@@ -39,6 +39,8 @@ export interface WebNotificationAdapterOptions {
   requestPermission?: () => Promise<NotificationPermissionState>;
   /** Show a system notification. Defaults to `new Notification(title, options)`. */
   createNotification?: (title: string, options: { body?: string; icon?: string; tag?: string; silent?: boolean }) => void;
+  /** Called when an in-app fallback listener throws. Defaults to rethrowing asynchronously. */
+  onHandlerError?: (error: unknown, notification: InAppNotification) => void;
 }
 
 function detectPermission(): NotificationPermissionState {
@@ -81,6 +83,16 @@ export function createWebNotificationAdapter(
   const inApp: InAppNotification[] = [];
   const fallbackListeners = new Set<InAppNotificationListener>();
 
+  function reportHandlerError(error: unknown, notification: InAppNotification): void {
+    if (options.onHandlerError !== undefined) {
+      options.onHandlerError(error, notification);
+      return;
+    }
+    queueMicrotask(() => {
+      throw error;
+    });
+  }
+
   function deliverInApp(
     notificationOptions: NotificationOptions,
     permission: NotificationPermissionState,
@@ -98,7 +110,13 @@ export function createWebNotificationAdapter(
     inApp.push(notification);
     while (inApp.length > MAX_IN_APP_NOTIFICATIONS) inApp.shift();
     for (const listener of [...fallbackListeners]) {
-      listener(notification);
+      // A failing UI listener must not reject sendNotification or skip the
+      // remaining listeners; the notification is already recorded above.
+      try {
+        listener(notification);
+      } catch (error) {
+        reportHandlerError(error, notification);
+      }
     }
     return { channel: "in-app", permission, title: notificationOptions.title, reason };
   }

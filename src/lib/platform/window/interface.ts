@@ -13,9 +13,15 @@
  * Upstream surface replaced: `getCurrentWindow`, `currentMonitor`,
  * `LogicalSize`, `PhysicalPosition` from `@tauri-apps/api/window`, and
  * `WebviewWindow`, `getAllWebviewWindows`, `getCurrentWebviewWindow` from
- * `@tauri-apps/api/webviewWindow`. Window methods used upstream: close,
- * show, hide, setFocus, setTitle, setAlwaysOnTop, isMaximized, setSize,
- * setPosition, startDragging, outerPosition, minimize, destroy.
+ * `@tauri-apps/api/webviewWindow`. This handle covers the V1-05 inventory
+ * (close, show, hide, setFocus, setTitle, setAlwaysOnTop, isMaximized,
+ * setSize, setPosition, startDragging, outerPosition, minimize) plus
+ * destroy. Upstream also uses handle methods outside this local definition
+ * (unminimize, isVisible, isMinimized, isFocused, toggleMaximize,
+ * outerSize, handle-level listen/once, onResized, onFocusChanged,
+ * onCloseRequested, and getByLabel); the canonical interface (V2-04)
+ * covers most of them and the integrator reconciles the two definitions.
+ * See laporan-window-adapters.md for the call-site inventory.
  *
  * Web behavior (binding for this worker): explicit window controls are
  * disabled, except `document.title` and the DOM fullscreen API when it is

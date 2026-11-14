@@ -84,8 +84,19 @@ export function createTauriEventAdapter(): EventAdapter {
     },
 
     async once<T>(event: string, handler: EventCallback<T>): Promise<UnlistenFn> {
-      const unlisten = await tauriOnce<T>(event, adapt(handler));
-      return track(event, unlisten);
+      // Tauri removes a once listener automatically after it fires, so the
+      // local count must drop on fire too; otherwise listenerCount keeps
+      // counting a listener that no longer exists. The wrapped unlisten is
+      // assigned synchronously after registration, before any event callback
+      // can run, and its removed guard makes a later manual unlisten safe.
+      let wrapped: UnlistenFn = () => undefined;
+      const firing: EventCallback<T> = (platformEvent) => {
+        wrapped();
+        return handler(platformEvent);
+      };
+      const unlisten = await tauriOnce<T>(event, adapt(firing));
+      wrapped = track(event, unlisten);
+      return wrapped;
     },
 
     async emit<T>(event: string, payload?: T): Promise<void> {

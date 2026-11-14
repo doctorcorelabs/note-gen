@@ -97,10 +97,10 @@ export function createTauriShortcutAdapter(
     }
 
     const previous = byId.get(binding.id);
-    if (previous !== undefined && previous.raw !== binding.shortcut) {
-      await unregisterTauri(previous.raw).catch(() => undefined);
-      byShortcut.delete(previous.shortcut);
-    }
+    // A replaced binding on the same combo must be released before the new
+    // registration, because one combo cannot be registered twice. If the new
+    // registration then fails, that replaced binding is lost; this matches
+    // the replace contract (the caller asked to replace it).
     if (duplicate !== null && registerOptions.replaceExisting === true) {
       const replaced = byShortcut.get(canonical);
       if (replaced !== undefined) {
@@ -138,6 +138,15 @@ export function createTauriShortcutAdapter(
           blocking: true,
         },
       };
+    }
+
+    // Only release the previous binding for this id after the replacement
+    // was accepted, so a refused shortcut never leaves the caller with no
+    // binding at all. This follows the upstream store, which keeps the old
+    // binding active until the replacement is accepted by the OS.
+    if (previous !== undefined && previous.raw !== binding.shortcut) {
+      await unregisterTauri(previous.raw).catch(() => undefined);
+      byShortcut.delete(previous.shortcut);
     }
 
     const stored: StoredBinding = {
