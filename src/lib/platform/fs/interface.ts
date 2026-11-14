@@ -19,6 +19,15 @@
  * watchImmediate, and size functions and the SeekMode enum are not
  * imported anywhere and are excluded. DirEntry has exactly the four
  * upstream fields; directory entries carry no path or children.
+ *
+ * Merge M8 reconciliation (audit V2-40): FileInfo gains the
+ * revision/version web extensions; WriteFileOptions gains
+ * expectedRevision/force; RenameOptions gains rewriteLinks/
+ * expectedRevision; the adapter gains readTextFileDetailed,
+ * readFileDetailed, and renameWithResult with their result
+ * types. FsAdapterError and its helpers moved to fs/errors.ts.
+ * The seek-mode enum and the writable FileHandle shape are
+ * intentionally absent: no call sites use them (G0).
  */
 export enum BaseDirectory {
   Audio = 1,
@@ -65,6 +74,10 @@ export interface FileInfo {
   rdev: number | null;
   blksize: number | null;
   blocks: number | null;
+  /** Web extension: revision string from the workspace API contract. Null for directories. */
+  revision?: string | null;
+  /** Web extension: index version counter. Null for directories. */
+  version?: number | null;
 }
 
 export interface FsFileHandle {
@@ -118,6 +131,18 @@ export interface RemoveOptions {
 export interface RenameOptions {
   oldPathBaseDir?: BaseDirectory;
   newPathBaseDir?: BaseDirectory;
+  /**
+   * Web extension. When true (the default), the server rewrites Markdown
+   * links that point at the moved path (V1-09 section 6). Ignored by the
+   * Tauri implementation.
+   */
+  rewriteLinks?: boolean;
+  /**
+   * Web extension. Revision guard for the move source (V1-09 section
+   * 2.7). When set and stale, the move fails with a revision_conflict
+   * error and nothing is renamed. Ignored by the Tauri implementation.
+   */
+  expectedRevision?: string;
 }
 
 export interface StatOptions {
@@ -130,6 +155,20 @@ export interface WriteFileOptions {
   createNew?: boolean;
   mode?: number;
   baseDir?: BaseDirectory;
+  /**
+   * Web extension. Revision the file must still have for the write to
+   * proceed (V1-09 section 3). When omitted, the web implementation
+   * reads the current revision first and guards the write with it, so
+   * plain call sites still get guarded writes. When set, no extra read
+   * happens and a stale revision fails with a revision_conflict error.
+   */
+  expectedRevision?: string;
+  /**
+   * Web extension. Force overwrite regardless of the current revision
+   * (If-Match: *). Only for explicit user choice through the conflict
+   * dialog (V1-09 section 3.5). Never a default.
+   */
+  force?: boolean;
 }
 
 export interface ExistsOptions {
@@ -196,6 +235,44 @@ export interface WatchEvent {
 
 export type UnwatchFn = () => void;
 
+/** Result of a move, mirroring the V1-09 section 6.5 response body. */
+export interface FsMoveResult {
+  source: string;
+  target: string;
+  kind: "file" | "folder";
+  rewriteLinks: boolean;
+  rewriteStatus: "complete" | "partial" | "skipped_only" | "disabled";
+  revision: string | null;
+  rewrittenFiles: Array<{
+    path: string;
+    oldRevision: string;
+    newRevision: string;
+    replacements: number;
+  }>;
+  skipped: Array<{ path: string; reason: string; detail: string }>;
+  pending: Array<{ path: string; reason: string; detail: string }>;
+  affectedCount: number;
+  indexHookWarning: string | null;
+}
+
+/** Text read plus the revision guard data a later save needs. */
+export interface FsTextFileResult {
+  content: string;
+  revision: string | null;
+  version: number | null;
+  size: number | null;
+  modifiedAt: string | null;
+}
+
+/** Binary read plus the revision guard data a later save needs. */
+export interface FsBinaryFileResult {
+  data: Uint8Array;
+  revision: string | null;
+  version: number | null;
+  size: number | null;
+  modifiedAt: string | null;
+}
+
 export interface FsAdapter {
   exists(path: string | URL, options?: ExistsOptions): Promise<boolean>;
   mkdir(path: string | URL, options?: MkdirOptions): Promise<void>;
@@ -234,4 +311,31 @@ export interface FsAdapter {
     cb: (event: WatchEvent) => void,
     options?: DebouncedWatchOptions,
   ): Promise<UnwatchFn>;
+
+  /**
+   * Web extension. Read text plus revision data, for the guarded-save
+   * flow in V1-09 section 3.9. The Tauri implementation returns the same
+   * shape with revision/version null.
+   */
+  readTextFileDetailed(
+    path: string | URL,
+    options?: ReadFileOptions,
+  ): Promise<FsTextFileResult>;
+
+  /** Web extension. Binary counterpart of readTextFileDetailed. */
+  readFileDetailed(
+    path: string | URL,
+    options?: ReadFileOptions,
+  ): Promise<FsBinaryFileResult>;
+
+  /**
+   * Web extension. Move plus the link-rewrite report (V1-09 section
+   * 6.5). Callers that need to report partial rewrites honestly must use
+   * this; rename() keeps the void Tauri shape and discards the report.
+   */
+  renameWithResult(
+    oldPath: string | URL,
+    newPath: string | URL,
+    options?: RenameOptions,
+  ): Promise<FsMoveResult>;
 }

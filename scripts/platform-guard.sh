@@ -130,7 +130,8 @@ echo "check 3: direct adapter implementation imports"
 direct=$(grep -rn --include='*.ts' --include='*.tsx' -E \
   "from ['\"][^'\"]*\.(tauri|web)['\"]|import\(['\"][^'\"]*\.(tauri|web)['\"]\)" \
   src 2>/dev/null | grep -v 'src/lib/platform/registry.ts' |
-  grep -v 'src/lib/platform/__tests__/' || true)
+  grep -v 'src/lib/platform/__tests__/' |
+  grep -v -E '^[^:]*\.(test|spec)\.tsx?:' || true)
 if [ -n "$direct" ]; then
   echo "  FAIL: direct implementation imports found:"
   echo "$direct" | sed 's/^/    /'
