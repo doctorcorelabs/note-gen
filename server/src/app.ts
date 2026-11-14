@@ -38,6 +38,7 @@ import {
 import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
+import { registerCspReportRoutes } from './routes/csp-reports.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface AppDeps {
@@ -76,6 +77,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
+
+  // CSP reports (kontrak 3.11, V3-39b): POST /api/csp-reports only.
+  // No session, no CSP header set here; directive values belong to
+  // the hardening wave (O-07). See routes/csp-reports.ts.
+  await registerCspReportRoutes(app);
 
   return app;
 }
