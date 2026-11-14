@@ -11,6 +11,8 @@
     "build:prune-maps": "node -e \"const fs=require('fs'),path=require('path');const roots=['out','.next'];function walk(dir){if(!fs.existsSync(dir))return;for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);if(entry.isDirectory())walk(file);else if(entry.isFile()){if(entry.name.endsWith('.map'))fs.rmSync(file,{force:true});else if(entry.name.endsWith('.js')||entry.name.endsWith('.css')){const text=fs.readFileSync(file,'utf8');const next=text.replace(/\\n?\\/\\/# sourceMappingURL=[^\\n\\r]*/g,'').replace(/\\/\\*# sourceMappingURL=[^*]*\\*\\//g,'');if(next!==text)fs.writeFileSync(file,next);}}}}roots.forEach(walk);\"",
     "start": "next start --turbopack -p 3456",
     "lint": "next lint",
+    "e2e": "playwright test",
+    "e2e:smoke": "playwright test --grep @smoke",
     "tauri": "tauri",
     "docs:build": "npm --prefix ./docs run build",
     "sync-version": "./scripts/sync-version.sh",
@@ -148,6 +150,7 @@
     "zustand": "^5.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tauri-apps/cli": "2.11.3",
     "@types/crypto-js": "^4.2.2",
