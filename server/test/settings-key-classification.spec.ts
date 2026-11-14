@@ -207,6 +207,23 @@ describe('pattern and scope rules', () => {
     expect(isKnownSettingKey('language')).toBe(true);
   });
 
+  it('treats prototype-shaped keys as unknown, never as catalogued', () => {
+    for (const key of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf']) {
+      const result = classifySettingKey(key);
+      expect(result.known).toBe(false);
+      expect(result.keyClass).toBe('UNKNOWN');
+      expect(result.info).toBe(null);
+      expect(result.settingsRejectionReason).toBe('unknown_key');
+      expect(isKnownSettingKey(key)).toBe(false);
+    }
+    for (const key of ['toString:scope', 'constructor:scope', '__proto__:scope']) {
+      const result = classifySettingKey(key);
+      expect(result.known).toBe(false);
+      expect(result.keyClass).toBe('UNKNOWN');
+      expect(result.settingsRejectionReason).toBe('unknown_key');
+    }
+  });
+
   it('keeps the secret-pattern rule from contradicting the table', () => {
     for (const key of [...S_SETTING_KEYS, ...L_SETTING_KEYS]) {
       const lowered = key.toLowerCase();

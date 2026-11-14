@@ -5,9 +5,14 @@
 // Encryption key loading and key-ring management for envelope encryption.
 //
 // Canonical key source: the ENCRYPTION_KEY environment variable
-// (desain-auth.md section 1.4; the legacy SECRETS_ENCRYPTION_KEY alias
-// was removed and is never read by this module). The key is a 32-byte
-// AES-256 key encoded as hex (64 characters), base64, or base64url.
+// (desain-auth.md section 1.4). The key is a 32-byte AES-256 key
+// encoded as hex (64 characters), base64, or base64url. The legacy
+// SECRETS_ENCRYPTION_KEY name is accepted as a fallback only when
+// ENCRYPTION_KEY is absent, matching the trunk config behaviour
+// (server/src/config/env.ts counts either name as configured and
+// server/.env.example documents the alias); when both names are set
+// they must decode to the same key, or loading fails closed. New
+// deployments must use the canonical name only.
 //
 // Rotation support: ENCRYPTION_KEY_VERSION names the version of the
 // current key (default 1). ENCRYPTION_PREVIOUS_KEYS carries retired
@@ -57,6 +62,10 @@ export function decodeEncryptionKey(value: string): Buffer {
     throw invalidKeyError('key must decode to exactly 32 bytes');
   }
   throw invalidKeyError('key must be hex, base64, or base64url encoded');
+}
+
+function present(raw: string | undefined): string | undefined {
+  return raw === undefined || raw.trim() === '' ? undefined : raw;
 }
 
 function parseKeyVersion(raw: string | undefined, label: string, allowEmpty: boolean): number {
@@ -169,19 +178,26 @@ export type KeyRingEnv = Readonly<Record<string, string | undefined>>;
 /**
  * Build a key ring from environment variables.
  *
- * Reads ENCRYPTION_KEY (required), ENCRYPTION_KEY_VERSION (optional,
- * default 1), and ENCRYPTION_PREVIOUS_KEYS (optional). The legacy
- * SECRETS_ENCRYPTION_KEY name is never consulted: an environment that
- * sets only the legacy name fails with ENCRYPTION_KEY_MISSING, so a
- * missing canonical key can never silently fall back to anything.
+ * Reads ENCRYPTION_KEY (required unless the legacy alias is set),
+ * ENCRYPTION_KEY_VERSION (optional, default 1), and
+ * ENCRYPTION_PREVIOUS_KEYS (optional). The legacy
+ * SECRETS_ENCRYPTION_KEY name is a fallback only: it is consulted
+ * when ENCRYPTION_KEY is absent, and when both names are set they
+ * must decode to the same key. An environment that sets neither
+ * name fails with ENCRYPTION_KEY_MISSING.
  */
 export function loadKeyRingFromEnv(env: KeyRingEnv): KeyRing {
-  const rawKey = env.ENCRYPTION_KEY;
-  if (rawKey === undefined || rawKey.trim() === '') {
+  const canonical = present(env.ENCRYPTION_KEY);
+  const legacy = present(env.SECRETS_ENCRYPTION_KEY);
+  const rawKey = canonical ?? legacy;
+  if (rawKey === undefined) {
     throw missingKeyError();
   }
   const currentVersion = parseKeyVersion(env.ENCRYPTION_KEY_VERSION, 'ENCRYPTION_KEY_VERSION', true);
   const currentKey = decodeEncryptionKey(rawKey);
+  if (canonical !== undefined && legacy !== undefined && !decodeEncryptionKey(legacy).equals(currentKey)) {
+    throw invalidKeyError('ENCRYPTION_KEY and SECRETS_ENCRYPTION_KEY decode to different keys');
+  }
   const previous = parsePreviousKeys(env.ENCRYPTION_PREVIOUS_KEYS);
   for (const entry of previous) {
     if (entry.version === currentVersion) {

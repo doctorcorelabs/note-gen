@@ -23,9 +23,9 @@
 //    - `key_version` holds the sealing key version.
 //    The version byte travels inside the stored bytes because the
 //    table has nowhere else to keep it. The GCM tag authenticates
-//    the ciphertext; the version byte is additionally bound through
-//    the additional authenticated data, so tampering with it fails
-//    the open instead of changing the meaning of the bytes.
+//    the ciphertext and tag bytes that follow it; the version byte
+//    itself is validated explicitly on open, so tampering with it
+//    fails the open instead of changing the meaning of the bytes.
 //
 // 2. String form, a single self-describing value for stores that keep
 //    one column (for example the sealed TOTP secret):
@@ -293,10 +293,11 @@ export function createCryptoService(keyRing: KeyRing): CryptoService {
 
 /**
  * Build a crypto service from environment variables. Throws
- * ENCRYPTION_KEY_MISSING when ENCRYPTION_KEY is absent, so a secrets
- * service built on this factory fails explicitly at startup instead of
- * ever handling secrets in plaintext. The legacy
- * SECRETS_ENCRYPTION_KEY name is never consulted.
+ * ENCRYPTION_KEY_MISSING when neither ENCRYPTION_KEY nor the legacy
+ * SECRETS_ENCRYPTION_KEY alias is set, so a secrets service built
+ * on this factory fails explicitly at startup instead of ever
+ * handling secrets in plaintext. See loadKeyRingFromEnv for the
+ * exact name precedence.
  */
 export function createCryptoServiceFromEnv(env: KeyRingEnv): CryptoService {
   return new CryptoService(loadKeyRingFromEnv(env));

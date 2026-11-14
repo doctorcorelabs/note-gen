@@ -484,6 +484,13 @@ function patternReject(key: string): ClassificationResult {
   };
 }
 
+function tableEntry(key: string): SettingKeyInfo | undefined {
+  // Own-property lookup only: a plain-object table inherits
+  // Object.prototype members, so indexing it directly would treat
+  // keys such as '__proto__' or 'toString' as catalogued entries.
+  return Object.prototype.hasOwnProperty.call(SETTING_KEY_TABLE, key) ? SETTING_KEY_TABLE[key] : undefined;
+}
+
 /**
  * Classify one Store key under the V1-02 section 2.3 rule order.
  *
@@ -508,7 +515,7 @@ export function classifySettingKey(key: string): ClassificationResult {
       baseKey: null,
     };
   }
-  const exact = SETTING_KEY_TABLE[key];
+  const exact = tableEntry(key);
   if (exact !== undefined) {
     return resultForInfo(key, exact, false, null);
   }
@@ -536,7 +543,7 @@ export function classifySettingKey(key: string): ClassificationResult {
     if (base === 'aiModelList') {
       return patternReject(key);
     }
-    const baseInfo = SETTING_KEY_TABLE[base];
+    const baseInfo = tableEntry(base);
     if (baseInfo !== undefined) {
       return resultForInfo(key, baseInfo, true, base);
     }

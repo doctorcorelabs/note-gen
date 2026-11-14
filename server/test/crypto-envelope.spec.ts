@@ -256,16 +256,35 @@ describe('key loading from the environment', () => {
     expect(() => loadKeyRingFromEnv({ ENCRYPTION_KEY: '   ' })).toThrowError(CryptoError);
   });
 
-  it('never reads the legacy SECRETS_ENCRYPTION_KEY alias', () => {
-    const key = fixtureKey('alias-only').toString('base64');
+  it('reads the legacy SECRETS_ENCRYPTION_KEY alias when the canonical name is absent', () => {
+    const raw = fixtureKey('alias-only');
+    const ring = loadKeyRingFromEnv({ SECRETS_ENCRYPTION_KEY: raw.toString('base64') });
+    expect(ring.currentKey()).toEqual(raw);
+    const service = createCryptoServiceFromEnv({ SECRETS_ENCRYPTION_KEY: raw.toString('hex') });
+    expect(service.decryptToString(service.encrypt(PLAINTEXT))).toBe(PLAINTEXT);
+  });
+
+  it('accepts both key names when they decode to the same key', () => {
+    const raw = fixtureKey('both-names-same');
+    const ring = loadKeyRingFromEnv({
+      ENCRYPTION_KEY: raw.toString('base64'),
+      SECRETS_ENCRYPTION_KEY: raw.toString('hex'),
+    });
+    expect(ring.currentKey()).toEqual(raw);
+  });
+
+  it('fails closed when both key names decode to different keys', () => {
     let caught: unknown;
     try {
-      loadKeyRingFromEnv({ SECRETS_ENCRYPTION_KEY: key });
+      loadKeyRingFromEnv({
+        ENCRYPTION_KEY: fixtureKey('canonical').toString('base64'),
+        SECRETS_ENCRYPTION_KEY: fixtureKey('legacy-different').toString('base64'),
+      });
     } catch (error) {
       caught = error;
     }
     expect(caught).toBeInstanceOf(CryptoError);
-    expect((caught as CryptoError).code).toBe('ENCRYPTION_KEY_MISSING');
+    expect((caught as CryptoError).code).toBe('ENCRYPTION_KEY_INVALID');
   });
 
   it('accepts hex, base64, and base64url encodings of the same key', () => {
