@@ -35,7 +35,10 @@ function emptyStringStub(): string {
   return "";
 }
 
-export const BOOT_STUBS: ReadonlyMap<string, () => unknown> = new Map([
+export const BOOT_STUBS: ReadonlyMap<string, () => unknown> = new Map<
+  string,
+  () => unknown
+>([
   ["drain_pending_plugin_install_requests", emptyListStub],
   ["drain_pending_open_files", emptyListStub],
   ["list_ocr_providers", emptyListStub],
