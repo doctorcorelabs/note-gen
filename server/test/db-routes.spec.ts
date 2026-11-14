@@ -6,8 +6,14 @@
 // (kontrak section 3.4). Handlers here are STUBS registered into a
 // fresh registry per test: this file proves routes, dispatch,
 // validation, envelope, error codes, and atomicity through the fake
-// runner. Real kind handlers are owned by V3-13b/V3-13c/V3-25; the
-// Postgres-backed atomicity proof lives in db-pg.spec.ts.
+// runner (one runWrite call, failure rolls back, no commit). Real
+// kind handlers are owned by V3-13b/V3-13c/V3-25. A Postgres-backed
+// atomicity proof against the real Drizzle runner, workspace
+// resolver, and idempotency store does not exist yet: it is
+// integrator debt for the handler merges (no live-DB harness exists
+// in server/test), and the single-transaction guarantee itself is
+// Drizzle's db.transaction, pinned by the runner delegation tests
+// in db-units.spec.ts.
 //
 // The test app assembles the same plugins and hooks in the same
 // order as buildApp (request id, error handling, auth hooks, then
@@ -322,16 +328,42 @@ describe('POST /api/transactions with stub handlers', () => {
     expect(harness.calls).toEqual([]);
   });
 
-  it('rejects the server-only kind with invalid_operation', async () => {
+  it('rejects the server-only kind with 410, even when a handler is registered', async () => {
     harness = await buildHarness();
+    // The 410 is a pre-flight second defense (penguncian D/G
+    // section 7 rule 5): registration must not let the kind run
+    // through HTTP.
+    harness.registry.registerWrite('vector.replaceChunks', recordStub(harness.calls, { affected: 1 }));
     const res = await harness.app.inject({
       method: 'POST',
       url: '/api/transactions',
       headers: AUTHED_HEADERS,
       payload: { operations: [{ kind: 'vector.replaceChunks' }] },
     });
-    expect(res.statusCode).toBe(400);
-    expect((res.json() as { error: Record<string, unknown> }).error['code']).toBe('invalid_operation');
+    expect(res.statusCode).toBe(410);
+    const body = res.json() as { error: Record<string, unknown> };
+    expect(body.error['code']).toBe('capability_unavailable');
+    expect(body.error['message']).toContain('vector.replaceChunks');
+    expect(body.error['message']).toContain('Fase 2');
+    expect(body.error['details']).toMatchObject({
+      capability: 'vector.replaceChunks',
+      phase: 'Fase 2',
+      operationIndex: 0,
+      kind: 'vector.replaceChunks',
+    });
+    expect(harness.runner.writeCalls).toBe(0);
+    expect(harness.calls).toEqual([]);
+    // In the read batch the same kind is a wrong-group kind and
+    // answers 400 invalid_operation like any write kind.
+    const batchRes = await harness.app.inject({
+      method: 'POST',
+      url: '/api/db/batch',
+      headers: AUTHED_HEADERS,
+      payload: { operations: [{ kind: 'vector.replaceChunks' }] },
+    });
+    expect(batchRes.statusCode).toBe(400);
+    expect((batchRes.json() as { error: Record<string, unknown> }).error['code']).toBe('invalid_operation');
+    expect(harness.runner.readCalls).toBe(0);
   });
 
   it.each(FORBIDDEN_OPERATION_FIELDS)(
@@ -534,7 +566,11 @@ describe('POST /api/transactions with stub handlers', () => {
     expect(res.statusCode).toBe(410);
     const body = res.json() as { error: Record<string, unknown> };
     expect(body.error['code']).toBe('capability_unavailable');
-    expect(body.error['details']).toMatchObject({ capability: 'memories.create' });
+    // The message names the capability and the phase, and details
+    // carry both (penguncian D/G section 7 rule 4).
+    expect(body.error['message']).toContain('memories.create');
+    expect(body.error['message']).toContain('Fase 2');
+    expect(body.error['details']).toMatchObject({ capability: 'memories.create', phase: 'Fase 2' });
     expect(harness.runner.writeCalls).toBe(0);
   });
 

@@ -32,10 +32,13 @@
 //   kinds, both with invalid_operation (kontrak section 6.2).
 // - There is no generic kind (raw, query, exec) and no operation
 //   carries SQL, a table name, a column name, or a workspace id.
-// - vector.replaceChunks is server-only: it is a catalog kind, but it
-//   is never a valid client operation, so the transaction route
-//   rejects it with invalid_operation. Only worker code on the server
-//   may run it, never through these HTTP endpoints.
+// - vector.replaceChunks is server-only: it is a catalog kind, but
+//   it is never a valid client operation. The web client must
+//   reject it locally before any HTTP, and the server rejects it
+//   with 410 capability_unavailable as the second defense, even
+//   if a handler were registered (penguncian D/G section 7 rule
+//   5). Only worker code on the server may run it, never through
+//   these HTTP endpoints.
 // - W2 kinds have their contract fixed but their handlers land in
 //   Fase 2. A W2 kind with no registered handler answers
 //   capability_unavailable (410), never a silent failure (AD-07).

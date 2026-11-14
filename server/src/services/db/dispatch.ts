@@ -10,9 +10,13 @@
 // section 4.3):
 // 1. Pre-flight, before any transaction opens: every operation must
 //    have a registered handler, or be a W2 kind. A W2 kind with no
-//    handler answers 410 capability_unavailable with
-//    details.capability set to the kind. A W1 kind with no handler
-//    is a server wiring bug and answers 500 internal_error. Handler
+//    handler answers 410 capability_unavailable with a message
+//    naming the kind and Fase 2 and details carrying capability,
+//    phase, operationIndex, and kind (penguncian D/G section 7
+//    rule 4). The server-only kind answers the same 410 even when
+//    a handler is registered: it must never run through HTTP
+//    (section 7 rule 5). A W1 kind with no handler is a server
+//    wiring bug and answers 500 internal_error. Handler
 //    `validate` steps also run here, in order, so a validation
 //    failure never executes a partial transaction.
 // 2. Inside one write transaction: resolve the workspace from the
@@ -34,7 +38,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../plugins/envelope.js';
 import { idempotencyScope, type IdempotencyStore } from './idempotency.js';
-import { isWave2OpKind } from './kinds.js';
+import { DB_SERVER_ONLY_OP_KIND, isWave2OpKind } from './kinds.js';
 import type { DbHandlerContext, DbHandlerRegistry, DbOperationInput } from './registry.js';
 import type { DbTransactionRunner } from './runner.js';
 import { normalizeReadRows, normalizeWriteResult } from './validation.js';
@@ -96,9 +100,14 @@ function withOperationContext(error: unknown, operationIndex: number, kind: stri
 }
 
 function unavailableForKind(kind: string, operationIndex: number): ApiError {
-  return new ApiError(410, 'capability_unavailable', 'This operation is not available yet.', {
-    details: { capability: kind, operationIndex, kind },
-  });
+  return new ApiError(
+    410,
+    'capability_unavailable',
+    `The ${kind} operation is not available in Fase 1; it is planned for Fase 2.`,
+    {
+      details: { capability: kind, phase: 'Fase 2', operationIndex, kind },
+    },
+  );
 }
 
 function missingHandler(kind: string, operationIndex: number): ApiError {
@@ -112,6 +121,11 @@ function missingHandler(kind: string, operationIndex: number): ApiError {
 function preflightWrites(registry: DbHandlerRegistry, operations: DbOperationInput[]): void {
   for (let index = 0; index < operations.length; index += 1) {
     const op = operations[index];
+    if (op.kind === DB_SERVER_ONLY_OP_KIND) {
+      // Server-only kinds never run through HTTP, even when a
+      // handler is registered (penguncian D/G section 7 rule 5).
+      throw unavailableForKind(op.kind, index);
+    }
     const handler = registry.getWrite(op.kind);
     if (handler === undefined) {
       if (isWave2OpKind(op.kind)) {

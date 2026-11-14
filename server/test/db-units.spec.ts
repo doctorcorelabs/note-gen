@@ -2,13 +2,20 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Unit tests for the handler registry and the pure validation
-// helpers. No HTTP, no database.
+// Unit tests for the handler registry, the pure validation
+// helpers, the kind-group classifiers, the Drizzle runner
+// delegation, and the workspace resolver's fail-closed UUID guard.
+// No HTTP, no database.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../src/plugins/envelope.js';
+import type { DbHandle } from '../src/db/index.js';
 import { dbOpGroup, isClientExposedOpKind } from '../src/services/db/kinds.js';
-import { createDbHandlerRegistry } from '../src/services/db/registry.js';
+import { createDbHandlerRegistry, type DbTransaction } from '../src/services/db/registry.js';
+import {
+  createDrizzleDbRunner,
+  createUnavailableDbRunner,
+} from '../src/services/db/runner.js';
 import {
   hashDbRequestBody,
   normalizeReadRows,
@@ -17,6 +24,7 @@ import {
   validateDbOperations,
   validateIdempotencyKey,
 } from '../src/services/db/validation.js';
+import { resolveDefaultWorkspaceId } from '../src/services/db/workspace.js';
 
 describe('DbHandlerRegistry', () => {
   it('stores and returns handlers by kind', () => {
@@ -53,6 +61,84 @@ describe('DbHandlerRegistry', () => {
     registry.registerWriteMap({ 'tags.create': async () => ({ affected: 0 }) });
     expect(registry.getRead('tags.list')?.validate).toBe(validate);
     expect(registry.getWrite('tags.create')?.validate).toBeUndefined();
+  });
+});
+
+describe('kind groups', () => {
+  it('classifies read and write kinds and returns null for unknown kinds', () => {
+    expect(dbOpGroup('marks.list')).toBe('read');
+    expect(dbOpGroup('messages.get')).toBe('read');
+    expect(dbOpGroup('marks.create')).toBe('write');
+    expect(dbOpGroup('vector.replaceChunks')).toBe('write');
+    expect(dbOpGroup('marks.explode')).toBeNull();
+    expect(dbOpGroup('')).toBeNull();
+  });
+
+  it('exposes every kind to clients except the server-only kind', () => {
+    expect(isClientExposedOpKind('marks.list')).toBe(true);
+    expect(isClientExposedOpKind('messages.get')).toBe(true);
+    expect(isClientExposedOpKind('memories.create')).toBe(true);
+    expect(isClientExposedOpKind('vector.replaceChunks')).toBe(false);
+    expect(isClientExposedOpKind('marks.explode')).toBe(false);
+  });
+});
+
+describe('Drizzle runner delegation', () => {
+  it('runs writes in a default transaction and reads in a read-only transaction', async () => {
+    const optionsSeen: unknown[] = [];
+    const fakeDb = {
+      transaction: async (fn: (tx: DbTransaction) => Promise<string>, options?: unknown) => {
+        optionsSeen.push(options);
+        return fn({} as DbTransaction);
+      },
+    };
+    const close = vi.fn(async () => {});
+    const handle = { db: fakeDb, client: {}, close } as unknown as DbHandle;
+    const runner = createDrizzleDbRunner(handle);
+    await expect(runner.runWrite(async () => 'wrote')).resolves.toBe('wrote');
+    await expect(runner.runRead(async () => 'read')).resolves.toBe('read');
+    expect(optionsSeen).toEqual([undefined, { accessMode: 'read only' }]);
+    await runner.close();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates a transaction failure instead of swallowing it', async () => {
+    const failure = new Error('driver down');
+    const fakeDb = {
+      transaction: async () => {
+        throw failure;
+      },
+    };
+    const handle = { db: fakeDb, client: {}, close: async () => {} } as unknown as DbHandle;
+    const runner = createDrizzleDbRunner(handle);
+    await expect(runner.runWrite(async () => 'never')).rejects.toBe(failure);
+  });
+
+  it('answers service_unavailable from the runner used without DATABASE_URL', async () => {
+    const runner = createUnavailableDbRunner();
+    for (const run of [runner.runWrite, runner.runRead]) {
+      try {
+        await run(async () => 'never');
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).statusCode).toBe(503);
+        expect((error as ApiError).code).toBe('service_unavailable');
+        expect((error as ApiError).retryable).toBe(true);
+      }
+    }
+    await expect(runner.close()).resolves.toBeUndefined();
+  });
+});
+
+describe('workspace resolver UUID guard', () => {
+  it('returns null for a non-UUID user id without touching the database', async () => {
+    // An empty transaction object: any database access would throw,
+    // proving the guard runs first and fails closed with null.
+    const untouched = {} as DbTransaction;
+    for (const userId of ['', 'not-a-uuid', '11111111-1111-4111-8111-11111111111']) {
+      await expect(resolveDefaultWorkspaceId(untouched, userId)).resolves.toBeNull();
+    }
   });
 });
 

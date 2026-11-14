@@ -21,6 +21,18 @@
 // W2 handler lands, its kind answers 410. Neither case ever answers
 // fake success.
 //
+// Wiring pattern (no barrel): each handler merge imports every one
+// of its handler files DIRECTLY by path in the db block of
+// buildApp and registers the exported `validate`/`handle` pair,
+// one file per kind, for example (paths relative to server/src):
+//
+//   import { HANDLER_KIND as conversationsListKind, handle as conversationsList, validate as validateConversationsList } from './services/db/conversations-list.js';
+//   dbDeps.registry.registerRead(conversationsListKind, { validate: validateConversationsList, handle: conversationsList });
+//
+// There is no services/db/index.ts barrel and there must never be
+// one: the handler files are imported individually at the wiring
+// point, and dispatch resolves kinds only through this registry.
+//
 // Tests and embedders that need stub handlers, a fake runner, or a
 // stub workspace resolver construct DbRouteDeps directly instead of
 // calling this factory.

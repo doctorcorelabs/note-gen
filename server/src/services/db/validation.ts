@@ -19,10 +19,14 @@
 //    rejected with validation_failed (kontrak 1.3, CT-S5). No field
 //    on any operation may ever carry SQL, a table name, a column
 //    name, or a workspace id (AD-26).
-// 5. An unknown kind, a kind from the wrong group for the endpoint,
-//    or the server-only kind (vector.replaceChunks) is rejected with
-//    invalid_operation 400 and details { operationIndex, kind }
-//    (kontrak 6.2, K-14).
+// 5. An unknown kind, or a kind from the wrong group for the
+//    endpoint, is rejected with invalid_operation 400 and details
+//    { operationIndex, kind } (kontrak 6.2, K-14). The server-only
+//    kind (vector.replaceChunks) is NOT rejected here: it is a
+//    known write kind, so dispatch pre-flight rejects it with 410
+//    capability_unavailable as the server-side second defense
+//    (penguncian D/G section 7 rule 5). In the read batch it is
+//    rejected here as a wrong-group kind, like any write kind.
 //
 // Per-kind field shapes (required fields, types, additional
 // properties per kind) are validated by the kind handlers
@@ -40,7 +44,6 @@ import { createHash } from 'node:crypto';
 import { ApiError } from '../../plugins/envelope.js';
 import {
   DB_MAX_OPERATIONS_PER_REQUEST,
-  DB_SERVER_ONLY_OP_KIND,
   FORBIDDEN_OPERATION_FIELDS,
   IDEMPOTENCY_KEY_MAX_LENGTH,
   dbOpGroup,
@@ -109,7 +112,7 @@ function validateOneOperation(value: unknown, index: number, group: DbOpGroup): 
     );
   }
   const actualGroup = dbOpGroup(kind);
-  if (actualGroup === null || actualGroup !== group || kind === DB_SERVER_ONLY_OP_KIND) {
+  if (actualGroup === null || actualGroup !== group) {
     throw new ApiError(400, 'invalid_operation', 'The operation is not valid for this endpoint.', {
       details: { operationIndex: index, kind },
     });
