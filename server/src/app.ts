@@ -39,6 +39,9 @@ import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerSecretsRoutes } from './routes/secrets.js';
+import { registerSettingsRoutes } from './routes/settings.js';
+import { createProductionSettingsDeps } from './services/settings/index.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -76,6 +79,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
+
+  // Settings and secrets routes (V3-10a; kontrak-api-kanonis.md 3.2-3.3).
+  // Registered after health, in contract order. The secret cipher is
+  // injected by the V3-10b wiring when it lands; until then secret
+  // writes fail closed with 503 (see services/settings/crypto-seam.ts).
+  // This block only adds routes; it does not change the frozen
+  // middleware shape (AD-40) or AppDeps.
+  const settingsDeps = createProductionSettingsDeps();
+  await registerSettingsRoutes(app, settingsDeps);
+  await registerSecretsRoutes(app, settingsDeps);
 
   return app;
 }
