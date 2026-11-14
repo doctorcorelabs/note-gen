@@ -4,12 +4,16 @@
 
 // API server entrypoint. This is the only file that calls listen().
 //
-// Startup order: parse and validate config (only a bad PORT fails
-// startup), read the version once from server/package.json and keep it
-// in memory, create the Postgres pool without an eager connection, build
-// the Fastify app, then listen. The server starts even when DATABASE_URL
-// or WORKSPACE_ROOT is missing, so the misconfiguration shows up as a
-// failed readiness check instead of a dead backend.
+// Startup order: parse and validate config (fail-closed boot refusals
+// in config/env.ts: an invalid PORT, an unrecognized REGISTRATION_MODE
+// or CF_ACCESS_ENABLED value, a Cloudflare Access deployment without
+// its audience or team domain, Access disabled outside local
+// development, and COOKIE_SECURE=false outside development on
+// localhost), read the version once from server/package.json and keep
+// it in memory, create the Postgres pool without an eager connection,
+// build the Fastify app, then listen. The server starts even when
+// DATABASE_URL or WORKSPACE_ROOT is missing, so the misconfiguration
+// shows up as a failed readiness check instead of a dead backend.
 //
 // Startup logs name variables only, never values. In particular, the
 // DATABASE_URL value is never logged. Workspace configuration is logged
@@ -38,8 +42,12 @@ export function readServerVersion(): string {
 function safeLoadConfig(): ServerConfig {
   try {
     return loadConfig(process.env);
-  } catch {
-    console.error('Failed to start: PORT configuration is not valid.');
+  } catch (err) {
+    // loadConfig refusal messages name variables only, never values,
+    // so printing the message is safe and tells the operator exactly
+    // which variable to fix.
+    const message = err instanceof Error ? err.message : 'Configuration is not valid.';
+    console.error(`Failed to start: ${message}`);
     process.exit(1);
   }
 }

@@ -22,18 +22,21 @@
 //   length-ok flags are recorded. The auth worker owns secret handling
 //   and reads secrets through its own module; this module only proves the
 //   deployment named them and that obvious misconfigurations fail closed.
-// - Fail-closed boot refusals (loadConfig throws, server.ts exits): a
-//   Cloudflare Access deployment without its audience or team domain, a
-//   production deployment with Access verification disabled, and an
-//   insecure cookie flag outside development on localhost. These are the
-//   only additions to the Fase 0 "only PORT fails startup" rule, and each
-//   is an explicit fail-closed requirement in desain-auth.md.
-// - An unrecognized REGISTRATION_MODE falls back to 'closed' (the most
-//   restrictive mode) with a warning, instead of refusing to start. The
-//   fallback is fail-closed for registration and keeps health available;
-//   desain-auth.md section 2.1 prefers a boot refusal, and this deviation
-//   is recorded in the Fase 1 backend foundation report for the
-//   coordinator to tighten if wanted.
+// - Fail-closed boot refusals (loadConfig throws, server.ts exits):
+//   an invalid PORT; an unrecognized REGISTRATION_MODE (section 2.1);
+//   an unrecognized CF_ACCESS_ENABLED value (section 7.2); a
+//   Cloudflare Access deployment without its audience or team domain;
+//   a production deployment with Access verification disabled, and a
+//   development deployment with Access disabled but a non-localhost
+//   canonical origin (section 7.6); and an insecure cookie flag outside
+//   development on localhost (section 4.2). Each refusal message names
+//   the variable only, never its value.
+// - SETUP_TOKEN is presence-and-length only here on purpose. Whether a
+//   missing or short setup token must refuse boot depends on database
+//   state (section 2.2: only when no account exists yet), which this
+//   module cannot see. The auth worker enforces that boot prerequisite
+//   after the database is reachable; this module only records the flags
+//   it needs.
 
 export interface ServerConfig {
   host: string;
@@ -214,7 +217,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     if (raw === 'closed' || raw === 'invitation' || raw === 'open') {
       registrationMode = raw;
     } else {
-      warnings.push('REGISTRATION_MODE is not recognized, using closed.');
+      throw new Error('REGISTRATION_MODE is not recognized: it must be closed, invitation, or open.');
     }
   }
 
@@ -269,7 +272,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (env.CF_ACCESS_ENABLED !== undefined && nonEmpty(env.CF_ACCESS_ENABLED) !== undefined) {
     const parsed = parseBoolean(env.CF_ACCESS_ENABLED);
     if (parsed === undefined) {
-      warnings.push('CF_ACCESS_ENABLED is not recognized, using false.');
+      throw new Error('CF_ACCESS_ENABLED is not recognized: it must be true or false.');
     } else {
       cfAccessEnabled = parsed;
     }
@@ -286,6 +289,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     }
   } else if (nodeEnv === 'production') {
     throw new Error('CF_ACCESS_ENABLED must be true when NODE_ENV is production.');
+  } else if (publicBaseUrl !== undefined && !isLocalhostOrigin(publicBaseUrl)) {
+    // Disabled Access is only allowed for local development: a
+    // non-localhost canonical origin means the deployment is reachable
+    // beyond localhost, where the Access perimeter must be on. An
+    // unset PUBLIC_BASE_URL keeps the local-dev assumption.
+    throw new Error(
+      'CF_ACCESS_ENABLED must be true when PUBLIC_BASE_URL is not localhost.',
+    );
   }
 
   let cfAccessJwksCacheTtlSeconds = DEFAULT_JWKS_CACHE_TTL_SECONDS;

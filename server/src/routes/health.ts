@@ -40,6 +40,15 @@ import {
 } from '../health/checks.js';
 import { liveResponseSchema, readyResponseSchema } from '../health/schemas.js';
 
+// Single source of truth for the health paths. The error handler and
+// the auth hook import this list; a path added here is public and
+// covered by the emergency-envelope safety net, and a path removed
+// here loses both. Keep the registrations below on these constants.
+export const HEALTH_LIVE_PATH = '/api/health/live';
+export const HEALTH_READY_PATH = '/api/health/ready';
+export const HEALTH_ALIAS_PATH = '/api/health';
+export const HEALTH_PATHS: readonly string[] = [HEALTH_LIVE_PATH, HEALTH_READY_PATH, HEALTH_ALIAS_PATH];
+
 export interface HealthRouteDeps {
   pool: HealthDbPool | null;
   workspaceRoot: string | undefined;
@@ -113,7 +122,7 @@ function setHealthHeaders(reply: FastifyReply): void {
 
 export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRouteDeps): Promise<void> {
   app.get(
-    '/api/health/live',
+    HEALTH_LIVE_PATH,
     { schema: { response: { 200: liveResponseSchema } }, config: { requiresAuth: false } },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       setHealthHeaders(reply);
@@ -159,6 +168,6 @@ export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRou
     schema: { response: { 200: readyResponseSchema, 503: readyResponseSchema } },
     config: { requiresAuth: false },
   };
-  app.get('/api/health/ready', readyOptions, readyHandler);
-  app.get('/api/health', readyOptions, readyHandler);
+  app.get(HEALTH_READY_PATH, readyOptions, readyHandler);
+  app.get(HEALTH_ALIAS_PATH, readyOptions, readyHandler);
 }

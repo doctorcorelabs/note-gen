@@ -25,16 +25,30 @@
 //
 // Check order for a protected mutation (desain-auth.md section 5.3):
 // session first (401 when invalid), then Origin (403), then the CSRF
-// token (403). Origin and CSRF failures produce the identical
-// client-visible outcome (403, code CSRF_FAILED, one generic message);
-// only the server log records which layer failed. The rejected Origin
-// value may be logged (it is not a secret); token values are never
-// logged.
+// token (403). Origin and CSRF failures share one generic client-visible
+// message; they are distinguished only by code, csrf_invalid versus
+// origin_rejected (kontrak-api-kanonis.md section 1.2). Only the server
+// log records which layer failed. The rejected Origin value may be
+// logged (it is not a secret); token values are never logged.
+//
+// Unmatched paths never reach this hook's checks: Fastify runs global
+// preHandler hooks even for 404s, and an unmatched /api/* path must
+// answer 404 from the not-found handler, not 401 from this hook. A
+// request is treated as unmatched when the router attached no route
+// URL (Fastify 5 leaves routeOptions.url undefined for 404s, including
+// wrong-method requests to an existing path).
 //
 // Health paths are public by design: orchestrator probes and container
 // healthchecks carry no credentials, and a 401 from the API itself
 // would break watchdog diagnosis. The Cloudflare Access perimeter
 // still guards public probes. This exemption is tested explicitly.
+// Two more no-session paths are exempt as wiring only (their endpoints
+// belong to other workers): POST /api/csp-reports, which browsers send
+// without a session, and GET /api/backups/downloads/:downloadToken,
+// which authenticates with its single-use token in the path
+// (kontrak-api-kanonis.md section 10.7 item 4). No endpoint is built
+// here; the exemptions only keep the hook from 401ing those routes
+// when they land.
 //
 // Public mutation routes (login, setup) are NOT covered by the global
 // hook: they have no session yet, so CSRF token checks cannot apply.
@@ -43,6 +57,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ApiError } from '../plugins/envelope.js';
+import { HEALTH_PATHS } from '../routes/health.js';
 
 // Route config keys understood by the auth hook. Declared here so route
 // registrations can set them with type checking; the merge applies to
@@ -103,10 +118,30 @@ export const denyByDefaultVerifySession: VerifySessionFn = async () => null;
 
 export const denyByDefaultVerifyCsrf: VerifyCsrfTokenFn = async () => false;
 
-// Health paths that bypass application auth. Keep this list in sync
-// with registerHealthRoutes; the middleware contract test asserts the
-// exemption explicitly (desain-auth.md section 12.4, item 8).
-export const PUBLIC_HEALTH_PATHS: readonly string[] = ['/api/health', '/api/health/live', '/api/health/ready'];
+// Health paths that bypass application auth. Single source of truth is
+// the route module; the middleware contract test asserts the exemption
+// explicitly (desain-auth.md section 12.4, item 8).
+export const PUBLIC_HEALTH_PATHS: readonly string[] = HEALTH_PATHS;
+
+// No-session paths beyond health (wiring only, see the header comment).
+// The CSP report path is exact and POST-only; the backup download path
+// is a GET prefix with a single non-empty token segment.
+export const CSP_REPORT_PATH = '/api/csp-reports';
+export const BACKUP_DOWNLOAD_PREFIX = '/api/backups/downloads/';
+
+export function isPublicNoSessionRequest(method: string, path: string): boolean {
+  if (PUBLIC_HEALTH_PATHS.includes(path)) {
+    return true;
+  }
+  if (method === 'POST' && path === CSP_REPORT_PATH) {
+    return true;
+  }
+  if (method === 'GET' && path.startsWith(BACKUP_DOWNLOAD_PREFIX)) {
+    const token = path.slice(BACKUP_DOWNLOAD_PREFIX.length);
+    return token !== '' && !token.includes('/');
+  }
+  return false;
+}
 
 export const SESSION_COOKIE_NAMES: readonly string[] = ['__Host-notegen_session', 'notegen_session'];
 
@@ -208,18 +243,28 @@ export function defaultVerifyOrigin(request: FastifyRequest, canonicalOrigin: st
 interface RouteInfo {
   config: { requiresAuth?: boolean; requiresCsrf?: boolean };
   pattern: string | undefined;
+  // False when the router matched no route (404, including a
+  // wrong-method request to an existing path). In Fastify 5 an
+  // unmatched request still carries a routeOptions object, but with
+  // no url or method fields; a matched request always has both.
+  matched: boolean;
 }
 
 function routeInfo(request: FastifyRequest): RouteInfo {
   const raw = request as unknown as {
-    routeOptions?: { config?: RouteInfo['config']; url?: string };
+    routeOptions?: { config?: RouteInfo['config']; url?: string; method?: string };
     routeConfig?: RouteInfo['config'];
   };
   if (raw.routeOptions !== undefined) {
-    return { config: raw.routeOptions.config ?? {}, pattern: raw.routeOptions.url };
+    return {
+      config: raw.routeOptions.config ?? {},
+      pattern: raw.routeOptions.url,
+      matched: raw.routeOptions.url !== undefined,
+    };
   }
-  // Fastify 4 shape: routeConfig IS the config object.
-  return { config: raw.routeConfig ?? {}, pattern: undefined };
+  // Fastify 4 shape: routeConfig IS the config object, present only
+  // when a route matched.
+  return { config: raw.routeConfig ?? {}, pattern: undefined, matched: raw.routeConfig !== undefined };
 }
 
 function requestPath(request: FastifyRequest): string {
@@ -254,11 +299,17 @@ export function createAuthPreHandler(deps: AuthHookDeps = {}) {
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
     const info = routeInfo(request);
     const path = requestPath(request);
+    // Unmatched paths are the not-found handler's job, never this
+    // hook's: answering 401 here would mask a 404 and, for health-like
+    // paths, could be converted into a misleading 503 upstream.
+    if (!info.matched) {
+      return;
+    }
     const pattern = info.pattern ?? path;
     if (info.config.requiresAuth === false) {
       return;
     }
-    if (PUBLIC_HEALTH_PATHS.includes(pattern) || PUBLIC_HEALTH_PATHS.includes(path)) {
+    if (isPublicNoSessionRequest(request.method, path) || PUBLIC_HEALTH_PATHS.includes(pattern)) {
       return;
     }
     const requiresAuth = info.config.requiresAuth === true || path.startsWith('/api/') || pattern.startsWith('/api/');
@@ -268,7 +319,7 @@ export function createAuthPreHandler(deps: AuthHookDeps = {}) {
 
     const principal = await verifySession({ request, sessionId: parseSessionCookieId(request) });
     if (principal === null) {
-      throw ApiError.authRequired('Authentication is required.');
+      throw ApiError.unauthenticated();
     }
     setPrincipal(request, principal);
 
@@ -282,12 +333,12 @@ export function createAuthPreHandler(deps: AuthHookDeps = {}) {
         { layer: 'origin', origin: request.headers.origin ?? null },
         'mutation rejected by origin check',
       );
-      throw ApiError.csrfFailed('Request verification failed.');
+      throw ApiError.originRejected();
     }
     const csrfOk = await verifyCsrf(request, principal);
     if (!csrfOk) {
       request.log.warn({ layer: 'csrf' }, 'mutation rejected by csrf check');
-      throw ApiError.csrfFailed('Request verification failed.');
+      throw ApiError.csrfInvalid();
     }
   };
 }
@@ -300,7 +351,7 @@ export function registerAuthHooks(app: FastifyInstance, deps: AuthHookDeps = {})
 // where no session exists yet and the global hook does not run. The
 // auth worker attaches this as a route preHandler. It enforces exactly
 // the same matcher as the authenticated path, with the same generic
-// 403 outcome.
+// 403 outcome and the origin_rejected code.
 export function createOriginPreHandler(canonicalOrigin: string | undefined) {
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
     if (!defaultVerifyOrigin(request, canonicalOrigin)) {
@@ -308,7 +359,7 @@ export function createOriginPreHandler(canonicalOrigin: string | undefined) {
         { layer: 'origin', origin: request.headers.origin ?? null },
         'public mutation rejected by origin check',
       );
-      throw ApiError.csrfFailed('Request verification failed.');
+      throw ApiError.originRejected();
     }
   };
 }
