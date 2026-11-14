@@ -37,7 +37,13 @@
 
 export const PLATFORM_BARREL = "@/lib/platform";
 
-/** Specifiers handled by each wave (desain-registry-shim.md section 4.2). */
+/**
+ * Specifiers handled by each wave (desain-registry-shim.md section 4.2).
+ * api/core spans three waves per binding: invoke/Channel/
+ * transformCallback at G2, convertFileSrc at G3, isTauri at G4. Each
+ * wave lists api/core so its own bindings stay reachable in wave mode;
+ * bindings of other waves are kept as a residual declaration.
+ */
 export const WAVE_SPECIFIERS = {
   G1: [
     "@tauri-apps/plugin-store",
@@ -60,6 +66,7 @@ export const WAVE_SPECIFIERS = {
     "@tauri-apps/plugin-os",
     "@tauri-apps/api/app",
     "@tauri-apps/plugin-notification",
+    "@tauri-apps/api/core",
   ],
   G5: [
     "@tauri-apps/plugin-global-shortcut",

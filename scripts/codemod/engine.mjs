@@ -25,7 +25,16 @@ import { readFileSync } from "node:fs";
 import { lookupMapping, PLATFORM_BARREL } from "./mappings.mjs";
 
 const require = createRequire(import.meta.url);
-const { Project, SyntaxKind, Node } = require("ts-morph");
+let tsMorph;
+try {
+  tsMorph = require("ts-morph");
+} catch {
+  process.stderr.write(
+    "codemod engine: error: the 'ts-morph' package is required. Install dev dependencies with 'pnpm install' (ts-morph is a devDependency; see scripts/codemod/README.md).\n",
+  );
+  process.exit(1);
+}
+const { Project, SyntaxKind, Node } = tsMorph;
 
 const MAX_REPORTED_REFERENCES = 200;
 const INTERNALS_MARKER = "__TAURI_INTERNALS__";
@@ -35,6 +44,8 @@ export const SUPPORTED_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
 /** Kind names that mark a type position when walking up from an identifier. */
 const TYPE_POSITION_EXTRA = new Set([
+  "TypeReference",
+  "ImportType",
   "QualifiedName",
   "ExpressionWithTypeArguments",
   "HeritageClause",
@@ -186,18 +197,30 @@ function newProject() {
 }
 
 /**
- * Prove that only import declarations differ between two texts: strip
- * every import declaration (plus its blank remainder line) from both
- * sides and compare what remains, ignoring blank lines.
+ * Prove that only import declarations (and, under the opt-in dynamic
+ * rewrite, dynamic import specifier literals) differ between two texts:
+ * strip every import declaration (plus its blank remainder line) and
+ * normalize every dynamic import() specifier literal on both sides,
+ * then compare what remains, ignoring blank lines. Any other change
+ * inside a dynamic import still fails the check.
  */
 function verifyImportOnly(oldText, newText, extension) {
   const project = newProject();
   const strip = (label, content) => {
     const sf = project.createSourceFile(label, content, { overwrite: true });
-    const spans = sf.getImportDeclarations().map((decl) => removalSpan(content, decl));
+    const edits = sf
+      .getImportDeclarations()
+      .map((decl) => ({ ...removalSpan(content, decl), text: "" }));
+    for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+      if (call.getExpression().getKind() !== SyntaxKind.ImportKeyword) continue;
+      const args = call.getArguments();
+      if (args.length > 0 && Node.isStringLiteral(args[0])) {
+        edits.push({ start: args[0].getStart(), end: args[0].getEnd(), text: '""' });
+      }
+    }
     let stripped = content;
-    for (const span of [...spans].sort((a, b) => b.start - a.start)) {
-      stripped = stripped.slice(0, span.start) + stripped.slice(span.end);
+    for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+      stripped = stripped.slice(0, edit.start) + edit.text + stripped.slice(edit.end);
     }
     project.removeSourceFile(sf);
     return stripped
