@@ -20,6 +20,14 @@
  * readImage functions of the manager package itself are not imported
  * anywhere and are excluded; read access enters through the vendor
  * package names above.
+ *
+ * Merge M10 reconciliation (audit V2-40): the G0 interface
+ * wins whole (8 methods, both clipboard surfaces). The V2-12
+ * mimeType parameter and Blob image input are NOT adopted:
+ * writeImage takes the byte union and always writes image/png
+ * on the web. The web implementation provides the five read
+ * methods as explicit not-implemented stubs until wave 3
+ * implements clipboard reads.
  */
 export interface ClipboardAdapter {
   writeText(text: string, opts?: { label?: string }): Promise<void>;

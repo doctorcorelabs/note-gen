@@ -71,9 +71,16 @@ export type {
   ConfirmDialogOptions,
   DialogAdapter,
   DialogFilter,
+  DialogKind,
+  DialogOpenResult,
+  DialogPickedFile,
+  DialogSaveTarget,
+  DialogService,
+  DialogWebAdapterOptions,
   MessageDialogOptions,
   OpenDialogOptions,
   OpenDialogReturn,
+  PromptDialogOptions,
   SaveDialogOptions,
 } from "./dialog/interface";
 export type {
