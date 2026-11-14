@@ -1,6 +1,9 @@
 {
   "root": true,
-  "extends": ["next/core-web-vitals", "next/typescript"],
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
   "rules": {
     "@next/next/no-img-element": "off",
     "react-hooks/exhaustive-deps": "off",
@@ -8,5 +11,114 @@
   },
   "ignorePatterns": [
     "docs/**"
+  ],
+  "overrides": [
+    {
+      "excludedFiles": [
+        "src/lib/platform/**/*"
+      ],
+      "files": [
+        "src/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "warn",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@tauri-apps/*",
+                  "tauri-plugin-clipboard-api"
+                ],
+                "message": "Do not import Tauri APIs outside src/lib/platform/. Use the adapter from @/lib/platform instead (AD-07)."
+              },
+              {
+                "group": [
+                  "**/lib/platform/*/*.tauri",
+                  "**/lib/platform/*/*.web",
+                  "@/lib/platform/*/*.tauri",
+                  "@/lib/platform/*/*.web",
+                  "**/*.tauri",
+                  "**/*.web"
+                ],
+                "message": "Do not import adapter implementations directly. Use the adapter from @/lib/platform (registry) instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/lib/platform/**/interface.ts",
+        "src/lib/platform/**/*.web.ts",
+        "src/lib/platform/registry.ts",
+        "src/lib/platform/detect.ts",
+        "src/lib/platform/errors.ts",
+        "src/lib/platform/types.ts",
+        "src/lib/platform/capabilities.ts",
+        "src/lib/platform/index.ts",
+        "src/lib/platform/invoke/commands.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@tauri-apps/*"
+                ],
+                "message": "Only *.tauri.ts files may import @tauri-apps/*."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/lib/platform/**/*.tauri.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/lib/platform/*/*.web",
+                  "@/lib/platform/*/*.web",
+                  "**/*.web"
+                ],
+                "message": "A *.tauri.ts implementation must never import a *.web.ts implementation."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/lib/platform/**/*.web.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/lib/platform/*/*.tauri",
+                  "@/lib/platform/*/*.tauri",
+                  "**/*.tauri"
+                ],
+                "message": "A *.web.ts implementation must never import a *.tauri.ts implementation."
+              }
+            ]
+          }
+        ]
+      }
+    }
   ]
 }

@@ -74,6 +74,7 @@ Aturan merge: PR fitur ke web memakai squash merge. PR sync upstream ke web mema
 - 2026-11-14: bahasa default UI menjadi Inggris, mode zh tetap jalan (623fbb0): DEFAULT_LOCALE en terpisah dari FALLBACK_LOCALE zh, tiga titik default lain berubah ke en. String CJK hardcoded di luar cakupan perubahan ini dan menjadi follow-up Fase 1.
 - 2026-11-14: endpoint health API Fastify di server/ (28687d5): GET /api/health/live, GET /api/health/ready, dan alias GET /api/health, dengan lockfile server terpisah. Diuji di Postgres 16.15; uji T16 lewat proksi ditunda ke compose.
 - 2026-11-14: hygiene repo dan identitas fork: tambahan .gitignore, file ini, .env.example (root, server, infra), penonaktifan workflow rilis dan publikasi config.
+- 2026-11-14: fondasi registry G0 gelombang 2 Fase 1 (branch web-registry-g0): 19 berkas interface adapter type-only di src/lib/platform/ (20 interface untuk 16 butir inventaris), perluasan registry.ts (registrasi bertipe, capability flag, freeze sesudah boot), barrel src/lib/platform/index.ts, aturan ESLint no-restricted-imports untuk impor Tauri di luar platform di .eslintrc.json (peringatan untuk berkas lama, error untuk berkas platform), dan gate grep scripts/platform-guard.sh dengan allowlist. Tidak ada perubahan perilaku; belum ada pemanggil registry.
 
 ### Basis upstream
 

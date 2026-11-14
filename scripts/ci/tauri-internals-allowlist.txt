@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Temporary allowlist for scripts/platform-guard.sh check 2 (AD-07).
+# One path per line: legacy files that still mention the Tauri internals
+# marker directly. Each entry is deleted when its file migrates to
+# detect.ts. Deadlines: debug-log.ts and tauri-event-listener.ts close
+# at G2; developer-tools.ts closes at G4. The canonical mention in
+# src/lib/platform/detect.ts is not listed here; the guard excludes it.
+src/lib/agent/debug-log.ts
+src/lib/developer-tools.ts
+src/lib/tauri-event-listener.ts
