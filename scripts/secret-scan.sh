@@ -109,14 +109,24 @@ done < "$tmp_list"
 # Lines carrying the CHANGE_ME placeholder or an angle-bracket placeholder
 # are not findings; any other assigned value is. Matched lines are piped
 # through filters only and are never printed.
+#
+# Test fixtures are not findings: an assignment whose target is a TEST_-
+# prefixed constant (for example TEST_AUTH_SECRET in server/test/) is a
+# labeled test-only value, never a production secret (AD-45 verdict for
+# the auth fixtures; coordinator decision AD-55, 15 November 2026). The
+# TEST_ filter below drops exactly those lines; any other assignment to
+# a secret name still flags. The filter requires a non-identifier
+# character (or line start) before TEST_, so names such as
+# MY_AUTH_SECRET or XTEST_AUTH_SECRET still flag.
 secret_assign="(AUTH_SECRET|SECRETS_ENCRYPTION_KEY|SETUP_TOKEN|INTERNAL_SERVICE_TOKEN|CF_ACCESS_AUD)[[:space:]]*=[[:space:]]*[\"']?[^[:space:]#\"']"
+test_assign="(^|[^A-Z0-9_])TEST_(AUTH_SECRET|SECRETS_ENCRYPTION_KEY|SETUP_TOKEN|INTERNAL_SERVICE_TOKEN|CF_ACCESS_AUD)[[:space:]]*="
 git grep -I -l -E -e "$secret_assign" -- ':!pnpm-lock.yaml' ':!server/pnpm-lock.yaml' ':!scripts/secret-scan.sh' > "$tmp_list" || true
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   case "$f" in
     *.env.example) continue ;;
   esac
-  if grep -E "$secret_assign" "$f" | grep -v 'CHANGE_ME' | grep -v '<[^>]*>' | grep -q .; then
+  if grep -E "$secret_assign" "$f" | grep -v 'CHANGE_ME' | grep -v '<[^>]*>' | grep -vE "$test_assign" | grep -q .; then
     report "secret-assignment" "$f"
   fi
 done < "$tmp_list"

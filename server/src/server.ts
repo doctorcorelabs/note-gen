@@ -23,6 +23,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { createAuthContextFromConfig } from './auth/context.js';
 import { loadConfig, type ServerConfig } from './config.js';
 import { closePool, createPool, type HealthDbPool } from './db/pool.js';
 
@@ -56,7 +57,13 @@ async function main(): Promise<void> {
   const config = safeLoadConfig();
   const version = readServerVersion();
   const pool: HealthDbPool | null = createPool(config.databaseUrl, config.checkTimeoutMs);
-  const app = await buildApp({ config, pool, version });
+  // Production auth context (V3-01): builds the Drizzle-backed store
+  // lazily from DATABASE_URL and reads secret values from the
+  // environment. With no DATABASE_URL the store is null and every
+  // auth path fails closed; the server still boots so health keeps
+  // reporting readiness honestly.
+  const auth = createAuthContextFromConfig(config);
+  const app = await buildApp({ config, pool, version, auth });
 
   for (const warning of config.warnings) {
     app.log.warn(warning);
@@ -84,6 +91,12 @@ async function main(): Promise<void> {
       await app.close();
     } catch {
       // Ignore close errors during shutdown.
+    }
+    try {
+      await auth.close();
+    } catch {
+      // Ignore auth close errors during shutdown. buildApp also
+      // closes the context on app.close(); the close is idempotent.
     }
     try {
       await closePool(pool);

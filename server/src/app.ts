@@ -19,6 +19,11 @@
 //    Without an injected verifySession, protected routes answer 401:
 //    the foundation is deny-by-default until the auth worker lands.
 // 4. Health routes, unchanged in behavior from Fase 0.
+// 5. Auth core routes (V3-01, AD-40): registered only when an auth
+//    context is injected through AppDeps, as the first commented
+//    route block after health. Without the injection, no auth route
+//    exists and the deny-by-default behavior of point 3 is
+//    unchanged.
 //
 // Request logging is disabled: health probes arrive every few seconds
 // from watchdogs and container healthchecks, and successful probes must
@@ -27,6 +32,7 @@
 // redacted at the logger level (see plugins/logging.ts).
 
 import Fastify, { LogController, type FastifyInstance } from 'fastify';
+import type { AuthContext } from './auth/context.js';
 import type { ServerConfig } from './config.js';
 import type { HealthDbPool } from './db/pool.js';
 import {
@@ -35,9 +41,12 @@ import {
   type VerifyOriginFn,
   type VerifySessionFn,
 } from './middleware/auth-hook.js';
+import { createCsrfVerifier } from './middleware/csrf.js';
+import { createSessionVerifier } from './middleware/session.js';
 import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
+import { registerAuthCoreRoutes } from './routes/auth-core.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface AppDeps {
@@ -50,6 +59,16 @@ export interface AppDeps {
   verifySession?: VerifySessionFn;
   verifyCsrf?: VerifyCsrfTokenFn;
   verifyOrigin?: VerifyOriginFn;
+  // Auth context injected by the auth worker (V3-01, AD-40). When
+  // present, the auth route block below is registered and the
+  // session/CSRF verifiers are derived from it, unless explicit
+  // verifiers above are also given (explicit wins, so foundation
+  // tests keep injecting stubs). When absent, no auth route exists
+  // and the foundation deny-by-default behavior is unchanged.
+  // server.ts injects the production context; tests inject a context
+  // built with a fake store. One context feeds one app: buildApp
+  // closes it on app.close().
+  auth?: AuthContext;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -62,13 +81,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerRequestId(app);
   registerErrorHandling(app, { version: deps.version });
+  // Resolve the verifiers before the hooks: explicit injections win,
+  // then verifiers derived from the injected auth context, then the
+  // deny-by-default stubs inside registerAuthHooks (undefined here).
+  // verifyOrigin is never derived: the hook's default Origin matcher
+  // applies when no explicit verifier is given.
+  const verifySession = deps.verifySession ?? (deps.auth === undefined ? undefined : createSessionVerifier(deps.auth));
+  const verifyCsrf = deps.verifyCsrf ?? (deps.auth === undefined ? undefined : createCsrfVerifier(deps.auth));
   registerAuthHooks(app, {
-    verifySession: deps.verifySession,
-    verifyCsrf: deps.verifyCsrf,
+    verifySession,
+    verifyCsrf,
     verifyOrigin: deps.verifyOrigin,
     canonicalOrigin: deps.config.publicBaseUrl,
   });
 
+  // Route blocks, in contract order (AD-40): one commented block per
+  // group. Later route workers add only their own block, in contract
+  // order, and never reorder the middleware above (pattern N-2).
+  // --- Health (kontrak 3.14) ---
   await registerHealthRoutes(app, {
     pool: deps.pool,
     workspaceRoot: deps.config.workspaceRoot,
@@ -76,6 +106,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
+
+  // --- Auth core (kontrak 3.12; V3-01) ---
+  if (deps.auth !== undefined) {
+    const auth = deps.auth;
+    await registerAuthCoreRoutes(app, { auth });
+    app.addHook('onClose', async () => {
+      await auth.close();
+    });
+  }
 
   return app;
 }
