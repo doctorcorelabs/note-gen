@@ -291,7 +291,7 @@ describe('PUT /api/workspace/file', () => {
 
   it('rejects traversal, absolute, and dot-leading paths with invalid_path', async () => {
     const { app } = await setup();
-    for (const bad of ['../escape.md', 'a/../b.md', '/abs.md', '.hidden.md', 'a/.git/x.md', '']) {
+    for (const bad of ['../escape.md', 'a/../b.md', '/abs.md', '.hidden.md', 'a/.git/x.md', 'a//b.md', 'a/', '']) {
       const res = await app.inject({
         method: 'PUT',
         url: `/api/workspace/file?path=${encodeURIComponent(bad)}`,
@@ -303,17 +303,16 @@ describe('PUT /api/workspace/file', () => {
     }
   });
 
-  it('collapses repeated slashes in the path', async () => {
-    const { app, root } = await setup();
+  it('rejects repeated slashes: strict segments, no collapsing (frozen V3-04a shape)', async () => {
+    const { app } = await setup();
     const res = await app.inject({
       method: 'PUT',
       url: '/api/workspace/file?path=a%2F%2Fb.md',
       headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'text/plain' },
       payload: 'x',
     });
-    expect(res.statusCode).toBe(201);
-    expect(dataOf(res)['path']).toBe('a/b.md');
-    expect(await readFile(join(root, 'a', 'b.md'), 'utf8')).toBe('x');
+    expect(res.statusCode).toBe(400);
+    expect(errorBody(res).code).toBe('invalid_path');
   });
 
   it('answers 400 invalid_path for a missing or repeated path query', async () => {

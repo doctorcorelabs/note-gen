@@ -15,7 +15,10 @@
 //
 // The doubles are deliberately strict: any path or revision behavior
 // the real V3-04a modules define differently must be caught by the
-// V3-04a conformance tests, not papered over here.
+// V3-04a conformance tests, not papered over here. The path double
+// was aligned 15 Nov 2026 to the frozen V3-04a module as pushed on
+// branch web-workspace-read (strict segments: no slash collapsing,
+// hidden segments rejected for writes).
 
 import { createHash } from 'node:crypto';
 import { lstat, realpath } from 'node:fs/promises';
@@ -51,12 +54,17 @@ function invalidPath(message: string): ApiError {
 }
 
 // Spec-faithful subset of the path validation order in
-// desain-workspace-api.md section 8: reject non-strings, empty
-// input, NUL/control characters, backslashes, absolute paths, and
-// drive letters; collapse repeated slashes; reject dot segments,
-// dot-leading segments, and empty segments; enforce the byte and
+// desain-workspace-api.md section 8 AS FROZEN BY V3-04a
+// (server/src/lib/paths.ts, branch web-workspace-read): reject
+// non-strings, empty input, NUL/control characters, backslashes,
+// absolute paths, and drive letters; reject empty segments (double
+// slashes and trailing slashes are ERRORS, never collapsed), dot
+// segments, and dot-leading segments (hidden paths answer 400
+// invalid_path on writes, desain section 8.6); enforce the byte and
 // segment limits; then walk every existing path prefix and reject
-// any symlink component.
+// any symlink component. This double mirrors the frozen module
+// exactly so the write tests pin the real contract; the V3-04a
+// adapter replaces it without behavior change.
 export function createTestPathPort(root: string): WorkspacePathPort {
   return {
     async resolveWritePath(input: unknown): Promise<ResolvedWorkspacePath> {
@@ -72,8 +80,8 @@ export function createTestPathPort(root: string): WorkspacePathPort {
       if (input.startsWith('/') || /^[A-Za-z]:/.test(input)) {
         throw invalidPath('The workspace path is not valid.');
       }
-      const normalized = input.replace(/\/+/g, '/');
-      if (normalized === '' || normalized.endsWith('/')) {
+      const normalized = input;
+      if (normalized.endsWith('/')) {
         throw invalidPath('The workspace path is not valid.');
       }
       if (Buffer.byteLength(normalized, 'utf8') > MAX_PATH_BYTES) {
