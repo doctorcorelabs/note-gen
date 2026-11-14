@@ -119,6 +119,8 @@ function hashDir(dir) {
   check("G1 f16 re-export UNSUPPORTED (R2)", f16.unsupported.length === 1 && f16.unsupported[0].reason === "re-export-not-handled", JSON.stringify(f16.unsupported));
   const f22 = byPath(report, "engine-f22-store-type.ts");
   check("G1 f22 type-only Store maps to StoreHandle (R2)", f22.status === "transformed" && f22.bindings.some((b) => b.localName === "Store" && b.barrelName === "StoreHandle" && b.barrelKind === "type"), JSON.stringify(f22.bindings));
+  const f25 = byPath(report, "engine-f25-basedir-type.ts");
+  check("G1 f25 type-only BaseDirectory keeps type import (R2)", f25.status === "transformed" && f25.bindings.some((b) => b.localName === "BaseDirectory" && b.barrelKind === "type"), JSON.stringify(f25.bindings));
   const f17 = byPath(report, "engine-f17-barrel-merge.ts");
   check("G1 f17 transformed, both decls (F-02)", f17.status === "transformed" && f17.declarationsTransformed === 2 && f17.declarationsSkipped.length === 0, JSON.stringify(f17));
   check("G1 f18 skipped (dynamic report-only)", byPath(report, "engine-f18-dynamic-barrel.ts").status === "skipped");
@@ -231,6 +233,8 @@ function hashDir(dir) {
   check("f14 platform + BaseDirectory one decl", /import \{ platform, BaseDirectory \}/.test(f14), f14);
   const f22w = readFileSync(resolve(work, "engine-f22-store-type.ts"), "utf8");
   check("f22 StoreHandle as Store in written output (R2)", f22w.includes("import type { StoreHandle as Store }"), f22w);
+  const f25w = readFileSync(resolve(work, "engine-f25-basedir-type.ts"), "utf8");
+  check("f25 single type import in written output (R2)", f25w.includes("import type { BaseDirectory, DirEntry }") && !f25w.includes("import { BaseDirectory }"), f25w);
   const proof = spawnSync("node", ["--input-type=module", "-e", `
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";

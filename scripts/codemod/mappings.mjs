@@ -22,7 +22,10 @@
  *   the same name (alias preserved). barrelKind "value" is a runtime
  *   export (BaseDirectory, isTauri). barrelKind "type" is a type-only
  *   export; the engine rewrites it only when every reference is in a
- *   type position, otherwise the declaration is skipped.
+ *   type position, otherwise the declaration is skipped. A "value"
+ *   export used only in type positions is still emitted as a type
+ *   import (usage-driven bucketing, pattern 3); mixed use keeps the
+ *   value import, which serves both positions.
  * - "none": no same-name replacement exists. The declaration is skipped
  *   with a reason. This covers QueryResult (rejected by AD-26), Update
  *   used as a value (barrel has UpdateInfo, a different shape), and

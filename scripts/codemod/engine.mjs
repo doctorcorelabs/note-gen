@@ -496,6 +496,20 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
           skipDetail = `'${importedName}' is a type-only barrel export but is used in a value position.`;
           return false;
         }
+        // Value-kind barrel exports (BaseDirectory, isTauri) used only
+        // in type positions keep a type import: `import type` of a
+        // value export is valid when no value use exists, and it
+        // preserves the source declaration form (pattern 3; fixture
+        // g1-fs-type-only). Mixed use keeps the value import, which
+        // serves both positions. No references plus a type-only
+        // declaration also keeps the type form.
+        let emittedKind = mapping.barrelKind;
+        if (mapping.barrelKind === "value") {
+          const mix = referenceMix(nameNode);
+          if ((mix.hasType && !mix.hasValue) || (!mix.hasType && !mix.hasValue && decl.isTypeOnly())) {
+            emittedKind = "type";
+          }
+        }
         const existing = barrelLocalNames.get(localName);
         if (existing !== undefined && existing !== importedName) {
           skipReason = "barrel-name-taken";
@@ -503,7 +517,7 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
           return false;
         }
         if (existing === undefined) {
-          if (mapping.barrelKind === "value") plannedBarrelValue.push({ importedName, localName });
+          if (emittedKind === "value") plannedBarrelValue.push({ importedName, localName });
           else plannedBarrelType.push({ importedName, localName });
         }
         removedBindings.push({
@@ -511,7 +525,7 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
           importedName,
           specifier: spec,
           action: "barrel",
-          barrelKind: mapping.barrelKind,
+          barrelKind: emittedKind,
           nameNode,
         });
         return true;

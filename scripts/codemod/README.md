@@ -120,7 +120,7 @@ note in the fase1 report.
 |---|---|---|---|
 | 1 | Static one-line import, either quote style, optional semicolon | Transform | `engine-fixtures/engine-f01-store.ts` |
 | 2 | Static multi-line import block | Transform (AST, not lines) | `engine-fixtures/engine-f02-multiline.ts` |
-| 3 | Type imports (`import type`, inline `type`, type-only barrel exports) | Transform when every reference is in a type position, else skip | `engine-fixtures/engine-f03-types.ts` |
+| 3 | Type imports (`import type`, inline `type`, type-only barrel exports) | Transform when every reference is in a type position, else skip. Value-kind barrel exports (`BaseDirectory`, `isTauri`) used only in type positions keep a type import; mixed use keeps the value import | `engine-fixtures/engine-f03-types.ts`, `engine-f25-basedir-type.ts` |
 | 4 | Aliases (`open as openDialog`, ...) | Transform; local name preserved | `engine-fixtures/engine-f04-alias.ts` |
 | 5 | Dynamic import (`await import`, `.then`, `Promise.all` batch) | Report only by default; batch reported as one unit; opt-in rewrite for all-barrel-value destructures | `engine-fixtures/engine-f05-dynamic.ts`, `engine-f18-dynamic-barrel.ts` |
 | 6 | Dynamic module access (`module.Store.load`) | Report only (namespace access) | `engine-fixtures/engine-f06-module-access.ts` |
@@ -138,7 +138,8 @@ barrel imports), `engine-f20` (`api/image` copy flow, transformed
 + MANUAL-REVIEW), `engine-f21` (`Update` used as a value, skip), `engine-f22`
 (type-only `Store` maps to `StoreHandle`), `engine-f23`
 (type-only `LogicalSize` maps to `LogicalSizeValue`),
-`engine-f24` (opener per-call-site decisions, MANUAL-REVIEW).
+`engine-f24` (opener per-call-site decisions, MANUAL-REVIEW),
+`engine-f25` (type-only `BaseDirectory` keeps a type import).
 
 ## Report
 
