@@ -39,6 +39,7 @@ import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerStubRoutes } from './routes/stubs.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -76,6 +77,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
+
+  // Explicit 501 stubs (V3-39a, canonical contract section 7): backup
+  // restore and document parse. The stubs answer 501 only after the
+  // auth hook passes, with no side effects.
+  await registerStubRoutes(app, { maxBodyBytes: deps.config.maxBodyBytes });
 
   return app;
 }
