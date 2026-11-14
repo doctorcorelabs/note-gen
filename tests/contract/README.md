@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Contract tests: store, filesystem, SQL
 
 One suite, many implementations. The same cases run once per factory,
@@ -12,8 +13,9 @@ AD-17. Case behavior details come from `fase1/desain-store-adapter.md`
 (section 8, CT-01 to CT-22) and `fase1/desain-sql-adapter.md`
 (section 6, CT-M/K/T/H/X/S/I/P). This README is the interface mapping
 required by assumption A2 of the test design: it records how the
-scaffold-local interface mirrors relate to the designs, and what the
-integrator must reconcile when V2-04 lands the real interfaces.
+scaffold-local interface mirrors relate to the designs and to the
+canonical V2-04 interfaces (branch `web-registry-g0`), and what the
+integrator must reconcile at merge time (see EXCEPTIONS.md E9).
 
 ## Status
 
@@ -31,16 +33,24 @@ not oversights):
 - No AI transport cases (C-AI-01 to C-AI-06) and no event/cache cases
   (C-EV-01 to C-EV-04). Those belong to later scaffold work, not to
   this store/filesystem/SQL scaffold.
-- No `tsconfig.json` change. The test design (section 1.6) requires
-  adding `tests/**/*.ts`, `vitest.config.ts`, and
-  `playwright.config.ts` to `include` and removing the stale `.bak`
-  entry (P0-2). That edit is owned by the integrator, together with
-  the P0-1 cleanup of `mark-view-mode.mjs`, because it touches shared
-  repo configuration also edited by other wave 2 workers.
 - No Postgres, no network, no real filesystem in any case in this
   scaffold. Cases that need them are listed as deferred below and
   must fail explicitly (not skip silently) if wired to an
   implementation that cannot run them.
+
+Wiring that IS present on this branch: `package.json` carries the
+`test`/`test:legacy`/`test:unit`/`test:contract`/
+`test:contract:tauri`/`test:watch`/`typecheck` scripts and the pinned
+devDependencies `vitest 3.2.7` and `vite-tsconfig-paths 5.1.4`
+(the Vitest version matches the one already installed for
+`server/`); `tsconfig.json` includes `tests/**/*.ts` and
+`vitest.config.ts` and the stale `.bak` entry (P0-2) is removed.
+Two wiring items stay with the integrator: regenerating
+`pnpm-lock.yaml` for the new devDependencies (this branch does not
+carry a regenerated lockfile, so the first `pnpm install` updates
+it and CI `--frozen-lockfile` needs the committed result), and the
+P0-1 cleanup of `mark-view-mode.mjs` plus the `playwright.config.ts`
+`include` entry, which land with the E2E scaffold merge.
 
 ## How to run
 
@@ -48,6 +58,10 @@ not oversights):
 pnpm install
 pnpm test:contract
 ```
+
+The first `pnpm install` on this branch regenerates
+`pnpm-lock.yaml` for the new devDependencies (see Status above);
+after that, `pnpm install --frozen-lockfile` works as in CI.
 
 Single adapter:
 
@@ -79,7 +93,8 @@ entry.
 | `tests/contract/store.contract.ts` | Store entry: fake factory + corrupt-backing suite |
 | `tests/contract/fs.contract.ts` | Filesystem entry: fake factory + `writeExternally` |
 | `tests/contract/sql.contract.ts` | SQL entry: fake factory |
-| `tests/contract/EXCEPTIONS.md` | Documented divergences (E1 to E8); silent `it.skip` is forbidden |
+| `tests/contract/EXCEPTIONS.md` | Documented divergences (E1 to E9); silent `it.skip` is forbidden |
+| `tests/contract/implementations/README.md` | Factory contract for web/Tauri/Postgres factories (no factories yet) |
 | `tests/fakes/fake-store.ts` | Independent in-memory `StoreAdapter` |
 | `tests/fakes/fake-fs.ts` | Independent in-memory `FsAdapter` |
 | `tests/fakes/fake-sql.ts` | Independent in-memory `SqlAdapter` (see R2 note below) |
@@ -91,45 +106,81 @@ entry.
 At branch point `a28fd02`, `src/lib/platform/` contains only
 `detect.ts`, `errors.ts`, `poc-app-shim.ts`, `poc-store-shim.ts`, and
 a registry skeleton that states interface definitions land with wave
-2. No store, SQL, or filesystem interface exists there yet, so the
-scaffold cannot import them. The mirrors in `contract-types.ts`
-stand in until V2-04 lands the real interfaces. When that happens,
-the integrator deletes the mirrored shapes, imports the real ones
-from `src/lib/platform/store/interface.ts`,
-`src/lib/platform/sql/interface.ts`, and
-`src/lib/platform/fs/interface.ts` (layout per
-`fase1/desain-registry-shim.md`), adapts the fakes and cases to any
-name or signature differences, and updates this section. Only
-`PlatformCapabilityError` (via the `capabilityError` helper) is
-imported from `src/lib/platform/errors.ts` today, because it already
-exists.
+2. No store, SQL, or filesystem interface exists on this branch, so
+the scaffold cannot import them. The mirrors in `contract-types.ts`
+stand in for the designs. Only `PlatformCapabilityError` (via the
+`capabilityError` helper) is imported from
+`src/lib/platform/errors.ts` today, because it already exists.
 
-### Store: mirror matches the design sketch exactly
+Reconciliation with the canonical interfaces (V2-04, branch
+`web-registry-g0`, commit `76e1660`, 20 interfaces in 19
+subdirectories under `src/lib/platform/`): the canonical interfaces
+have now been written, and a method-by-method comparison shows the
+mirrors do NOT match them. The differences are structural, and the
+integrator must NOT resolve them by deleting the mirrors and
+importing the canonical shapes: the canonical interfaces fix the
+narrow upstream shim surface (what the Tauri plugins expose), while
+the mirrors fix the observable workspace-level behavior the contract
+cases lock (what the web app must do). Both layers are needed; the
+remapping composes them. Summary (detail in EXCEPTIONS.md E9):
+
+| Adapter | Mirror in `contract-types.ts` | Canonical (V2-04) | Verdict |
+|---|---|---|---|
+| Store | `IStore` sketch + `path`, `length`, `close`, `getStore`, `closeAll` | `StoreHandle` without `path`/`length`/`close`; adapter is `load` only | Close: same core; 5 mirror-only members need a drop-or-extend decision |
+| Filesystem | Workspace contract: scan, trash, link rewrite, image resolve, `seq` events | Plugin-fs surface: `readTextFile`, `readDir`, `rename`, `watch`, `BaseDirectory` options | Different layers: cases bind the workspace layer, built on the shim |
+| SQL | Typed operation catalog (`query`/`execute`/`transaction`) | Raw `{sql, params}` shim (`execute`/`select`/`close`) for legacy `src/db` callers | Different layers: cases bind the typed catalog; raw SQL stays out of the contract |
+
+Fakes location note: the test design (section 6.1) places fakes at
+`tests/contract/fakes/`, but this scaffold keeps them at
+`tests/fakes/`, the location already cataloged by the wave 2 merge
+plan. The deviation is layout only; imports and the Vitest config do
+not depend on it. Do not move the directory without updating the
+merge plan catalog in the same change.
+
+### Store: mirror matches the design sketch, not the canonical interface
 
 `StoreAdapter`, `StoreHandle`, `StoreOptions`, and `UnlistenFn` in
 `contract-types.ts` are identical in shape to
 `fase1/desain-store-adapter.md` section 3.3, which mirrors `IStore`
 from `@tauri-apps/plugin-store` 2.3.0 plus a read-only `path` field.
-No mapping is expected. Two related items still need V2-04:
+Against the canonical V2-04 interface, the core matches
+(`load`/`get`/`set`/`has`/`delete`/`clear`/`reset`/`keys`/`values`/
+`entries`/`reload`/`save`/`onKeyChange`/`onChange`, same
+`StoreOptions`), but five mirror members have no canonical
+counterpart: the `path` field, `length()`, `close()`,
+`getStore()`, and `closeAll()`. V2-04 excluded them as zero-call-site
+surface. Cases CT-01 and CT-03c assert that mirror-only surface;
+the integrator either drops those assertions or extends the
+canonical interface, and records the choice in EXCEPTIONS.md E9.
+Two related items the integrator must still resolve:
 
-- `createLazyStore` (CT-04) is not part of the mirror. It lives in
-  `store/interface.ts` per the design and is owned by V2-04.
+- `createLazyStore` (CT-04) is not part of the mirror. The design
+  places it in `store/interface.ts`, but V2-04 excluded `LazyStore`
+  (0 call sites); CT-04 stays deferred unless the integrator
+  reintroduces the helper.
 - The key-schema module (`classifyKey`, S/R/L lists, `aiModelList`
   split) is not part of the mirror. The fake uses a minimal
   pattern-based secret classification only; the full module belongs
-  to V2-04 and the real adapter. Cases CT-05 to CT-08 need it and are
+  to the store-interface owner and the real adapter. Cases CT-05 to CT-08 need it and are
   deferred (see below).
 
 ### SQL: mirror is a subset, with four flagged divergences
 
 The `SqlAdapter` shape (mode, `ready`, `query`, `queryOne`,
 `queryMany`, `execute`, `transaction`, `close`) matches
-`fase1/desain-sql-adapter.md` section 3.2. The operation catalog is a
-subset: 12 read kinds and 18 write kinds, covering only the
+`fase1/desain-sql-adapter.md` section 3.2. It does NOT match the
+canonical V2-04 `SqlAdapter`, which is the narrow raw shim
+(`load(path)` returning `execute(query, bindValues)` /
+`select(query, bindValues)` / `close()`) for the legacy `src/db`
+callers. The contract cases bind the typed-operation catalog, not
+the raw shim; no case sends raw SQL, and the raw shim must never
+become a contract surface (see EXCEPTIONS.md E9 and CT-S5/C-SQ-08).
+The operation catalog is a subset: 12 read kinds and 18 write kinds, covering only the
 operations exercised by the contract cases plus their minimal
 neighbors. The full MVP catalog in section 3.4 (conversations,
 messages, notes, compactions, activity, memories, policy, image
-cache, wiki pages/jobs/segments) is not mirrored; V2-04 defines it.
+cache, wiki pages/jobs/segments) is not mirrored; the typed-catalog
+owner (branch `web-sql-ops-catalog`) defines it.
 
 Divergences the integrator must resolve (do not silently "fix" the
 cases to match one side without recording the decision):
@@ -141,7 +192,7 @@ cases to match one side without recording the decision):
    `insertExternalMark` idempotency semantics from section 3.4 and
    C-SQ-05; the committed flag carries the "return false on
    conflict, do not throw" semantics of `commitWikiSourceRevision`
-   in section 3.4. V2-04 must confirm the field names or rename
+   in section 3.4. The typed-catalog owner must confirm the field names or rename
    them in the cases and the fake together.
 2. `SqlHealth.mode` and `SqlAdapter.mode` in the mirror allow
    `"fake"` in addition to `"tauri" | "web"`. Production interfaces
@@ -153,7 +204,7 @@ cases to match one side without recording the decision):
    follow the hash-machine vocabulary of section 1.7 and CT-H1 to
    CT-H6. The section 3.4 table names different operations
    (`knowledge.upsertSource`, `knowledge.updateStatus`,
-   `knowledge.removeSource`). V2-04 must confirm the canonical
+   `knowledge.removeSource`). The typed-catalog owner must confirm the canonical
    names; whichever wins, the cases and the fake change together.
 4. `vector.insertChunk` exists in the mirror only to test the
    unique-chunk-key behavior (CT-K4/C-SQ-06a) at adapter level.
@@ -165,8 +216,8 @@ cases to match one side without recording the decision):
    worker-only in the design and is mirrored for the same reason.
 5. `marks.create` in the mirror omits the `activity` input shown in
    the section 3.3 example, and `marks.list` omits the `cursor`
-   field. No case asserts activity rows or cursor pagination; V2-04
-   adds them to the real catalog without changing these cases.
+   field. No case asserts activity rows or cursor pagination; the
+   typed-catalog owner adds them to the real catalog without changing these cases.
    `marks.create` also omits the `ON CONFLICT` wording: see E7 for
    the `tags.create` duplicate conflict, and the CT-K2 note below.
 
@@ -192,9 +243,15 @@ plugin-fs operations being replaced (`readDir`, `readTextFile`,
 `removeToTrash`, `restoreFromTrash`, `purgeFromTrash`, `listTrash`,
 `resolveImage`, `onEvent`) are chosen from the observable behaviors
 in C-FS-01 to C-FS-11 and are UNVERIFIED against V2-04. The
-integrator must remap every call site in `fs-cases.ts` and
-`fake-fs.ts` to the real `FsAdapter` names, and record the mapping
-here. Behavior, not names, is what the cases lock.
+canonical V2-04 `FsAdapter` is the upstream plugin-fs surface
+(`readTextFile`, `writeTextFile`, `readDir`, `remove`, `rename`,
+`watch`, `BaseDirectory` options, ...): it has no scanner, no trash,
+no link rewriting, and no image resolution, because those are
+workspace-layer behaviors composed on top of the shim. The
+integrator remaps the cases to that composed layer and records the
+mapping here; remapping them to the raw shim method-for-method
+would delete the AD-17 behaviors the cases exist to lock. Behavior,
+not names, is what the cases lock.
 
 Two design points are only partly testable through the mirror:
 
@@ -214,8 +271,9 @@ Two design points are only partly testable through the mirror:
   (`VALIDATION`, `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE`, `UNKNOWN`).
   It omits `UNAUTHORIZED` and `FORBIDDEN`: the fake has no auth
   surface, and cases CT-S1 to CT-S4 that need those codes are
-  deferred to the server level. When V2-04 lands the real error
-  types, the integrator rewires the codes to the final taxonomy;
+  deferred to the server level. V2-04 added no further error
+  taxonomy (`errors.ts` unchanged); when a final taxonomy lands,
+  the integrator rewires the codes to it;
   cases assert codes, never message text, except CT-X6.
 - Store cases assert `PlatformCapabilityError` for removed store
   files, secret-key writes, and custom serializers, using the real
@@ -227,7 +285,7 @@ Two design points are only partly testable through the mirror:
   `NOT_FOUND` in the fake. The design requires `NOT_FOUND` for a
   closed handle but through the `PlatformError` taxonomy, which
   does not exist yet. The integrator rewires this assertion to the
-  real error type when V2-04 defines it.
+  real error type when a final taxonomy defines it.
 
 ## Constants
 
@@ -358,7 +416,8 @@ SQL (`fase1/desain-sql-adapter.md` section 6), against Postgres 17:
 
 Store (`fase1/desain-store-adapter.md` section 8):
 
-- CT-04: `createLazyStore` helper (owned by V2-04).
+- CT-04: `createLazyStore` helper (excluded by V2-04; see the
+  Store mapping above).
 - CT-05 to CT-08: key-schema list parity, client/server schema
   parity, key classification routing, `aiModelList` split (need
   the key-schema module and the server).
@@ -416,6 +475,6 @@ failures here together.
 ## Exceptions
 
 Divergences that are intentional, and divergences forced by missing
-implementations, are recorded in `EXCEPTIONS.md` (E1 to E8) and
+implementations, are recorded in `EXCEPTIONS.md` (E1 to E9) and
 asserted as the expected divergent behavior where a case covers
 them. A divergence without an entry there is a review failure.

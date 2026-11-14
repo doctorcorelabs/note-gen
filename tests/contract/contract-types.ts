@@ -7,8 +7,8 @@
 // point a28fd02 the only files under src/lib/platform/ are detect.ts,
 // errors.ts, poc-app-shim.ts, poc-store-shim.ts, and a registry skeleton
 // that states interface definitions land with wave 2. No store, sql, or fs
-// interface exists yet, so these shapes cannot be imported from
-// src/lib/platform/* today. They mirror the designs instead:
+// interface exists yet on THIS branch, so these shapes cannot be imported
+// from src/lib/platform/* today. They mirror the designs instead:
 //
 // - StoreAdapter / StoreHandle: fase1/desain-store-adapter.md section 3.3,
 //   which mirrors IStore from @tauri-apps/plugin-store 2.3.0 plus a
@@ -19,14 +19,21 @@
 //   plus the plugin-fs surface named in fase1/desain-workspace-api.md
 //   (readDir, readTextFile, writeTextFile).
 //
-// When V2-04 lands the real interfaces in src/lib/platform/store/,
-// src/lib/platform/sql/, and src/lib/platform/fs/, the integrator deletes
-// the mirrored shapes here, imports the real ones, and adapts the fakes
-// and cases to any name or signature differences. The mapping is recorded
-// in tests/contract/README.md. Only PlatformCapabilityError is imported
-// from src/lib/platform/errors.ts today, because it already exists; its
-// real constructor signature differs from the sketch in the store design,
-// see tests/contract/EXCEPTIONS.md entry E6.
+// RECONCILIATION WITH V2-04 (branch web-registry-g0, commit 76e1660):
+// the canonical shim interfaces now exist, and they do NOT match these
+// mirrors. That is expected, not a defect to fix by deleting the mirrors:
+// the canonical interfaces fix the narrow upstream shim surface, while
+// these mirrors fix the observable workspace-level behavior the contract
+// cases lock (link rewriting, trash, dot filtering, typed SQL operations).
+// The per-adapter mapping, including which mirror members have no
+// canonical counterpart, is recorded in tests/contract/README.md and in
+// tests/contract/EXCEPTIONS.md entry E9. The integrator remaps the cases
+// to the canonical interfaces plus the workspace layer; the mirrors stay
+// until that remapping lands, so the suite keeps running in the meantime.
+// Only PlatformCapabilityError is imported from src/lib/platform/errors.ts
+// today, because it already exists; its real constructor signature differs
+// from the sketch in the store design, see tests/contract/EXCEPTIONS.md
+// entry E6.
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -347,7 +354,7 @@ export interface WriteResult {
 
 // The "fake" mode value is scaffold-only: it lets the in-memory fake
 // identify itself in ready() without pretending to be a real backend.
-// Production interfaces (V2-04) keep only "tauri" | "web"; the
+// The production typed catalog keeps only "tauri" | "web"; the
 // integrator removes "fake" from the production type and keeps it only
 // on the fake class if the real SqlAdapter type does not allow it.
 export interface SqlHealth {

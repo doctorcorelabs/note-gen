@@ -9,8 +9,8 @@
 //   fase1/desain-store-adapter.md section 8 that can run against a
 //   StoreAdapter without a server, a browser, or localStorage. The
 //   server/API cases (CT-10 to CT-15, CT-18, CT-21), the key-schema
-//   cases (CT-05 to CT-08), CT-04 (createLazyStore helper, owned by
-//   V2-04), CT-16 (POC cleanup in the browser), CT-19 (desktop parity),
+//   cases (CT-05 to CT-08), CT-04 (createLazyStore helper, excluded
+//   by V2-04), CT-16 (POC cleanup in the browser), CT-19 (desktop parity),
 //   and CT-20 (CI gates) are recorded as deferred in
 //   tests/contract/README.md.
 //

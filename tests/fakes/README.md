@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Fakes
 
 Independent in-memory implementations of the scaffold-local adapter
@@ -43,7 +44,7 @@ Only `store.json` loads; every other name fails closed with
 fake-local subset of the store design: the exact key `pin` and keys
 whose lowercase name contains a sensitive pattern behave as absent
 on every read surface, and `set` over them throws. The full
-key-schema module belongs to V2-04. The `corrupt: true` option makes
+key-schema module belongs to the store-interface owner. The `corrupt: true` option makes
 `load()` reject as if the stored document were corrupt, for C-ST-04.
 `set(key, undefined)` deletes the key (interim CT-02 behavior, see
 EXCEPTIONS.md E4).
@@ -73,7 +74,10 @@ concern); FK-style rejections use `VALIDATION`, guard conflicts use
 kinds are rejected with `VALIDATION`, while extra fields on an
 operation are ignored (strict unknown-field rejection is a server
 TypeBox concern); idempotency keys never expire; `ready()` reports
-`migrationsCurrent: true` because the fake has no migrations.
+`migrationsCurrent: true` because the fake has no migrations; a
+null `sourceId` is stored as null and stays null on read, so null
+rows stay independent exactly like rows under a partial unique
+index (the duplicate check only runs for non-null `sourceId`).
 
 ### `broken-fake-store.ts`
 

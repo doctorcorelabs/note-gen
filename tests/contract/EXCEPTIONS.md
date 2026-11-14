@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Contract exceptions
 
 Documented divergences for the contract suites, per
@@ -100,3 +101,64 @@ path-string traversal only (`..` escapes, absolute paths). The web
 implementation must reject symlink escapes as well; its factory
 adds that coverage when it lands. The fake column passing C-FS-09
 does not prove symlink safety.
+
+## E9: scaffold mirrors differ from the canonical V2-04 interfaces
+
+The canonical shim interfaces (V2-04, branch `web-registry-g0`,
+commit `76e1660`, verified method by method against the installed
+upstream declarations and every call site at `4dcaa3f`) do not
+match the scaffold-local mirrors in `tests/contract/contract-types.ts`.
+The mirrors are retained deliberately: they express the observable
+workspace-level behavior the contract cases lock, while the
+canonical interfaces express the narrow upstream shim surface. The
+integrator remaps the cases onto the canonical interfaces composed
+with the workspace layer; deleting the mirrors and importing the
+canonical shapes method-for-method would silently drop the locked
+behaviors below. Until that remapping lands, the mirrors are the
+running contract and this entry is the record of the difference.
+
+Store. The core matches (`load`, `get`, `set`, `has`, `delete`,
+`clear`, `reset`, `keys`, `values`, `entries`, `reload`, `save`,
+`onKeyChange`, `onChange`, `StoreOptions`). Five mirror members
+have no canonical counterpart because V2-04 excluded them as
+zero-call-site surface: the read-only `path` field on the handle,
+`length()`, `close()`, `getStore()`, and `closeAll()`. Cases CT-01
+and CT-03c assert that mirror-only surface (including the
+closed-handle `NOT_FOUND` behavior). The integrator either drops
+those assertions or extends the canonical interface; either choice
+is recorded here before the cases change. The fake-only
+`backings`/`corrupt` construction options are not interface
+surface and never migrate.
+
+Filesystem. The canonical `FsAdapter` is the upstream plugin-fs
+surface: `exists`, `mkdir`, `readFile`, `writeFile`,
+`readTextFile`, `writeTextFile`, `readDir`, `remove`, `lstat`,
+`stat`, `copyFile`, `rename`, `open`, `watch`, with
+`BaseDirectory` option bags and `DirEntry` carrying exactly four
+fields. The mirror is a workspace contract: `scanMarkdown`,
+`removeToTrash`/`restoreFromTrash`/`purgeFromTrash`/`listTrash`,
+`rename` with `rewriteLinks` and a `rewrittenFiles` report,
+`resolveImage`, and `seq`-ordered `created`/`changed`/`deleted`/
+`moved` events. None of those exist on the shim. The C-FS cases
+bind the composed workspace layer (AD-17 rename/link rewriting,
+trash, dot filtering, atomic write); the web factory provides that
+layer over the shim plus the workspace API, and the Tauri factory
+provides it over the Tauri shim with the E2 divergence for C-FS-05a.
+
+SQL. The canonical `SqlAdapter` is the raw shim (`load(path)` then
+`execute(query, bindValues)`, `select(query, bindValues)`,
+`close()`), kept only for the legacy `src/db` callers funneled
+through `getDb`. The mirror is the typed operation catalog from
+`fase1/desain-sql-adapter.md` (`query`/`queryOne`/`queryMany`/
+`execute`/`transaction` over `DbReadOperation`/`DbWriteOperation`,
+plus `ready()` and `mode`). The C-SQ/CT cases bind the typed
+catalog; no case sends raw SQL (CT-S5/C-SQ-08 asserts the raw path
+is rejected). The raw shim must never become a contract surface:
+the Postgres-backed factory implements the typed catalog over
+Drizzle, and the deferred migration/catalog/auth cases run there.
+
+Errors. V2-04 added no new error taxonomy (`errors.ts` unchanged:
+`PlatformCapabilityError` only). The scaffold-local `ContractError`
+codes (`VALIDATION`, `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE`,
+`UNKNOWN`) stay until a final taxonomy lands; cases assert codes,
+never message text, except CT-X6.

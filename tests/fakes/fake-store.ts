@@ -16,7 +16,8 @@
 // accesstoken, password, secret, token, credential) behave as absent on
 // every read surface, and set() over them throws PlatformCapabilityError.
 // The full key-schema module (classifyKey, S/L lists, aiModelList split)
-// belongs to V2-04 and the real adapter; the fake must not grow it.
+// belongs to the store-interface owner and the real adapter; the fake
+// must not grow it.
 
 import { capabilityError } from "../../src/lib/platform/errors";
 import { ContractError } from "../contract/contract-errors";
