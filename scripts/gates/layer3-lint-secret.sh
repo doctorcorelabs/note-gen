@@ -8,7 +8,9 @@
 #   A. ESLint config shape: .eslintrc.json must match the merged M5
 #      form (see check-eslint-shape.mjs). The gate uses the config in
 #      the tree; it never re-implements the restriction patterns.
-#   B. Lint run. Default: full `pnpm lint`, exit code must be 0. With
+#   B. Lint run. Default: full `next lint` (the package.json `lint`
+#      script, invoked as ./node_modules/.bin/next so the gate does
+#      not depend on pnpm being on PATH). With
 #      --files or --base: targeted ESLint JSON run over the changed
 #      files, analyzed by eslint-wave-check.mjs (any
 #      no-restricted-imports error fails; in wave mode any diagnostic
@@ -141,12 +143,15 @@ else
       fi
     fi
   else
-    echo "layer3: full lint: pnpm lint"
-    if pnpm lint > "$tmpdir/lint.log" 2>&1; then
+    echo "layer3: full lint: next lint (package.json lint script)"
+    if [ ! -x "node_modules/.bin/next" ]; then
+      echo "layer3: FAIL: Next.js not installed (node_modules missing). Run pnpm install first; refusing to pass without lint."
+      failures=$((failures + 1))
+    elif ./node_modules/.bin/next lint > "$tmpdir/lint.log" 2>&1; then
       echo "layer3: full lint PASS (exit 0)"
       tail -n 3 "$tmpdir/lint.log" | sed 's/^/  /'
     else
-      echo "layer3: FAIL: pnpm lint exited non-zero; last 30 lines:"
+      echo "layer3: FAIL: next lint exited non-zero; last 30 lines:"
       tail -n 30 "$tmpdir/lint.log" | sed 's/^/  /'
       failures=$((failures + 1))
     fi

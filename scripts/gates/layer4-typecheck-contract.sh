@@ -4,8 +4,10 @@
 #
 # Codemod gate layer 4: typecheck + contract + smoke (V1-05 4.4/4).
 #
-# Subchecks:
-#   A. Root typecheck: `pnpm typecheck` (tsc --noEmit) must exit 0.
+# Subchecks (each command below is the package.json script of the
+# same name, invoked through the installed binary in node_modules so
+# the gate does not depend on pnpm being on PATH):
+#   A. Root typecheck: `tsc --noEmit` must exit 0.
 #      Missing node_modules fails; this layer never passes without
 #      running the typechecker.
 #   B. Server typecheck: run when server dependencies are installed;
@@ -13,16 +15,16 @@
 #      Codemod waves do not touch server/, so a missing server install
 #      must not silently count as a pass, nor block a frontend gate
 #      without the integrator asking for it.
-#   C. Contract suite: `pnpm test:contract` (vitest contract project)
+#   C. Contract suite: `vitest run --project contract`
 #      must exit 0 and must report at least one test file and one test
 #      (an empty suite is a failure, per AD-36). With --contract-files
 #      the given spec files run explicitly instead of the whole
 #      project. --skip-contract prints a loud SKIP for diagnosis only.
 #   D. Smoke: skipped by default with a loud SKIP and instructions;
-#      --require-smoke runs `pnpm e2e:smoke` (Playwright) and requires
-#      exit 0. Smoke needs browsers and a built app; the default skip
-#      is honest reporting, not a pass, and the runner surfaces the
-#      skip count in its summary.
+#      --require-smoke runs `playwright test --grep @smoke` and
+#      requires exit 0. Smoke needs browsers and a built app; the
+#      default skip is honest reporting, not a pass, and the runner
+#      surfaces the skip count in its summary.
 #
 # Usage (from the repo root):
 #   sh scripts/gates/layer4-typecheck-contract.sh [--skip-contract]
@@ -76,13 +78,13 @@ done
 failures=0
 
 # Subcheck A: root typecheck.
-echo "layer4: root typecheck: pnpm typecheck"
+echo "layer4: root typecheck: tsc --noEmit (package.json typecheck script)"
 if [ ! -x "node_modules/.bin/tsc" ]; then
   echo "layer4: FAIL: TypeScript not installed (node_modules missing). Run pnpm install first; refusing to pass without typecheck."
   failures=$((failures + 1))
 else
   start=$(date +%s)
-  if pnpm typecheck > "$tmpdir/typecheck.log" 2>&1; then
+  if ./node_modules/.bin/tsc --noEmit > "$tmpdir/typecheck.log" 2>&1; then
     elapsed=$(( $(date +%s) - start ))
     echo "layer4: root typecheck PASS (${elapsed}s)"
   else
@@ -95,8 +97,8 @@ fi
 # Subcheck B: server typecheck.
 if [ -f "server/package.json" ]; then
   if [ -x "server/node_modules/.bin/tsc" ]; then
-    echo "layer4: server typecheck: pnpm --dir server typecheck"
-    if pnpm --dir server typecheck > "$tmpdir/server-typecheck.log" 2>&1; then
+    echo "layer4: server typecheck: tsc --noEmit -p server/tsconfig.json"
+    if ./server/node_modules/.bin/tsc --noEmit -p server/tsconfig.json > "$tmpdir/server-typecheck.log" 2>&1; then
       echo "layer4: server typecheck PASS"
     else
       echo "layer4: FAIL: server typecheck exited non-zero; last 30 lines:"
@@ -129,9 +131,9 @@ else
       contract_rc=0
       xargs -a "$tmpdir/contract-files.txt" -d '\n' ./node_modules/.bin/vitest run --project contract > "$tmpdir/contract.log" 2>&1 || contract_rc=$?
     else
-      echo "layer4: contract suite: pnpm test:contract"
+      echo "layer4: contract suite: vitest run --project contract (package.json test:contract script)"
       contract_rc=0
-      pnpm test:contract > "$tmpdir/contract.log" 2>&1 || contract_rc=$?
+      ./node_modules/.bin/vitest run --project contract > "$tmpdir/contract.log" 2>&1 || contract_rc=$?
     fi
     if [ "$contract_rc" -ne 0 ]; then
       echo "layer4: FAIL: contract suite exited $contract_rc; last 30 lines:"
@@ -154,8 +156,11 @@ fi
 
 # Subcheck D: smoke.
 if [ "$REQUIRE_SMOKE" -eq 1 ]; then
-  echo "layer4: smoke: pnpm e2e:smoke"
-  if pnpm e2e:smoke > "$tmpdir/smoke.log" 2>&1; then
+  echo "layer4: smoke: playwright test --grep @smoke (package.json e2e:smoke script)"
+  if [ ! -x "node_modules/.bin/playwright" ]; then
+    echo "layer4: FAIL: Playwright not installed (node_modules missing) and --require-smoke was given"
+    failures=$((failures + 1))
+  elif ./node_modules/.bin/playwright test --grep @smoke > "$tmpdir/smoke.log" 2>&1; then
     echo "layer4: smoke PASS"
   else
     echo "layer4: FAIL: smoke exited non-zero; last 30 lines:"
