@@ -3,14 +3,19 @@
 //
 // Proposed message keys for the auth shell (namespace: auth).
 //
-// These English strings live here ONLY because the shell task forbids
-// editing messages/*.json. They are the proposed values for the keys
-// listed in fase1/laporan-auth-pages-shell.md. The i18n owner moves
-// them into messages/en.json (and messages/zh.json) and wave 3 wiring
-// replaces authText() with useTranslations("auth"). Until then, no
-// string on the auth pages comes from the message catalogs, so a
-// missing catalog key can never render as a raw key or as fallback
-// text in another language on these pages.
+// These English strings live here ONLY because this shell task must
+// not edit messages/*.json: the catalog has no auth namespace, a new
+// namespace needs integrator approval (D-7), and no Mandarin values
+// may be invented for these new strings. They are the proposed
+// English values for the keys listed in fase1/laporan-auth-shell.md.
+// TODO(i18n-owner): move the keys into messages/en.json with the
+// values proposed here, supply the messages/zh.json values by real
+// translation (none is proposed here), and get integrator approval
+// for the new auth namespace; then wave 3 wiring replaces authText()
+// with useTranslations("auth"). Until then, no string on the auth
+// pages comes from the message catalogs, so a missing catalog key
+// can never render as a raw key or as fallback text in another
+// language on these pages.
 
 export const AUTH_MESSAGE_KEYS = [
   "loginTitle",
@@ -32,6 +37,7 @@ export const AUTH_MESSAGE_KEYS = [
   "verifyButton",
   "verifyingButton",
   "backToSignIn",
+  "signInHelp",
   "setupTitle",
   "setupDescription",
   "setupTokenLabel",
@@ -94,6 +100,7 @@ const AUTH_MESSAGES: Record<AuthMessageKey, string> = {
   verifyButton: "Verify and sign in",
   verifyingButton: "Verifying...",
   backToSignIn: "Back to sign in",
+  signInHelp: "Cannot sign in? Contact the deployment owner for help.",
   setupTitle: "Set up the first account",
   setupDescription: "Create the first account for this installation. This page stops working after setup is complete.",
   setupTokenLabel: "Setup token",

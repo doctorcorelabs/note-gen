@@ -3,8 +3,14 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { authText, type AuthMessageKey } from "./messages";
 
-// Error codes from the canonical API contract (fase1/kontrak-api-kanonis.md
-// section 3.12), plus shell-only codes. The displayed text is always the
+// Display error codes for the auth shell. Most names match the wire
+// codes in fase1/kontrak-api-kanonis.md section 3.12; three are
+// display-only mappings and never arrive on the wire as named here:
+// request_rejected covers both csrf_invalid and origin_rejected
+// (one generic text, per desain-auth.md section 3.7), session_expired
+// covers unauthenticated, and not_connected/unexpected are shell-only.
+// TODO(wave-3-auth-wiring): map each wire error code to one of these
+// display codes at the call site. The displayed text is always the
 // generic anti-enumeration message from desain-auth.md section 3.7: a
 // failed sign-in never says whether the email exists, the password was
 // wrong, or the account is disabled.

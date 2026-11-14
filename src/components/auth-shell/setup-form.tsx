@@ -18,9 +18,11 @@ import { AuthShellNotImplementedError, submitSetup } from "./stubs";
 // only links to /login.
 //
 // SHELL ONLY: submit calls a typed stub that throws, so the form always
-// ends in the visible "not connected" error state. Client-side checks
-// below mirror the contract limits (password 12-128 characters); the
-// server remains the authority and re-validates everything.
+// ends in the visible "not connected" error state.
+// TODO(wave-3-auth-wiring): replace the stub call in handleSubmit with
+// the real POST /api/auth/setup call. Client-side checks below mirror
+// the contract limits (password 12-128 characters); the server remains
+// the authority and re-validates everything.
 
 export function SetupForm() {
   const [setupToken, setSetupToken] = useState("");
@@ -73,6 +75,9 @@ export function SetupForm() {
         password,
         workspaceName: workspaceName.trim() || undefined,
       });
+      // TODO(wave-3-auth-wiring): this success state is driven by the
+      // real 201 response once submitSetup is wired; setup creates no
+      // session, so the state only links to /login.
       setIsCreated(true);
     } catch (error) {
       if (error instanceof AuthShellNotImplementedError) {

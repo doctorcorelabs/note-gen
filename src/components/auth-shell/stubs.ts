@@ -3,11 +3,14 @@
 //
 // Typed stubs for the auth shell. UI ONLY: every stub throws
 // AuthShellNotImplementedError. There is no fetch, no cookie handling,
-// no session logic, and no CSRF handling here. Wave 3 auth wiring
-// replaces these stubs with real calls to the canonical endpoints in
-// fase1/kontrak-api-kanonis.md section 3.12. The stub signatures mirror
-// that contract so the replacement is a drop-in change at these call
-// sites and nowhere else in the shell components.
+// no session logic, and no CSRF handling here.
+// TODO(wave-3-auth-wiring): replace each stub below with a real call to
+// its canonical endpoint in fase1/kontrak-api-kanonis.md section 3.12.
+// The stub signatures mirror that contract so the replacement is a
+// drop-in change at these call sites and nowhere else in the shell
+// components. The local `outcome` discriminant maps from the wire
+// response: HTTP 200 means "authenticated", HTTP 202 with
+// step "totp" means "totp_required" (kontrak-api-kanonis.md 3.12).
 
 export class AuthShellNotImplementedError extends Error {
   readonly endpoint: string;
@@ -54,21 +57,21 @@ export interface SetupResult {
   workspaceId: string;
 }
 
-/** POST /api/auth/login (step 1: identity). Wave 3 wiring owns this call. */
+/** TODO(wave-3-auth-wiring): POST /api/auth/login (step 1: identity). Replace this stub with the real call. */
 export async function submitLoginIdentity(
   _request: LoginIdentityRequest,
 ): Promise<LoginIdentityResult> {
   throw new AuthShellNotImplementedError("POST /api/auth/login");
 }
 
-/** POST /api/auth/login/totp (step 2: verification). Wave 3 wiring owns this call. */
+/** TODO(wave-3-auth-wiring): POST /api/auth/login/totp (step 2: verification). Replace this stub with the real call. */
 export async function submitLoginVerification(
   _request: LoginVerificationRequest,
 ): Promise<LoginSuccess> {
   throw new AuthShellNotImplementedError("POST /api/auth/login/totp");
 }
 
-/** POST /api/auth/setup (first account). Wave 3 wiring owns this call. */
+/** TODO(wave-3-auth-wiring): POST /api/auth/setup (first account). Replace this stub with the real call. */
 export async function submitSetup(_request: SetupRequest): Promise<SetupResult> {
   throw new AuthShellNotImplementedError("POST /api/auth/setup");
 }

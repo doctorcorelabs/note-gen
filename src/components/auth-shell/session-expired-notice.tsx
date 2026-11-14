@@ -16,7 +16,9 @@ import { authText } from "./messages";
 // convenience wrapper used on the login page: it reads the query string
 // on the client after mount (?reason=session-expired) because the app
 // is a static export and the page cannot read search params on the
-// server. Wave 3 may keep or replace the banner mechanism.
+// server.
+// TODO(wave-3-auth-wiring): keep or replace the banner mechanism above;
+// the presentational SessionExpiredNotice stays either way.
 export function SessionExpiredNotice({ visible = true }: { visible?: boolean }) {
   if (!visible) return null;
   return (

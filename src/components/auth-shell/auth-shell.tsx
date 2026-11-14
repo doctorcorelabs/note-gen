@@ -13,8 +13,9 @@ export interface AuthShellProps {
 // Centered single-column layout shared by the login and setup pages.
 // The shell notice is part of the shell, not of the product: it states
 // plainly that sign-in is not connected yet, so the pages make no
-// security claim the code behind them does not support. Wave 3 wiring
-// removes the notice when the real auth calls land.
+// security claim the code behind them does not support.
+// TODO(wave-3-auth-wiring): remove the shell notice Alert below when
+// the real auth calls land.
 export function AuthShell({ titleKey, descriptionKey, children }: AuthShellProps) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12">

@@ -22,9 +22,10 @@ import {
 //
 // SHELL ONLY: both submit handlers call typed stubs that throw, so the
 // form always ends in the visible "not connected" error state. Step 2
-// is reached in the shell only through the #verify preview hook below,
-// which wave 3 wiring removes once the real step 1 response drives the
-// transition. The preview hook sets no session and sends no request.
+// is reached in the shell only through the #verify preview hook below
+// (see TODO at the hook). The preview hook sets no session and sends
+// no request. No registration link is shown: registration stays
+// closed per desain-auth.md section 2.4.
 
 type LoginStep = "identity" | "verify";
 type VerifyMode = "code" | "recovery";
@@ -41,8 +42,9 @@ export function LoginForm() {
   const [errorCode, setErrorCode] = useState<AuthErrorCode | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Shell-only preview hook: opening /login#verify shows the step 2
-  // shell for review. Wave 3 wiring removes this effect.
+  // TODO(wave-3-auth-wiring): remove this shell-only preview hook.
+  // Opening /login#verify shows the step 2 shell for review; the real
+  // step 1 response drives the transition once wiring lands.
   useEffect(() => {
     if (window.location.hash === "#verify") {
       setStep("verify");
@@ -78,9 +80,10 @@ export function LoginForm() {
         setChallengeToken(result.challengeToken);
         setStep("verify");
       }
-      // Wave 3: the "authenticated" outcome navigates away from the
-      // login page and stores the CSRF token in memory only. The shell
-      // performs no navigation and no session handling.
+      // TODO(wave-3-auth-wiring): on the "authenticated" outcome,
+      // navigate away from the login page and store the CSRF token in
+      // memory only. The shell performs no navigation and no session
+      // handling.
     } catch (error) {
       setErrorCode(toErrorCode(error));
     } finally {
@@ -119,8 +122,9 @@ export function LoginForm() {
           ? { challengeToken, code: code.trim() }
           : { challengeToken, recoveryCode: recoveryCode.trim() };
       await submitLoginVerification(request);
-      // Wave 3: on success, navigate away and store the CSRF token in
-      // memory only. The shell performs no navigation.
+      // TODO(wave-3-auth-wiring): on success, navigate away and store
+      // the CSRF token in memory only. The shell performs no
+      // navigation.
     } catch (error) {
       setErrorCode(toErrorCode(error));
     } finally {
@@ -236,6 +240,7 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? authText("signingInButton") : authText("signInButton")}
       </Button>
+      <p className="text-center text-sm text-muted-foreground">{authText("signInHelp")}</p>
     </form>
   );
 }
