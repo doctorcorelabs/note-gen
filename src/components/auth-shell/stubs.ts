@@ -61,6 +61,7 @@ export interface SetupResult {
 export async function submitLoginIdentity(
   _request: LoginIdentityRequest,
 ): Promise<LoginIdentityResult> {
+  void _request;
   throw new AuthShellNotImplementedError("POST /api/auth/login");
 }
 
@@ -68,10 +69,12 @@ export async function submitLoginIdentity(
 export async function submitLoginVerification(
   _request: LoginVerificationRequest,
 ): Promise<LoginSuccess> {
+  void _request;
   throw new AuthShellNotImplementedError("POST /api/auth/login/totp");
 }
 
 /** TODO(wave-3-auth-wiring): POST /api/auth/setup (first account). Replace this stub with the real call. */
 export async function submitSetup(_request: SetupRequest): Promise<SetupResult> {
+  void _request;
   throw new AuthShellNotImplementedError("POST /api/auth/setup");
 }
