@@ -128,3 +128,12 @@ infra/data/
 # Fork web: runbook infra BOLEH di-commit (pola docs/ di atas meng-ignore-nya)
 !infra/docs/
 !infra/docs/**
+
+# Fork web: berkas test TypeScript/JavaScript BOLEH di-commit (pengecualian atas *.test.* di atas)
+!*.test.ts
+!*.test.tsx
+!*.test.mts
+!*.test.mjs
+!*.test.js
+!*.test.jsx
+!*.test.cjs
