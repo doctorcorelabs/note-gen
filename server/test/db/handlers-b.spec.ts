@@ -594,6 +594,7 @@ describe.skipIf(TEST_DATABASE_URL === undefined)('group B handlers over Postgres
         source: sourceRef(stableId),
         state: 'ready',
         status: 'ready',
+        contentHash: 'h1',
         revisionId: null,
         ...overrides,
       };
@@ -736,13 +737,14 @@ describe.skipIf(TEST_DATABASE_URL === undefined)('group B handlers over Postgres
     it('returns only active revisions whose source state agrees on ready, id, and hash', async () => {
       const active = statePayload('S1', {
         source: sourceRef('S1', { title: 'State title' }),
+        contentHash: 'h1',
         revisionId: 'rev-1',
       });
       await db.insert(wikiSources).values([
         { workspaceId, contextId: CONTEXT, stableId: 'S1', sourceKey: 'article:S1', contentHash: 'h1', status: 'ready', revisionId: 'rev-1', version: 1, payload: active },
-        { workspaceId, contextId: CONTEXT, stableId: 'S2', sourceKey: 'article:S2', contentHash: 'h2', status: 'pending', revisionId: 'rev-2', version: 1, payload: statePayload('S2', { state: 'pending', status: 'pending', revisionId: 'rev-2' }) },
-        { workspaceId, contextId: CONTEXT, stableId: 'S3', sourceKey: 'article:S3', contentHash: 'h3', status: 'ready', revisionId: 'rev-missing', version: 1, payload: statePayload('S3', { revisionId: 'rev-missing' }) },
-        { workspaceId, contextId: CONTEXT, stableId: 'S4', sourceKey: 'article:S4', contentHash: 'h4-new', status: 'ready', revisionId: 'rev-4', version: 1, payload: statePayload('S4', { revisionId: 'rev-4' }) },
+        { workspaceId, contextId: CONTEXT, stableId: 'S2', sourceKey: 'article:S2', contentHash: 'h2', status: 'pending', revisionId: 'rev-2', version: 1, payload: statePayload('S2', { state: 'pending', status: 'pending', contentHash: 'h2', revisionId: 'rev-2' }) },
+        { workspaceId, contextId: CONTEXT, stableId: 'S3', sourceKey: 'article:S3', contentHash: 'h3', status: 'ready', revisionId: 'rev-missing', version: 1, payload: statePayload('S3', { contentHash: 'h3', revisionId: 'rev-missing' }) },
+        { workspaceId, contextId: CONTEXT, stableId: 'S4', sourceKey: 'article:S4', contentHash: 'h4-new', status: 'ready', revisionId: 'rev-4', version: 1, payload: statePayload('S4', { contentHash: 'h4-new', revisionId: 'rev-4' }) },
       ]);
       await db.insert(wikiRevisions).values([
         { workspaceId, contextId: CONTEXT, id: 'rev-1', sourceId: 'S1', inputHash: 'i1', outputHash: 'o1', payload: revisionPayload('rev-1', { source: sourceRef('S1', { title: 'Revision title', contentHash: 'h1' }) }) },
