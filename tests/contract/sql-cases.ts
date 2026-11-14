@@ -386,7 +386,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     await assertPrimaryInvariant(sql);
   });
 
-  it("CT-H1: register, claim, complete drives pending to ready with matching hashes", async () => {
+  it("CT-H1/C-SQ-07: register, claim, complete drives pending to ready with matching hashes", async () => {
     const sql = getImpl();
     await sql.execute({
       kind: "knowledge.registerSource",
