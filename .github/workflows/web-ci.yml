@@ -9,11 +9,13 @@
 # Every job must be green before merge (F12 section 6.2). There is no
 # emergency merge without a written reason in the PR.
 #
-# Placeholder jobs fail explicitly: the e2e-smoke job exits 1 with a
-# clear message while its suite does not exist yet. It must never pass
+# The e2e-smoke job runs the Playwright @smoke subset (M16). Expected
+# state until waves 3/4 land the features: E2E-01 passes (boot guard
+# fail-closed contract) and the 5 TODO flows fail explicitly with
+# "fitur belum mendarat". That red state is honest, not a regression:
+# the TODO failures name the missing feature. The job must never pass
 # vacuously. The contract suite landed in M7 (Vitest project
-# "contract"); when the e2e suite lands, its PR wires the Playwright
-# runner and this file runs it.
+# "contract").
 #
 # Toolchain pins live here because root package.json has no
 # packageManager/engines fields yet (F1-54 tracks that separately):
@@ -192,6 +194,8 @@ jobs:
           cache: pnpm
       - name: Install root dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
       - name: Fail explicitly when the e2e smoke suite is absent
         run: |
           if [ ! -d tests/e2e ] || [ -z "$(ls playwright.config.* 2>/dev/null | head -n 1)" ]; then
@@ -199,13 +203,10 @@ jobs:
             echo "This job fails explicitly instead of passing with no suite. Land the 6 critical flows, then re-run." >&2
             exit 1
           fi
-      # The suite-landing PR must add @playwright/test, pin the browser
-      # install step, and provide the seeded harness (F12 section 5.1).
-      # Until then this step cannot run, which is itself explicit.
-      - name: Build then run e2e smoke suite
+      - name: Build then run e2e smoke subset
         run: |
           pnpm build
-          pnpm exec playwright test tests/e2e
+          pnpm e2e:smoke
 
   secret-scan:
     name: Secret scan
