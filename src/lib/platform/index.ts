@@ -140,8 +140,11 @@ export type {
 } from "./shortcut/interface";
 export type { SqlAdapter } from "./sql/interface";
 export type {
+  PersistenceState,
   StoreAdapter,
   StoreHandle,
+  StoreHandleWebExtensions,
+  StoreKeyClass,
   StoreOptions,
 } from "./store/interface";
 export type {
