@@ -249,3 +249,25 @@ test("repair-links preconditions return 409", async () => {
   });
   expectError(both, 409, "repair_precondition_failed");
 });
+
+test("move idempotency key replays without moving twice", async () => {
+  const source = ctx.path("move", "idem-old.md");
+  const target = ctx.path("move", "idem-new.md");
+  await createFile(ctx, source, "once");
+  const key = `idem-move-${Date.now()}`;
+  const body = { source, target, rewriteLinks: false };
+  const first = await request(ctx, "POST", "/api/workspace/move", {
+    headers: { "Idempotency-Key": key },
+    json: body,
+  });
+  const firstData = expectOk(first, 200, "move first");
+  const second = await request(ctx, "POST", "/api/workspace/move", {
+    headers: { "Idempotency-Key": key },
+    json: body,
+  });
+  const secondData = expectOk(second, 200, "move replay");
+  assert.deepEqual(secondData, firstData);
+  assert.equal((await getFileText(ctx, target)).text, "once");
+  const gone = await request(ctx, "GET", `/api/workspace/file${query({ path: source })}`);
+  expectError(gone, 404, "not_found");
+});

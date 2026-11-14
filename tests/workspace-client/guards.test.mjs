@@ -14,6 +14,7 @@ import {
   query,
   request,
   setupContext,
+  skipUnlessMock,
 } from "./helpers.mjs";
 
 const ctx = await setupContext();
@@ -333,4 +334,66 @@ test("legacy X-Idempotency-Key header is not honored", async () => {
     json: body,
   });
   expectError(second, 409, "revision_conflict");
+});
+
+test("append past 2 MiB returns 413 text_too_large", skipUnlessMock(ctx, "a 2 MiB fixture cannot be grown past the limit via the API"), async () => {
+  const path = ctx.path("guard", "append-limit.md");
+  ctx.store.injectFile(path, Buffer.alloc(2 * 1024 * 1024, 0x61));
+  const revision = await getRevision(ctx, path);
+  const resp = await request(ctx, "POST", `/api/workspace/file/append${query({ path })}`, {
+    json: { expectedRevision: revision, content: "b" },
+  });
+  expectError(resp, 413, "text_too_large");
+  assert.equal((await getFileText(ctx, path)).bytes.length, 2 * 1024 * 1024);
+});
+
+test("patch past 2 MiB returns 413 text_too_large", skipUnlessMock(ctx, "a 2 MiB fixture cannot be grown past the limit via the API"), async () => {
+  const path = ctx.path("guard", "patch-limit.md");
+  ctx.store.injectFile(path, Buffer.alloc(2 * 1024 * 1024, 0x61));
+  const revision = await getRevision(ctx, path);
+  const resp = await request(ctx, "POST", `/api/workspace/file/patch${query({ path })}`, {
+    json: { expectedRevision: revision, startLine: 1, endLine: 1, replacement: "b" },
+  });
+  expectError(resp, 413, "text_too_large");
+});
+
+test("malformed JSON bodies return 400 invalid_json", async () => {
+  const mk = await request(ctx, "POST", "/api/workspace/mkdir", {
+    headers: { "Content-Type": "application/json" },
+    body: "{not json",
+  });
+  expectError(mk, 400, "invalid_json");
+  const path = ctx.path("guard", "bad-json.md");
+  await createFile(ctx, path, "base");
+  const ap = await request(ctx, "POST", `/api/workspace/file/append${query({ path })}`, {
+    headers: { "Content-Type": "application/json" },
+    body: "{not json",
+  });
+  expectError(ap, 400, "invalid_json");
+  const arr = await request(ctx, "POST", "/api/workspace/mkdir", {
+    headers: { "Content-Type": "application/json" },
+    body: "[1, 2]",
+  });
+  expectError(arr, 400, "validation_failed");
+});
+
+test("JSON body limit is exactly 64 KiB", async () => {
+  const path = ctx.path("guard", "json-limit");
+  const base = JSON.stringify({ path, pad: "" });
+  const padLen = 64 * 1024 - base.length;
+  const exact = JSON.stringify({ path, pad: "p".repeat(padLen) });
+  assert.equal(Buffer.byteLength(exact, "utf8"), 64 * 1024);
+  // Accepted for parsing (unknown field is a 400, not a 413).
+  const ok = await request(ctx, "POST", "/api/workspace/mkdir", {
+    headers: { "Content-Type": "application/json" },
+    body: exact,
+  });
+  expectError(ok, 400, "validation_failed");
+  const over = `${exact} `;
+  assert.equal(Buffer.byteLength(over, "utf8"), 64 * 1024 + 1);
+  const big = await request(ctx, "POST", "/api/workspace/mkdir", {
+    headers: { "Content-Type": "application/json" },
+    body: over,
+  });
+  expectError(big, 413, "payload_too_large");
 });

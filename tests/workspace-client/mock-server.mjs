@@ -1136,7 +1136,7 @@ export function createMockServer() {
       sendError(req, res, 400, "invalid_precondition", "The guard headers are not valid.", {});
       return;
     }
-    const { buffer, truncated } = await readBody(req, TEXT_LIMIT_BYTES + 1);
+    const { buffer, truncated } = await readBody(req, TEXT_LIMIT_BYTES);
     if (truncated) {
       sendError(req, res, 413, "text_too_large", "The text exceeds the size limit.", {});
       return;
@@ -1184,7 +1184,7 @@ export function createMockServer() {
   }
 
   async function readJsonWithLimit(req, res) {
-    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES + 1);
+    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES);
     if (truncated) {
       sendError(req, res, 413, "payload_too_large", "The JSON body exceeds the size limit.", {});
       return null;
@@ -1640,7 +1640,7 @@ export function createMockServer() {
   }
 
   async function handleRestore(req, res, id) {
-    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES + 1);
+    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES);
     if (truncated) {
       sendError(req, res, 413, "payload_too_large", "The JSON body exceeds the size limit.", {});
       return;
@@ -1724,7 +1724,7 @@ export function createMockServer() {
   }
 
   async function handleEmptyTrash(req, res) {
-    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES + 1);
+    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES);
     if (truncated) {
       sendError(req, res, 413, "payload_too_large", "The JSON body exceeds the size limit.", {});
       return;
@@ -1768,7 +1768,7 @@ export function createMockServer() {
 
   // --- Handlers: reconcile ---
   async function handlePostReconcile(req, res) {
-    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES + 1);
+    const { buffer, truncated } = await readBody(req, JSON_LIMIT_BYTES);
     if (truncated) {
       sendError(req, res, 413, "payload_too_large", "The JSON body exceeds the size limit.", {});
       return;
@@ -2095,7 +2095,7 @@ export function createMockServer() {
       sendError(req, res, 400, "invalid_precondition", "The guard headers are not valid.", {});
       return;
     }
-    const { buffer, truncated } = await readBody(req, MEDIA_LIMIT_BYTES + 1);
+    const { buffer, truncated } = await readBody(req, MEDIA_LIMIT_BYTES);
     if (truncated) {
       sendError(req, res, 413, "media_too_large", "The media exceeds the size limit.", {});
       return;

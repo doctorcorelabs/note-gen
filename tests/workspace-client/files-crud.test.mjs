@@ -115,9 +115,12 @@ test("HEAD returns GET headers without a body", async () => {
   assert.equal(resp.headers.get("X-Version"), "1");
 });
 
-test("HEAD missing file returns 404", async () => {
+test("HEAD missing file returns 404 without a body", async () => {
+  // HEAD responses never carry a body, so the error envelope cannot be
+  // read back; the contract point is the status plus an empty body.
   const resp = await request(ctx, "HEAD", `/api/workspace/file${query({ path: ctx.path("crud", "nope.md") })}`);
-  expectError(resp, 404, "not_found");
+  assert.equal(resp.status, 404);
+  assert.equal(resp.bytes.length, 0);
 });
 
 test("PUT overwrite with quoted If-Match bumps version and revision", async () => {
@@ -415,4 +418,90 @@ test("versioned prefix and wrong case return 404", async () => {
   expectError(v1, 404, "not_found");
   const cased = await request(ctx, "GET", "/api/workspace/List");
   expectError(cased, 404, "not_found");
+});
+
+test("PUT of exactly 2 MiB succeeds at the limit", async () => {
+  const resp = await request(ctx, "PUT", `/api/workspace/file${query({ path: ctx.path("crud", "exact-limit.md") })}`, {
+    headers: { "If-None-Match": "*" },
+    body: "y".repeat(2 * 1024 * 1024),
+  });
+  const data = expectOk(resp, 201, "PUT exactly 2 MiB");
+  assert.equal(data.size, 2 * 1024 * 1024);
+});
+
+test("GET of invalid UTF-8 returns 422, HEAD returns 200", skipUnlessMock(ctx, "invalid bytes cannot be planted via the API"), async () => {
+  const path = ctx.path("crud", "bad-utf8.md");
+  ctx.store.injectFile(path, Buffer.from([0x41, 0xff, 0xfe, 0x42]));
+  const get = await request(ctx, "GET", `/api/workspace/file${query({ path })}`);
+  expectError(get, 422, "invalid_text_encoding");
+  // Contract 3.1: HEAD errors match GET except 415/422 do not apply.
+  const head = await request(ctx, "HEAD", `/api/workspace/file${query({ path })}`);
+  assert.equal(head.status, 200);
+  assert.equal(head.bytes.length, 0);
+  assert.ok(head.headers.get("ETag").startsWith('"sha256:'));
+});
+
+test("HEAD of a non-text file returns 200 without a body", async () => {
+  const path = ctx.path("crud", "head-media.png");
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
+  const up = await request(ctx, "PUT", `/api/workspace/media${query({ path })}`, {
+    headers: { "If-None-Match": "*" },
+    body: png,
+  });
+  expectOk(up, 201, "PUT media png for HEAD");
+  const get = await request(ctx, "GET", `/api/workspace/file${query({ path })}`);
+  expectError(get, 415, "not_text_file");
+  const head = await request(ctx, "HEAD", `/api/workspace/file${query({ path })}`);
+  assert.equal(head.status, 200);
+  assert.equal(head.bytes.length, 0);
+});
+
+test("GET with an If-None-Match list containing the revision returns 304", async () => {
+  const path = ctx.path("crud", "list-match.md");
+  await createFile(ctx, path, "cached");
+  const revision = await getRevision(ctx, path);
+  const resp = await request(ctx, "GET", `/api/workspace/file${query({ path })}`, {
+    headers: { "If-None-Match": `"sha256:deadbeef", "${revision}"` },
+  });
+  assert.equal(resp.status, 304);
+  assert.equal(resp.bytes.length, 0);
+});
+
+test("stat errors: missing path 404, invalid path 400", async () => {
+  const missing = await request(ctx, "GET", `/api/workspace/stat${query({ path: ctx.path("crud", "ghost.md") })}`);
+  expectError(missing, 404, "not_found");
+  const invalid = await request(ctx, "GET", `/api/workspace/stat${query({ path: "../escape.md" })}`);
+  expectError(invalid, 400, "invalid_path");
+  const noParam = await request(ctx, "GET", "/api/workspace/stat");
+  expectError(noParam, 400, "invalid_path");
+});
+
+test("scan rejects invalid cursor and limit", async () => {
+  const folder = ctx.path("scan", "limits");
+  await mkdirOk(ctx, folder);
+  const badLimit = await request(ctx, "GET", `/api/workspace/scan${query({ folder, limit: "0" })}`);
+  expectError(badLimit, 400, "invalid_limit");
+  const badCursor = await request(ctx, "GET", `/api/workspace/scan${query({ folder, cursor: "nope!!" })}`);
+  expectError(badCursor, 400, "invalid_cursor");
+  const clamped = await request(ctx, "GET", `/api/workspace/scan${query({ folder, limit: "99999" })}`);
+  expectOk(clamped, 200, "scan limit clamps to the maximum");
+});
+
+test("symlink reads return 404 and symlink writes return 400", skipUnlessMock(ctx, "symlinks cannot be planted via the API"), async () => {
+  const target = ctx.path("crud", "link-target.md");
+  await createFile(ctx, target, "real");
+  const link = ctx.path("crud", "link.md");
+  ctx.store.injectSymlink(link, target);
+  const get = await request(ctx, "GET", `/api/workspace/file${query({ path: link })}`);
+  expectError(get, 404, "not_found");
+  const stat = await request(ctx, "GET", `/api/workspace/stat${query({ path: link })}`);
+  expectError(stat, 404, "not_found");
+  const revision = await getRevision(ctx, target);
+  const put = await request(ctx, "PUT", `/api/workspace/file${query({ path: link })}`, {
+    headers: { "If-Match": `"${revision}"` },
+    body: "through link",
+  });
+  expectError(put, 400, "symlink_not_allowed");
+  const del = await request(ctx, "DELETE", `/api/workspace/file${query({ path: link })}`);
+  expectError(del, 400, "symlink_not_allowed");
 });

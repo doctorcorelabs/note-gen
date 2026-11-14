@@ -294,16 +294,31 @@ test("empty trash purges entries and reports zero on a second run", async () => 
   const path = ctx.path("trash", "empty-me.md");
   await createFile(ctx, path, "e");
   const del = await request(ctx, "DELETE", `/api/workspace/file${query({ path })}`);
-  expectOk(del, 200, "delete");
+  const trashId = expectOk(del, 200, "delete").trashId;
   const first = await request(ctx, "DELETE", "/api/workspace/trash", { json: { confirm: true } });
   const firstData = expectOk(first, 200, "empty trash");
   assert.ok(firstData.purged >= 1);
-  assert.equal(firstData.failed, 0);
-  assert.deepEqual(firstData.failures, []);
+  // Other tests in this file may leave unpurgeable entries (the
+  // blob-missing fixture), so assert only about this test's own entry:
+  // it must be purged, and no failure may name it.
+  assert.ok(!firstData.failures.some((f) => f.id === trashId));
   assertIsoUtc(firstData.purgedAt);
-  assert.equal(await trashCountForPrefix(), 0);
+  const after = await listTrash(ctx);
+  assert.ok(!after.entries.some((e) => e.id === trashId));
   const second = await request(ctx, "DELETE", "/api/workspace/trash", { json: { confirm: true } });
   const secondData = expectOk(second, 200, "empty trash again");
   assert.equal(secondData.purged, 0);
-  assert.equal(secondData.failed, 0);
+});
+
+test("malformed JSON bodies return 400 invalid_json", async () => {
+  const restore = await request(ctx, "POST", "/api/workspace/trash/00000000-0000-4000-8000-000000000001/restore", {
+    headers: { "Content-Type": "application/json" },
+    body: "{not json",
+  });
+  expectError(restore, 400, "invalid_json");
+  const empty = await request(ctx, "DELETE", "/api/workspace/trash", {
+    headers: { "Content-Type": "application/json" },
+    body: "{not json",
+  });
+  expectError(empty, 400, "invalid_json");
 });
