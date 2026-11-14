@@ -59,8 +59,11 @@ export function decodeEncryptionKey(value: string): Buffer {
   throw invalidKeyError('key must be hex, base64, or base64url encoded');
 }
 
-function parseKeyVersion(raw: string | undefined, label: string): number {
+function parseKeyVersion(raw: string | undefined, label: string, allowEmpty: boolean): number {
   if (raw === undefined || raw.trim() === '') {
+    if (!allowEmpty) {
+      throw invalidKeyError(`${label} must be a positive integer`);
+    }
     return DEFAULT_KEY_VERSION;
   }
   const trimmed = raw.trim();
@@ -89,7 +92,7 @@ function parsePreviousKeys(raw: string | undefined): Array<{ version: number; ke
     if (eq <= 0) {
       throw invalidKeyError('ENCRYPTION_PREVIOUS_KEYS entries must use version=key form');
     }
-    const version = parseKeyVersion(entry.slice(0, eq), 'ENCRYPTION_PREVIOUS_KEYS version');
+    const version = parseKeyVersion(entry.slice(0, eq), 'ENCRYPTION_PREVIOUS_KEYS version', false);
     if (seen.has(version)) {
       throw invalidKeyError('ENCRYPTION_PREVIOUS_KEYS lists the same version twice');
     }
@@ -177,7 +180,7 @@ export function loadKeyRingFromEnv(env: KeyRingEnv): KeyRing {
   if (rawKey === undefined || rawKey.trim() === '') {
     throw missingKeyError();
   }
-  const currentVersion = parseKeyVersion(env.ENCRYPTION_KEY_VERSION, 'ENCRYPTION_KEY_VERSION');
+  const currentVersion = parseKeyVersion(env.ENCRYPTION_KEY_VERSION, 'ENCRYPTION_KEY_VERSION', true);
   const currentKey = decodeEncryptionKey(rawKey);
   const previous = parsePreviousKeys(env.ENCRYPTION_PREVIOUS_KEYS);
   for (const entry of previous) {
