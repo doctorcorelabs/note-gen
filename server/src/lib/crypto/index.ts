@@ -32,3 +32,8 @@ export {
   type SealedParts,
   type SealedStringHeader,
 } from './envelope.js';
+export {
+  CryptoServiceSecretCipher,
+  createSecretCipherFromEnv,
+  type SealedSecretBytes,
+} from './secret-cipher.js';
