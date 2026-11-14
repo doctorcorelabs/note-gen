@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# Caddyfile DEV untuk fork web NoteGen (Fase 1, gelombang 1, pekerja V1-07).
+# Satu pintu (AD-18): /api/* ke backend Fastify, sisanya ke file statis.
+# BELUM TERUJI: tidak ada Caddy atau Docker di VM penulis; berkas ini
+# belum pernah divalidasi dengan caddy validate maupun dijalankan. Jangan
+# mengklaim jalan sebelum T16 lewat proksi lulus; lihat
+# infra/docs/runbook-dev.md.
+#
+# Bind: Caddy di dalam container mendengarkan :80. Bind ke host
+# 127.0.0.1:3200 (kandidat, F10 bagian 4.1) dilakukan oleh pemetaan
+# ports pada docker-compose.dev.yml, bukan oleh berkas ini. URL yang
+# dihadapi pengguna dev adalah http://127.0.0.1:3200.
+#
+# Health: /api/health/* diteruskan ke api tanpa perubahan. Header
+# Cache-Control no-store ditegaskan di sini sebagai pertahanan kedua;
+# backend sendiri sudah mengeset header yang sama. Alias /api/health
+# (tanpa akhiran) jatuh ke blok /api/* dan tetap sampai ke api yang
+# sama, sehingga perilakunya identik. Tidak ada caching di Caddy pada
+# berkas ini; probe health tidak boleh dijawab dari cache.
+#
+# WebSocket watcher (/api/workspace/events, AD-09) lewat reverse_proxy
+# yang sama; Caddy menangani upgrade otomatis. Belum teruji.
+#
+# Yang SENGAJA tidak ada di berkas dev ini: CSP (ditetapkan pekerjaan
+# frontend/shim, F10 bagian 4.4, bukan salinan dari Edge), filter log
+# token (pengerasan Caddyfile produksi, gelombang 5), TLS/Access
+# (perimeter produksi, bukan dev lokal).
+
+:80 {
+	header /api/health/* Cache-Control "no-store"
+
+	handle /api/health/* {
+		reverse_proxy api:3001
+	}
+
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}

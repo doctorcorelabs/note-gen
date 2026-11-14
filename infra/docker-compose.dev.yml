@@ -1,0 +1,190 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# Stack DEV untuk fork web NoteGen (Fase 1, gelombang 1, pekerja V1-07).
+# Kerangka saja. BELUM PERNAH DIJALANKAN: tidak ada Docker atau Caddy di VM
+# penulis, sehingga berkas ini baru divalidasi sintaks YAML-nya. Jangan
+# mengklaim stack ini jalan sebelum T16 lewat proksi lulus; lihat
+# infra/docs/runbook-dev.md.
+#
+# Cara pakai ringkas (lengkap di runbook-dev.md): dari direktori infra/,
+# jalankan: docker compose -f docker-compose.dev.yml up -d
+# Prasyarat: server/.env dan infra/.env sudah dibuat dari berkas
+# .env.example masing-masing, dan direktori out/ hasil build frontend
+# sudah ada di root repo.
+#
+# Aturan yang ditegakkan berkas ini:
+# - Satu-satunya port yang dipublikasi ke host adalah 127.0.0.1:3200
+#   (Caddy). Service lain hanya expose internal, tanpa ports.
+# - Secret hanya lewat env_file. Berkas ini tidak memuat nilai secret.
+# - Semua service memakai restart unless-stopped.
+# - Postgres 17 dengan volume bernama pgdata.
+# - Arsitektur mengikuti AD-18/AD-19 dan desain F10 bagian 4, dengan
+#   penyesuaian DEV yang dicatat per service di bawah. Frontend adalah
+#   static export (AD-04/AD-22), bukan server Next.js.
+
+name: notegen-dev
+
+services:
+  caddy:
+    # Satu pintu (AD-18): /api/* ke api, sisanya ke web. Caddy di dalam
+    # container mendengarkan :80; bind ke 127.0.0.1:3200 dilakukan oleh
+    # pemetaan ports di bawah, mengikuti F10 bagian 4.1.
+    # Tanpa env_file: Caddy tidak memakai secret (F10 bagian 4.3).
+    # Tanpa healthcheck: liveness Caddy dinilai lewat probe proksi pada
+    # T16, bukan lewat probe container, agar gagalnya API tidak dibaca
+    # sebagai gagalnya Caddy.
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3200:80"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+      - api
+    mem_limit: "256m"
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    # File statis hasil static export Next.js (output: export, AD-22).
+    # DEV ONLY: nginx menyajikan direktori out/ hasil build di host,
+    # di-mount read-only. Jalankan build frontend di host sebelum up
+    # (lihat runbook). Bila out/ belum ada, service ini tidak sehat
+    # dan itu sinyal yang jujur, bukan untuk ditutup-tutupi.
+    # Tanpa env_file: penyajian statis tidak memakai secret.
+    image: nginx:alpine
+    restart: unless-stopped
+    expose:
+      - "80"
+    volumes:
+      - ../out:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: "512m"
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    # API Fastify (server/). DEV ONLY: image dasar Node + bind mount
+    # kode, karena Dockerfile API belum ada di Fase 1 gelombang 1
+    # (image produksi dibangun CI/GHCR pada gelombang 5). Command
+    # memasang dependensi dari lockfile, membangun, lalu menjalankan
+    # server. Restart container untuk memakai perubahan kode server/.
+    # pnpm dipin 9.15.9 lewat corepack, sesuai laporan toolchain W04.
+    # HOST/PORT/WORKSPACE_ROOT dipaksa lewat environment agar benar di
+    # dalam container; environment menang atas env_file. DATABASE_URL
+    # (memuat password) HANYA berasal dari env_file, tidak pernah
+    # ditulis atau dirakit di berkas ini.
+    image: node:24-bookworm-slim
+    restart: unless-stopped
+    working_dir: /app
+    command: ["sh", "-c", "corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile && pnpm build && exec pnpm start"]
+    expose:
+      - "3001"
+    env_file:
+      - ../server/.env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3001"
+      WORKSPACE_ROOT: "/workspace"
+    volumes:
+      - ../server:/app
+      - /app/node_modules
+      - workspace:/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health/live').then(function (r) { process.exit(r.ok ? 0 : 1); }).catch(function () { process.exit(1); });"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    mem_limit: "1g"
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    # PLACEHOLDER. Belum ada kode worker di Fase 1 gelombang 1 (check
+    # worker pada endpoint ready masih skipped, no_worker_in_fase_0).
+    # Service ini memakai image yang sama dengan api dengan command
+    # berbeda, mengikuti pola F10/AD-18, agar topologi compose
+    # (depends_on, restart) sudah benar sejak awal. Command hanya
+    # mencatat status placeholder lalu idle. Worker nyata (command
+    # worker pada image API, heartbeat DB) datang bersama Dockerfile
+    # dan entrypoint API pada gelombang berikutnya, bukan di sini.
+    # Tanpa ports, tanpa env_file, tanpa volume, tanpa healthcheck:
+    # placeholder tidak membaca secret, tidak menyentuh berkas, dan
+    # liveness-nya dinilai lewat status container.
+    image: node:24-bookworm-slim
+    restart: unless-stopped
+    command: ["sh", "-c", "echo 'worker placeholder: no worker implemented yet (Fase 1 wave 1); idling' && exec sleep infinity"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: "1g"
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    # Postgres 17 (AD-05, keputusan final user). Data di volume
+    # bernama pgdata; data bertahan melintasi down tanpa -v.
+    # Tanpa ports: hanya internal, sesuai F10. Debug lewat
+    # docker compose exec postgres psql. Healthcheck memakai
+    # ekspansi env di dalam container ($$ adalah escape compose
+    # untuk $ literal, mengikuti aturan F10 bagian 4.3).
+    image: postgres:17-alpine
+    restart: unless-stopped
+    expose:
+      - "5432"
+    env_file:
+      - .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: "1g"
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # Volume bernama. Nama eksplisit agar mudah diperiksa
+  # (docker volume ls) dan tidak bergantung pada nama proyek.
+  # Keputusan bind mount vs named volume untuk workspace produksi
+  # (F10 bagian 4.2) TIDAK ditetapkan di sini; named volume hanya
+  # untuk DEV. Data produksi di /data mengikuti keputusan deploy.
+  pgdata:
+    name: notegen_dev_pgdata
+  workspace:
+    name: notegen_dev_workspace
