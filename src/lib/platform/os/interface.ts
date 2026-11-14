@@ -2,18 +2,22 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
 /**
- * Local OsAdapter interface (provisional).
+ * Local OsAdapter interface (provisional copy of the canonical interface).
  *
- * The canonical interface is owned by worker V2-04; the integrator
- * reconciles this local definition with the canonical one. This file
- * exists so the web implementation in this directory can be written,
- * typechecked, and tested without waiting for that reconciliation.
+ * The canonical interface is owned by worker V2-04 (branch
+ * web-registry-g0). The type declarations below are identical to the
+ * canonical ones read from that branch, so the integrator can keep
+ * either copy with no type reconciliation. This copy exists so the
+ * web implementation in this directory can be written, typechecked,
+ * and tested inside this branch without waiting for the merge.
  *
- * Surface, per the V1-05 inventory (design registry shim, section 1.8):
- * `platform`, `version`, `locale`, and `arch` from plugin-os, plus
- * `getAppVersion` folded in from api/app (the only name imported from
- * that specifier anywhere in src). The plugin-os function `type` has
- * zero imports in src and is deliberately NOT part of this interface.
+ * Surface, per the V1-05 inventory (design registry shim, section
+ * 1.8), re-verified against the reference tree at 4dcaa3f: `platform`,
+ * `version`, `locale`, and `arch` from plugin-os, plus `getAppVersion`
+ * folded in from api/app (the only name imported from that specifier
+ * anywhere in src). The plugin-os function `type` has zero imports in
+ * src and is deliberately NOT part of this interface; `eol`, `family`,
+ * `exeExtension`, and `hostname` are likewise excluded as unused.
  *
  * Shape notes:
  * - `platform`, `version`, and `arch` stay synchronous, matching the
@@ -22,11 +26,11 @@
  *   async would rewrite every call site for no behavioral gain.
  * - `locale` and `getAppVersion` stay async, matching the upstream
  *   functions, which return promises.
- * - The web `platform()` value is derived from `navigator`, not from a
- *   hardcoded marker. Call sites that branch on macOS, Windows, iOS, or
- *   Android behavior (shortcuts, export, sync paths) keep working.
- *   Runtime detection (web vs desktop shell) must use detect.ts, never
- *   this method: a browser on macOS legitimately reports 'macos'.
+ * - `platform()` returns `OsPlatform | "web"`. The web implementation
+ *   always returns `"web"`; every `platform()` call site must be
+ *   audited for that value during wave G4 (design section 1.8, G4
+ *   exit gate). Runtime detection (web vs desktop shell) must use
+ *   detect.ts, never this method.
  */
 export type OsPlatform =
   | "linux"
@@ -54,20 +58,9 @@ export type OsArch =
   | "sparc64";
 
 export interface OsAdapter {
-  /** Operating system platform, derived from navigator in web mode. */
-  platform(): OsPlatform;
-  /**
-   * Operating system version string. The web implementation throws
-   * PlatformCapabilityError: no synchronous browser API exposes it.
-   */
+  platform(): OsPlatform | "web";
   version(): string;
-  /**
-   * Operating system CPU architecture. The web implementation throws
-   * PlatformCapabilityError: no synchronous browser API exposes it.
-   */
   arch(): OsArch;
-  /** BCP-47 locale tag, or null when it cannot be obtained. */
   locale(): Promise<string | null>;
-  /** Application version string. */
   getAppVersion(): Promise<string>;
 }
