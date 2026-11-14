@@ -6,7 +6,7 @@
 //
 // Source: fase1/desain-sql-adapter.md section 1.2 (V1-03), wave M1,
 // with the auth shape of fase1/desain-auth.md section 1 (V1-08)
-// applied by the forward-only M8 migrations 0001-0003 (AD-25).
+// applied by the forward-only M8 migrations 0001-0004 (AD-25).
 // Table and column names are snake_case in Postgres; the service layer
 // maps them to camelCase JSON. Times are timestamptz in the database and
 // epoch milliseconds in the API. Status values use text plus CHECK, never
