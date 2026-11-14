@@ -129,6 +129,24 @@ export function createWebEventAdapter(options: WebEventAdapterOptions = {}): Eve
     });
   }
 
+  function deliverToOne<T>(handler: EventCallback<T>, event: string, payload: T): void {
+    const platformEvent: PlatformEvent<T> = {
+      event,
+      id: nextId,
+      payload,
+      windowLabel,
+    };
+    nextId += 1;
+    try {
+      const result = handler(platformEvent);
+      if (result !== undefined && typeof (result as PromiseLike<void>).then === "function") {
+        (result as Promise<void>).catch((error: unknown) => reportHandlerError(error, event));
+      }
+    } catch (error) {
+      reportHandlerError(error, event);
+    }
+  }
+
   function deliverLocally<T>(event: string, payload: T, fromWindowLabel?: string): void {
     const handlers = listeners.get(event);
     if (handlers === undefined || handlers.size === 0) return;
@@ -257,11 +275,17 @@ export function createWebEventAdapter(options: WebEventAdapterOptions = {}): Eve
   return {
     async listen<T>(event: string, handler: EventCallback<T>): Promise<UnlistenFn> {
       if (disposed) return () => undefined;
-      const unlisten = addListener(event, handler);
+      let active = true;
+      const inner = addListener(event, handler);
+      const unlisten: UnlistenFn = () => {
+        active = false;
+        inner();
+      };
       if ((CREATED_EVENTS as readonly string[]).includes(event)) {
-        // The web tab already exists, so creation already happened.
+        // The web tab already exists, so creation already happened. Deliver
+        // to this listener only, not to every listener of the event.
         queueMicrotask(() => {
-          deliverLocally(event, undefined as T);
+          if (active && !disposed) deliverToOne(handler, event, undefined as T);
         });
       }
       return unlisten;
@@ -269,15 +293,21 @@ export function createWebEventAdapter(options: WebEventAdapterOptions = {}): Eve
 
     async once<T>(event: string, handler: EventCallback<T>): Promise<UnlistenFn> {
       if (disposed) return () => undefined;
-      let unlisten: UnlistenFn = () => undefined;
+      let active = true;
+      let inner: UnlistenFn = () => undefined;
       const wrapper: EventCallback<T> = (platformEvent) => {
-        unlisten();
+        active = false;
+        inner();
         return handler(platformEvent);
       };
-      unlisten = addListener(event, wrapper);
+      inner = addListener(event, wrapper);
+      const unlisten: UnlistenFn = () => {
+        active = false;
+        inner();
+      };
       if ((CREATED_EVENTS as readonly string[]).includes(event)) {
         queueMicrotask(() => {
-          deliverLocally(event, undefined as T);
+          if (active && !disposed) deliverToOne(wrapper, event, undefined as T);
         });
       }
       return unlisten;

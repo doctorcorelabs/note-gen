@@ -21,6 +21,7 @@
 
 import { capabilityError } from "../errors";
 import {
+  canonicalShortcut,
   checkBrowserConflict,
   detectMac,
   matchesKeyEvent,
@@ -150,9 +151,7 @@ export function createWebShortcutAdapter(
           },
         };
       }
-      const canonical = [parsed.mod ? "Mod" : null, parsed.ctrl ? "Ctrl" : null, parsed.meta ? "Meta" : null, parsed.shift ? "Shift" : null, parsed.alt ? "Alt" : null, parsed.key]
-        .filter((part): part is string => part !== null)
-        .join("+");
+      const canonical = canonicalShortcut(parsed);
 
       const browserConflict = checkBrowserConflict(canonical);
       if (browserConflict !== null) {
@@ -208,9 +207,7 @@ export function createWebShortcutAdapter(
     async unregisterShortcut(shortcut: string): Promise<boolean> {
       const parsed = parseShortcut(shortcut);
       if (parsed === null) return false;
-      const canonical = [parsed.mod ? "Mod" : null, parsed.ctrl ? "Ctrl" : null, parsed.meta ? "Meta" : null, parsed.shift ? "Shift" : null, parsed.alt ? "Alt" : null, parsed.key]
-        .filter((part): part is string => part !== null)
-        .join("+");
+      const canonical = canonicalShortcut(parsed);
       const stored = byShortcut.get(canonical);
       if (stored === undefined) return false;
       byShortcut.delete(canonical);
@@ -221,9 +218,7 @@ export function createWebShortcutAdapter(
     async isRegistered(shortcut: string): Promise<boolean> {
       const parsed = parseShortcut(shortcut);
       if (parsed === null) return false;
-      const canonical = [parsed.mod ? "Mod" : null, parsed.ctrl ? "Ctrl" : null, parsed.meta ? "Meta" : null, parsed.shift ? "Shift" : null, parsed.alt ? "Alt" : null, parsed.key]
-        .filter((part): part is string => part !== null)
-        .join("+");
+      const canonical = canonicalShortcut(parsed);
       return byShortcut.has(canonical);
     },
 
@@ -251,9 +246,7 @@ export function createWebShortcutAdapter(
           blocking: true,
         };
       }
-      const canonical = [parsed.mod ? "Mod" : null, parsed.ctrl ? "Ctrl" : null, parsed.meta ? "Meta" : null, parsed.shift ? "Shift" : null, parsed.alt ? "Alt" : null, parsed.key]
-        .filter((part): part is string => part !== null)
-        .join("+");
+      const canonical = canonicalShortcut(parsed);
       return checkBrowserConflict(canonical) ?? checkDuplicate(canonical, "");
     },
 

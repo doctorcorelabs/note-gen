@@ -109,15 +109,18 @@ class WebWindowHandle implements WindowHandle {
     unsupported("isMaximized", "browser tabs have no maximized state");
   }
 
-  async setSize(_size: WindowSize): Promise<void> {
+  async setSize(size: WindowSize): Promise<void> {
+    void size;
     unsupported("setSize", "browser tabs have no size control");
   }
 
-  async setPosition(_position: WindowPosition): Promise<void> {
+  async setPosition(position: WindowPosition): Promise<void> {
+    void position;
     unsupported("setPosition", "browser tabs have no position control");
   }
 
-  async setAlwaysOnTop(_enabled: boolean): Promise<void> {
+  async setAlwaysOnTop(enabled: boolean): Promise<void> {
+    void enabled;
     unsupported("setAlwaysOnTop", "browser tabs have no always-on-top control");
   }
 

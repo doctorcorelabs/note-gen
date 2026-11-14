@@ -67,7 +67,8 @@ export function createTauriNotificationAdapter(): NotificationAdapter {
       };
     },
 
-    onInAppNotification(_listener: InAppNotificationListener): UnlistenFn {
+    onInAppNotification(listener: InAppNotificationListener): UnlistenFn {
+      void listener;
       return () => undefined;
     },
 

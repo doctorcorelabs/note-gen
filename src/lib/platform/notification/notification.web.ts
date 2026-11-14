@@ -72,7 +72,7 @@ export function createWebNotificationAdapter(
   const createNotification =
     options.createNotification ??
     ((title: string, init: { body?: string; icon?: string; tag?: string; silent?: boolean }) => {
-      const ctor = (globalThis as { Notification?: new (title: string, init?: NotificationOptions) => unknown })
+      const ctor = (globalThis as { Notification?: new (title: string, init?: { body?: string; icon?: string; tag?: string; silent?: boolean }) => unknown })
         .Notification;
       if (ctor === undefined) throw new Error("Notification API is unavailable");
       new ctor(title, init);

@@ -123,7 +123,8 @@ export function createTauriWindowAdapter(): WindowAdapter {
       return true;
     },
 
-    isSupported(_capability: WindowCapability): boolean {
+    isSupported(capability: WindowCapability): boolean {
+      void capability;
       return true;
     },
   };
