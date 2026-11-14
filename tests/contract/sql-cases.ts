@@ -146,7 +146,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     const tagId = await makeTag(sql, "Dup");
     const first = await sql.execute({
       kind: "marks.create",
-      mark: { tagId, type: "text", sourceId: "src-1" },
+      mark: { tagId, type: "text", content: "body", sourceId: "src-1" },
       tagIds: [tagId],
     });
     const second = await sql.execute({

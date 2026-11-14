@@ -646,7 +646,10 @@ export class FakeSqlAdapter implements SqlAdapter {
           content: mark.content ?? null,
           url: mark.url ?? null,
           desc: mark.desc ?? null,
-          sourceId: mark.sourceId ?? randomUUID(),
+          // A null sourceId stays null on read, matching the partial
+          // unique index semantics: nulls never collide with each
+          // other and each null row stays independent by id.
+          sourceId: mark.sourceId ?? null,
           deletedAt: null,
           tagUpdatedAt: now,
           version: 1,
