@@ -2,7 +2,7 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
 import { capabilityError } from "../errors";
-import type { HttpAdapter, HttpClientOptions } from "./interface";
+import type { ClientOptions, HttpAdapter } from "./interface";
 
 /**
  * Web implementation of HttpAdapter: a guard around the browser fetch.
@@ -121,6 +121,9 @@ function parseTarget(
   baseOrigin: string | null,
 ): { url: URL; wasRelative: boolean } {
   const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (raw.trim() === "") {
+    throw new TypeError("HttpAdapter.fetch received an empty URL.");
+  }
   try {
     return { url: new URL(raw), wasRelative: false };
   } catch {
@@ -135,22 +138,14 @@ function parseTarget(
 }
 
 function assertAllowedTarget(url: URL, wasRelative: boolean, baseOrigin: string | null): void {
-  // A URL that started out relative is allowed only when resolution
-  // kept it on the expected origin. Without this check, spellings
-  // the URL parser normalizes into a foreign origin ("//evil/x",
-  // "\\\\evil\\x", leading whitespace before "//evil/x") would
-  // resolve cross-origin yet sail through as "relative". When no
-  // page origin is known, the expected origin is the placeholder
-  // parse base, so only genuinely relative spellings pass.
-  if (wasRelative) {
-    const expected = baseOrigin ?? new URL(PLACEHOLDER_BASE).origin;
-    if (url.origin === expected) {
-      return;
-    }
-    // Resolved away from the expected origin: fall through to the
-    // absolute-URL checks below, which reject it unless the origin
-    // is the page origin or on the allowlist.
-  }
+  // Scheme and credential checks run FIRST, before the relative-URL
+  // fast path below. A protocol-relative spelling with embedded
+  // credentials ("//user:pass@host/path") resolves to the page origin
+  // yet carries userinfo; checking credentials only on the absolute
+  // path would let it sail through as "relative". Relative URLs
+  // resolved against an http(s) base always carry an http(s) scheme
+  // and no userinfo, so these checks never reject a genuine relative
+  // reference.
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw capabilityError(
       "unsupported",
@@ -169,6 +164,22 @@ function assertAllowedTarget(url: URL, wasRelative: boolean, baseOrigin: string 
       "URLs with embedded credentials are rejected",
     );
   }
+  // A URL that started out relative is allowed only when resolution
+  // kept it on the expected origin. Without this check, spellings
+  // the URL parser normalizes into a foreign origin ("//evil/x",
+  // "\\\\evil\\x", leading whitespace before "//evil/x") would
+  // resolve cross-origin yet sail through as "relative". When no
+  // page origin is known, the expected origin is the placeholder
+  // parse base, so only genuinely relative spellings pass.
+  if (wasRelative) {
+    const expected = baseOrigin ?? new URL(PLACEHOLDER_BASE).origin;
+    if (url.origin === expected) {
+      return;
+    }
+    // Resolved away from the expected origin: fall through to the
+    // origin checks below, which reject it unless the origin is the
+    // page origin or on the allowlist.
+  }
   if (baseOrigin !== null && url.origin === baseOrigin) {
     return;
   }
@@ -184,7 +195,7 @@ function assertAllowedTarget(url: URL, wasRelative: boolean, baseOrigin: string 
   );
 }
 
-function assertSupportedClientOptions(init: RequestInit & HttpClientOptions | undefined): void {
+function assertSupportedClientOptions(init: RequestInit & ClientOptions | undefined): void {
   const proxy = init?.proxy;
   if (proxy && (proxy.all !== undefined || proxy.http !== undefined || proxy.https !== undefined)) {
     throw capabilityError(
@@ -265,7 +276,7 @@ export function createWebHttpAdapter(options?: WebHttpAdapterOptions): HttpAdapt
   return {
     async fetch(
       input: string | URL | Request,
-      init?: RequestInit & HttpClientOptions,
+      init?: RequestInit & ClientOptions,
     ): Promise<Response> {
       const { url, wasRelative } = parseTarget(input, baseOrigin);
       assertAllowedTarget(url, wasRelative, baseOrigin);

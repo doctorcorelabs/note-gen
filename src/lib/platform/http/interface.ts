@@ -2,19 +2,22 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
 /**
- * Local HttpAdapter interface (provisional).
+ * Local HttpAdapter interface (provisional copy of the canonical interface).
  *
- * The canonical interface is owned by worker V2-04; the integrator
- * reconciles this local definition with the canonical one. This file
- * exists so the web implementation in this directory can be written,
- * typechecked, and tested without waiting for that reconciliation.
+ * The canonical interface is owned by worker V2-04 (branch
+ * web-registry-g0). The type declarations below are identical to the
+ * canonical ones read from that branch, so the integrator can keep
+ * either copy with no type reconciliation. This copy exists so the
+ * web implementation in this directory can be written, typechecked,
+ * and tested inside this branch without waiting for the merge.
  *
- * Surface, per the V1-05 inventory (design registry shim, section 1.7):
- * `fetch` from plugin-http, with the `ClientOptions` fields
- * `maxRedirections`, `connectTimeout`, `proxy`, and `danger`. The
- * plugin types are redeclared here under Http-prefixed names so this
- * file never imports a Tauri specifier; the field shapes match the
- * installed plugin-http 2.3.0 declarations.
+ * Surface, per the V1-05 inventory (design registry shim, section
+ * 1.7), re-verified against the reference tree at 4dcaa3f and the
+ * installed plugin-http 2.3.0 declarations: `fetch` (including the
+ * call-site aliases `httpFetch` and `tauriFetch`), plus the
+ * `ClientOptions` and `Proxy` types. The plugin types are redeclared
+ * here under their upstream names so this file never imports a Tauri
+ * specifier; the field shapes match the installed declarations.
  *
  * Notes on the upstream shape:
  * - The installed plugin `fetch` returns a standard web `Response`
@@ -23,61 +26,43 @@
  *   usage exists in src, so no response-type mapping is defined.
  * - `timeout` as a bare option name does not exist either; the
  *   timeout knob is `connectTimeout` (milliseconds).
- * - Call sites use the aliases `httpFetch` and `tauriFetch` for the
- *   same function; the adapter exposes the single method `fetch`.
+ * - `Proxy` is used as a type only in src (object literals such as
+ *   `{ all: proxyUrl }`); no call site constructs it as a value, so
+ *   a type-only redeclaration is sufficient.
+ * - The local wrapper in src/lib/sync/encode-fetch.ts bypasses the
+ *   plugin `fetch` and talks to the plugin over raw invoke commands;
+ *   its migration is owned by the G2 codemod, not by this signature.
  */
-export interface HttpProxyConfig {
-  /** URL of the proxy server. */
-  readonly url: string;
-  /** Proxy-Authorization header via Basic auth. */
-  readonly basicAuth?: {
-    readonly username: string;
-    readonly password: string;
+export interface ProxyConfig {
+  url: string;
+  basicAuth?: {
+    username: string;
+    password: string;
   };
-  /** Comma-separated list of hosts that must bypass the proxy. */
-  readonly noProxy?: string;
+  noProxy?: string;
 }
 
-export interface HttpProxy {
-  /** Proxy all traffic to the passed URL. */
-  readonly all?: string | HttpProxyConfig;
-  /** Proxy all HTTP traffic to the passed URL. */
-  readonly http?: string | HttpProxyConfig;
-  /** Proxy all HTTPS traffic to the passed URL. */
-  readonly https?: string | HttpProxyConfig;
+export interface Proxy {
+  all?: string | ProxyConfig;
+  http?: string | ProxyConfig;
+  https?: string | ProxyConfig;
 }
 
-export interface HttpDangerSettings {
-  /** Disables SSL verification. No browser equivalent. */
-  readonly acceptInvalidCerts?: boolean;
-  /** Disables hostname verification. No browser equivalent. */
-  readonly acceptInvalidHostnames?: boolean;
+export interface DangerousSettings {
+  acceptInvalidCerts?: boolean;
+  acceptInvalidHostnames?: boolean;
 }
 
-export interface HttpClientOptions {
-  /**
-   * Maximum number of redirects to follow. Zero means no redirects
-   * are followed.
-   */
-  readonly maxRedirections?: number;
-  /** Timeout in milliseconds. */
-  readonly connectTimeout?: number;
-  /** Proxy configuration. No browser equivalent. */
-  readonly proxy?: HttpProxy;
-  /** Dangerous client settings. No browser equivalent. */
-  readonly danger?: HttpDangerSettings;
+export interface ClientOptions {
+  maxRedirections?: number;
+  connectTimeout?: number;
+  proxy?: Proxy;
+  danger?: DangerousSettings;
 }
 
 export interface HttpAdapter {
-  /**
-   * Fetch a resource, with the same signature as the plugin-http
-   * `fetch`: standard `RequestInit` plus `HttpClientOptions`.
-   * The web implementation enforces the same-origin policy documented
-   * in http.web.ts and rejects cross-origin requests whose origin is
-   * not on the (MVP-empty) allowlist.
-   */
   fetch(
-    input: string | URL | Request,
-    init?: RequestInit & HttpClientOptions,
+    input: URL | Request | string,
+    init?: RequestInit & ClientOptions,
   ): Promise<Response>;
 }
