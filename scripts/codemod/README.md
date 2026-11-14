@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 
-# Codemod engine (V3-16aR)
+# Codemod engine (V3-16aR2)
 
 AST-based, import-only migration of Tauri module imports to the
 platform registry (`@/lib/platform`), for waves G1-G5 (V1-05
@@ -19,6 +19,18 @@ non-import text is byte-identical before and after the transform.
   rewritten; the JSON report lists every reference with a suggested
   replacement expression, and the wave worker (3C) applies the
   call-site rewrites, then typechecks.
+- Type-only renames: a binding used only in type positions whose
+  mapping names a different barrel type (`Store` to `StoreHandle`,
+  `Update` to `UpdateInfo`, `LogicalSize` to `LogicalSizeValue`,
+  `PhysicalPosition` to `PhysicalPositionValue`) is re-imported as
+  `import type { <BarrelName> as <local> }`, so type references keep
+  working; the wave worker renames them to the barrel name at
+  stage A. Mixed type+value use of such a binding fails the
+  declaration closed (`mixed-type-value-use`).
+- `api/image` is never rewritten: the two screenshot routes are
+  disabled on web (V3-21) and image bytes go through
+  `ClipboardAdapter.writeImage` at the real call sites. Files
+  importing it are skipped and flagged MANUAL-REVIEW.
 - Dynamic `import()`: reported, never edited, unless the caller
   opts in with `--rewrite-dynamic-imports`, and even then only the
   specifier literal of a fully barrel-mappable destructure is
@@ -117,9 +129,14 @@ Edge fixtures: `engine-f09` (name collision), `engine-f10`
 (default import + no-equivalent type), `engine-f12` (existing
 barrel import, no duplicate), `engine-f13` (barrel type used as a
 value, skip), `engine-f14` (platform + barrel value in one
-declaration), `engine-f15` (no-equivalent name fails the whole
-declaration), `engine-f16` (namespace, side-effect, re-export),
-`engine-f17` (merge into existing barrel imports).
+declaration), `engine-f15` (type-only `Update` maps to
+`UpdateInfo`, flagged MANUAL-REVIEW), `engine-f16` (namespace,
+side-effect, re-export), `engine-f17` (merge into existing
+barrel imports), `engine-f20` (`api/image` skipped, MANUAL-REVIEW),
+`engine-f21` (`Update` used as a value, skip), `engine-f22`
+(type-only `Store` maps to `StoreHandle`), `engine-f23`
+(type-only `LogicalSize` maps to `LogicalSizeValue`),
+`engine-f24` (opener per-call-site decisions, MANUAL-REVIEW).
 
 ## Report
 
@@ -127,13 +144,24 @@ declaration), `engine-f16` (namespace, side-effect, re-export),
 per file (`status`, `declarationsTransformed`,
 `declarationsSkipped` with `reason`, `declarationsDeferred`,
 `bindings` with `references` and `replacement`,
-`dynamicImports`, `notes`). Statuses: `transformed`,
-`unchanged`, `skipped`, `error`.
+`dynamicImports`, `notes`, `unsupported`, `manualReview`).
+Statuses: `transformed`, `unchanged`, `skipped`, `error`.
+`unsupported` lists re-exports of a target specifier: such a file
+is never reported as a clean success (status `skipped` when
+nothing else changed). `manualReview` lists bindings whose
+migration needs a human decision before merge (SQL funnel,
+opener per-call-site decisions, `Update`/size-value mappings,
+`api/image`); a file can be both `transformed` and
+MANUAL-REVIEW. Totals count `unsupportedReported` and
+`manualReviewFiles`. The `unsupported`/`manualReview` fields and
+the `barrelName` binding field are additive (V3-16aR2); readers
+of schema version 1 ignore unknown fields.
 
 Skip reasons for declarations: `namespace-import`,
 `side-effect-import`, `unknown-import-name`,
 `unknown-default-import`, `no-barrel-equivalent`,
-`barrel-type-used-as-value`, `barrel-name-taken`,
+`barrel-type-used-as-value`, `mixed-type-value-use`,
+`barrel-name-taken`,
 `name-collision-platform`, `platform-name-taken`,
 `default-import-barrel`. Dynamic reasons: `promise-all-batch`,
 `dynamic-namespace-access`, `dynamic-then-access`,
@@ -151,7 +179,14 @@ Skip reasons for declarations: `namespace-import`,
 4. Typecheck in batches of at most 20 files; fix before continuing.
 5. Run the 4-layer gate (`scripts/gates/`, V3-16b) before merge.
 
-Verify the engine itself over copies, never over the committed
+Verify the engine itself with the committed harness (from the
+repo root, after `pnpm install`):
+
+```sh
+node scripts/codemod/self-check.mjs
+```
+
+Or verify over copies manually, never over the committed
 fixtures in place:
 
 ```sh
@@ -166,6 +201,9 @@ node scripts/codemod/run.mjs --wave G1 --root ~/workspace/codemod-check --report
 - `engine.mjs`: AST transform + import-only self-check.
 - `mappings.mjs`: per-name mapping tables and wave lists.
 - `report.mjs`: unified diff + report summary helpers.
+- `self-check.mjs`: verification harness over copies of the
+  engine fixtures (run from the repo root; never writes into
+  the repo tree). Exit 0 means every check passed.
 - `engine-fixtures/`: engine-owned verification inputs.
 - `fixtures/`: owned by V3-16c (before/after pairs + guide);
   not owned by this task, do not edit here.

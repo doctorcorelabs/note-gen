@@ -149,6 +149,8 @@ function main() {
         bindings: [],
         dynamicImports: [],
         notes: [],
+        unsupported: [],
+        manualReview: [],
         changed: false,
         newText: null,
       });

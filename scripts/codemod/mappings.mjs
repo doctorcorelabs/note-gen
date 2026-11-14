@@ -25,9 +25,21 @@
  *   type position, otherwise the declaration is skipped.
  * - "none": no same-name replacement exists. The declaration is skipped
  *   with a reason. This covers QueryResult (rejected by AD-26), Update
- *   (barrel has UpdateInfo, a different shape), and LogicalSize /
- *   PhysicalPosition (barrel has *Value structural types; the one call
- *   site migrates to a plain object in G4, manually).
+ *   used as a value (barrel has UpdateInfo, a different shape), and
+ *   LogicalSize / PhysicalPosition used as values (barrel has *Value
+ *   structural types; the one call site migrates to a plain object in
+ *   G4, manually). The same names used ONLY in type positions are
+ *   handled by typeBarrelName below instead of skipping.
+ * - "typeBarrelName": when present, a binding whose references are all
+ *   in type positions is re-imported as a barrel type under the new
+ *   name, keeping the local name as an alias
+ *   (`import type { StoreHandle as Store }`). References keep working;
+ *   the wave worker renames them to the barrel name at stage A. Mixed
+ *   type+value use of such a binding fails the declaration closed.
+ * - "manualReview": when present, the file is flagged MANUAL-REVIEW in
+ *   the report even when its import rewrite is mechanical, because a
+ *   human decision is required before merge (V3-16c manual-review
+ *   kind). Auto cases never carry this flag.
  *
  * Wave: the migration wave that owns the name. The api/core specifier is
  * shared: invoke/Channel/transformCallback close at G2, convertFileSrc
@@ -89,6 +101,8 @@ export const KNOWN_SPECIFIERS = [...new Set(Object.values(WAVE_SPECIFIERS).flat(
  * - replacement: expression or instruction replacing the binding at call
  *   sites. Report-only; the engine never edits call sites.
  * - barrelKind: "value" | "type", for "barrel" entries.
+ * - typeBarrelName: barrel type name for type-only references (see above).
+ * - manualReview: human-decision note; flags the file MANUAL-REVIEW.
  * - note: extra context for the wave worker, kept in the report.
  */
 export const NAME_MAPPINGS = {
@@ -98,7 +112,8 @@ export const NAME_MAPPINGS = {
       action: "platform",
       adapter: "store",
       replacement: "platform.store",
-      note: "Store.load(...) becomes platform.store.load(...).",
+      typeBarrelName: "StoreHandle",
+      note: "Store.load(...) becomes platform.store.load(...). A type-only Store binding is re-imported as StoreHandle (aliased to Store).",
     },
   },
   "@tauri-apps/plugin-sql": {
@@ -107,12 +122,14 @@ export const NAME_MAPPINGS = {
       action: "platform",
       adapter: "sql",
       replacement: "typed operations via platform.sql",
+      manualReview: "SQL funnel (db/index.ts): migration to typed operations is manual work (V3-14), not an import rewrite.",
       note:
         "No direct replacement: the SqlAdapter interface (V3-14) exposes typed operations, not Database.load. The db/index.ts funnel migrates when that interface lands.",
     },
     QueryResult: {
       wave: "G1",
       action: "none",
+      manualReview: "QueryResult has no barrel equivalent (AD-26); the funnel migrates manually (V3-14).",
       note: "No barrel equivalent: QueryResult was rejected by AD-26 and must not be reintroduced.",
     },
   },
@@ -188,8 +205,20 @@ export const NAME_MAPPINGS = {
   },
   "@tauri-apps/plugin-opener": {
     openUrl: { wave: "G3", action: "platform", adapter: "opener", replacement: "platform.opener.openUrl" },
-    openPath: { wave: "G3", action: "platform", adapter: "opener", replacement: "platform.opener.openPath" },
-    revealItemInDir: { wave: "G3", action: "platform", adapter: "opener", replacement: "platform.opener.revealItemInDir" },
+    openPath: {
+      wave: "G3",
+      action: "platform",
+      adapter: "opener",
+      replacement: "platform.opener.openPath",
+      manualReview: "Per-call-site decision: workspace paths map to downloads; OS paths throw PlatformCapabilityError. A human records the decision.",
+    },
+    revealItemInDir: {
+      wave: "G3",
+      action: "platform",
+      adapter: "opener",
+      replacement: "platform.opener.revealItemInDir",
+      manualReview: "Per-call-site decision: workspace paths map to downloads; OS paths throw PlatformCapabilityError. A human records the decision.",
+    },
   },
   "@tauri-apps/plugin-clipboard-manager": {
     writeText: { wave: "G3", action: "platform", adapter: "clipboard", replacement: "platform.clipboard.writeText" },
@@ -210,11 +239,15 @@ export const NAME_MAPPINGS = {
     LogicalSize: {
       wave: "G4",
       action: "none",
+      typeBarrelName: "LogicalSizeValue",
+      manualReview: "Construction sites migrate to plain objects with manual verification; type-only uses map to LogicalSizeValue.",
       note: "No same-name barrel export (barrel has LogicalSizeValue). The one construction site migrates to a plain object in G4, manually.",
     },
     PhysicalPosition: {
       wave: "G4",
       action: "none",
+      typeBarrelName: "PhysicalPositionValue",
+      manualReview: "Construction sites migrate to plain objects with manual verification; type-only uses map to PhysicalPositionValue.",
       note: "No same-name barrel export (barrel has PhysicalPositionValue). The one construction site migrates to a plain object in G4, manually.",
     },
   },
@@ -282,16 +315,17 @@ export const NAME_MAPPINGS = {
     Update: {
       wave: "G5",
       action: "none",
-      note: "No same-name barrel export: the barrel has UpdateInfo (data), while Update is a class with downloadAndInstall. The update store migrates manually in G5.",
+      typeBarrelName: "UpdateInfo",
+      manualReview: "Update to UpdateInfo mapping and check behavior need manual verification, including the updater trigger guard in layout (V3-21, AD-42).",
+      note: "No same-name barrel export: the barrel has UpdateInfo (data), while Update is a class with downloadAndInstall. Type-only uses map to UpdateInfo; value uses migrate manually in G5.",
     },
   },
   "@tauri-apps/api/image": {
     Image: {
       wave: "G5",
-      action: "platform",
-      adapter: "clipboard",
-      replacement: "bytes via platform.clipboard",
-      note: "No adapter of its own: ClipboardAdapter builds the image internally from bytes.",
+      action: "none",
+      manualReview: "No migration by import rewrite: the screenshot routes are disabled on web (V3-21) and image bytes go through ClipboardAdapter.writeImage at the real call sites. A human resolves this file.",
+      note: "No import rewrite: api/image occurs only in the two screenshot routes, which are disabled on web. The import stays until a human resolves the route.",
     },
   },
 };

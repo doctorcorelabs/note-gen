@@ -178,6 +178,8 @@ export function summarize(results) {
     bindingsRemoved: 0,
     referencesReported: 0,
     dynamicImportsReported: 0,
+    unsupportedReported: 0,
+    manualReviewFiles: 0,
   };
   for (const result of results) {
     if (result.status === "transformed") totals.transformed += 1;
@@ -191,6 +193,8 @@ export function summarize(results) {
     totals.referencesReported +=
       result.bindings?.reduce((sum, binding) => sum + (binding.totalReferences ?? 0), 0) ?? 0;
     totals.dynamicImportsReported += result.dynamicImports?.length ?? 0;
+    totals.unsupportedReported += result.unsupported?.length ?? 0;
+    if ((result.manualReview?.length ?? 0) > 0) totals.manualReviewFiles += 1;
   }
   return totals;
 }
@@ -208,8 +212,17 @@ export function printSummary(results, totals, mode) {
   lines.push(
     `bindings removed=${totals.bindingsRemoved} references reported=${totals.referencesReported} dynamic imports reported=${totals.dynamicImportsReported}`,
   );
+  lines.push(
+    `unsupported=${totals.unsupportedReported} manual-review files=${totals.manualReviewFiles}`,
+  );
   for (const result of results) {
-    if (result.status === "unchanged") continue;
+    if (
+      result.status === "unchanged" &&
+      (result.unsupported?.length ?? 0) === 0 &&
+      (result.manualReview?.length ?? 0) === 0
+    ) {
+      continue;
+    }
     if (result.status === "error") {
       lines.push(`ERROR ${result.path}: ${result.error ?? "unknown error"}`);
       continue;
@@ -219,6 +232,8 @@ export function printSummary(results, totals, mode) {
       ...(result.dynamicImports ?? [])
         .filter((d) => d.reason !== "rewritten")
         .map((d) => `${d.reason} (line ${d.line}${d.specifier ? `, ${d.specifier}` : ""})`),
+      ...(result.unsupported ?? []).map((d) => `UNSUPPORTED ${d.reason} (line ${d.line}, ${d.specifier})`),
+      ...(result.manualReview ?? []).map((d) => `MANUAL-REVIEW ${d.importedName} (${d.specifier})`),
     ];
     lines.push(
       `${result.status.toUpperCase()} ${result.path}: ${result.declarationsTransformed ?? 0} declaration(s) transformed` +

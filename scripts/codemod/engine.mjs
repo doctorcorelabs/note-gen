@@ -180,12 +180,41 @@ function collectReferences(nameNode, sourceFile, text, starts) {
 }
 
 function allReferencesAreTypes(nameNode) {
+  return !referenceMix(nameNode).hasValue;
+}
+
+/**
+ * Whether a binding has references in type positions, value positions,
+ * or both (excluding the import declaration itself). Drives the
+ * type-rename path for mappings with typeBarrelName: all-type means
+ * rename, mixed means fail closed, all-value means the normal action.
+ */
+function referenceMix(nameNode) {
   const nodes = nameNode.findReferencesAsNodes();
+  let hasType = false;
+  let hasValue = false;
   for (const node of nodes) {
     if (node.getFirstAncestorByKind(SyntaxKind.ImportDeclaration) !== undefined) continue;
-    if (!isTypePositionReference(node)) return false;
+    if (isTypePositionReference(node)) hasType = true;
+    else hasValue = true;
   }
-  return true;
+  return { hasType, hasValue };
+}
+
+/** True when a dynamic import() feeds a `.then(...)` call (pattern 6). */
+function isThenAccess(callExpression) {
+  let current = callExpression.getParent();
+  for (let depth = 0; depth < 3 && current !== undefined; depth += 1) {
+    if (
+      Node.isPropertyAccessExpression(current) &&
+      current.getName() === "then" &&
+      Node.isCallExpression(current.getParent())
+    ) {
+      return true;
+    }
+    current = current.getParent();
+  }
+  return false;
 }
 
 function newProject() {
@@ -287,6 +316,8 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
     bindings: [],
     dynamicImports: [],
     notes: [],
+    unsupported: [],
+    manualReview: [],
     changed: false,
     newText: null,
   };
@@ -390,9 +421,27 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
     const removedBindings = [];
     const plannedBarrelValue = [];
     const plannedBarrelType = [];
+    let keptDefault = null;
     let skipReason = null;
     let skipDetail = null;
     let needsPlatform = false;
+
+    const flagManualReview = (mapping, importedName, localName) => {
+      if (mapping.manualReview === undefined) return;
+      if (
+        result.manualReview.some(
+          (entry) => entry.importedName === importedName && entry.localName === localName,
+        )
+      ) {
+        return;
+      }
+      result.manualReview.push({
+        importedName,
+        localName,
+        specifier: spec,
+        reason: mapping.manualReview,
+      });
+    };
 
     const planNamed = (importedName, localName, nameNode, specText) => {
       const mapping = lookupMapping(spec, importedName);
@@ -404,6 +453,37 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
       if (wave !== null && mapping.wave !== wave) {
         kept.push(specText);
         return true;
+      }
+      flagManualReview(mapping, importedName, localName);
+      if (mapping.typeBarrelName !== undefined) {
+        const mix = referenceMix(nameNode);
+        if (mix.hasType && mix.hasValue) {
+          skipReason = "mixed-type-value-use";
+          skipDetail = `'${importedName}' is used in both type and value positions; one binding name cannot serve both replacements. Migrate manually.`;
+          return false;
+        }
+        if (mix.hasType || (!mix.hasValue && decl.isTypeOnly())) {
+          const existing = barrelLocalNames.get(localName);
+          if (existing !== undefined && existing !== mapping.typeBarrelName) {
+            skipReason = "barrel-name-taken";
+            skipDetail = `Local name '${localName}' is already bound from the barrel to '${existing}'.`;
+            return false;
+          }
+          if (existing === undefined) {
+            plannedBarrelType.push({ importedName: mapping.typeBarrelName, localName });
+          }
+          removedBindings.push({
+            localName,
+            importedName,
+            specifier: spec,
+            action: "barrel",
+            barrelKind: "type",
+            barrelName: mapping.typeBarrelName,
+            note: mapping.note,
+            nameNode,
+          });
+          return true;
+        }
       }
       if (mapping.action === "none") {
         skipReason = "no-barrel-equivalent";
@@ -465,16 +545,19 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
         skipDetail = `No mapping entry for the default import from '${spec}'.`;
         planned = false;
       } else if (wave !== null && mapping.wave !== wave) {
-        kept.push(localName);
+        keptDefault = localName;
       } else if (mapping.action === "none") {
+        flagManualReview(mapping, "default", localName);
         skipReason = "no-barrel-equivalent";
         skipDetail = mapping.note ?? "No replacement for the default import.";
         planned = false;
       } else if (mapping.action === "barrel") {
+        flagManualReview(mapping, "default", localName);
         skipReason = "default-import-barrel";
         skipDetail = "Default imports are never rewritten to barrel bindings.";
         planned = false;
       } else {
+        flagManualReview(mapping, "default", localName);
         if (localName === "platform") {
           skipReason = "name-collision-platform";
           skipDetail = "Removed default binding is named 'platform'. Migrate manually.";
@@ -523,7 +606,11 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
     }
 
     if (removedBindings.length === 0) {
-      result.declarationsDeferred.push({ line, specifier: spec, names: kept });
+      result.declarationsDeferred.push({
+        line,
+        specifier: spec,
+        names: [...(keptDefault !== null ? [keptDefault] : []), ...kept],
+      });
       continue;
     }
 
@@ -545,6 +632,7 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
         ...(binding.adapter ? { adapter: binding.adapter } : {}),
         ...(binding.replacement ? { replacement: binding.replacement } : {}),
         ...(binding.barrelKind ? { barrelKind: binding.barrelKind } : {}),
+        ...(binding.barrelName ? { barrelName: binding.barrelName } : {}),
         ...(binding.note ? { note: binding.note } : {}),
         references,
         totalReferences: total,
@@ -552,14 +640,17 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
       });
     }
 
-    if (kept.length > 0) {
+    if (kept.length > 0 || keptDefault !== null) {
       const typeKeyword = decl.isTypeOnly() ? "type " : "";
       const semi = declarationHasSemicolon(decl) ? ";" : "";
       const quote = specifierQuote(decl);
+      const defaultPart = keptDefault !== null ? keptDefault : "";
+      const namedPart = kept.length > 0 ? `{ ${kept.join(", ")} }` : "";
+      const separator = defaultPart !== "" && namedPart !== "" ? ", " : "";
       edits.push({
         start: decl.getStart(),
         end: decl.getEnd(),
-        text: `import ${typeKeyword}{ ${kept.join(", ")} } from ${quote}${spec}${quote}${semi}`,
+        text: `import ${typeKeyword}${defaultPart}${separator}${namedPart} from ${quote}${spec}${quote}${semi}`,
       });
     } else {
       const span = removalSpan(text, decl);
@@ -569,6 +660,8 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
   }
 
   // Re-exports of a target specifier are reported, never edited.
+  // They mark the file UNSUPPORTED: the report must never claim
+  // success over a file whose re-export still names the specifier.
   for (const decl of sourceFile.getExportDeclarations()) {
     const spec = decl.getModuleSpecifierValue();
     if (spec !== undefined && specifiers.has(spec)) {
@@ -576,6 +669,12 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
         kind: "re-export-not-handled",
         line: decl.getStartLineNumber(),
         detail: `Re-export from '${spec}' is never rewritten by the engine.`,
+      });
+      result.unsupported.push({
+        line: decl.getStartLineNumber(),
+        specifier: spec,
+        reason: "re-export-not-handled",
+        detail: `Re-export from '${spec}' is never rewritten by the engine; resolve it manually.`,
       });
     }
   }
@@ -647,11 +746,10 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
       continue;
     }
     if (destructured === null) {
-      const parentText = call.getParent()?.getText() ?? "";
       result.dynamicImports.push({
         line,
         specifier: spec,
-        reason: parentText.includes(".then(") ? "dynamic-then-access" : "dynamic-import-unclassified",
+        reason: isThenAccess(call) ? "dynamic-then-access" : "dynamic-import-unclassified",
         names: [],
         detail: "Dynamic import without an object destructure; migrate manually.",
       });
@@ -779,6 +877,7 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
   if (edits.length === 0) {
     if (
       result.declarationsSkipped.length > 0 ||
+      result.unsupported.length > 0 ||
       result.dynamicImports.some((entry) => entry.reason !== "rewritten")
     ) {
       result.status = "skipped";
@@ -816,6 +915,8 @@ export function transformFile({ absPath, relPath, specifiers, wave, rewriteDynam
       bindings: [],
       dynamicImports: [],
       notes: [{ kind: "unsupported-extension", detail: `Extension '${extension}' is not parsed by the engine.` }],
+      unsupported: [],
+      manualReview: [],
       changed: false,
       newText: null,
     };
@@ -834,6 +935,8 @@ export function transformFile({ absPath, relPath, specifiers, wave, rewriteDynam
       bindings: [],
       dynamicImports: [],
       notes: [],
+      unsupported: [],
+      manualReview: [],
       changed: false,
       newText: null,
     };
