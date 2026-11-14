@@ -15,6 +15,13 @@
       "when": 1794689969905,
       "tag": "0001_m8-expand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794690136886,
+      "tag": "0002_m8-tighten",
+      "breakpoints": true
     }
   ]
 }

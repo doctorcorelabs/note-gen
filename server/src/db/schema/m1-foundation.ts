@@ -10,14 +10,14 @@
 // epoch milliseconds in the API. Status values use text plus CHECK, never
 // a Postgres enum type, so new values need no type migration.
 //
-// M8 expand state (migration 0001): this file carries BOTH the M1 shape
-// and the additive V1-08 columns. Old columns (login, is_admin,
-// suspended_at, totp_secret, device_id, ip_hash, user_agent_hash,
-// expires_at, idle_expires_at, actor_id, action, target_type,
-// target_id, owner_id) are still present; they are removed only by the
-// contract migration 0003, after the data procedure and the tighten
-// migration 0002. Do not read this intermediate state as the final
-// shape; the final shape is documented in laporan-v3-01a-m8.md.
+// M8 tighten state (migration 0002): email is NOT NULL with a unique
+// lower() index, credential_epoch is integer, session tightening
+// columns are NOT NULL, and owner_user_id carries its RESTRICT foreign
+// key. This state is only valid after the data procedure has run on an
+// expand-state database. Old M1 columns are still present; they are
+// removed only by the contract migration 0003. Do not read this
+// intermediate state as the final shape; the final shape is documented
+// in laporan-v3-01a-m8.md.
 
 import { desc, sql } from 'drizzle-orm';
 import {
@@ -57,7 +57,7 @@ export const users = pgTable(
     login: text('login').notNull(),
     passwordHash: text('password_hash').notNull(),
     totpSecret: bytea('totp_secret'),
-    credentialEpoch: bigint('credential_epoch', { mode: 'number' }).notNull().default(0),
+    credentialEpoch: integer('credential_epoch').notNull().default(0),
     isAdmin: boolean('is_admin').notNull().default(false),
     suspendedAt: timestamp('suspended_at', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -65,9 +65,9 @@ export const users = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    // M8 expand: V1-08 columns. email stays nullable until the data
-    // procedure backfills it and migration 0002 tightens it.
-    email: text('email'),
+    // M8 tighten: email is NOT NULL with a unique lower() index; the
+    // data procedure must have backfilled it before migration 0002.
+    email: text('email').notNull(),
     passwordChangedAt: timestamp('password_changed_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
@@ -81,6 +81,7 @@ export const users = pgTable(
   (t) => [
     // Login uniqueness is case-insensitive without the citext extension.
     uniqueIndex('users_login_lower_key').using('btree', sql`lower(${t.login})`),
+    uniqueIndex('users_email_unique_idx').using('btree', sql`lower(${t.email})`),
     index('users_status_idx').on(t.status),
     check('users_role_check', sql`${t.role} IN ('user', 'admin')`),
     check('users_status_check', sql`${t.status} IN ('active', 'disabled')`),
@@ -119,16 +120,15 @@ export const sessions = pgTable(
     idleExpiresAt: timestamp('idle_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
-    // M8 expand: V1-08 columns. csrf_token_hash and absolute_expires_at
-    // stay nullable until the data procedure invalidates pre-M8 sessions
-    // and migration 0002 tightens them.
-    csrfTokenHash: text('csrf_token_hash'),
+    // M8 tighten: csrf_token_hash and absolute_expires_at are NOT NULL;
+    // the data procedure must have invalidated pre-M8 sessions first.
+    csrfTokenHash: text('csrf_token_hash').notNull(),
     credentialEpoch: integer('credential_epoch').notNull().default(0),
     userAgent: text('user_agent'),
     createdIp: inet('created_ip'),
     lastSeenIp: inet('last_seen_ip'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true, mode: 'date' }),
+    absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     stepUpAt: timestamp('step_up_at', { withTimezone: true, mode: 'date' }),
   },
   (t) => [
@@ -146,10 +146,11 @@ export const workspaces = pgTable(
     ownerId: uuid('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
-    // M8 expand: owner_user_id without a foreign key yet. The data
-    // procedure backfills it from owner_id; migration 0002 adds the
-    // NOT NULL constraint, the RESTRICT foreign key, and the index.
-    ownerUserId: uuid('owner_user_id'),
+    // M8 tighten: owner_user_id is NOT NULL with the RESTRICT foreign
+    // key kept from M1 (R8); the data procedure backfilled it first.
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
     storageQuotaBytes: bigint('storage_quota_bytes', { mode: 'number' }),
@@ -159,7 +160,10 @@ export const workspaces = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index('workspaces_owner_id_idx').on(t.ownerId)],
+  (t) => [
+    index('workspaces_owner_id_idx').on(t.ownerId),
+    index('workspaces_owner_user_id_idx').on(t.ownerUserId),
+  ],
 );
 
 export const workspaceMembers = pgTable(
