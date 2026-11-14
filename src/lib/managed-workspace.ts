@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 import { appDataDir, join } from '@tauri-apps/api/path'
 import { exists, lstat, mkdir } from '@tauri-apps/plugin-fs'
 import type { Store } from '@tauri-apps/plugin-store'
@@ -18,7 +19,17 @@ const iosContainer = new RegExp(`^(?:(?:/private)?/var/mobile|/Users/[^/]+/Libra
 
 /** Managed roots have a stable location relative to the current app-data root. */
 export async function managedWorkspaceLocation(path: string): Promise<string | null> {
-  const root = normalizeManagedWorkspacePath(await appDataDir())
+  let root: string
+  try {
+    root = normalizeManagedWorkspacePath(await appDataDir())
+  } catch {
+    // Web fork POC: appDataDir() rejects in a plain browser (no Tauri IPC).
+    // Treat the path as unmanaged so callers keep it as-is instead of
+    // killing settings hydration. In Tauri, appDataDir() does not reject,
+    // so desktop behavior is unchanged. Fase 1 replaces this guard with a
+    // real PathAdapter; the guard only keeps boot alive for the POC.
+    return null
+  }
   let candidate = normalizeManagedWorkspacePath(path)
   const currentIOS = root.match(iosContainer)
   const savedIOS = candidate.match(iosContainer)
