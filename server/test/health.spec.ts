@@ -12,10 +12,10 @@
 // silently drop a file named health.test.ts from git. This file uses the
 // .spec.ts suffix instead, which Vitest also picks up by default.
 //
-// Debt (design 7.3 item 6): there is no auth or rate-limit middleware in
-// the Fase 0 skeleton, so the test that health passes without credentials
-// while a protected data endpoint rejects them cannot exist yet. It must
-// be added when the middleware lands. The test below only proves health
+// Middleware contract (design 7.3 item 6, closed in Fase 1 by the
+// backend foundation): auth-hook.spec.ts proves health passes without
+// credentials while a protected data route rejects them, plus the
+// health path exemption list. The test below only proves health
 // answers without credentials today.
 
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
@@ -90,6 +90,22 @@ function testConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     checkTimeoutMs: 2000,
     overallTimeoutMs: 5000,
     warnings: [],
+    registrationMode: 'closed',
+    publicBaseUrl: undefined,
+    trustProxy: false,
+    cookieSecure: true,
+    cfAccessEnabled: false,
+    cfAccessTeamDomain: undefined,
+    cfAccessAud: undefined,
+    cfAccessServiceAud: undefined,
+    cfAccessJwksCacheTtlSeconds: 3600,
+    jwtAudience: undefined,
+    authSecretConfigured: false,
+    authSecretLengthOk: false,
+    encryptionKeyConfigured: false,
+    setupTokenConfigured: false,
+    setupTokenLengthOk: false,
+    maxBodyBytes: 1048576,
     ...overrides,
   };
 }

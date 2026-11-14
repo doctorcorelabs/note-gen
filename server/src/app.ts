@@ -6,44 +6,67 @@
 // registers routes, but never listens: only server.ts calls listen(),
 // so tests can exercise the app with inject() without opening a port.
 //
+// Foundation wiring (Fase 1, V2-02), in registration order:
+// 1. Request ids: genReqId honors a well-formed client X-Request-Id
+//    and otherwise generates a UUID; every reply echoes the id in the
+//    X-Request-Id header, and error envelopes carry the same id.
+// 2. Error handling: unknown paths answer 404 with the generic error
+//    envelope; health paths keep the Fase 0 emergency envelope safety
+//    net; all other errors become the generic envelope without leaking
+//    messages, stack traces, or config values.
+// 3. Auth hooks: routes under /api/ are protected by default (see
+//    middleware/auth-hook.ts). Health routes are explicitly public.
+//    Without an injected verifySession, protected routes answer 401:
+//    the foundation is deny-by-default until the auth worker lands.
+// 4. Health routes, unchanged in behavior from Fase 0.
+//
 // Request logging is disabled: health probes arrive every few seconds
 // from watchdogs and container healthchecks, and successful probes must
 // not flood the log. Failed checks are logged by the ready handler
-// itself, with error codes only. The global error handler never leaks
-// error messages, stack traces, or config values into a response body.
+// itself, with error codes only. Credential-carrying headers are
+// redacted at the logger level (see plugins/logging.ts).
 
 import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import type { ServerConfig } from './config.js';
 import type { HealthDbPool } from './db/pool.js';
-import { buildEmergencyEnvelope, registerHealthRoutes } from './routes/health.js';
+import {
+  registerAuthHooks,
+  type VerifyCsrfTokenFn,
+  type VerifyOriginFn,
+  type VerifySessionFn,
+} from './middleware/auth-hook.js';
+import { registerErrorHandling } from './plugins/error-handler.js';
+import { buildLoggerOptions } from './plugins/logging.js';
+import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
+import { registerHealthRoutes } from './routes/health.js';
 
 export interface AppDeps {
   config: ServerConfig;
   pool: HealthDbPool | null;
   version: string;
+  // Injected by the auth worker. When absent, the deny-by-default
+  // stubs in middleware/auth-hook.ts apply (401 for protected routes,
+  // 403 for authenticated mutations). Never allow-by-default.
+  verifySession?: VerifySessionFn;
+  verifyCsrf?: VerifyCsrfTokenFn;
+  verifyOrigin?: VerifyOriginFn;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: { level: deps.config.logLevel },
+    logger: buildLoggerOptions(deps.config.logLevel),
     logController: new LogController({ disableRequestLogging: true }),
+    bodyLimit: deps.config.maxBodyBytes,
+    genReqId: (request) => requestIdFromHeaders(request.headers),
   });
 
-  app.setNotFoundHandler((_request, reply) => {
-    reply.code(404).send({ error: 'Not Found', statusCode: 404 });
-  });
-
-  app.setErrorHandler((error, request, reply) => {
-    if (request.url.startsWith('/api/health')) {
-      // Second safety net behind the ready handler's own try/catch:
-      // an unexpected error on a health route still answers 503 with
-      // a valid envelope, never a default 500 body.
-      reply.header('Cache-Control', 'no-store');
-      reply.code(503).send(buildEmergencyEnvelope(deps.version));
-      return;
-    }
-    request.log.error({ code: 'UNHANDLED_ERROR' }, 'unhandled error');
-    reply.code(500).send({ error: 'Internal Server Error', statusCode: 500 });
+  registerRequestId(app);
+  registerErrorHandling(app, { version: deps.version });
+  registerAuthHooks(app, {
+    verifySession: deps.verifySession,
+    verifyCsrf: deps.verifyCsrf,
+    verifyOrigin: deps.verifyOrigin,
+    canonicalOrigin: deps.config.publicBaseUrl,
   });
 
   await registerHealthRoutes(app, {
