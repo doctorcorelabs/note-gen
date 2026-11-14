@@ -120,7 +120,11 @@ export function createWebNotificationAdapter(
         reportHandlerError(error, notification);
       }
     }
-    // The delivery core is synchronous: permission detection, the
+
+    return { channel: "in-app", permission, title: notificationOptions.title, reason };
+  }
+
+  // The delivery core is synchronous: permission detection, the
   // Notification constructor, and the in-app fallback are all sync.
   // Only schedule is rejected: a scheduled notification delivered
   // immediately would be a semantic lie. The remaining upstream-only
@@ -174,9 +178,6 @@ export function createWebNotificationAdapter(
     }
   }
 
-  return { channel: "in-app", permission, title: notificationOptions.title, reason };
-  }
-
   return {
     isSupported(): boolean {
       return hasApi;
@@ -206,8 +207,6 @@ export function createWebNotificationAdapter(
     ): Promise<NotificationDelivery> {
       return deliver(input);
     },
-
-
 
     onInAppNotification(listener: InAppNotificationListener): UnlistenFn {
       fallbackListeners.add(listener);

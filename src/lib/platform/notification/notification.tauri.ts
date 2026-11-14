@@ -19,9 +19,12 @@
  */
 
 import {
+  Schedule as TauriSchedule,
+  ScheduleEvery as TauriScheduleEvery,
   isPermissionGranted,
   requestPermission as requestTauriPermission,
   sendNotification as sendTauriNotification,
+  type Options as PluginNotificationOptions,
 } from "@tauri-apps/plugin-notification";
 import type { UnlistenFn } from "../event/interface";
 import type {
@@ -32,10 +35,39 @@ import type {
   NotificationDelivery,
   NotificationOptions,
   NotificationPermissionState,
+  NotificationSchedule,
 } from "./interface";
 
 export function createTauriNotificationAdapter(): NotificationAdapter &
   NotificationAdapterExtensions {
+  // Convert the plain fork schedule shape to the plugin Schedule class.
+  // The plugin exposes static factories; the fork shape carries the same
+  // three variants as optional fields. An empty schedule object carries
+  // no scheduling instruction and is dropped.
+  function toPluginSchedule(
+    schedule: NotificationSchedule | undefined,
+  ): InstanceType<typeof TauriSchedule> | undefined {
+    if (schedule === undefined) return undefined;
+    if (schedule.at !== undefined) {
+      return TauriSchedule.at(
+        schedule.at.date,
+        schedule.at.repeating,
+        schedule.at.allowWhileIdle,
+      );
+    }
+    if (schedule.interval !== undefined) {
+      return TauriSchedule.interval(schedule.interval.interval, schedule.interval.allowWhileIdle);
+    }
+    if (schedule.every !== undefined) {
+      return TauriSchedule.every(
+        schedule.every.interval as TauriScheduleEvery,
+        schedule.every.count,
+        schedule.every.allowWhileIdle,
+      );
+    }
+    return undefined;
+  }
+
   // Validate and forward the full upstream options bag. The fork-only
   // `tag` field is stripped: the plugin has no such option.
   function sendValidated(input: NotificationOptions | string): NotificationOptions {
@@ -48,8 +80,12 @@ export function createTauriNotificationAdapter(): NotificationAdapter &
       sendTauriNotification(input);
       return notificationOptions;
     }
-    const { tag, ...pluginOptions } = notificationOptions;
+    const { tag, schedule, ...rest } = notificationOptions;
     void tag;
+    const pluginOptions: PluginNotificationOptions = {
+      ...rest,
+      schedule: toPluginSchedule(schedule),
+    };
     sendTauriNotification(pluginOptions);
     return notificationOptions;
   }
