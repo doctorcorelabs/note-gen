@@ -32,6 +32,16 @@
 // - Sidebar tab buttons render their title text ONLY when selected
 //   (expandable-tabs.tsx), so unselected tabs have no accessible
 //   name: tab switching by role/name is NOT VERIFIABLE.
+// - Tag editor: trigger button and dialog title "Manage tags"
+//   (record-tag-editor.tsx + record.tagging.manage). The trigger is
+//   VERIFIED (source); the dialog name and the tag checkboxes are
+//   UNVERIFIED (Radix live-DOM exposure not checked).
+// - File delete menu item text "Delete" is VERIFIED (source) in the
+//   catalog, but the menu role and trigger are NOT traced: the
+//   deleteMenuItem locator is UNVERIFIED.
+// - Login and archive-download UI do not exist in the reference repo
+//   and are NOT VERIFIABLE: no locators for them exist here by
+//   design. See login.spec.ts and archive-download.spec.ts.
 
 import type { Locator, Page } from '@playwright/test'
 
@@ -149,6 +159,72 @@ export function editorImages(page: Page): Locator {
  */
 export function settingsDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: 'Settings' })
+}
+
+/**
+ * VERIFIED (source). "Manage tags" trigger button for the record tag
+ * editor (record-tag-editor.tsx DialogTrigger Button, text
+ * record.tagging.manage = "Manage tags"). One button exists per
+ * record row that renders the editor, so a flow must scope this
+ * locator to the record under test instead of matching page-wide.
+ */
+export function manageTagsButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Manage tags', exact: true })
+}
+
+/**
+ * UNVERIFIED. Tag editor dialog. The title "Manage tags" is VERIFIED
+ * (source) via record-tag-editor.tsx (DialogTitle from
+ * record.tagging.manage), but whether Radix exposes it as the dialog
+ * accessible name in the live DOM was not checked.
+ */
+export function tagEditorDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Manage tags' })
+}
+
+/**
+ * UNVERIFIED. One tag checkbox inside the tag editor, by tag name.
+ * The checkbox is labelled by the tag name through htmlFor
+ * (record-tag-editor.tsx); the primary tag label carries a
+ * " (primary)" suffix and its checkbox is disabled in source. The
+ * rendered checkbox role and label association were not checked in
+ * a live DOM. Pass the bare tag name; for the primary tag the flow
+ * must assert the disabled state instead of clicking.
+ */
+export function tagCheckbox(page: Page, tagName: string): Locator {
+  return tagEditorDialog(page).getByRole('checkbox', { name: tagName })
+}
+
+/**
+ * UNVERIFIED. Record row detail button, by its accessible label. The
+ * button carries data-mark-detail-trigger="true" and aria-label equal
+ * to the record content or, when empty, the type label (mark-item.tsx:
+ * label = content || t(mark.type)). The label is content-derived, so
+ * a flow must use a seeded record with a fixed unique content string,
+ * and must prove the label in a live DOM before relying on it.
+ */
+export function markDetailButton(page: Page, label: string): Locator {
+  // The button has no text content; its accessible name is the label
+  // alone (aria-label in mark-item.tsx), so role/name is the hook.
+  // The data-mark-detail-trigger attribute exists in source but is
+  // not combined here: combining it with an aria-label match would
+  // need manual attribute escaping for arbitrary content strings.
+  return page.getByRole('button', { name: label, exact: true })
+}
+
+/**
+ * UNVERIFIED. "Delete" entry of the file tree context menu. The text
+ * "Delete" is VERIFIED (source) in the English catalog
+ * (article.file.context.delete) and the deletion handler exists
+ * (file-item.tsx useFileDeletion). The menu container role, the
+ * menuitem role, and the trigger mechanism were NOT traced to a
+ * component, so this locator must be proven in a live DOM (menu
+ * opens, item clickable) before any flow relies on it. Do not drive
+ * deletion through the 'filemanager-delete' window event instead:
+ * that bypasses the UI the user actually uses.
+ */
+export function deleteMenuItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: 'Delete', exact: true })
 }
 
 /**

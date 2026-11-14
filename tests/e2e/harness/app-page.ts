@@ -22,6 +22,7 @@ import {
   fileTreeItemByName,
   fileTreeItemByPath,
   globalSearchInput,
+  manageTagsButton,
   newNoteButton,
   searchNoResults,
   searchResult,
@@ -82,5 +83,16 @@ export class AppPage {
   /** Open a sidebar search result by its title. */
   async openSearchResult(title: string): Promise<void> {
     await searchResult(this.page, title).click()
+  }
+
+  /**
+   * Open the tag editor for the record under test ("Manage tags"
+   * button, locator VERIFIED in source). The caller must have scoped
+   * the page to a single record row first: one such button exists per
+   * rendered record row, so a page-wide click is ambiguous when
+   * several records are listed.
+   */
+  async openTagEditor(): Promise<void> {
+    await manageTagsButton(this.page).click()
   }
 }
