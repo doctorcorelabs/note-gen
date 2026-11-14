@@ -40,3 +40,14 @@ export {
   listProposedKeysFromFlags,
 } from './web-chrome-messages'
 export type { FeatureText } from './web-chrome-messages'
+
+export {
+  WEB_SHELL_BREAKPOINT_PX,
+  WEB_SHELL_PREFERENCE_KEY,
+  parseShellPreference,
+  resolveWebShell,
+  readShellPreference,
+  writeShellPreference,
+  resolveEntryShell,
+} from './shell-selector'
+export type { WebShellId, WebShellPreference, ShellPreferenceStorage } from './shell-selector'
