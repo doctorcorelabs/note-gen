@@ -27,10 +27,12 @@ non-import text is byte-identical before and after the transform.
   working; the wave worker renames them to the barrel name at
   stage A. Mixed type+value use of such a binding fails the
   declaration closed (`mixed-type-value-use`).
-- `api/image` is never rewritten: the two screenshot routes are
-  disabled on web (V3-21) and image bytes go through
-  `ClipboardAdapter.writeImage` at the real call sites. Files
-  importing it are skipped and flagged MANUAL-REVIEW.
+- `api/image` follows the screenshot copy flow: the `Image` binding
+  is removed and the `platform` import is ensured, flagged
+  MANUAL-REVIEW, because the worker must drop
+  `TauriImage.fromBytes`/`close()` and pass bytes to
+  `platform.clipboard.writeImage` (ClipboardAdapter takes bytes
+  directly; route behavior on web is owned by V3-21).
 - Dynamic `import()`: reported, never edited, unless the caller
   opts in with `--rewrite-dynamic-imports`, and even then only the
   specifier literal of a fully barrel-mappable destructure is
@@ -132,8 +134,8 @@ value, skip), `engine-f14` (platform + barrel value in one
 declaration), `engine-f15` (type-only `Update` maps to
 `UpdateInfo`, flagged MANUAL-REVIEW), `engine-f16` (namespace,
 side-effect, re-export), `engine-f17` (merge into existing
-barrel imports), `engine-f20` (`api/image` skipped, MANUAL-REVIEW),
-`engine-f21` (`Update` used as a value, skip), `engine-f22`
+barrel imports), `engine-f20` (`api/image` copy flow, transformed
++ MANUAL-REVIEW), `engine-f21` (`Update` used as a value, skip), `engine-f22`
 (type-only `Store` maps to `StoreHandle`), `engine-f23`
 (type-only `LogicalSize` maps to `LogicalSizeValue`),
 `engine-f24` (opener per-call-site decisions, MANUAL-REVIEW).

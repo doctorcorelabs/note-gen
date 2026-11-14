@@ -323,9 +323,11 @@ export const NAME_MAPPINGS = {
   "@tauri-apps/api/image": {
     Image: {
       wave: "G5",
-      action: "none",
-      manualReview: "No migration by import rewrite: the screenshot routes are disabled on web (V3-21) and image bytes go through ClipboardAdapter.writeImage at the real call sites. A human resolves this file.",
-      note: "No import rewrite: api/image occurs only in the two screenshot routes, which are disabled on web. The import stays until a human resolves the route.",
+      action: "platform",
+      adapter: "clipboard",
+      replacement: "bytes via platform.clipboard",
+      manualReview: "Copy flow: TauriImage.fromBytes is only an intermediate to writeImage; the worker drops fromBytes/close and passes bytes to platform.clipboard.writeImage. Route behavior on web is owned by V3-21.",
+      note: "No adapter of its own: ClipboardAdapter builds the image internally from bytes (copy flow of the screenshot routes).",
     },
   },
 };

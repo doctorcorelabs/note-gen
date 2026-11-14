@@ -168,7 +168,7 @@ function hashDir(dir) {
   const f15 = byPath(report, "engine-f15-updater.ts");
   check("G5 f15 transformed, Update maps to UpdateInfo + MANUAL-REVIEW (R2)", f15.status === "transformed" && f15.bindings.some((b) => b.localName === "Update" && b.barrelName === "UpdateInfo") && f15.manualReview.some((m) => m.importedName === "Update"), JSON.stringify(f15));
   const f20 = byPath(report, "engine-f20-image.ts");
-  check("G5 f20 api/image skipped + MANUAL-REVIEW (R2)", f20.status === "skipped" && f20.declarationsSkipped[0]?.reason === "no-barrel-equivalent" && f20.manualReview.some((m) => m.importedName === "Image"), JSON.stringify(f20));
+  check("G5 f20 api/image transformed + MANUAL-REVIEW copy flow (R2)", f20.status === "transformed" && f20.manualReview.some((m) => m.importedName === "Image") && f20.bindings.some((b) => b.localName === "TauriImage" && b.replacement === "bytes via platform.clipboard"), JSON.stringify(f20));
   const f21 = byPath(report, "engine-f21-update-value.ts");
   check("G5 f21 Update used as value skipped (R2)", f21.status === "skipped" && f21.declarationsSkipped[0]?.reason === "no-barrel-equivalent", JSON.stringify(f21.declarationsSkipped));
   check("G5 errors 0", report.totals.errors === 0, JSON.stringify(report.totals));
