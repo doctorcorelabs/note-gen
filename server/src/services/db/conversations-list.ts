@@ -19,7 +19,7 @@
 // schema accessor, the canonical error type, drizzle-orm). It imports
 // no other handler file and no shared helper.
 
-import { and, desc, eq, lt, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, or, type SQL } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
 import { conversations, type Database } from '../../db/index.js';
 
@@ -133,13 +133,21 @@ export async function handle(
   if (position !== null) {
     const samePin = eq(conversations.isPinned, position.pinned);
     const parts: SQL[] = [];
-    const olderUpdated = and(samePin, lt(conversations.updatedAt, new Date(position.updatedAtMs)));
+    const at = new Date(position.updatedAtMs);
+    const next = new Date(position.updatedAtMs + 1);
+    // Postgres timestamps carry microseconds, but the cursor carries
+    // milliseconds (the precision of a JS Date). Rows sharing the
+    // cursor's millisecond fall in [at, next); within that bucket the
+    // id tiebreak applies. An exact equality on the timestamp would
+    // miss every row whose microseconds are nonzero.
+    const olderUpdated = and(samePin, lt(conversations.updatedAt, at));
     if (olderUpdated !== undefined) {
       parts.push(olderUpdated);
     }
     const sameUpdated = and(
       samePin,
-      eq(conversations.updatedAt, new Date(position.updatedAtMs)),
+      gte(conversations.updatedAt, at),
+      lt(conversations.updatedAt, next),
       lt(conversations.id, position.id),
     );
     if (sameUpdated !== undefined) {

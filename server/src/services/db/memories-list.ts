@@ -21,7 +21,7 @@
 // schema accessor, the canonical error type, drizzle-orm). It imports
 // no other handler file and no shared helper.
 
-import { and, desc, eq, inArray, lt, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, or, type SQL } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
 import { memories, type Database } from '../../db/index.js';
 
@@ -199,9 +199,15 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<readonly
   }
   if (position !== null) {
     const at = new Date(position.updatedAtMs);
+    const next = new Date(position.updatedAtMs + 1);
+    // Postgres timestamps carry microseconds, but the cursor carries
+    // milliseconds (the precision of a JS Date). Rows sharing the
+    // cursor's millisecond fall in [at, next); within that bucket the
+    // id tiebreak applies. An exact equality on the timestamp would
+    // miss every row whose microseconds are nonzero.
     const after = or(
       lt(memories.updatedAt, at),
-      and(eq(memories.updatedAt, at), lt(memories.id, position.id)),
+      and(gte(memories.updatedAt, at), lt(memories.updatedAt, next), lt(memories.id, position.id)),
     );
     if (after !== undefined) {
       conditions.push(after);
