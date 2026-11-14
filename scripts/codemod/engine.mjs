@@ -692,7 +692,8 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
     }
   }
 
-  // Tauri internals marker mentions: report-only, never edited.
+  // Tauri internals marker mentions (identifier and string forms):
+  // report-only, never edited.
   for (const identifier of sourceFile.getDescendantsOfKind(SyntaxKind.Identifier)) {
     if (identifier.getText() !== INTERNALS_MARKER) continue;
     if (identifier.getFirstAncestorByKind(SyntaxKind.ImportDeclaration) !== undefined) continue;
@@ -700,6 +701,14 @@ export function transformSource({ text, relPath, extension, specifiers, wave, re
       kind: "tauri-internals-marker",
       line: identifier.getStartLineNumber(),
       detail: "File mentions __TAURI_INTERNALS__; detection moves to detect.ts manually, not via import rewrite.",
+    });
+  }
+  for (const literal of sourceFile.getDescendantsOfKind(SyntaxKind.StringLiteral)) {
+    if (!literal.getLiteralValue().includes(INTERNALS_MARKER)) continue;
+    result.notes.push({
+      kind: "tauri-internals-marker",
+      line: literal.getStartLineNumber(),
+      detail: "File mentions __TAURI_INTERNALS__ as a string; detection moves to detect.ts manually, not via import rewrite.",
     });
   }
 
