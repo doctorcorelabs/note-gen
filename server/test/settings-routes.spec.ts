@@ -122,18 +122,21 @@ describe('PATCH /api/settings', () => {
     );
     expect(response.statusCode).toBe(200);
     const data = bodyOf(response).data as Record<string, unknown>;
-    expect(data.applied).toEqual(['language']);
+    // editorShortcuts is class S (AD-33/KEP-7) and applies.
+    expect(data.applied).toEqual(['editorShortcuts', 'language']);
     expect(data.rejected).toEqual([
-      { key: 'editorShortcuts', reason: 'unknown_key' },
       { key: 'madeUpKey', reason: 'unknown_key' },
       { key: 'openTabs', reason: 'local_only' },
       { key: 's3SyncConfig', reason: 'secret_only' },
     ]);
     expect(data.revision).toBe(1);
-    // Rejected entries carry key + reason only, never the value.
+    // The PATCH response carries key names only, never values.
     expect(response.body).not.toContain('Mod+B');
     const read = await app!.inject({ headers: SESSION_HEADERS, method: 'GET', url: '/api/settings' });
-    expect((bodyOf(read).data as Record<string, unknown>).settings).toEqual({ language: 'English' });
+    expect((bodyOf(read).data as Record<string, unknown>).settings).toEqual({
+      editorShortcuts: { toggleBold: 'Mod+B' },
+      language: 'English',
+    });
   });
 
   it('does not bump the revision when every key is rejected', async () => {

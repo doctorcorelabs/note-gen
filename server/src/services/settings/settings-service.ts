@@ -41,8 +41,14 @@
 //   patch into the sealed bundle (absent leaves, value replaces,
 //   null deletes the field), seals through the cipher seam, and
 //   answers { updated: [{ providerKey, hasApiKey, updatedAt }] }
-//   with no echo of any value. An empty merged bundle deletes the
-//   row instead of storing an empty ciphertext. A rewrite under a
+//   with no echo of any value. hasApiKey means a sealed bundle row
+//   exists for the provider, the same existence semantics GET
+//   /api/settings uses when it enriches aiModelList (desain
+//   section 4.3 rule 5: hasApiKey is computed from secret
+//   existence, not stored separately, so the two answers cannot
+//   diverge). A bundle holding only a web-search key still answers
+//   hasApiKey true, on both routes. An empty merged bundle deletes
+//   the row instead of storing an empty ciphertext. A rewrite under a
 //   different keyVersion is recorded as secret_rotated in the audit
 //   trail; the row itself records key_version.
 // - DELETE .../ai-providers/:providerKey answers 404 when the
@@ -67,7 +73,6 @@
 import { ApiError } from '../../plugins/envelope.js';
 import { classifyKey } from './classification.js';
 import {
-  bundleHasApiKey,
   decodeSecretBundle,
   encodeSecretBundle,
   isEmptySecretBundle,
@@ -349,7 +354,7 @@ export async function patchSettings(
         rejected.push({ key, reason: 'secret_only' });
         continue;
       }
-      if (keyClass === 'UNCLASSIFIED' || keyClass === 'UNKNOWN') {
+      if (keyClass === 'UNKNOWN') {
         rejected.push({ key, reason: 'unknown_key' });
         continue;
       }
@@ -500,7 +505,12 @@ export async function putAiProviders(
       const action =
         existing === null ? 'secret_created' : sealed.keyVersion !== existing.keyVersion ? 'secret_rotated' : 'secret_updated';
       await tx.recordAudit(action, 'secret', entry.providerKey, ipHash, nowMs);
-      updated.push({ hasApiKey: bundleHasApiKey(merged), providerKey: entry.providerKey, updatedAt: nowMs });
+      // Row exists after this write, so hasApiKey is true by the
+      // existence semantics shared with GET /api/settings (see the
+      // header comment). Do not use bundleHasApiKey here: a bundle
+      // holding only a web-search key must not answer differently
+      // on PUT than on the next GET.
+      updated.push({ hasApiKey: true, providerKey: entry.providerKey, updatedAt: nowMs });
     }
     const data: PutAiProvidersData = { updated };
     await storeIdempotentResponse(tx, SECRETS_PUT_IDEMPOTENCY_SCOPE, idempotencyKey, requestHash, data, nowMs);

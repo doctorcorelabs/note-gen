@@ -8,11 +8,43 @@
 // The envelope implementation belongs to V3-10b
 // (server/src/lib/crypto/*, branch web-settings-crypto): envelope
 // AES-256-GCM over node:crypto, per desain-store-adapter.md section
-// 4.3 and AD-16. At the time V3-10a was written that branch had not
-// been pushed, so this seam is written against the design
-// specification. V3-10b (or the integrator) wires its implementation
-// here by supplying a SecretCipher when registering the routes; the
-// services never import a crypto module directly.
+// 4.3 and AD-16. That branch has landed (CryptoService, KeyRing,
+// SealedParts, branch web-settings-crypto tip 623084fa); it is NOT
+// imported here, because this branch must stay buildable on its own
+// until the integrator merges the two branches. The adapter already
+// exists on that branch: CryptoServiceSecretCipher (plus the
+// createSecretCipherFromEnv factory) in
+// server/src/lib/crypto/secret-cipher.ts, structurally assignable to
+// SecretCipher below. Only that adapter may import
+// server/src/lib/crypto/*. Adapter mapping, verified by reading the
+// V3-10b branch as pushed:
+// - seal(plaintext): CryptoService.encrypt(plaintext) returns
+//   SealedParts { formatVersion, keyVersion, nonce, ciphertext };
+//   the adapter keeps { ciphertext, nonce, keyVersion }. The format
+//   version travels inside the ciphertext bytes (first byte, always
+//   1); the adapter validates that byte on open. No SealOptions/AAD:
+//   the settings service binds no caller AAD, and the adapter passes
+//   none on seal or open, or sealed rows become unreadable.
+// - open(sealed): rebuild SealedParts with formatVersion set to
+//   ENVELOPE_FORMAT_VERSION, then CryptoService.decrypt(parts).
+// - keyVersion: CryptoService.currentKeyVersion.
+// - construction: createSecretCipherFromEnv(env), which reads
+//   ENCRYPTION_KEY (canonical). The SECRETS_ENCRYPTION_KEY name is
+//   accepted as a legacy fallback only when ENCRYPTION_KEY is
+//   absent; when both names are set to different keys the factory
+//   throws. When no key is present the factory throws; the
+//   production wiring must then keep unavailableSecretCipher
+//   (writes fail closed with 503, status reads still work) instead
+//   of starting a server that pretends to seal secrets.
+// TODO (integrator, tested at merge): no adapter code remains to be
+// written. Supply the existing adapter instance in place of
+// unavailableSecretCipher in createProductionSettingsDeps, and run
+// the settings/secrets specs plus the Postgres spec against the
+// real cipher with a test ENCRYPTION_KEY, asserting that a secret
+// sealed by the adapter opens through a fresh service and that no
+// response carries the test value. Until that wiring lands, this
+// seam is written against the V3-10b interface as documented above,
+// and services never import a crypto module directly.
 //
 // Contract of the seam, matching the secrets table columns
 // (server/src/db/schema/m1-foundation.ts):
@@ -103,6 +135,13 @@ export function isEmptySecretBundle(bundle: AiProviderSecretBundle): boolean {
   );
 }
 
+// Field-presence helper: true only when the bundle holds a
+// non-empty apiKey field. This is NOT the response semantics for
+// hasApiKey: both PUT and GET answer hasApiKey from sealed-row
+// existence (desain-store-adapter.md section 4.3 rule 5), so a
+// bundle holding only a web-search key still answers true. Do not
+// use this helper to build a response; it exists for bundle
+// inspection by callers that need field presence, not existence.
 export function bundleHasApiKey(bundle: AiProviderSecretBundle): boolean {
   return typeof bundle.apiKey === 'string' && bundle.apiKey !== '';
 }
@@ -124,7 +163,7 @@ export function mergeSecretBundle(
     }
     const value = patch[field];
     if (value === null) {
-      delete merged[field as SecretBundleField];
+      delete (merged as Record<string, unknown>)[field];
     } else {
       (merged as Record<string, unknown>)[field] = value;
     }

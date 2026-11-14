@@ -5,10 +5,9 @@
 // Classification contract tests (V3-10a). The key lists reproduce
 // fase1/inventaris-pengaturan.md (V2-27 FINAL): 236 keys plus 1
 // pattern. Counts are asserted exactly so inventory drift fails here
-// instead of silently changing which keys the server accepts. The
-// one deliberate deviation is editorShortcuts, held UNCLASSIFIED
-// pending the written KEP-7 decision (KEP-7 / O-13); see
-// classification.ts.
+// instead of silently changing which keys the server accepts.
+// `editorShortcuts` is class S: AD-33 ratifies KEP-7 (server-side,
+// per V2-27). See classification.ts.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -18,19 +17,16 @@ import {
   REJECTED_KEYS,
   SECRET_REJECT_KEYS,
   SPLIT_KEYS,
-  UNCLASSIFIED_KEYS,
 } from '../src/services/settings/classification.js';
 
 describe('settings key inventory counts', () => {
-  it('reproduces the V2-27 inventory: 236 keys plus the held key', () => {
-    // 78 S here + editorShortcuts held = 79 inventory S keys.
-    expect(KNOWN_S_KEYS).toHaveLength(78);
+  it('reproduces the V2-27 inventory: 236 keys', () => {
+    expect(KNOWN_S_KEYS).toHaveLength(79);
     expect(LOCAL_ONLY_KEYS).toHaveLength(132);
     expect(SECRET_REJECT_KEYS).toHaveLength(23);
     expect(SPLIT_KEYS).toEqual(['aiModelList']);
     expect(REJECTED_KEYS).toEqual(['pin']);
-    expect(UNCLASSIFIED_KEYS).toEqual(['editorShortcuts']);
-    const all = [...KNOWN_S_KEYS, ...LOCAL_ONLY_KEYS, ...SECRET_REJECT_KEYS, ...SPLIT_KEYS, ...REJECTED_KEYS, ...UNCLASSIFIED_KEYS];
+    const all = [...KNOWN_S_KEYS, ...LOCAL_ONLY_KEYS, ...SECRET_REJECT_KEYS, ...SPLIT_KEYS, ...REJECTED_KEYS];
     expect(new Set(all).size).toBe(236);
     expect(all).toHaveLength(236);
   });
@@ -47,7 +43,7 @@ describe('settings key inventory counts', () => {
     }
     expect(classifyKey('aiModelList')).toBe('SPLIT');
     expect(classifyKey('pin')).toBe('REJECTED');
-    expect(classifyKey('editorShortcuts')).toBe('UNCLASSIFIED');
+    expect(classifyKey('editorShortcuts')).toBe('S');
   });
 
   it('does not treat locale as a known key (V1-02 assumption A-02)', () => {
@@ -107,7 +103,7 @@ describe('classifyKey rule order', () => {
   it('inherits the basis class for colon-scoped variants', () => {
     expect(classifyKey('openTabs:workspace-1')).toBe('L');
     expect(classifyKey('language:workspace-1')).toBe('S');
-    expect(classifyKey('editorShortcuts:workspace-1')).toBe('UNCLASSIFIED');
+    expect(classifyKey('editorShortcuts:workspace-1')).toBe('S');
     expect(classifyKey('unknownBasis:scope')).toBe('UNKNOWN');
   });
 

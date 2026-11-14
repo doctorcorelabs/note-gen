@@ -27,17 +27,15 @@
 // comparing the exported lists in review, not by sharing code, because
 // the server must never import client store code.
 //
-// OPEN ITEM (KEP-7 / O-13): the key `editorShortcuts` is deliberately
-// NOT in any class set below. The V2-27 inventory lists it as S and
-// AD-33 ratifies KEP-7 as class S server-side, but the wave 3 map
-// validation (validasi-peta-gelombang3.md, O-13) and the V3-10 brief
-// treat its classification as not yet written, and the brief forbids
-// assuming it. classifyKey therefore answers UNCLASSIFIED for it, and
-// PATCH rejects it with reason unknown_key (fail closed). Once the
-// written KEP table closes O-5/O-13, enabling it is a one-line change:
-// move the key into KNOWN_S_KEYS and delete UNCLASSIFIED_KEYS. The
-// same applies to colon-scoped variants, which inherit UNCLASSIFIED
-// from their basis. No other key is affected.
+// `editorShortcuts` is class S (AD-33 ratifies KEP-7: server-side
+// via GET/PATCH /api/settings, per inventaris-pengaturan.md V2-27
+// sections 3.6 and 5.2). An earlier revision of this module held the
+// key UNCLASSIFIED pending the written KEP-7 decision; AD-33 closed
+// that item, so the key now sits in KNOWN_S_KEYS like every other
+// inventory S key, and colon-scoped variants inherit S. This matches
+// the V3-10b classification data module
+// (server/src/lib/settings-key-classification.ts), whose 236-key
+// table agrees with the lists below key for key.
 
 export type SettingsKeyClass =
   | 'S'
@@ -45,12 +43,10 @@ export type SettingsKeyClass =
   | 'R_REJECT'
   | 'SPLIT'
   | 'REJECTED'
-  | 'UNCLASSIFIED'
   | 'UNKNOWN';
 
 // Known class S keys: server settings, stored in the settings table.
-// 78 keys here; the 79th inventory S key (editorShortcuts) is held in
-// UNCLASSIFIED_KEYS pending the KEP-7 written decision (see header).
+// 79 keys, the full inventory S count (V2-27).
 export const KNOWN_S_KEYS: readonly string[] = [
   'agentSystemPromptExtension', 'audioModel', 'autoUpdate',
   'canvasDefaultZoom', 'canvasGridGap', 'canvasGridStyle',
@@ -58,7 +54,8 @@ export const KNOWN_S_KEYS: readonly string[] = [
   'canvasManagerViewMode', 'canvasMinimapVisible', 'canvasSnapToGrid',
   'canvasWheelBehavior', 'centeredContent', 'codeTheme', 'commitModel',
   'completionModel', 'customThemeColors', 'darkMode', 'editorContentWidth',
-  'editorLineHeight', 'editorModel', 'editorSourceWrap', 'editorViewMode',
+  'editorLineHeight', 'editorModel', 'editorShortcuts',
+  'editorSourceWrap', 'editorViewMode',
   'embeddingModel', 'enableImageRecognition', 'enableOutline',
   'fileManagerTextSize', 'fixedRecordTagId', 'giteaCustomUrl',
   'giteaInstanceType', 'githubCustomImageRepo', 'gitlabCustomUrl',
@@ -163,11 +160,6 @@ export const SPLIT_KEYS: readonly string[] = ['aiModelList'];
 // Rejected outright: the app-lock PIN. Never stored in any layer.
 export const REJECTED_KEYS: readonly string[] = ['pin'];
 
-// Keys whose classification is not yet written (KEP-7 / O-13). See the
-// header comment. Fail closed: treated like unknown keys on write.
-export const UNCLASSIFIED_KEYS: readonly string[] = ['editorShortcuts'];
-const UNCLASSIFIED_SET: ReadonlySet<string> = new Set(UNCLASSIFIED_KEYS);
-
 // SENSITIVE verdicts that reclassify to L (desain-store-adapter.md
 // section 2.5). Checked before the secret-name patterns, because the
 // verdict table (rule 3) outranks the pattern rule (rule 4).
@@ -203,9 +195,6 @@ export const GITLAB_PROJECT_ID_PATTERN = /^gitlab_.+_project_id(?::.*)?$/;
 function classifyExact(key: string): SettingsKeyClass | null {
   if (key === 'pin') {
     return 'REJECTED';
-  }
-  if (UNCLASSIFIED_SET.has(key)) {
-    return 'UNCLASSIFIED';
   }
   if (key === 'aiModelList') {
     return 'SPLIT';

@@ -118,6 +118,27 @@ describe('PUT /api/settings/secrets/ai-providers', () => {
     expect(stored!.bundle.apiKey).toBe(MARKER);
   });
 
+  it('answers hasApiKey from row existence: a web-search-only bundle reads true on PUT and on GET', async () => {
+    await setup();
+    await setMetadata([{ baseURL: 'https://example.invalid', key: 'provider-a', title: 'Provider A' }]);
+    const response = await putProviders([{ providerKey: 'provider-a', webSearchApiKey: MARKER_2 }]);
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain(MARKER_2);
+    const data = bodyOf(response).data as Record<string, unknown>;
+    const [entry] = data.updated as Array<Record<string, unknown>>;
+    // Row exists after this write, so hasApiKey is true even though
+    // the bundle holds no apiKey field (existence semantics, shared
+    // with GET /api/settings enrichment).
+    expect(entry.hasApiKey).toBe(true);
+
+    const settings = await app!.inject({ headers: SESSION_HEADERS, method: 'GET', url: '/api/settings' });
+    expect(settings.body).not.toContain(MARKER_2);
+    const settingsData = bodyOf(settings).data as Record<string, unknown>;
+    const list = (settingsData.settings as Record<string, unknown>).aiModelList as Array<Record<string, unknown>>;
+    expect(list[0].hasApiKey).toBe(true);
+    expect(list[0]).not.toHaveProperty('webSearchApiKey');
+  });
+
   it('merges patches: absent leaves, value replaces, null deletes the field', async () => {
     const { store, cipher } = await setup();
     await setMetadata([{ key: 'provider-a', title: 'Provider A' }]);
