@@ -2,20 +2,41 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
 import { capabilityError } from "../errors";
-import type { AssetUrlAdapter, AssetUrlOptions } from "./interface";
+import type { AssetUrlAdapter } from "./interface";
 
 /**
  * Web implementation of AssetUrlAdapter: a pure URL builder.
  *
  * Contract (V1-09 workspace API, section 7): a workspace-relative
  * path becomes `/api/workspace/media/<path>` with each segment
- * percent-encoded separately, plus an optional `?v=` cache-busting
- * value from the file revision. The server ignores `v` for
- * authorization and content; ETag stays authoritative for
- * revalidation. Media URLs require the same session authentication
- * as every other workspace endpoint; there is no public media URL.
- * This builder performs no I/O and no fetch: it only constructs the
- * string, and the browser loads it with the session cookie.
+ * percent-encoded separately. Callers that need cache-busting append
+ * `?v=<revision>` themselves, as the canvas call sites already do
+ * today; the server ignores `v` for authorization and content, and
+ * ETag stays authoritative for revalidation. Media URLs require the
+ * same session authentication as every other workspace endpoint;
+ * there is no public media URL. This builder performs no I/O and no
+ * fetch: it only constructs the string, and the browser loads it
+ * with the session cookie.
+ *
+ * The method takes a workspace-relative path. Absolute OS paths have
+ * no meaning in web mode and are rejected. This is a migration
+ * dependency, not a drop-in behavior: every upstream call site
+ * passes an absolute path today (the `convertImageByWorkspace`
+ * funnel in utils.ts joins the workspace root or app-data dir onto
+ * the relative path before calling `convertFileSrc`, and the chat,
+ * canvas, and screenshot call sites pass absolute paths directly).
+ * The G3 codemod must rewrite those call sites to pass the
+ * workspace-relative path, and the funnel to stop joining the root;
+ * this adapter cannot recover the relative path from an absolute
+ * one because it does not know the workspace root.
+ *
+ * The optional `protocol` argument keeps upstream signature
+ * fidelity. Upstream it defaults to "asset"; no call site passes it.
+ * In web mode only the default protocol is meaningful, so "asset"
+ * (case-insensitive) and an absent value build the media URL, while
+ * any other protocol is rejected: a custom Tauri protocol has no
+ * web equivalent and must fail explicitly rather than silently
+ * produce a media URL for the wrong scheme.
  *
  * Client-side path defense (first layer only; the server validates
  * again authoritatively per V1-09 section 8, and the server verdict
@@ -34,13 +55,11 @@ import type { AssetUrlAdapter, AssetUrlOptions } from "./interface";
  *
  * Passthrough: already-resolved sources and already-built media
  * URLs are returned unchanged, so the builder is idempotent and so
- * external media keeps loading directly (V1-09 section 7.1). When a
- * media URL is passed through, revision options are ignored.
+ * external media keeps loading directly (V1-09 section 7.1).
  *
  * No internal cache: building the string is cheap, and the existing
  * per-workspace URL caches stay with their call sites (utils.ts),
- * preserving their shape. Callers must pass the revision through
- * AssetUrlOptions instead of appending "?v=" by hand to the result.
+ * preserving their shape.
  */
 
 const MEDIA_BASE_PATH = "/api/workspace/media";
@@ -51,25 +70,43 @@ const MAX_PATH_BYTES = 1024;
 const MAX_SEGMENTS = 50;
 
 function invalidPath(reason: string): never {
-  throw capabilityError("invalid_argument", "asset-url", "assetUrl.convertFileSrc", "web", reason);
+  throw capabilityError("invalid_argument", "assetUrl", "assetUrl.convertFileSrc", "web", reason);
 }
 
-function normalizeSegments(workspacePath: string): string[] {
-  if (workspacePath.length === 0) {
+function assertSupportedProtocol(protocol: string | undefined): void {
+  if (protocol === undefined || protocol === "") {
+    return;
+  }
+  if (typeof protocol !== "string") {
+    throw new TypeError("AssetUrlAdapter.convertFileSrc: protocol must be a string.");
+  }
+  if (protocol.toLowerCase() !== "asset") {
+    throw capabilityError(
+      "unsupported",
+      "assetUrl",
+      "assetUrl.convertFileSrc",
+      "web",
+      "Only the default asset protocol has a web mapping; custom protocols have no web equivalent",
+    );
+  }
+}
+
+function normalizeSegments(filePath: string): string[] {
+  if (filePath.length === 0) {
     invalidPath("Workspace path must not be empty.");
   }
-  if (CONTROL_CHAR_RE.test(workspacePath)) {
+  if (CONTROL_CHAR_RE.test(filePath)) {
     invalidPath("Workspace path must not contain NUL or control characters.");
   }
-  if (workspacePath.startsWith("/")) {
+  if (filePath.startsWith("/")) {
     invalidPath("Absolute paths cannot be converted to media URLs; pass a workspace-relative path.");
   }
-  if (DRIVE_LETTER_RE.test(workspacePath)) {
+  if (DRIVE_LETTER_RE.test(filePath)) {
     invalidPath(
       "Absolute Windows paths cannot be converted to media URLs; pass a workspace-relative path.",
     );
   }
-  const unified = workspacePath.replace(/\\/g, "/");
+  const unified = filePath.replace(/\\/g, "/");
   if (unified.startsWith("/")) {
     invalidPath("Absolute paths cannot be converted to media URLs; pass a workspace-relative path.");
   }
@@ -99,36 +136,21 @@ function normalizeSegments(workspacePath: string): string[] {
   return segments;
 }
 
-function cacheBusterValue(options: AssetUrlOptions | undefined): string | null {
-  for (const candidate of [options?.cacheBuster, options?.revision]) {
-    if (candidate === null || candidate === undefined) {
-      continue;
-    }
-    const text = typeof candidate === "number" ? String(candidate) : candidate;
-    const stripped = text.startsWith("sha256:") ? text.slice("sha256:".length) : text;
-    if (stripped.length > 0) {
-      return stripped;
-    }
-  }
-  return null;
-}
-
 export function createWebAssetUrlAdapter(): AssetUrlAdapter {
   return {
-    convertFileSrc(workspacePath: string, options?: AssetUrlOptions): string {
-      if (typeof workspacePath !== "string") {
+    convertFileSrc(filePath: string, protocol?: string): string {
+      if (typeof filePath !== "string") {
         invalidPath("Workspace path must be a string.");
       }
-      if (workspacePath === MEDIA_BASE_PATH || workspacePath.startsWith(`${MEDIA_BASE_PATH}/`)) {
-        return workspacePath;
+      assertSupportedProtocol(protocol);
+      if (filePath === MEDIA_BASE_PATH || filePath.startsWith(`${MEDIA_BASE_PATH}/`)) {
+        return filePath;
       }
-      if (RESOLVED_SRC_RE.test(workspacePath)) {
-        return workspacePath;
+      if (RESOLVED_SRC_RE.test(filePath)) {
+        return filePath;
       }
-      const segments = normalizeSegments(workspacePath);
-      const path = `${MEDIA_BASE_PATH}/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
-      const version = cacheBusterValue(options);
-      return version === null ? path : `${path}?v=${encodeURIComponent(version)}`;
+      const segments = normalizeSegments(filePath);
+      return `${MEDIA_BASE_PATH}/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
     },
   };
 }
