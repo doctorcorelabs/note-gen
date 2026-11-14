@@ -15,6 +15,8 @@
  * The channel, pending/active, action-type, and listener functions are
  * not imported anywhere and are excluded.
  */
+import type { UnlistenFn } from "../event/interface";
+
 export interface NotificationAttachment {
   id: string;
   url: string;
@@ -74,6 +76,9 @@ export interface NotificationOptions {
   sound?: string;
   inboxLines?: string[];
   icon?: string;
+  /** Fork addition (M12 reconciliation): browser Notification tag and
+   * in-app fallback grouping. Stripped before the Tauri plugin call. */
+  tag?: string;
   largeIcon?: string;
   iconColor?: string;
   attachments?: NotificationAttachment[];
@@ -89,4 +94,59 @@ export interface NotificationAdapter {
   isPermissionGranted(): Promise<boolean>;
   requestPermission(): Promise<NotificationPermission>;
   sendNotification(options: NotificationOptions | string): void;
+}
+
+/** Permission states shared by the web adapter and the in-app fallback. */
+export type NotificationPermissionState = "granted" | "denied" | "default";
+
+export type NotificationChannel = "system" | "in-app";
+
+export interface NotificationDelivery {
+  /** Where the notification actually went. */
+  channel: NotificationChannel;
+  /** Permission state observed at send time. */
+  permission: NotificationPermissionState;
+  title: string;
+  /** Human-readable reason when the channel is `in-app`. */
+  reason?: string;
+}
+
+export interface InAppNotification {
+  id: string;
+  title: string;
+  body?: string;
+  icon?: string;
+  tag?: string;
+  receivedAt: number;
+}
+
+export type InAppNotificationListener = (notification: InAppNotification) => void;
+
+/**
+ * Fork additions (M12 reconciliation, from V2-13): the web in-app fallback
+ * surface. The canonical sendNotification stays synchronous and void, as
+ * upstream; sendNotificationDetailed is the async variant that reports
+ * where the notification went. Implementations expose both surfaces;
+ * callers that need the fallback use the factory return type
+ * (NotificationAdapter & NotificationAdapterExtensions).
+ */
+export interface NotificationAdapterExtensions {
+  /** True when system notifications can be shown in the running mode. */
+  isSupported(): boolean;
+  /** Current permission state without prompting the user. */
+  getPermission(): Promise<NotificationPermissionState>;
+  /**
+   * Show a notification and report the delivery. Uses the system channel
+   * when permission is granted, otherwise the in-app fallback. It throws
+   * only for invalid options (for example, an empty title).
+   */
+  sendNotificationDetailed(
+    options: NotificationOptions | string,
+  ): Promise<NotificationDelivery>;
+  /** Subscribe to in-app fallback notifications so the UI can render them. */
+  onInAppNotification(listener: InAppNotificationListener): UnlistenFn;
+  /** Notifications currently held by the in-app fallback, oldest first. */
+  getInAppNotifications(): readonly InAppNotification[];
+  /** Clear the in-app fallback list. */
+  clearInAppNotifications(): void;
 }

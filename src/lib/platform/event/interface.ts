@@ -73,3 +73,17 @@ export interface EventAdapter {
     payload?: T,
   ): Promise<void>;
 }
+
+/**
+ * Fork additions (M12 reconciliation, from V2-13): lifecycle helpers that
+ * the canonical upstream surface does not have. Implementations expose
+ * them alongside EventAdapter; callers that need them use the factory
+ * return type (EventAdapter & EventAdapterExtensions). The bridge-event
+ * names live in the web implementation, not here.
+ */
+export interface EventAdapterExtensions {
+  /** Number of active listeners, for one event or for all events. */
+  listenerCount(event?: string): number;
+  /** Remove all listeners and release cross-tab and DOM resources. */
+  dispose(): void;
+}

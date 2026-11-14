@@ -116,6 +116,8 @@ export interface WindowHandle {
   setTitle(title: string): Promise<void>;
   minimize(): Promise<void>;
   unminimize(): Promise<void>;
+  /** Fork addition (M12 reconciliation): call site src/components/title-bar.tsx. */
+  toggleMaximize(): Promise<void>;
   show(): Promise<void>;
   hide(): Promise<void>;
   close(): Promise<void>;
@@ -137,4 +139,73 @@ export interface WindowAdapter {
     options?: WebviewWindowOptions,
   ): WindowHandle;
   currentMonitor(): Promise<Monitor | null>;
+}
+
+export interface WindowOpenOptions {
+  /** App route or same-origin URL to open, for example `/editor-window`. */
+  url: string;
+  /** Stable label for the new window or tab, for example `editor-<id>`. */
+  label: string;
+  title?: string;
+}
+
+/**
+ * Fork addition (M12 reconciliation, from V2-13): capability vocabulary
+ * for the web extension surface. The first fifteen names are the V2-13
+ * set; the last six cover the canonical handle methods that have no
+ * V2-13 counterpart, so the UI can hide every disabled control.
+ */
+export type WindowCapability =
+  | "close"
+  | "show"
+  | "hide"
+  | "setFocus"
+  | "setTitle"
+  | "setAlwaysOnTop"
+  | "isMaximized"
+  | "setSize"
+  | "setPosition"
+  | "startDragging"
+  | "outerPosition"
+  | "minimize"
+  | "destroy"
+  | "fullscreen"
+  | "openWindow"
+  | "toggleMaximize"
+  | "unminimize"
+  | "isMinimized"
+  | "isFocused"
+  | "isVisible"
+  | "outerSize";
+
+/**
+ * Fork additions (M12 reconciliation, from V2-13): window controls that
+ * exist only on the web (new-tab navigation, DOM fullscreen) plus the
+ * capability query the UI uses to hide disabled controls. Opening a new
+ * browser tab is navigation, not a window control, and is exposed
+ * separately as `openWindow`. Implementations expose both surfaces;
+ * callers that need them use the factory return type
+ * (WindowAdapter & WindowAdapterWebExtensions).
+ */
+export interface WindowAdapterWebExtensions {
+  /**
+   * Open a window. On the web this opens a new browser tab for an app route
+   * and returns a handle limited to title, focus, and close. Returns null
+   * when the browser blocks the new tab (popup blocker) or when there is no
+   * browser window (server-side rendering).
+   */
+  openWindow(options: WindowOpenOptions): Promise<WindowHandle | null>;
+  /** True when the current tab is in DOM fullscreen (web) or fullscreen (desktop). */
+  isFullscreen(): Promise<boolean>;
+  /**
+   * Request fullscreen. Returns true when fullscreen was entered, false when
+   * the Fullscreen API is unavailable or the request was rejected (for
+   * example, because it was not triggered by a user gesture). Never throws
+   * for a rejected request.
+   */
+  requestFullscreen(): Promise<boolean>;
+  /** Exit fullscreen. Returns false when there was nothing to exit or the API is unavailable. */
+  exitFullscreen(): Promise<boolean>;
+  /** Whether a capability is available in the running mode. UI must use this to hide disabled controls. */
+  isSupported(capability: WindowCapability): boolean;
 }

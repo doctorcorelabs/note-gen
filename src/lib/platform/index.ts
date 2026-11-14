@@ -86,6 +86,7 @@ export type {
 export type {
   Event,
   EventAdapter,
+  EventAdapterExtensions,
   EventCallback,
   EventListenOptions,
   EventName,
@@ -130,9 +131,15 @@ export type {
   ProxyConfig,
 } from "./http/interface";
 export type {
+  InAppNotification,
+  InAppNotificationListener,
   NotificationAdapter,
+  NotificationAdapterExtensions,
   NotificationAttachment,
+  NotificationChannel,
+  NotificationDelivery,
   NotificationOptions,
+  NotificationPermissionState,
   NotificationSchedule,
   NotificationScheduleEvery,
   NotificationScheduleInterval,
@@ -148,6 +155,16 @@ export type {
   ShortcutEvent,
   ShortcutHandler,
 } from "./shortcut/interface";
+export type {
+  ShortcutBinding,
+  ShortcutConflict,
+  ShortcutConflictKind,
+  ShortcutRegisterOptions,
+  ShortcutRegistration,
+  ShortcutRegistrationResult,
+  ShortcutRegistry,
+  ShortcutRegistryHandler,
+} from "./shortcut/registry";
 export type { SqlAdapter } from "./sql/interface";
 export type {
   PersistenceState,
@@ -173,7 +190,10 @@ export type {
   PhysicalSizeValue,
   WebviewWindowOptions,
   WindowAdapter,
+  WindowAdapterWebExtensions,
+  WindowCapability,
   WindowHandle,
+  WindowOpenOptions,
   WindowPositionValue,
   WindowSizeValue,
   WindowTitleBarStyle,
