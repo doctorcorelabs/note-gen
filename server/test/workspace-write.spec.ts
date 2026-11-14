@@ -148,7 +148,7 @@ describe('PUT /api/workspace/file', () => {
   });
 
   it('answers 412 revision_conflict for a stale If-Match and leaves the bytes untouched', async () => {
-    const { app, root, bundle } = await setup();
+    const { app, root } = await setup();
     const created = await app.inject({
       method: 'PUT',
       url: '/api/workspace/file?path=conf.md',
