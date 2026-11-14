@@ -62,10 +62,13 @@
 //    only scheme, host, and path. Query strings, fragments, and
 //    userinfo are removed entirely, so a token in "?token=..." can
 //    never reach the log. Non-HTTP(S) URLs keep only their scheme
-//    (for example "data:"). Bare tokens the spec allows
-//    ("inline", "eval") pass through unchanged. A value that does
-//    not parse as a URL becomes the literal "[redacted]". Long
-//    path segments that look like tokens are replaced per segment.
+//    (for example "data:"). Only the bare spec keywords "inline"
+//    and "eval" pass through unchanged; any other bare value is
+//    redacted, so a raw token or JWT sent as a bare blocked-uri
+//    cannot reach the log either. A value that does not parse as a
+//    URL becomes the literal "[redacted]". Long path segments that
+//    look like tokens are replaced per segment, and a key=value
+//    secret embedded in a path is redacted as a last step.
 // 3. Policy and sample strings pass through redactSensitiveText:
 //    Bearer tokens, key=value pairs for token, secret, password,
 //    api key, and session names, nonce and hash tokens inside a
@@ -135,11 +138,11 @@ export type CspReportParseResult =
   | { ok: true; reports: SanitizedCspReport[] }
   | { ok: false; issues: CspReportValidationIssue[] };
 
-const BARE_BLOCKED_TOKEN = /^[A-Za-z][A-Za-z0-9+.-]*:?$/;
+const BARE_BLOCKED_KEYWORDS = new Set(['inline', 'eval']);
 const TOKEN_RUN = /[A-Za-z0-9._~-]{32,}/g;
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
 const SENSITIVE_KEY_VALUE =
-  /\b(token|api[-_]?key|apikey|secret|password|passwd|pwd|authorization|access[-_]?token|refresh[-_]?token|session[-_]?id|session|client[-_]?secret)\s*[:=]\s*[^\s&'";,]+/gi;
+  /\b(token|api[-_]?key|apikey|secret|password|passwd|pwd|authorization|access[-_]?token|refresh[-_]?token|session[-_]?id|session|client[-_]?secret)\s*[:=]\s*(?!Bearer\b)[^\s&'";,]+/gi;
 const POLICY_NONCE_OR_HASH = /'(nonce|sha256|sha384|sha512)-[^']*'/gi;
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 
@@ -169,14 +172,20 @@ function redactLongPathSegments(pathname: string): string {
 // Keep only scheme, host, and path of a URL. Query, fragment, and
 // userinfo are dropped. Non-HTTP(S) URLs keep only the scheme, so a
 // data: or blob: payload can never leak into the log. Unparseable
-// values become "[redacted]"; bare spec tokens pass through.
+// values become "[redacted]". Only the two bare keywords the CSP
+// spec allows for blocked-uri ("inline", "eval") pass through; any
+// other bare value (a raw token, a JWT, a bare hostname) fails the
+// URL parse below and becomes "[redacted]", so a token sent
+// without slashes or a scheme can never reach the log. The cleaned
+// URL passes through redactSensitiveText as a last step, so a
+// key=value secret embedded in a path segment is redacted too.
 export function sanitizeCspReportUrl(value: string): string {
   const trimmed = stripControlChars(value).trim();
   if (trimmed === '') {
     return '[redacted]';
   }
-  if (!trimmed.includes('/') && !trimmed.includes(':') && BARE_BLOCKED_TOKEN.test(trimmed)) {
-    return trimmed;
+  if (BARE_BLOCKED_KEYWORDS.has(trimmed.toLowerCase())) {
+    return trimmed.toLowerCase();
   }
   let parsed: URL;
   try {
@@ -189,7 +198,7 @@ export function sanitizeCspReportUrl(value: string): string {
   }
   const path = redactLongPathSegments(parsed.pathname);
   const cleaned = `${parsed.protocol}//${parsed.host}${path}`;
-  return cleaned.slice(0, CSP_REPORT_MAX_URL_LENGTH);
+  return redactSensitiveText(cleaned).slice(0, CSP_REPORT_MAX_URL_LENGTH);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -246,7 +255,7 @@ function nonEmpty(value: string | undefined): string | undefined {
 
 function assignIfPresent<T>(target: SanitizedCspReport, key: keyof SanitizedCspReport, value: T | undefined): void {
   if (value !== undefined) {
-    (target as Record<string, unknown>)[key] = value;
+    (target as unknown as Record<string, unknown>)[key] = value;
   }
 }
 
@@ -608,7 +617,7 @@ function registerCspReportContentTypeParsers(app: FastifyInstance): void {
         try {
           done(null, JSON.parse(body) as unknown);
         } catch {
-          done(contentTypeError('FST_ERR_CTP_INVALID_JSON_CONTENT', 'Body is not valid JSON.'));
+          done(contentTypeError('FST_ERR_CTP_INVALID_JSON_BODY', 'Body is not valid JSON.'));
         }
       },
     );

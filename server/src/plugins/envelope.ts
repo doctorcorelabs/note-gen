@@ -384,7 +384,14 @@ export function toErrorEnvelope(error: unknown, requestId: string): { statusCode
         envelope: errorEnvelope('validation_failed', 'Request validation failed.', id),
       };
     }
-    if (code === 'FST_ERR_CTP_INVALID_JSON_CONTENT' || code === 'FST_ERR_CTP_EMPTY_JSON_BODY') {
+    // Fastify 5 names the malformed-JSON error
+    // FST_ERR_CTP_INVALID_JSON_BODY (verified in fastify 5.12.8,
+    // lib/errors.js); the older _CONTENT name is kept for safety.
+    if (
+      code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
+      code === 'FST_ERR_CTP_INVALID_JSON_CONTENT' ||
+      code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
+    ) {
       return {
         statusCode: 400,
         envelope: errorEnvelope('invalid_json', 'Request body is not valid JSON.', id),

@@ -281,6 +281,30 @@ describe('sanitization', () => {
     );
   });
 
+  it('redacts bare token-like blocked-uri values and keeps only the spec keywords', () => {
+    // A bare value with no slash or scheme used to pass through
+    // unchanged, which would let a raw token or JWT reach the log
+    // as a blocked-uri. Only "inline" and "eval" survive now.
+    expect(sanitizeCspReportUrl(LONG_TOKEN)).toBe('[redacted]');
+    expect(sanitizeCspReportUrl('BareTokenValue1234567890abcdef')).toBe('[redacted]');
+    expect(sanitizeCspReportUrl(`${'a'.repeat(20)}.${'b'.repeat(20)}.${'c'.repeat(20)}`)).toBe('[redacted]');
+    expect(sanitizeCspReportUrl('INLINE')).toBe('inline');
+    const parsed = parseCspReportBody(legacyBody({ 'blocked-uri': LONG_TOKEN }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+    expect(parsed.reports[0]?.blockedUri).toBe('[redacted]');
+    expect(JSON.stringify(parsed.reports)).not.toContain(LONG_TOKEN);
+  });
+
+  it('redacts a key=value secret embedded in a URL path', () => {
+    expect(sanitizeCspReportUrl('https://app.example.invalid/notes/token=abc123')).toBe(
+      'https://app.example.invalid/notes/token=[redacted]',
+    );
+    expect(sanitizeCspReportUrl('https://app.example.invalid/notes/a')).toBe('https://app.example.invalid/notes/a');
+  });
+
   it('redacts Bearer tokens, key=value secrets, and policy nonces', () => {
     expect(redactSensitiveText(`Authorization: Bearer ${LONG_TOKEN}`)).toBe('Authorization: Bearer [redacted]');
     expect(redactSensitiveText(`token=${SECRET_TOKEN}&other=1`)).toBe('token=[redacted]&other=1');
@@ -305,12 +329,12 @@ describe('sanitization', () => {
     const serialized = JSON.stringify(parsed.reports);
     expect(serialized).not.toContain(SECRET_TOKEN);
     expect(serialized).not.toContain(LONG_TOKEN);
-    expect(serialized).not.toContain('token=');
+    expect(serialized).toContain('token=[redacted]');
     expect(parsed.reports[0]?.documentUri).toBe('https://app.example.invalid/notes/a');
   });
 
   it('truncates samples to the log cap', () => {
-    const parsed = parseCspReportBody(legacyBody({ 'script-sample': 'x'.repeat(1000) }));
+    const parsed = parseCspReportBody(legacyBody({ 'script-sample': 'ab '.repeat(400) }));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) {
       return;

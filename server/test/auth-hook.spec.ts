@@ -405,12 +405,23 @@ describe('authenticated requests with injected verifiers', () => {
 });
 
 describe('no-session exemptions as wiring', () => {
-  it('lets a test-only CSP report route pass without a session', async () => {
+  // The real CSP report route landed with V3-39b, so this case now
+  // exercises it (a valid report, no session) instead of registering
+  // a test-only route on the same path, which Fastify rejects as a
+  // duplicate. The assertion is unchanged: the hook exemption lets
+  // the request pass without a session.
+  it('lets the real CSP report route pass without a session', async () => {
     const app = await buildApp({ config: testConfig(), pool: null, version: '0.39.2-fork.1' });
-    app.post('/api/csp-reports', async (_request, reply) => {
-      reply.code(204).send();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/csp-reports',
+      payload: {
+        'csp-report': {
+          'document-uri': 'https://app.example.invalid/notes/a',
+          'violated-directive': 'script-src',
+        },
+      },
     });
-    const res = await app.inject({ method: 'POST', url: '/api/csp-reports' });
     expect(res.statusCode).toBe(204);
     await app.close();
   });
