@@ -17,10 +17,7 @@
 import { defineContractSuite } from "./contract-harness";
 import type { ContractFactory } from "./contract-harness";
 import type { StoreAdapter } from "./contract-types";
-import {
-  BrokenFakeStoreAdapter,
-  createBrokenFakeStoreAdapter,
-} from "../fakes/broken-fake-store";
+import { createBrokenFakeStoreAdapter } from "../fakes/broken-fake-store";
 import {
   createFakeStoreAdapter,
   FakeStoreAdapter,

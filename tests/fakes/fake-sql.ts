@@ -51,7 +51,6 @@ import type {
   KnowledgeSourceRow,
   KnowledgeSourceType,
   KnowledgeStatsRow,
-  KnowledgeStatus,
   MarkRow,
   SqlAdapter,
   SqlHealth,
