@@ -17,6 +17,11 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     environment: "node",
+    // Contract files may run in parallel, but cases inside one file
+    // share a per-case fixture setup and must not share state across
+    // implementations. Vitest 3 only allows fileParallelism at the
+    // top level (it is a NonProjectOption), not inside a project.
+    fileParallelism: true,
     projects: [
       {
         test: {
@@ -30,11 +35,6 @@ export default defineConfig({
           name: "contract",
           include: ["tests/contract/**/*.contract.ts"],
           exclude: ["**/node_modules/**"],
-          // One contract file is one adapter; files may run in
-          // parallel, but cases inside one file share a per-case
-          // fixture setup and must not share state across
-          // implementations.
-          fileParallelism: true,
         },
       },
     ],
