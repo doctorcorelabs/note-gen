@@ -26,9 +26,7 @@ export * from './m6-wiki.js';
 export * from './m7-memory.js';
 
 import {
-  apiTokens,
   auditEvents,
-  devices,
   idempotencyKeys,
   sessions,
   settingRevisions,
@@ -59,14 +57,12 @@ import { memories, memoryJobs, memoryPolicies } from './m7-memory.js';
 // the bytea column builder) can leak into the Drizzle schema object.
 export const schema = {
   users,
-  devices,
   sessions,
   workspaces,
   workspaceMembers,
   settings,
   settingRevisions,
   secrets,
-  apiTokens,
   auditEvents,
   idempotencyKeys,
   agentTokens,

@@ -15,10 +15,12 @@
 // History: the 0000 migration holds the V1-03 M1 shape (login,
 // api_tokens, owner_id, devices table). Migration 0001 added the V1-08
 // columns and tables, migration 0002 tightened them after the data
-// procedure ran, migration 0003 removes the old M1 columns, and
-// migration 0004 removes the devices and api_tokens tables. This
-// intermediate state still defines those two tables; the final shape
-// is reached at migration 0004.
+// procedure ran, migration 0003 removed the old M1 columns, and
+// migration 0004 removed the devices and api_tokens tables. This file
+// is the final, post-M8 shape. The contract phase needed two journal
+// entries because drizzle-kit emits DROP TABLE before DROP CONSTRAINT
+// in a single generate, which fails on the sessions FK; see
+// laporan-v3-01a-m8.md.
 
 import { sql } from 'drizzle-orm';
 import {
@@ -81,30 +83,6 @@ export const users = pgTable(
     check('users_role_check', sql`${t.role} IN ('user', 'admin')`),
     check('users_status_check', sql`${t.status} IN ('active', 'disabled')`),
   ],
-);
-
-// M8 contract-columns state: the devices and api_tokens tables are
-// still defined here. Their columns are already unreferenced (the
-// sessions device link and all old columns are gone); the tables
-// themselves are dropped by migration 0004, which is generated only
-// after 0003 has removed the columns and constraints. A single
-// contract entry cannot drop both, because drizzle-kit emits
-// DROP TABLE before DROP CONSTRAINT and the CASCADE drop of the
-// devices table removes the sessions FK before its explicit
-// DROP CONSTRAINT runs. See laporan-v3-01a-m8.md.
-export const devices = pgTable(
-  'devices',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    deviceName: text('device_name').notNull(),
-    userAgentHash: text('user_agent_hash').notNull(),
-    lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
-  },
-  (t) => [index('devices_user_id_idx').on(t.userId)],
 );
 
 export const sessions = pgTable(
@@ -220,30 +198,6 @@ export const secrets = pgTable(
     lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
   },
   (t) => [uniqueIndex('secrets_user_kind_ref_key').on(t.userId, t.kind, t.ref)],
-);
-
-// M8 contract-columns state: api_tokens is still defined here and is
-// dropped by migration 0004, for the reason stated above devices.
-export const apiTokens = pgTable(
-  'api_tokens',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    // SHA-256 of the raw token. The raw value is never stored.
-    tokenHash: text('token_hash').notNull(),
-    scopes: text('scopes').array().notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }),
-    lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
-    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
-  },
-  (t) => [
-    uniqueIndex('api_tokens_token_hash_key').on(t.tokenHash),
-    index('api_tokens_user_id_idx').on(t.userId),
-  ],
 );
 
 export const auditEvents = pgTable(
