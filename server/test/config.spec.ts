@@ -212,7 +212,8 @@ describe('secret presence flags', () => {
       AUTH_SECRET: marker,
       SETUP_TOKEN: marker,
       ENCRYPTION_KEY: marker,
-      DATABASE_URL: `postgres://user:${marker}@localhost:5432/db`,
+      // <user> placeholder keeps this marker-only fixture out of secret-scan's credential-DSN pattern; loadConfig treats DATABASE_URL as opaque.
+      DATABASE_URL: `postgres://<user>:${marker}@localhost:5432/db`,
     });
     expect(config.warnings.join('\n')).not.toContain(marker);
   });
