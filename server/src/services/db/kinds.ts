@@ -15,6 +15,16 @@
 // that test. Do not edit the lists here without the matching catalog
 // change and the conformance test passing.
 //
+// One ratified exception (AD-44, AMD-O10-01): the read list below
+// carries `messages.get`, the 74th kind, which the D/G lock-in
+// ratified as a W1 client read kind but which has not yet entered
+// the catalog code; the catalog amendment is V3-14 work (wave 3B).
+// Until that amendment lands, the mirror is catalog + messages.get,
+// exactly as the kind split note (fase1/pembagian-handler-kind.md,
+// V-1) allows, and the conformance test pins the delta to that one
+// kind. Once the catalog carries messages.get, mirror and catalog
+// are equal again and the same test still passes.
+//
 // Rules carried from the catalog and the design (V1-03 sections 3.3
 // and 3.4, AD-26):
 // - Read and write kinds are disjoint sets. The read batch endpoint
@@ -41,6 +51,7 @@ export const DB_READ_OP_KINDS = [
   'conversations.get',
   'messages.listByConversation',
   'messages.listByTag',
+  'messages.get',
   'compactions.listByConversation',
   'canvases.list',
   'canvases.get',
