@@ -861,6 +861,24 @@ describe("CSRF seam (V3-30b provider)", () => {
     assert.equal(error.localCode, "SERVER_ERROR");
     assert.equal(calls.length, 0);
   });
+
+  it("a 403 csrf_invalid rejection carries flat status/code fields for the V3-30b predicates", async () => {
+    const { fetchFn, calls } = makeFetch(() =>
+      fakeResponse({
+        status: 403,
+        body: errorBody("csrf_invalid", { requestId: "req-csrf-9", retryable: false }),
+      }),
+    );
+    const client = createApiClient({ fetchFn, csrfTokenProvider: () => "token-stale" });
+    const error = await expectApiError(
+      client.requestJson("/api/marks", { method: "POST", jsonBody: {} }),
+    );
+    assert.equal(error.status, 403);
+    assert.equal(error.code, "csrf_invalid");
+    assert.equal(error.wireCode, "csrf_invalid");
+    assert.equal(error.requestId, "req-csrf-9");
+    assert.equal(calls.length, 1);
+  });
 });
 
 describe("onUnauthorized seam (V3-30b 401 handling)", () => {
@@ -886,6 +904,32 @@ describe("onUnauthorized seam (V3-30b 401 handling)", () => {
     assert.equal(error.wireCode, "unauthenticated");
     assert.equal(error.status, 401);
     assert.equal(calls.length, 1);
+  });
+
+  it("delivers flat code and requestId fields the csrf.ts seam reads", async () => {
+    let seen: ApiError | undefined;
+    const { fetchFn } = makeFetch(() =>
+      fakeResponse({
+        status: 401,
+        body: errorBody("unauthenticated", { requestId: "req-401-7", retryable: false }),
+      }),
+    );
+    const client = createApiClient({
+      fetchFn,
+      onUnauthorized: (error) => {
+        seen = error;
+      },
+    });
+    const thrown = await expectApiError(client.requestJson("/api/marks"));
+    assert.equal(seen, thrown);
+    assert.equal(thrown.code, "unauthenticated");
+    assert.equal(thrown.wireCode, "unauthenticated");
+    assert.equal(thrown.status, 401);
+    assert.equal(thrown.requestId, "req-401-7");
+    const flat = thrown as unknown as Record<string, unknown>;
+    assert.equal(flat.code, "unauthenticated");
+    assert.equal(flat.status, 401);
+    assert.equal(flat.requestId, "req-401-7");
   });
 
   it("still throws the original ApiError when the handler throws or rejects", async () => {

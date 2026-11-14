@@ -383,6 +383,101 @@ describe("ApiError", () => {
   });
 });
 
+describe("flat code field for the V3-30b seam (csrf.ts predicates)", () => {
+  it("code always equals wireCode, for every catalog code", () => {
+    for (const entry of WIRE_CODE_TABLE) {
+      const error = createApiErrorFromWire({
+        status: entry.status,
+        wireCode: entry.code,
+        requestId: "req-seam",
+        details: {},
+      });
+      assert.equal(error.code, entry.code);
+      assert.equal(error.wireCode, entry.code);
+    }
+    const conflict412 = createApiErrorFromWire({
+      status: 412,
+      wireCode: "revision_conflict",
+      requestId: "req-seam",
+      details: {},
+    });
+    assert.equal(conflict412.code, "revision_conflict");
+  });
+
+  it("code is null exactly when no envelope arrived", () => {
+    assert.equal(createNetworkError().code, null);
+    assert.equal(createTimeoutError(false).code, null);
+    assert.equal(createTimeoutError(true).code, null);
+    assert.equal(createLocalApiError("VALIDATION_ERROR").code, null);
+    assert.equal(createLocalApiError("SERVER_ERROR").code, null);
+    assert.equal(createApiErrorWithoutEnvelope({ status: 502 }).code, null);
+    assert.equal(new ApiError({ localCode: "SERVER_ERROR" }).code, null);
+  });
+
+  it("typed 501 subclasses carry their wire code in code", () => {
+    const cases: Array<{ wireCode: string; ctor: unknown }> = [
+      { wireCode: "fuzzy_search_unavailable", ctor: FuzzySearchUnavailableError },
+      { wireCode: "document_parse_unavailable", ctor: DocumentParseUnavailableError },
+      { wireCode: "restore_unavailable", ctor: RestoreUnavailableError },
+    ];
+    for (const entry of cases) {
+      const error = createApiErrorFromWire({
+        status: 501,
+        wireCode: entry.wireCode,
+        requestId: "req-seam",
+        details: {},
+      });
+      assert.equal(error.code, entry.wireCode);
+      assert.ok(error instanceof (entry.ctor as new (...args: never[]) => unknown));
+    }
+  });
+
+  it("flat status/code/requestId fields satisfy the csrf.ts predicate shape", () => {
+    // This mirrors the field reads in csrf.ts readErrorStatusCode
+    // without importing that module: csrf.ts lives on the V3-30b
+    // branch, and this branch must stay green on its own. The pin
+    // is the field NAMES (status, code, requestId) and their flat
+    // placement on the error object.
+    function readFlat(error: unknown): { status?: number; code?: string; requestId?: string } {
+      if (typeof error !== "object" || error === null) {
+        return {};
+      }
+      const record = error as Record<string, unknown>;
+      return {
+        status: typeof record.status === "number" ? record.status : undefined,
+        code: typeof record.code === "string" ? record.code : undefined,
+        requestId: typeof record.requestId === "string" ? record.requestId : undefined,
+      };
+    }
+    const csrfError = createApiErrorFromWire({
+      status: 403,
+      wireCode: "csrf_invalid",
+      requestId: "req-csrf-1",
+      details: {},
+    });
+    assert.deepEqual(readFlat(csrfError), {
+      status: 403,
+      code: "csrf_invalid",
+      requestId: "req-csrf-1",
+    });
+    const expiredError = createApiErrorFromWire({
+      status: 401,
+      wireCode: "unauthenticated",
+      requestId: "req-401-1",
+      details: {},
+    });
+    assert.deepEqual(readFlat(expiredError), {
+      status: 401,
+      code: "unauthenticated",
+      requestId: "req-401-1",
+    });
+    const networkFlat = readFlat(createNetworkError());
+    assert.equal(networkFlat.status, undefined);
+    assert.equal(networkFlat.code, undefined);
+    assert.equal(networkFlat.requestId, undefined);
+  });
+});
+
 describe("typed 501 errors", () => {
   it("fuzzy 501 becomes FuzzySearchUnavailableError", () => {
     const error = createApiErrorFromWire({

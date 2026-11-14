@@ -49,27 +49,44 @@
 // SEAMS FOR V3-30b (CSRF / 401 handling). This task owns the client
 // and the envelope/error mapping only. It deliberately does NOT
 // implement CSRF token fetching, token storage, token refresh, 401
-// redirects, or 401 retries. V3-30b owns csrf.ts and the 401
-// behavior, and wires it through these two seams:
-// - onUnauthorized: called exactly once per HTTP 401 response,
-//   awaited, with the ApiError, before the error is thrown. Errors
-//   thrown by the handler are swallowed so they can never mask the
-//   ApiError. V3-30b uses this seam to clear in-memory auth state
-//   and navigate to login (contract K-10: 401 means go to login;
-//   there is no refresh endpoint and no automatic retry). The
-//   handler must not retry the request through this client.
+// redirects, or 401 retries. V3-30b owns csrf.ts (branch
+// web-api-csrf) and the 401/CSRF-stale behavior, and wires it
+// through these two seams, whose names follow the V3-30b module:
+// - onUnauthorized (type OnUnauthorized): called exactly once per
+//   HTTP 401 response, awaited, with the ApiError, before the error
+//   is thrown. Errors thrown by the handler are swallowed so they
+//   can never mask the ApiError. The ApiError carries the flat
+//   status, code, and requestId fields that the csrf.ts predicates
+//   read, so wiring code forwards it with
+//   handleUnauthorizedError(seam, error), where seam is the
+//   WebApiAuthSeam from createWebApiAuthSeam (csrf.ts). That call
+//   clears the cached token and notifies expiry listeners once;
+//   this module never navigates and the handler must not retry the
+//   request through this client (contract K-10: 401 means the
+//   session is expired; there is no refresh endpoint and no
+//   automatic retry; the UI layer decides what to show without
+//   losing form data). Do not confuse OnUnauthorized (this
+//   callback) with the UnauthorizedHandler interface in csrf.ts,
+//   which is the session-status holder behind the seam.
 // - csrfTokenProvider: supplies the in-memory CSRF token for
-//   mutations. The client only attaches the X-CSRF-Token header
-//   when the provider returns a non-empty token; it never fetches
-//   the token endpoint itself, never stores a token, and never
-//   refreshes a stale token. V3-30b owns csrf.ts, which implements
-//   this provider (fetch from GET /api/auth/csrf, memory-only
-//   storage, refresh on csrf_invalid). When no provider is wired,
-//   mutations are sent without the header and the server answers
-//   403; that is the correct unwired behavior, not a fallback.
-//   GET and HEAD never carry the header (contract 1.2 rule 3).
-//   Pre-session mutations (login, setup) pass skipCsrf so the
-//   provider is not consulted before a session exists.
+//   mutations, normally as () => seam.csrf.getToken() over the
+//   shared CsrfTokenStore from createCsrfTokenStore (csrf.ts).
+//   The client only attaches the X-CSRF-Token header when the
+//   provider returns a non-empty token; it never fetches the token
+//   endpoint itself, never stores a token, and never refreshes a
+//   stale token. The single refresh-and-retry on 403 csrf_invalid
+//   belongs to V3-30b's withCsrfRetry, applied at the wiring layer
+//   around mutation attempts; it composes with this seam because
+//   both share the one store instance, so the retried attempt
+//   reads the refreshed cached token through this provider. When
+//   no provider is wired, mutations are sent without the header
+//   and the server answers 403; that is the correct unwired
+//   behavior, not a fallback. GET and HEAD never carry the header
+//   (contract 1.2 rule 3). Pre-session mutations (login, setup)
+//   pass skipCsrf so the provider is not consulted before a
+//   session exists. This branch intentionally has no csrf.ts file:
+//   that file is owned by V3-30b, and the integrator merges it
+//   alongside this client.
 //
 // Callers import from this file and errors.ts directly. There is no
 // barrel index.ts in src/lib/web/ (N-13); do not create one without
@@ -103,11 +120,25 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 /**
  * SEAM (V3-30b): invoked once per HTTP 401 response, awaited, before
- * the ApiError is thrown. The handler owns the 401 behavior (clear
- * in-memory state, navigate to login). It must not retry the
- * request, and any error it throws is swallowed by the client.
+ * the ApiError is thrown. The name matches the callback type in
+ * csrf.ts (V3-30b). That module's listeners receive an
+ * UnauthorizedEvent, while this client delivers the ApiError
+ * itself, which carries the same flat status, code, and requestId
+ * fields the csrf.ts predicates read (see errors.ts); wiring code
+ * forwards the error to handleUnauthorizedError(seam, error). The
+ * handler must not retry the request, and any error it throws is
+ * swallowed by the client. This client never navigates.
  */
-export type UnauthorizedHandler = (error: ApiError) => void | Promise<void>;
+export type OnUnauthorized = (error: ApiError) => void | Promise<void>;
+
+/**
+ * Former name of OnUnauthorized, kept as an alias so existing wiring
+ * keeps compiling. New code uses OnUnauthorized, the V3-30b seam
+ * name. Do not confuse this alias with the UnauthorizedHandler
+ * interface in csrf.ts, which is the session-status holder, not a
+ * callback.
+ */
+export type UnauthorizedHandler = OnUnauthorized;
 
 /**
  * SEAM (V3-30b): supplies the in-memory CSRF token for one request.
@@ -125,8 +156,8 @@ export type RequestIdProvider = () => string;
 export interface ApiClientOptions {
   /** Fetch implementation. Defaults to the global fetch, resolved per request. Injectable for tests. */
   fetchFn?: typeof fetch;
-  /** SEAM (V3-30b): 401 handler. See UnauthorizedHandler. */
-  onUnauthorized?: UnauthorizedHandler;
+  /** SEAM (V3-30b): 401 handler. See OnUnauthorized. */
+  onUnauthorized?: OnUnauthorized;
   /** SEAM (V3-30b): CSRF token provider. See CsrfTokenProvider. */
   csrfTokenProvider?: CsrfTokenProvider;
   /** Supplies X-Request-Id values. Defaults to a UUID/counter generator. */

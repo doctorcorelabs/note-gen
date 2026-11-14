@@ -452,6 +452,11 @@ function buildApiErrorMessage(
  * - wireCode: exact snake_case server code, or null when no envelope
  *   arrived. Branch on this for precise handling (csrf_invalid vs
  *   origin_rejected, revision_conflict payloads, tag codes).
+ * - code: alias of wireCode, kept as a flat field. The V3-30b seam
+ *   in csrf.ts (readErrorStatusCode) branches on the flat status
+ *   and code fields of the thrown error; without this alias its
+ *   csrf_invalid predicate could never see the wire code. Always
+ *   equal to wireCode; never set independently.
  * - status: HTTP status, or null when no response arrived.
  * - retryable: K-07 semantics. Advisory only: the client never
  *   retries on its own, and a retry still needs a fresh guard or an
@@ -478,6 +483,8 @@ function buildApiErrorMessage(
 export class ApiError extends Error {
   readonly localCode: LocalApiErrorCode;
   readonly wireCode: string | null;
+  /** Alias of wireCode. Flat `code` field required by the V3-30b seam (see the class doc). */
+  readonly code: string | null;
   readonly status: number | null;
   readonly retryable: boolean;
   readonly requestId: string | null;
@@ -491,6 +498,7 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.localCode = options.localCode;
     this.wireCode = wireCode;
+    this.code = wireCode;
     this.status = status;
     this.retryable = options.retryable ?? false;
     this.requestId = options.requestId ?? null;
