@@ -28,6 +28,7 @@
 // Fastify parser; malformed JSON answers invalid_json through the
 // global error handler.
 
+import type { IncomingMessage } from 'node:http';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getPrincipal, type SessionPrincipal } from '../middleware/auth-hook.js';
 import { ApiError, successEnvelope } from '../plugins/envelope.js';
@@ -101,18 +102,33 @@ async function readStreamCapped(
 function registerBufferParsers(app: FastifyInstance, textLimitBytes: number, mediaLimitBytes: number): void {
   const textCap = textLimitBytes + 1024 * 1024;
   const mediaCap = mediaLimitBytes + 1024 * 1024;
-  for (const type of TEXT_CONTENT_TYPES) {
+  // Fastify's built-in text/plain parser decodes to a string, which
+  // would silently replace invalid UTF-8 bytes before the handler
+  // can reject them with invalid_utf8. Replace it with the Buffer
+  // parser; the other types have no built-in parser, so the guard
+  // only prevents a duplicate registration on the same instance.
+  if (app.hasContentTypeParser('text/plain')) {
+    app.removeContentTypeParser('text/plain');
+  }
+  app.addContentTypeParser('text/plain', async (_request: FastifyRequest, payload: IncomingMessage) =>
+    readStreamCapped(payload, textCap),
+  );
+  for (const type of TEXT_CONTENT_TYPES.slice(1)) {
     if (!app.hasContentTypeParser(type)) {
-      app.addContentTypeParser(type, async (_request, payload) => readStreamCapped(payload, textCap));
+      app.addContentTypeParser(type, async (_request: FastifyRequest, payload: IncomingMessage) =>
+        readStreamCapped(payload, textCap),
+      );
     }
   }
   for (const type of BINARY_CONTENT_TYPES) {
     if (!app.hasContentTypeParser(type)) {
-      app.addContentTypeParser(type, async (_request, payload) => readStreamCapped(payload, mediaCap));
+      app.addContentTypeParser(type, async (_request: FastifyRequest, payload: IncomingMessage) =>
+        readStreamCapped(payload, mediaCap),
+      );
     }
   }
   if (!app.hasContentTypeParser('multipart/form-data')) {
-    app.addContentTypeParser('multipart/form-data', async (_request, payload) =>
+    app.addContentTypeParser('multipart/form-data', async (_request: FastifyRequest, payload: IncomingMessage) =>
       readStreamCapped(payload, mediaLimitBytes + 64 * 1024),
     );
   }
