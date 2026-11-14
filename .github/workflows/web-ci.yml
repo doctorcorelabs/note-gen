@@ -9,10 +9,11 @@
 # Every job must be green before merge (F12 section 6.2). There is no
 # emergency merge without a written reason in the PR.
 #
-# Placeholder jobs fail explicitly: the contract and e2e-smoke jobs exit
-# 1 with a clear message while their suites do not exist yet. They must
-# never pass vacuously. When a suite lands, its PR wires the runner
-# (Vitest for contract, Playwright for e2e) and this file runs it.
+# Placeholder jobs fail explicitly: the e2e-smoke job exits 1 with a
+# clear message while its suite does not exist yet. It must never pass
+# vacuously. The contract suite landed in M7 (Vitest project
+# "contract"); when the e2e suite lands, its PR wires the Playwright
+# runner and this file runs it.
 #
 # Toolchain pins live here because root package.json has no
 # packageManager/engines fields yet (F1-54 tracks that separately):
@@ -138,15 +139,13 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Fail explicitly when the contract suite is absent
         run: |
-          if [ ! -d tests/contract ] || [ -z "$(find tests/contract -name '*.test.ts' -o -name '*.spec.ts' | head -n 1)" ]; then
+          if [ ! -d tests/contract ] || [ -z "$(find tests/contract \( -name '*.test.ts' -o -name '*.spec.ts' -o -name '*.contract.ts' \) | head -n 1)" ]; then
             echo "CONTRACT SUITE MISSING: tests/contract has no test files yet (design F12 section 3)." >&2
             echo "This job fails explicitly instead of passing with no suite. Land the contract suite, then re-run." >&2
             exit 1
           fi
-      # The suite-landing PR must add Vitest as a root devDependency;
-      # until then this step cannot run, which is itself explicit.
       - name: Run contract suite
-        run: pnpm exec vitest run tests/contract
+        run: pnpm test:contract
 
   build:
     name: Full build
