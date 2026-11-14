@@ -39,6 +39,7 @@ import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerWorkspaceWriteRoutes } from './routes/workspace-write.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -76,6 +77,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
+
+  // Workspace write routes (V3-04b, wave 3A). Registered with no
+  // ports until the V3-04a path/revision modules land: every write
+  // route answers 503 service_unavailable after auth passes, so no
+  // write can succeed on a guessed path or revision implementation.
+  // The integrator wires the real ports here in this one block:
+  // registerWorkspaceWriteRoutes(app, { ports, resolveIdentity }).
+  await registerWorkspaceWriteRoutes(app, {});
 
   return app;
 }
