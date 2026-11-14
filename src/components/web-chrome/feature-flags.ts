@@ -25,6 +25,7 @@ export type WebFeatureId =
   | 'image-hosting'
   | 'screenshot-scan'
   | 'browser-panel'
+  | 'plugins'
 
 export type WebFeatureFlag = {
   id: WebFeatureId
@@ -113,6 +114,16 @@ export const WEB_FEATURE_FLAGS: Record<WebFeatureId, WebFeatureFlag> = {
     fallbackMessage:
       'The browser panel is not available in this build. External links open in a new browser tab instead.',
   },
+  plugins: {
+    id: 'plugins',
+    enabled: false,
+    targetPhase: 'Phase 3b',
+    labelKey: 'settings.plugins.title',
+    fallbackLabel: 'Plugins',
+    messageKey: 'webChrome.plugins.unavailable',
+    fallbackMessage:
+      'Plugins are not available in this build. No plugin can be installed, enabled, or run, and no plugin code is loaded.',
+  },
 }
 
 export const WEB_FEATURE_IDS: readonly WebFeatureId[] = [
@@ -123,6 +134,7 @@ export const WEB_FEATURE_IDS: readonly WebFeatureId[] = [
   'image-hosting',
   'screenshot-scan',
   'browser-panel',
+  'plugins',
 ]
 
 export function getFeatureFlag(featureId: WebFeatureId): WebFeatureFlag {

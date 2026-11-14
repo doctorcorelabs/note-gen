@@ -19,7 +19,7 @@ export {
 } from './disabled-feature'
 export type { DisabledFeatureProps, DisabledFeatureButtonProps } from './disabled-feature'
 
-export { AiChatDisabledPanel, CanvasDisabledPanel } from './disabled-feature-panels'
+export { AiChatDisabledPanel, CanvasDisabledPanel, PluginsDisabledPanel } from './disabled-feature-panels'
 
 export { useFeatureFlag, useIsFeatureEnabled } from './use-feature-flag'
 export type { FeatureFlagState } from './use-feature-flag'

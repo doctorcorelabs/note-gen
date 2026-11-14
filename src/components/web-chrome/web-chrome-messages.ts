@@ -14,9 +14,10 @@ import { getFeatureFlag, WEB_FEATURE_IDS, type WebFeatureId } from './feature-fl
  * to en.json and zh.json (and keeps the two catalogs parallel) in a separate
  * change; once a key exists, resolveCatalogText finds it and the translated
  * string renders automatically. Until then, the English fallback text from
- * feature-flags.ts renders. Three label keys below reuse keys that already
- * exist in the catalog (navigation.chat, navigation.canvases, wiki.title);
- * the rest are new proposals under the webChrome namespace.
+ * feature-flags.ts renders. Four label keys below reuse keys that already
+ * exist in the catalog (navigation.chat, navigation.canvases, wiki.title,
+ * settings.plugins.title); the rest are new proposals under the webChrome
+ * namespace.
  */
 export const PROPOSED_WEB_CHROME_MESSAGE_KEYS: readonly string[] = [
   'webChrome.aiChat.unavailable',
@@ -30,6 +31,7 @@ export const PROPOSED_WEB_CHROME_MESSAGE_KEYS: readonly string[] = [
   'webChrome.screenshotScan.unavailable',
   'webChrome.browserPanel.label',
   'webChrome.browserPanel.unavailable',
+  'webChrome.plugins.unavailable',
 ]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
