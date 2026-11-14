@@ -1,0 +1,314 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+// See LICENSE and FORK.md.
+
+// Authentication and CSRF hook shell (foundation wiring only).
+//
+// This module defines the INTERFACES the auth worker implements and the
+// hook that enforces them. It contains no session database lookup, no
+// password or token cryptography, and no CSRF hash comparison. The full
+// logic belongs to the auth worker (desain-auth.md); this file is the
+// wiring point that worker plugs into by injecting verifiers into
+// buildApp.
+//
+// Deny-by-default rules (never allow-by-default):
+// - When no verifySession is injected, every protected route answers
+//   401. There is no mode in which a missing verifier means "allow".
+// - A route is protected when its config sets requiresAuth: true, or
+//   when it has no explicit config and lives under /api/. Only routes
+//   with requiresAuth: false, and the health paths below, are public.
+//   A future route that forgets its config is protected, not public.
+// - When no CSRF verifier is injected, authenticated mutations answer
+//   403. A verified session alone is never enough for a mutation.
+// - When no canonical origin is configured, Origin checks fail closed
+//   and authenticated mutations answer 403.
+//
+// Check order for a protected mutation (desain-auth.md section 5.3):
+// session first (401 when invalid), then Origin (403), then the CSRF
+// token (403). Origin and CSRF failures produce the identical
+// client-visible outcome (403, code CSRF_FAILED, one generic message);
+// only the server log records which layer failed. The rejected Origin
+// value may be logged (it is not a secret); token values are never
+// logged.
+//
+// Health paths are public by design: orchestrator probes and container
+// healthchecks carry no credentials, and a 401 from the API itself
+// would break watchdog diagnosis. The Cloudflare Access perimeter
+// still guards public probes. This exemption is tested explicitly.
+//
+// Public mutation routes (login, setup) are NOT covered by the global
+// hook: they have no session yet, so CSRF token checks cannot apply.
+// The auth worker attaches createOriginPreHandler to those routes for
+// the Origin layer, per desain-auth.md sections 3.1 and 5.3.
+
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ApiError } from '../plugins/envelope.js';
+
+// Route config keys understood by the auth hook. Declared here so route
+// registrations can set them with type checking; the merge applies to
+// the whole program because this file is part of the build.
+declare module 'fastify' {
+  interface FastifyContextConfig {
+    requiresAuth?: boolean;
+    requiresCsrf?: boolean;
+  }
+}
+
+export interface SessionPrincipal {
+  userId: string;
+  role: 'user' | 'admin';
+  sessionId: string;
+  credentialEpoch?: number;
+}
+
+export interface SessionVerificationInput {
+  request: FastifyRequest;
+  sessionId: string | undefined;
+}
+
+// Verify a browser session from its opaque cookie id. Returns the
+// principal when the session is valid, or null when it is missing,
+// unknown, expired, revoked, or owned by a disabled account. All of
+// those cases answer with the same generic 401; the verifier must not
+// distinguish them in any client-visible way. A verifier that throws
+// fails closed through the global error handler (generic 500 envelope,
+// still denied), and the throw is logged with its code only.
+export type VerifySessionFn = (input: SessionVerificationInput) => Promise<SessionPrincipal | null>;
+
+// Verify the CSRF token for an authenticated mutation. The token travels
+// in the X-CSRF-Token header (desain-auth.md section 5.2). Returns true
+// only when the token matches the session's stored hash. The request
+// gives access to headers; the principal gives the session identity.
+export type VerifyCsrfTokenFn = (request: FastifyRequest, principal: SessionPrincipal) => Promise<boolean>;
+
+// Verify the Origin/Referer layer for an authenticated mutation.
+// canonicalOrigin is the normalized origin from PUBLIC_BASE_URL, or
+// undefined when it is not configured (which must fail closed).
+export type VerifyOriginFn = (
+  request: FastifyRequest,
+  canonicalOrigin: string | undefined,
+) => boolean | Promise<boolean>;
+
+export interface AuthHookDeps {
+  verifySession?: VerifySessionFn;
+  verifyCsrf?: VerifyCsrfTokenFn;
+  verifyOrigin?: VerifyOriginFn;
+  canonicalOrigin?: string | undefined;
+}
+
+// Stub verifiers. These are the ONLY defaults: both deny. They exist so
+// the foundation is secure before the auth worker lands, and so tests
+// can assert deny-by-default behavior without a database.
+export const denyByDefaultVerifySession: VerifySessionFn = async () => null;
+
+export const denyByDefaultVerifyCsrf: VerifyCsrfTokenFn = async () => false;
+
+// Health paths that bypass application auth. Keep this list in sync
+// with registerHealthRoutes; the middleware contract test asserts the
+// exemption explicitly (desain-auth.md section 12.4, item 8).
+export const PUBLIC_HEALTH_PATHS: readonly string[] = ['/api/health', '/api/health/live', '/api/health/ready'];
+
+export const SESSION_COOKIE_NAMES: readonly string[] = ['__Host-notegen_session', 'notegen_session'];
+
+export const CSRF_HEADER_NAME = 'x-csrf-token';
+
+const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+function isMutationMethod(method: string): boolean {
+  return MUTATION_METHODS.has(method.toUpperCase());
+}
+
+// Parse the session id from the Cookie header. The production name
+// (__Host- prefix) is tried first, then the development name. Cookie
+// values are percent-decoded when possible; an undecodable value is
+// used as-is and will simply fail verification server-side.
+export function parseSessionCookieId(request: FastifyRequest): string | undefined {
+  const header = request.headers.cookie;
+  if (typeof header !== 'string' || header === '') {
+    return undefined;
+  }
+  const values = new Map<string, string>();
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) {
+      continue;
+    }
+    const name = part.slice(0, eq).trim();
+    const raw = part.slice(eq + 1).trim();
+    if (name === '' || values.has(name)) {
+      continue;
+    }
+    try {
+      values.set(name, decodeURIComponent(raw));
+    } catch {
+      values.set(name, raw);
+    }
+  }
+  for (const name of SESSION_COOKIE_NAMES) {
+    const value = values.get(name);
+    if (value !== undefined && value !== '') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+// Read the CSRF token from its canonical header. Missing, empty, or
+// duplicated headers yield undefined (deny). This helper is shared so
+// the auth worker's verifier and this shell read the header identically.
+export function readCsrfTokenHeader(request: FastifyRequest): string | undefined {
+  const raw = request.headers[CSRF_HEADER_NAME];
+  if (typeof raw !== 'string' || raw === '') {
+    return undefined;
+  }
+  return raw;
+}
+
+// Pure Origin/Referer matcher (desain-auth.md section 5.3). The Origin
+// must equal the canonical origin exactly after URL normalization
+// (lowercase host, default port removed). When Origin is absent, the
+// Referer origin must equal the canonical origin. When both are
+// absent, or when no canonical origin is configured, the check fails.
+// The string 'null' (opaque origin) never matches.
+export function matchCanonicalOrigin(
+  origin: string | string[] | undefined,
+  referer: string | string[] | undefined,
+  canonicalOrigin: string | undefined,
+): boolean {
+  if (canonicalOrigin === undefined || canonicalOrigin === '') {
+    return false;
+  }
+  let canonical: string;
+  try {
+    canonical = new URL(canonicalOrigin).origin;
+  } catch {
+    return false;
+  }
+  if (typeof origin === 'string' && origin !== '') {
+    try {
+      return new URL(origin).origin === canonical;
+    } catch {
+      return false;
+    }
+  }
+  if (typeof referer === 'string' && referer !== '') {
+    try {
+      return new URL(referer).origin === canonical;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function defaultVerifyOrigin(request: FastifyRequest, canonicalOrigin: string | undefined): boolean {
+  return matchCanonicalOrigin(request.headers.origin, request.headers.referer, canonicalOrigin);
+}
+
+interface RouteInfo {
+  config: { requiresAuth?: boolean; requiresCsrf?: boolean };
+  pattern: string | undefined;
+}
+
+function routeInfo(request: FastifyRequest): RouteInfo {
+  const raw = request as unknown as {
+    routeOptions?: { config?: RouteInfo['config']; url?: string };
+    routeConfig?: RouteInfo['config'];
+  };
+  if (raw.routeOptions !== undefined) {
+    return { config: raw.routeOptions.config ?? {}, pattern: raw.routeOptions.url };
+  }
+  // Fastify 4 shape: routeConfig IS the config object.
+  return { config: raw.routeConfig ?? {}, pattern: undefined };
+}
+
+function requestPath(request: FastifyRequest): string {
+  const url = request.url;
+  const q = url.indexOf('?');
+  return q === -1 ? url : url.slice(0, q);
+}
+
+// Attach the verified principal to the request without augmenting the
+// FastifyRequest type. Handlers read it back with getPrincipal.
+const PRINCIPAL_KEY = 'principal';
+
+export function getPrincipal(request: FastifyRequest): SessionPrincipal | undefined {
+  const holder = request as unknown as Record<string, unknown>;
+  const value = holder[PRINCIPAL_KEY];
+  if (typeof value === 'object' && value !== null && typeof (value as SessionPrincipal).userId === 'string') {
+    return value as SessionPrincipal;
+  }
+  return undefined;
+}
+
+function setPrincipal(request: FastifyRequest, principal: SessionPrincipal): void {
+  (request as unknown as Record<string, unknown>)[PRINCIPAL_KEY] = principal;
+}
+
+export function createAuthPreHandler(deps: AuthHookDeps = {}) {
+  const verifySession = deps.verifySession ?? denyByDefaultVerifySession;
+  const verifyOrigin = deps.verifyOrigin ?? defaultVerifyOrigin;
+  const verifyCsrf = deps.verifyCsrf ?? denyByDefaultVerifyCsrf;
+  const canonicalOrigin = deps.canonicalOrigin;
+
+  return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
+    const info = routeInfo(request);
+    const path = requestPath(request);
+    const pattern = info.pattern ?? path;
+    if (info.config.requiresAuth === false) {
+      return;
+    }
+    if (PUBLIC_HEALTH_PATHS.includes(pattern) || PUBLIC_HEALTH_PATHS.includes(path)) {
+      return;
+    }
+    const requiresAuth = info.config.requiresAuth === true || path.startsWith('/api/') || pattern.startsWith('/api/');
+    if (!requiresAuth) {
+      return;
+    }
+
+    const principal = await verifySession({ request, sessionId: parseSessionCookieId(request) });
+    if (principal === null) {
+      throw ApiError.authRequired('Authentication is required.');
+    }
+    setPrincipal(request, principal);
+
+    if (!isMutationMethod(request.method) || info.config.requiresCsrf === false) {
+      return;
+    }
+
+    const originOk = await verifyOrigin(request, canonicalOrigin);
+    if (!originOk) {
+      request.log.warn(
+        { layer: 'origin', origin: request.headers.origin ?? null },
+        'mutation rejected by origin check',
+      );
+      throw ApiError.csrfFailed('Request verification failed.');
+    }
+    const csrfOk = await verifyCsrf(request, principal);
+    if (!csrfOk) {
+      request.log.warn({ layer: 'csrf' }, 'mutation rejected by csrf check');
+      throw ApiError.csrfFailed('Request verification failed.');
+    }
+  };
+}
+
+export function registerAuthHooks(app: FastifyInstance, deps: AuthHookDeps = {}): void {
+  app.addHook('preHandler', createAuthPreHandler(deps));
+}
+
+// Standalone Origin check for public mutation routes (login, setup),
+// where no session exists yet and the global hook does not run. The
+// auth worker attaches this as a route preHandler. It enforces exactly
+// the same matcher as the authenticated path, with the same generic
+// 403 outcome.
+export function createOriginPreHandler(canonicalOrigin: string | undefined) {
+  return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
+    if (!defaultVerifyOrigin(request, canonicalOrigin)) {
+      request.log.warn(
+        { layer: 'origin', origin: request.headers.origin ?? null },
+        'public mutation rejected by origin check',
+      );
+      throw ApiError.csrfFailed('Request verification failed.');
+    }
+  };
+}

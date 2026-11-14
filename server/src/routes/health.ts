@@ -21,6 +21,13 @@
 //   Cloudflare Access perimeter still guards public probes.
 // - Responses are never cached: Cache-Control no-store on every health
 //   response.
+// - Health keeps its Fase 0 envelope shape (ok, status, service,
+//   version, uptimeSeconds, timestamp, checks). It does NOT use the
+//   generic { ok, data } / { ok, error } envelope: the response schemas
+//   forbid extra body fields. The request id travels only via the
+//   X-Request-Id response header. The routes declare requiresAuth:
+//   false explicitly so the global auth hook skips them by config as
+//   well as by the health path exemption.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { HealthDbPool } from '../db/pool.js';
@@ -107,7 +114,7 @@ function setHealthHeaders(reply: FastifyReply): void {
 export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRouteDeps): Promise<void> {
   app.get(
     '/api/health/live',
-    { schema: { response: { 200: liveResponseSchema } } },
+    { schema: { response: { 200: liveResponseSchema } }, config: { requiresAuth: false } },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       setHealthHeaders(reply);
       return buildLiveEnvelope(deps.version);
@@ -148,7 +155,10 @@ export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRou
     }
   };
 
-  const readySchema = { response: { 200: readyResponseSchema, 503: readyResponseSchema } };
-  app.get('/api/health/ready', { schema: readySchema }, readyHandler);
-  app.get('/api/health', { schema: readySchema }, readyHandler);
+  const readyOptions = {
+    schema: { response: { 200: readyResponseSchema, 503: readyResponseSchema } },
+    config: { requiresAuth: false },
+  };
+  app.get('/api/health/ready', readyOptions, readyHandler);
+  app.get('/api/health', readyOptions, readyHandler);
 }
