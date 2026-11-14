@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# Web CI for the NoteGen web fork (Fase 1 framework; F1-55, AD-01, AD-18;
+# design F10 section 6 and F12 section 6).
+#
+# Gates: typecheck, lint, unit, contract, build, e2e-smoke, secret-scan.
+# Every job must be green before merge (F12 section 6.2). There is no
+# emergency merge without a written reason in the PR.
+#
+# Placeholder jobs fail explicitly: the contract and e2e-smoke jobs exit
+# 1 with a clear message while their suites do not exist yet. They must
+# never pass vacuously. When a suite lands, its PR wires the runner
+# (Vitest for contract, Playwright for e2e) and this file runs it.
+#
+# Toolchain pins live here because root package.json has no
+# packageManager/engines fields yet (F1-54 tracks that separately):
+# Node 24 and pnpm 9, matching the upstream plugin-contract workflow.
+# Root and server/ have separate lockfiles (AD-06), so each job that
+# needs dependencies installs both trees. Jobs run on isolated
+# runners, so there is no shared install job; the pnpm cache keeps
+# per-job installs fast.
+#
+# Root package.json has no typecheck/test scripts yet (upstream state),
+# so this workflow calls tsc, node --test, and the server scripts
+# directly instead of depending on scripts that do not exist. Adding
+# root scripts is a follow-up for the owning PR, not this framework.
+#
+# The secret-scan job uses gitleaks when the runner provides it and
+# the grep backstop in scripts/secret-scan.sh otherwise. The backstop
+# carries one documented baseline exception for an upstream shared
+# key; see the script header. The gitleaks path is untested locally
+# (no gitleaks binary in the authoring environment) and may flag that
+# same baseline key until the AD-15 removal lands.
+#
+# Not in this framework: Docker image publication (AD-18, deploy work),
+# the conditional Rust job (F12 section 6.1 job 8), and the license
+# inventory gate (Fase 2, F10 section 6.1). Each needs its own decision
+# and must not be added silently.
+
+name: Web CI
+
+on:
+  pull_request:
+    branches: [web, dev]
+  # Feature branches use the web-<topic> scheme (AD-24): git forbids
+  # web/<topic> refs alongside the web trunk ref.
+  push:
+    branches: [web, dev, "web-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install server dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      - name: Typecheck web app
+        run: pnpm exec tsc --noEmit
+      - name: Typecheck server
+        run: pnpm --dir server run typecheck
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      # Server has no lint setup yet; this job covers the root tree only.
+      - name: Lint web app
+        run: pnpm lint
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install server dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      # Legacy node:test specs (F12 section 1). Listed explicitly: a
+      # missing file fails here instead of silently shrinking the suite.
+      # When the root Vitest suite lands (F12 section 7), extend this
+      # job to run it alongside these specs; do not drop either side.
+      - name: Run legacy node:test specs
+        run: node --test src/lib/vector-document-key.spec.mjs src/app/core/main/file/folder-item/paste-target.spec.mjs src/app/core/main/mark/mark-view-mode.spec.mjs
+      - name: Run server tests
+        run: pnpm --dir server test
+
+  contract:
+    name: Contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Fail explicitly when the contract suite is absent
+        run: |
+          if [ ! -d tests/contract ] || [ -z "$(find tests/contract -name '*.test.ts' -o -name '*.spec.ts' | head -n 1)" ]; then
+            echo "CONTRACT SUITE MISSING: tests/contract has no test files yet (design F12 section 3)." >&2
+            echo "This job fails explicitly instead of passing with no suite. Land the contract suite, then re-run." >&2
+            exit 1
+          fi
+      # The suite-landing PR must add Vitest as a root devDependency;
+      # until then this step cannot run, which is itself explicit.
+      - name: Run contract suite
+        run: pnpm exec vitest run tests/contract
+
+  build:
+    name: Full build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install server dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      # Full build: both esbuild worker bundles plus next build, never
+      # next build alone (F12 section 5.1). Static export per AD-04.
+      - name: Build web app
+        run: pnpm build
+      - name: Verify web build artifacts
+        run: |
+          test -d out
+          test -f out/index.html
+          test -f public/plugin-runtime.js
+          test -f public/markdown-lexer.js
+      - name: Build server
+        run: pnpm --dir server run build
+      - name: Verify server build artifact
+        run: test -f server/dist/server.js
+
+  e2e-smoke:
+    name: E2E smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Fail explicitly when the e2e smoke suite is absent
+        run: |
+          if [ ! -d tests/e2e ] || [ -z "$(ls playwright.config.* 2>/dev/null | head -n 1)" ]; then
+            echo "E2E SMOKE SUITE MISSING: tests/e2e and a Playwright config do not exist yet (design F12 section 5)." >&2
+            echo "This job fails explicitly instead of passing with no suite. Land the 6 critical flows, then re-run." >&2
+            exit 1
+          fi
+      # The suite-landing PR must add @playwright/test, pin the browser
+      # install step, and provide the seeded harness (F12 section 5.1).
+      # Until then this step cannot run, which is itself explicit.
+      - name: Build then run e2e smoke suite
+        run: |
+          pnpm build
+          pnpm exec playwright test tests/e2e
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets (gitleaks when present, grep backstop otherwise)
+        run: |
+          if command -v gitleaks >/dev/null 2>&1; then
+            gitleaks detect --source . --no-git --exit-code 1
+          else
+            bash scripts/secret-scan.sh
+          fi
