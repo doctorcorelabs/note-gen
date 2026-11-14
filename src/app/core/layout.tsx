@@ -1,4 +1,5 @@
 'use client'
+// Modified for the web fork on 2026-11-14; see FORK.md.
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { CloseBehaviorGuard } from "@/components/close-behavior-guard"
@@ -22,7 +23,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import initShowWindow from "@/lib/shortcut/show-window"
 import { initMcp } from "@/lib/mcp/init"
 import { reportAppStart } from "@/lib/event-report"
-import { TitleBar } from "@/components/title-bar"
+import { TopAppBar, WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
 import { Store } from '@tauri-apps/plugin-store'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
@@ -502,20 +503,23 @@ export default function RootLayout({
       disableTransitionOnChange
     >
       <TextSizeProvider>
-        <TitleBar />
-        <main className="flex flex-1 flex-col overflow-hidden w-full h-[calc(100vh-36px)] mt-9">
-          {children}
-        </main>
-        <SettingsDialog />
-        <SyncConfirmDialog />
-        <MemoryAutoNotifications />
-        <WebClipperBridge />
-        <DesktopScreenshotBridge ready={pluginsReady} />
-        <LocalMcpBridge />
-        <PluginHostBridge ready={pluginsReady} locale={currentLocale} />
-        <PluginCommandPalette />
-        <PluginDialogHost />
-        <CloseBehaviorGuard />
+        <WebDialogProvider>
+          <TopAppBar />
+          <main className="flex flex-1 flex-col overflow-hidden w-full h-[calc(100vh-36px)] mt-9">
+            {children}
+          </main>
+          <SettingsDialog />
+          <SyncConfirmDialog />
+          <MemoryAutoNotifications />
+          <WebClipperBridge />
+          <DesktopScreenshotBridge ready={pluginsReady} />
+          <LocalMcpBridge />
+          <PluginHostBridge ready={pluginsReady} locale={currentLocale} />
+          <PluginCommandPalette />
+          <PluginDialogHost />
+          <CloseBehaviorGuard />
+          <WebDialogHost />
+        </WebDialogProvider>
       </TextSizeProvider>
     </ThemeProvider>
   );
