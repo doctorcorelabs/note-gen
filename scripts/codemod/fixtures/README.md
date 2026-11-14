@@ -24,6 +24,13 @@ Branch mesin yang ter-push tetap skeleton saat salvage ini
 ditulis; perilaku mesin final mengikuti V3-16aR dan keputusan
 integrator.
 
+Catatan salvage generasi ke-2 (V3-16cR2, 15 November 2026):
+V3-16cR mati pada restart daemon 04:51 WIB sesudah push
+c4b9fe4f; pekerjaan dilanjutkan dari tip branch yang sama
+tanpa perubahan isi pada commit pendahulu. Audit 85 berkas R1,
+penyelarasan dengan mesin V3-16aR2, dan pemutakhiran panduan
+dicatat di laporan V3-16cR2 di `fase1/`.
+
 ## Tata letak
 
 Tiap kasus adalah satu direktori di bawah `fixtures/` dengan
