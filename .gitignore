@@ -124,3 +124,7 @@ infra/data/
 
 # Fork web: dokumen fork di root BOLEH di-commit (lihat seksi 3 dokumen hygiene)
 !FORK.md
+
+# Fork web: runbook infra BOLEH di-commit (pola docs/ di atas meng-ignore-nya)
+!infra/docs/
+!infra/docs/**

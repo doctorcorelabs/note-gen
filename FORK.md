@@ -39,7 +39,7 @@ Kode baru fork juga dilisensikan GPLv3.
 
 - dev: cermin pristine upstream. Selalu sama dengan upstream/dev setelah sync. Tidak pernah berisi commit fork.
 - web: trunk fork dan branch default repo fork. Pekerjaan mendarat lewat PR atau push langsung ke web (push langsung dipakai selama Fase 0-1; proteksi branch belum diatur lewat web UI).
-- web/<topik>: branch fitur berumur pendek dari web, dihapus setelah merge.
+- web-<topik>: branch fitur berumur pendek dari web, dihapus setelah merge.
 - upstream-sync-YYYY-MM-DD: branch kerja temporer tiap sync, dibuat dari web, di-PR ke web, lalu dihapus.
 
 Aturan merge: PR fitur ke web memakai squash merge. PR sync upstream ke web memakai merge commit (bukan squash, bukan rebase). Jangan pernah rebase dev atau web setelah di-push.
@@ -68,6 +68,7 @@ Aturan merge: PR fitur ke web memakai squash merge. PR sync upstream ke web mema
 
 ### web-v0.1.0 (belum dirilis)
 
+- 2026-11-14: penamaan branch fitur diperbaiki menjadi `web-<topik>` (AD-24, amandemen atas AD-02; bentuk lama memakai slash dan tidak dapat dipakai berdampingan dengan ref trunk `web`) dan exception `.gitignore` ditambahkan untuk `infra/docs/` agar runbook infra dapat di-commit tanpa `git add -f`.
 - 2026-11-14: keputusan gate S2 diformalkan (AD-22): static export + API terpisah dipertahankan; rumah kanonis registry shim ditetapkan di src/lib/platform/ (AD-23); kalimat branch diperbaiki agar konsisten dengan praktik push langsung Fase 0-1.
 
 - 2026-11-14: boot web POC (a397b86, 7e95e0c): alias Turbopack untuk plugin-store dan api/app, shim Store dan App sementara di src/lib/platform/, guard platform dan guard appDataDir. Shim menyimpan dokumen sebagai plaintext di localStorage dan wajib diganti di Fase 1.
