@@ -43,6 +43,18 @@ import {
 } from './tables.js';
 import type { AuditEventType } from './values.js';
 
+// Row types used by the AuthStore interface, re-exported so handlers
+// and middleware import every store type from this module.
+export type {
+  AccountLockoutRow,
+  AuthSessionRow,
+  AuthUserRow,
+  AuthWorkspaceRow,
+  LoginChallengeRow,
+  RecoveryCodeRow,
+  TotpCredentialRow,
+} from './tables.js';
+
 export class InstallationAlreadyCompletedError extends Error {
   constructor() {
     super('Installation has already completed.');
@@ -60,6 +72,10 @@ export interface CreateSessionInput {
   createdIp: string | null;
   lastSeenIp: string | null;
   createdAt: Date;
+  // Optional: when absent the database default applies. The service
+  // always passes it so session timestamps follow the application
+  // clock (and the controllable test clock), not the database clock.
+  lastSeenAt?: Date;
   absoluteExpiresAt: Date;
   stepUpAt: Date | null;
 }
@@ -98,7 +114,11 @@ export interface AuthStore {
   updateUserPasswordHash(userId: string, passwordHash: string): Promise<void>;
   updateUserLastLogin(userId: string, at: Date): Promise<void>;
   replaceUserPassword(userId: string, input: { passwordHash: string; passwordChangedAt: Date }): Promise<number>;
-  bumpEpochAndRevokeAllSessions(userId: string): Promise<number>;
+  // When an audit event is supplied it is written inside the same
+  // transaction, so a failed audit write fails the revocation
+  // (desain-auth.md transaction discipline for credential-changing
+  // operations). Callers that have no audit event pass nothing.
+  bumpEpochAndRevokeAllSessions(userId: string, audit?: AuditEventInput): Promise<number>;
 
   createSession(input: CreateSessionInput): Promise<AuthSessionRow>;
   findSessionByHash(sessionHash: string): Promise<AuthSessionRow | null>;
@@ -259,7 +279,7 @@ export class DrizzleAuthStore implements AuthStore {
     });
   }
 
-  async bumpEpochAndRevokeAllSessions(userId: string): Promise<number> {
+  async bumpEpochAndRevokeAllSessions(userId: string, audit?: AuditEventInput): Promise<number> {
     return this.db.transaction(async (tx) => {
       const rows = await tx
         .update(authUsers)
@@ -271,6 +291,9 @@ export class DrizzleAuthStore implements AuthStore {
         throw new Error('Epoch bump found no user row.');
       }
       await tx.delete(authSessions).where(eq(authSessions.userId, userId));
+      if (audit !== undefined) {
+        await tx.insert(authAuditEvents).values(audit);
+      }
       return epoch;
     });
   }
