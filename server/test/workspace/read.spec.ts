@@ -444,6 +444,14 @@ describe('workspace read routes', () => {
     expect(huge.statusCode).toBe(200);
     const hugeData = JSON.parse(huge.body) as { data: { entries: unknown[] } };
     expect(hugeData.data.entries).toHaveLength(5);
+    const beyondSafeInteger = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '99999999999999999999999999' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(beyondSafeInteger.statusCode).toBe(200);
+    const beyondData = JSON.parse(beyondSafeInteger.body) as { data: { entries: unknown[] } };
+    expect(beyondData.data.entries).toHaveLength(5);
     const badCursor = await app.inject({
       method: 'GET',
       url: `/api/workspace/list${q({ path: 'pages', cursor: 'not-a-cursor!!' })}`,

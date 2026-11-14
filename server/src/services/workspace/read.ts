@@ -199,11 +199,17 @@ export function parseLimit(raw: unknown, defaultLimit: number, maxLimit: number)
   if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
     throw invalidLimit();
   }
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 1) {
+  // Compare as BigInt so a digit string far beyond the safe-integer
+  // range still clamps to the maximum instead of erroring: the
+  // contract clamps any limit above the maximum (kontrak 1.4).
+  const value = BigInt(raw);
+  if (value < BigInt(1)) {
     throw invalidLimit();
   }
-  return Math.min(value, maxLimit);
+  if (value > BigInt(maxLimit)) {
+    return maxLimit;
+  }
+  return Number(value);
 }
 
 export function parseIncludeMetadata(raw: unknown, defaultValue: boolean): boolean {
