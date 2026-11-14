@@ -83,7 +83,7 @@ export interface CreateSessionInput {
 export interface CreateLoginChallengeInput {
   userId: string;
   challengeHash: string;
-  ip: string | null;
+  createdIp: string | null;
   userAgentHash: string | null;
   expiresAt: Date;
 }

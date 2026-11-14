@@ -243,7 +243,7 @@ export class FakeAuthStore implements AuthStore {
       userId: input.userId,
       challengeHash: input.challengeHash,
       attempts: 0,
-      ip: input.ip,
+      createdIp: input.createdIp,
       userAgentHash: input.userAgentHash,
       expiresAt: input.expiresAt,
       createdAt: new Date(),

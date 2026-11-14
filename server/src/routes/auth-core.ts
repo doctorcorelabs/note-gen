@@ -114,8 +114,10 @@ function requestUserAgent(request: FastifyRequest): string | undefined {
 export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCoreRouteDeps): Promise<void> {
   const auth = deps.auth;
   const originCheck = createOriginPreHandler(auth.canonicalOrigin);
-  const publicRoute = { config: { requiresAuth: false }, preHandler: [originCheck] };
-  const sessionRoute = { config: { requiresAuth: true } };
+  // Factories, not shared objects: Fastify keeps route options, so
+  // each registration gets a fresh options object.
+  const publicRoute = () => ({ config: { requiresAuth: false }, preHandler: [originCheck] });
+  const sessionRoute = () => ({ config: { requiresAuth: true } });
 
   const auditFailed = (request: FastifyRequest, eventType: string) => (): void => {
     request.log.warn({ event: eventType }, 'audit write failed');
@@ -185,7 +187,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // POST /api/auth/setup: first account, only while installation is
   // open. 201 with account id, email, and workspace id. No session
   // is created: the operator logs in through the normal flow.
-  app.post('/api/auth/setup', publicRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/setup', publicRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['setupToken', 'email', 'password', 'workspaceName'])];
     const setupToken = requiredString(body, 'setupToken', issues, { maxCodePoints: 1024 });
@@ -263,7 +265,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // TOTP is off; 202 with a challenge token and no cookie when TOTP
   // is on. Failures are generic and costed identically (see the
   // module header).
-  app.post('/api/auth/login', publicRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/login', publicRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['email', 'password'])];
     const emailRaw = requiredString(body, 'email', issues, { maxCodePoints: 254 });
@@ -336,7 +338,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
       store.createLoginChallenge({
         userId: user.id,
         challengeHash: hashToken(challengeToken),
-        ip: ip ?? null,
+        createdIp: ip ?? null,
         userAgentHash: userAgentHash(requestUserAgent(request)),
         expiresAt: new Date(nowMs + LOGIN_CHALLENGE_MS),
       }),
@@ -347,7 +349,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // POST /api/auth/login/totp: step 2 (TOTP code or recovery code).
   // 200 with the same login success shape. Every failure mode shares
   // one 401 invalid_verification_code.
-  app.post('/api/auth/login/totp', publicRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/login/totp', publicRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['challengeToken', 'code', 'recoveryCode'])];
     const challengeToken = requiredString(body, 'challengeToken', issues, { maxCodePoints: 1024 });
@@ -400,7 +402,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
     // IP binding applies only when an IP was recorded at both steps
     // (desain-auth.md section 1.6); the User-Agent binding is strict
     // (both absent passes, anything else must match exactly).
-    if (challenge.ip !== null && ip !== undefined && challenge.ip !== ip) {
+    if (challenge.createdIp !== null && ip !== undefined && challenge.createdIp !== ip) {
       await bindingFailed();
     }
     if (challenge.userAgentHash !== userAgentHash(userAgent)) {
@@ -463,7 +465,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
 
   // POST /api/auth/logout: delete the current session server-side
   // and clear the cookie. 200 with null data.
-  app.post('/api/auth/logout', sessionRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/logout', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = getPrincipal(request);
     if (principal === undefined) {
       throw ApiError.unauthenticated();
@@ -489,7 +491,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // POST /api/auth/logout-all: delete every session of the account,
   // bump the credential epoch, and clear the cookie. Requires a
   // fresh step-up (403 step_up_required otherwise).
-  app.post('/api/auth/logout-all', sessionRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/logout-all', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = getPrincipal(request);
     if (principal === undefined) {
       throw ApiError.unauthenticated();
@@ -518,7 +520,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
 
   // GET /api/auth/sessions: the requester's own sessions, newest
   // activity first. No session ids, hashes, or CSRF tokens.
-  app.get('/api/auth/sessions', sessionRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/auth/sessions', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = getPrincipal(request);
     if (principal === undefined) {
       throw ApiError.unauthenticated();
@@ -532,7 +534,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // DELETE /api/auth/sessions/:id: revoke one own session. A missing
   // id and an id owned by another account share one 404. Revoking
   // the current session also clears the cookie.
-  app.delete('/api/auth/sessions/:id', sessionRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/api/auth/sessions/:id', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = getPrincipal(request);
     if (principal === undefined) {
       throw ApiError.unauthenticated();
@@ -570,7 +572,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // derived deterministically (no state change in this GET). The
   // frontend re-fetches it after a reload, when its in-memory copy
   // is gone. Never cached.
-  app.get('/api/auth/csrf', sessionRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/auth/csrf', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = getPrincipal(request);
     if (principal === undefined) {
       throw ApiError.unauthenticated();
@@ -594,7 +596,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // blocks entry. The envelope shape here is what the guard checks;
   // the data fields beyond ok are for the UI and are intentionally
   // tolerant on the guard side.
-  app.get('/api/auth/me', sessionRoute, async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/auth/me', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = getPrincipal(request);
     if (principal === undefined) {
       throw ApiError.unauthenticated();
@@ -631,7 +633,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // while it answers 404, and the response advertises nothing about
   // the deployment mode. The Origin check still applies: this is a
   // public mutation.
-  app.post('/api/auth/register', publicRoute, async () => {
+  app.post('/api/auth/register', publicRoute(), async () => {
     throw ApiError.notFound();
   });
 }

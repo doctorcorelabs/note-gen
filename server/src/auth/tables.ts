@@ -172,7 +172,7 @@ export const loginChallenges = pgTable(
       .references(() => authUsers.id, { onDelete: 'cascade' }),
     challengeHash: text('challenge_hash').notNull(),
     attempts: integer('attempts').notNull().default(0),
-    ip: inet('ip'),
+    createdIp: inet('created_ip'),
     userAgentHash: text('user_agent_hash'),
     expiresAt: tz('expires_at').notNull(),
     createdAt: tz('created_at').notNull().defaultNow(),
