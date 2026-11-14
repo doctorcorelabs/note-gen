@@ -167,8 +167,8 @@ else
   if [ -n "$BASE" ]; then
     echo "layer3: scanning added diff lines for secret patterns (file paths only)"
     git diff --unified=0 --no-color "$BASE...HEAD" -- 2>/dev/null | awk '
-      /^\\+\\+\\+ b\\// { file = substr($0, 7); next }
-      /^\\+/ {
+      substr($0, 1, 6) == "+++ b/" { file = substr($0, 7); next }
+      substr($0, 1, 1) == "+" {
         line = substr($0, 2)
         if (line ~ /ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_.-]{10,}|AKIA[0-9A-Z]{16}/) found[file] = 1
         else if (line ~ /-----BEGIN [A-Z ]*PRIVATE KEY-----/) found[file] = 1
