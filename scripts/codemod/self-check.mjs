@@ -218,6 +218,7 @@ function hashDir(dir) {
   check("write G1 exit 0", r1.status === 0, `got ${r1.status}: ${r1.stderr}`);
   const r2 = runCli(["--wave", "G1", "--root", work, "--write", "--no-diff", "--report", "r2.json", ...rel], work);
   const rep2 = JSON.parse(readFileSync(resolve(work, "r2.json"), "utf8"));
+  check("idempotent: second write exit 0", r2.status === 0, `got ${r2.status}: ${r2.stderr}`);
   check("idempotent: second write transforms 0", rep2.totals.transformed === 0, JSON.stringify(rep2.totals));
   check("idempotent: first write transformed > 0", rep1.totals.transformed > 0, JSON.stringify(rep1.totals));
   const f01 = readFileSync(resolve(work, "engine-f01-store.ts"), "utf8");

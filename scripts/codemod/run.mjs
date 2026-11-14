@@ -15,7 +15,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve, relative, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import { transformFile } from "./engine.mjs";
 import { unifiedDiff, summarize, printSummary } from "./report.mjs";
 import { WAVE_SPECIFIERS, KNOWN_SPECIFIERS } from "./mappings.mjs";
