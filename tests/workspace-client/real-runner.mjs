@@ -17,7 +17,7 @@
 import { randomBytes } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, chown } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile, chown } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -284,14 +284,15 @@ async function runMigrations(config, databaseUrl) {
     return { status: "unavailable", reason: "built migrator not found at server/dist/db/migrate.js" };
   }
   const script = [
-    "import { runMigrations } from process.argv[1];",
+    "import { pathToFileURL } from 'node:url';",
+    "const { runMigrations } = await import(pathToFileURL(process.env.WS_REAL_MIGRATE_JS).href);",
     "const out = await runMigrations({ databaseUrl: process.env.WS_REAL_DATABASE_URL });",
     "console.log(JSON.stringify({ appliedTags: out.appliedTags, driftCurrent: out.drift.current }));",
   ].join("\n");
   const result = await runCommand(
     process.execPath,
-    ["--input-type=module", "-e", script, migrateJs],
-    { cwd: config.backendDir, env: { ...process.env, WS_REAL_DATABASE_URL: databaseUrl }, timeoutMs: 120000 },
+    ["--input-type=module", "-e", script],
+    { cwd: config.backendDir, env: { ...process.env, WS_REAL_DATABASE_URL: databaseUrl, WS_REAL_MIGRATE_JS: migrateJs }, timeoutMs: 120000 },
   );
   if (result.code !== 0) {
     return { status: "failed", tail: redact(tailLines(`${result.stdout}\n${result.stderr}`, 15)) };
@@ -672,6 +673,8 @@ async function main() {
         setupCode: auth.setupCode ?? null,
         loginStatus: auth.loginStatus ?? null,
         loginCode: auth.loginCode ?? null,
+        loginProbeStatus: auth.loginProbeStatus ?? null,
+        loginProbeCode: auth.loginProbeCode ?? null,
         setupNote: auth.setupNote ?? null,
       };
       if (auth.status !== "ok") {
