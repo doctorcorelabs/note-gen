@@ -32,7 +32,8 @@
 
 set -u
 
-ROOT=$(git rev-parse --show-toplevel 2>/dev/null || CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -z "$ROOT" ]; then ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd); fi
 cd "$ROOT" || exit 1
 
 SKIP_CONTRACT=0

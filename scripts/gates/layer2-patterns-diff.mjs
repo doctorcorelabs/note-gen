@@ -20,9 +20,19 @@
 // given): every changed line under src/ must sit inside an import
 // statement (static, type, side-effect, export-from, or dynamic
 // import(), including multi-line statements and Promise.all batches),
-// or be blank. With --diff-scope import-and-qualifier, paired
-// removed/added lines in one hunk that differ only by a
-// platform.<adapter>. qualifier are also allowed. Files outside src/
+// or be blank. With --diff-scope import-and-qualifier, two further
+// allowances apply, both recorded in the invocation:
+//   (a) paired removed/added lines in one hunk that differ only by a
+//       platform.<adapter>. qualifier (in either capitalization:
+//       Store.load vs platform.store.load, invoke vs
+//       platform.invoke.invoke);
+//   (b) batch replacement: when every removed line of a hunk sits
+//       inside an import statement, added lines that are simple
+//       platform-access statements (assignment or expression over
+//       platform.<adapter>...) are allowed. This covers the V1-05
+//       Promise.all batch pattern, which is replaced as one unit.
+//       Anything else fails closed for manual review.
+// Files outside src/
 // may change only if they are the two allowlists or .eslintrc.json.
 // Added or deleted source files fail, except the G4 deletion of
 // src/lib/tauri-event-listener.ts (the transitional re-export).
@@ -186,6 +196,12 @@ function stripForDepth(line) {
     .replace(/`(?:[^`\\]|\\.)*`/g, "``");
 }
 
+// A dynamic import may sit inside a larger statement (Promise.all
+// batch, await expression). The whole statement is the import unit:
+// expand upward from the import( line while the previous line does
+// not end the previous statement, and scan forward until the
+// statement terminator. Expansion stops before block openers,
+// statement terminators, blank lines, and other import/export lines.
 function importLineSet(lines) {
   const inImport = new Set();
   let inBlockComment = false;
@@ -208,11 +224,24 @@ function importLineSet(lines) {
     const isExportFrom = /^\s*export\s/.test(line);
     const hasDynamic = line.includes("import(") || line.includes("import (");
     if (!isStatic && !isExportFrom && !hasDynamic) continue;
+    let start = i;
+    if (hasDynamic && !isStatic) {
+      // Expand upward to the statement start (at most 10 lines).
+      for (let up = i - 1; up >= Math.max(0, i - 10); up -= 1) {
+        const prev = lines[up];
+        const ptrim = prev.trim();
+        if (!ptrim) break;
+        if (/[;{}]\s*$/.test(prev)) break;
+        if (/^\s*(import|export)\b/.test(prev)) break;
+        start = up;
+      }
+    }
     // Scan the statement, tracking bracket depth, up to its terminator.
     let depth = 0;
-    let end = i;
+    let end = start;
     let text = "";
-    for (let j = i; j < Math.min(lines.length, i + 60); j += 1) {
+    for (let j = start; j < Math.min(lines.length, start + 60); j += 1) {
+      if (j > start && depth <= 0 && /^\s*$/.test(lines[j])) { end = j - 1; break; }
       text += `${lines[j]}\n`;
       const clean = stripForDepth(lines[j]);
       for (const ch of clean) {
@@ -222,18 +251,51 @@ function importLineSet(lines) {
       end = j;
       if (depth <= 0 && /;/.test(lines[j])) break;
       if (isStatic && depth <= 0 && /\bfrom\s+['"]/.test(lines[j])) break;
-      if (hasDynamic && !isStatic && depth <= 0 && j > i) break;
     }
     if (isExportFrom && !/\bfrom\s+['"]/.test(text)) continue; // plain export, not a module specifier
     if (isStatic && !text.includes("from") && !/import\s*['"]/.test(text) && !text.includes("import(")) continue;
-    for (let k = i; k <= end; k += 1) inImport.add(k);
+    for (let k = start; k <= end; k += 1) inImport.add(k);
     i = end;
   }
   return inImport;
 }
 
-function normalizeQualifier(line) {
-  return line.replace(/platform\.[A-Za-z_$][A-Za-z0-9_$]*\./g, "").replace(/\s+/g, " ").trim();
+function collapseWs(line) {
+  return line.replace(/\s+/g, " ").trim();
+}
+
+// Two qualifier normalizations, tried in both directions when pairing
+// removed/added lines: strip platform.<adapter>. entirely (invoke vs
+// platform.invoke.invoke), or replace it with the capitalized adapter
+// name (Store.load vs platform.store.load).
+function stripPlatform(line) {
+  return collapseWs(line.replace(/platform\.[A-Za-z_$][A-Za-z0-9_$]*\./g, ""));
+}
+function capitalizePlatform(line) {
+  return collapseWs(line.replace(/platform\.([A-Za-z_$][A-Za-z0-9_$]*)\./g, (_, n) => `${n.charAt(0).toUpperCase()}${n.slice(1)}.`));
+}
+function qualifierPair(removedText, addedText) {
+  const r = collapseWs(removedText);
+  const a = collapseWs(addedText);
+  if (!r || !a || r === a) return false;
+  const forms = (t) => [t, stripPlatform(t), capitalizePlatform(t)];
+  for (const rf of forms(r)) {
+    for (const af of forms(a)) {
+      if (rf === af) return true;
+    }
+  }
+  return false;
+}
+
+// Simple platform-access statements allowed as batch replacements:
+// a declaration assigned from platform.<adapter>..., or a bare/return/
+// await expression over platform.<adapter>... . Anything more complex
+// fails closed.
+function isSimplePlatformStatement(text) {
+  const t = collapseWs(text);
+  if (/^(const|let|var)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*(await\s+)?platform\.[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*(\(.*\))?)?;?$/.test(t)) return true;
+  if (/^(return\s+|await\s+)?platform\.[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*(\(.*\))?)?;?$/.test(t)) return true;
+  return false;
 }
 
 // ------------------------------------------------------------- diff check
@@ -379,18 +441,30 @@ function checkDiff(root, opts) {
     const newImport = importLineSet(newContent.split("\n"));
     const badRemoved = [];
     const badAdded = [];
-    // Qualifier pairing applies per hunk when the scope allows it.
+    // Qualifier pairing + batch replacement apply per hunk when the
+    // scope allows them.
     const pairedRemoved = new Set();
     const pairedAdded = new Set();
+    const batchAdded = new Set();
     if (opts.diffScope === "import-and-qualifier") {
       for (const h of entry.hunks) {
         const n = Math.min(h.removed.length, h.added.length);
         for (let k = 0; k < n; k += 1) {
           const r = h.removed[k];
           const a = h.added[k];
-          if (normalizeQualifier(r.text) === normalizeQualifier(a.text) && r.text.trim() !== "" && a.text.trim() !== "") {
+          if (qualifierPair(r.text, a.text)) {
             pairedRemoved.add(`${r.no}:${r.text}`);
             pairedAdded.add(`${a.no}:${a.text}`);
+          }
+        }
+        // Batch replacement: removed side entirely import lines.
+        const removedAllImport = h.removed.length > 0 && h.removed.every(
+          (r) => r.text.trim() === "" || oldImport.has(r.no - 1) || pairedRemoved.has(`${r.no}:${r.text}`),
+        );
+        if (removedAllImport) {
+          for (const a of h.added) {
+            if (a.text.trim() === "" || newImport.has(a.no - 1)) continue;
+            if (isSimplePlatformStatement(a.text)) batchAdded.add(`${a.no}:${a.text}`);
           }
         }
       }
@@ -403,6 +477,7 @@ function checkDiff(root, opts) {
     for (const a of entry.added) {
       if (a.text.trim() === "") continue;
       if (pairedAdded.has(`${a.no}:${a.text}`)) continue;
+      if (batchAdded.has(`${a.no}:${a.text}`)) continue;
       if (!newImport.has(a.no - 1)) badAdded.push(`${rel}:${a.no}: ${a.text.slice(0, 100)}`);
     }
     if (badRemoved.length > 0 || badAdded.length > 0) {
