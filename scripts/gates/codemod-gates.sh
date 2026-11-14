@@ -26,6 +26,10 @@
 #   sh scripts/gates/codemod-gates.sh
 #   sh scripts/gates/codemod-gates.sh --wave G1 --base <trunk-sha>
 #   sh scripts/gates/codemod-gates.sh --wave G2 --base <trunk-sha> --require-smoke
+#   sh scripts/gates/codemod-gates.sh --wave G1 --base <trunk-sha> --layers 2 \
+#     --engine-cmd "node scripts/codemod/run.mjs --wave G1 --files <list-file> --strict --no-diff --report <report-path>"
+# With --report, layer 2 requires the engine JSON report to show
+# transformed=0, skipped=0, errors=0 (see layer2-patterns-diff.mjs).
 #
 # Exit 0 only when every selected layer passes. Exit 2 on bad arguments.
 

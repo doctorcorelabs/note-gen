@@ -48,10 +48,19 @@
 // closed for manual review.
 //
 // Subcheck C, engine idempotence (only when --engine-cmd is given):
-// the codemod engine CLI (V3-16a) is expected to support a dry-run
-// command whose stdout is empty when the tree is already migrated.
-// The command is run through the shell; a non-zero exit or any stdout
-// fails. Without --engine-cmd this subcheck is reported SKIP.
+// the codemod engine CLI (V3-16a) is run in dry-run mode over the
+// wave's files. When the command includes "--report <path>", the
+// gate reads that JSON report (schema version 1) and requires
+// totals.transformed == 0, totals.skipped == 0 and totals.errors == 0
+// (a skipped file means the engine declined a declaration, so the
+// wave is not cleanly migrated). A missing or unparseable report
+// fails closed. When the command has no --report flag, the generic
+// contract applies: exit 0 and empty stdout. The command is run
+// through the shell; a non-zero exit fails. Without --engine-cmd
+// this subcheck is reported SKIP. Wiring example (V3-16a CLI, branch
+// web-codemod-engine):
+//   node scripts/codemod/run.mjs --wave G1 --files <list-file>
+//     --strict --no-diff --report <report-path>
 //
 // Usage:
 //   node scripts/gates/layer2-patterns-diff.mjs [--wave G1|G2|G3|G4|G5|all]
@@ -490,18 +499,52 @@ function checkDiff(root, opts) {
 }
 
 // ---------------------------------------------------------------- engine
-function checkEngine(engineCmd, root) {
-  try {
-    const out = execSync(engineCmd, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 600000 });
-    if (out.trim() !== "") {
-      return [`engine dry-run produced output (expected empty when already migrated); first 500 chars: ${out.slice(0, 500)}`];
+function reportPathFromCommand(engineCmd) {
+  const parts = engineCmd.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i].replace(/^"|"$/g, "");
+    if (part === "--report" && i + 1 < parts.length) {
+      return parts[i + 1].replace(/^"|"$/g, "");
     }
-    console.log("layer2 engine: dry-run output empty (idempotent)");
-    return [];
+    if (part.startsWith("--report=")) return part.slice("--report=".length);
+  }
+  return null;
+}
+
+function checkEngine(engineCmd, root) {
+  let out;
+  try {
+    out = execSync(engineCmd, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 600000 });
   } catch (err) {
     const detail = (err && err.stderr ? String(err.stderr) : String(err)).slice(0, 500);
     return [`engine dry-run command failed: ${detail}`];
   }
+  const reportPath = reportPathFromCommand(engineCmd);
+  if (reportPath !== null) {
+    const absReport = path.isAbsolute(reportPath) ? reportPath : path.join(root, reportPath);
+    let report;
+    try {
+      report = JSON.parse(fs.readFileSync(absReport, "utf8"));
+    } catch (err) {
+      return [`engine report ${reportPath} missing or unparseable: ${String(err).slice(0, 200)}`];
+    }
+    const totals = report && report.totals;
+    if (!totals || typeof totals.transformed !== "number" || typeof totals.errors !== "number" || typeof totals.skipped !== "number") {
+      return [`engine report ${reportPath} has no usable totals (expected schema version 1)`];
+    }
+    console.log(`layer2 engine: report totals: transformed=${totals.transformed} unchanged=${totals.unchanged} skipped=${totals.skipped} errors=${totals.errors}`);
+    if (totals.transformed !== 0 || totals.skipped !== 0 || totals.errors !== 0) {
+      const bad = (report.files || []).filter((f) => f.status !== "unchanged").map((f) => `${f.path} (${f.status})`).slice(0, 10);
+      return [`engine dry-run not idempotent: transformed=${totals.transformed} skipped=${totals.skipped} errors=${totals.errors}${bad.length > 0 ? `; ${bad.join(", ")}` : ""}`];
+    }
+    console.log("layer2 engine: dry-run report clean (idempotent)");
+    return [];
+  }
+  if (out.trim() !== "") {
+    return [`engine dry-run produced output (expected empty when already migrated); first 500 chars: ${out.slice(0, 500)}`];
+  }
+  console.log("layer2 engine: dry-run output empty (idempotent)");
+  return [];
 }
 
 function main() {
