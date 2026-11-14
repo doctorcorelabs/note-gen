@@ -157,7 +157,7 @@ function multipartHeaders(boundary: string = BOUNDARY) {
 describe('multipart shape parser', () => {
   it('describes one file part without keeping its bytes', () => {
     const body = multipartBody([
-      { name: 'archive', filename: 'backup.ngwbackup', contentType: 'application/octet-stream', content: 'secret-bytes' },
+      { name: 'archive', filename: 'backup.ngwbackup', contentType: 'application/octet-stream', content: 'opaque-bytes' },
     ]);
     const parts = parseMultipartParts(body, BOUNDARY);
     expect(parts).toEqual([
