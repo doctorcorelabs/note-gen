@@ -1034,6 +1034,9 @@ describe('L2: progressive lockout ladder [reference harness, fake clock]', () =>
     });
   }
 
+  // Timeout raised by V3-01cR2: six injects plus harness build exceed
+  // the 5000 ms default under shared-CPU load (observed 6213 ms);
+  // the assertions are unchanged.
   it('five failures answer 401; the sixth, even with the correct password, answers 429 with Retry-After 900', async () => {
     const { app } = await buildHarness();
     for (let i = 0; i < 5; i += 1) {
@@ -1048,7 +1051,7 @@ describe('L2: progressive lockout ladder [reference harness, fake clock]', () =>
     expect(locked.headers['retry-after']).toBe('900');
     expect(locked.headers).not.toHaveProperty('x-ratelimit-limit');
     await app.close();
-  });
+  }, 15000);
 
   it('attempts during lockout do not extend it: lockedUntil and the failure count stay fixed', async () => {
     const { app, state } = await buildHarness();
