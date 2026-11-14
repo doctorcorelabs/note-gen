@@ -4,22 +4,23 @@
 
 // Wave M1: foundation tables (auth, workspace, settings, secrets).
 //
-// Source: fase1/desain-sql-adapter.md section 1.2 (V1-03), wave M1.
+// Source: fase1/desain-sql-adapter.md section 1.2 (V1-03), wave M1,
+// with the auth shape of fase1/desain-auth.md section 1 (V1-08)
+// applied by the forward-only M8 migrations 0001-0003 (AD-25).
 // Table and column names are snake_case in Postgres; the service layer
 // maps them to camelCase JSON. Times are timestamptz in the database and
 // epoch milliseconds in the API. Status values use text plus CHECK, never
 // a Postgres enum type, so new values need no type migration.
 //
-// M8 tighten state (migration 0002): email is NOT NULL with a unique
-// lower() index, credential_epoch is integer, session tightening
-// columns are NOT NULL, and owner_user_id carries its RESTRICT foreign
-// key. This state is only valid after the data procedure has run on an
-// expand-state database. Old M1 columns are still present; they are
-// removed only by the contract migration 0003. Do not read this
-// intermediate state as the final shape; the final shape is documented
-// in laporan-v3-01a-m8.md.
+// History: the 0000 migration holds the V1-03 M1 shape (login,
+// api_tokens, owner_id, devices table). Migration 0001 added the V1-08
+// columns and tables, migration 0002 tightened them after the data
+// procedure ran, migration 0003 removes the old M1 columns, and
+// migration 0004 removes the devices and api_tokens tables. This
+// intermediate state still defines those two tables; the final shape
+// is reached at migration 0004.
 
-import { desc, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
@@ -54,33 +55,27 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    login: text('login').notNull(),
+    // The only login identifier. Uniqueness is case-insensitive via
+    // the lower() index below, without the citext extension (R1).
+    email: text('email').notNull(),
     passwordHash: text('password_hash').notNull(),
-    totpSecret: bytea('totp_secret'),
+    passwordChangedAt: timestamp('password_changed_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
     credentialEpoch: integer('credential_epoch').notNull().default(0),
-    isAdmin: boolean('is_admin').notNull().default(false),
-    suspendedAt: timestamp('suspended_at', { withTimezone: true, mode: 'date' }),
+    role: text('role').notNull().default('user'),
+    status: text('status').notNull().default('active'),
+    totpEnabled: boolean('totp_enabled').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    // M8 tighten: email is NOT NULL with a unique lower() index; the
-    // data procedure must have backfilled it before migration 0002.
-    email: text('email').notNull(),
-    passwordChangedAt: timestamp('password_changed_at', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    role: text('role').notNull().default('user'),
-    status: text('status').notNull().default('active'),
-    totpEnabled: boolean('totp_enabled').notNull().default(false),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true, mode: 'date' }),
     disabledAt: timestamp('disabled_at', { withTimezone: true, mode: 'date' }),
     disabledReason: text('disabled_reason'),
   },
   (t) => [
-    // Login uniqueness is case-insensitive without the citext extension.
-    uniqueIndex('users_login_lower_key').using('btree', sql`lower(${t.login})`),
     uniqueIndex('users_email_unique_idx').using('btree', sql`lower(${t.email})`),
     index('users_status_idx').on(t.status),
     check('users_role_check', sql`${t.role} IN ('user', 'admin')`),
@@ -88,6 +83,15 @@ export const users = pgTable(
   ],
 );
 
+// M8 contract-columns state: the devices and api_tokens tables are
+// still defined here. Their columns are already unreferenced (the
+// sessions device link and all old columns are gone); the tables
+// themselves are dropped by migration 0004, which is generated only
+// after 0003 has removed the columns and constraints. A single
+// contract entry cannot drop both, because drizzle-kit emits
+// DROP TABLE before DROP CONSTRAINT and the CASCADE drop of the
+// devices table removes the sessions FK before its explicit
+// DROP CONSTRAINT runs. See laporan-v3-01a-m8.md.
 export const devices = pgTable(
   'devices',
   {
@@ -110,25 +114,25 @@ export const sessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    deviceId: uuid('device_id').references(() => devices.id, { onDelete: 'set null' }),
     // SHA-256 of the raw opaque session id. The raw value is never stored.
     sessionHash: text('session_hash').notNull(),
-    deviceLabel: text('device_label').notNull(),
-    ipHash: text('ip_hash').notNull(),
-    userAgentHash: text('user_agent_hash').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-    idleExpiresAt: timestamp('idle_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-    lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
-    // M8 tighten: csrf_token_hash and absolute_expires_at are NOT NULL;
-    // the data procedure must have invalidated pre-M8 sessions first.
+    // SHA-256 of the raw CSRF token for this session.
     csrfTokenHash: text('csrf_token_hash').notNull(),
+    // Copy of users.credential_epoch at session creation time.
     credentialEpoch: integer('credential_epoch').notNull().default(0),
+    deviceLabel: text('device_label').notNull(),
+    // Raw User-Agent, truncated to 512 characters by the service layer.
     userAgent: text('user_agent'),
     createdIp: inet('created_ip'),
     lastSeenIp: inet('last_seen_ip'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    // created_at + 30 days, never extended. Idle expiry is computed in
+    // code from last_seen_at + 24 hours, not from a column.
     absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    // Kept for audit compatibility (R6); revocation is a hard delete
+    // and the audit trail lives in audit_events.
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
     stepUpAt: timestamp('step_up_at', { withTimezone: true, mode: 'date' }),
   },
   (t) => [
@@ -143,11 +147,6 @@ export const workspaces = pgTable(
   'workspaces',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    ownerId: uuid('owner_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    // M8 tighten: owner_user_id is NOT NULL with the RESTRICT foreign
-    // key kept from M1 (R8); the data procedure backfilled it first.
     ownerUserId: uuid('owner_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -160,10 +159,7 @@ export const workspaces = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [
-    index('workspaces_owner_id_idx').on(t.ownerId),
-    index('workspaces_owner_user_id_idx').on(t.ownerUserId),
-  ],
+  (t) => [index('workspaces_owner_user_id_idx').on(t.ownerUserId)],
 );
 
 export const workspaceMembers = pgTable(
@@ -176,8 +172,6 @@ export const workspaceMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
-    // M8 expand: backfilled by the column default (migration time) for
-    // pre-existing rows; recorded in laporan-v3-01a-m8.md.
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (t) => [
@@ -228,6 +222,8 @@ export const secrets = pgTable(
   (t) => [uniqueIndex('secrets_user_kind_ref_key').on(t.userId, t.kind, t.ref)],
 );
 
+// M8 contract-columns state: api_tokens is still defined here and is
+// dropped by migration 0004, for the reason stated above devices.
 export const apiTokens = pgTable(
   'api_tokens',
   {
@@ -254,24 +250,24 @@ export const auditEvents = pgTable(
   'audit_events',
   {
     id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
-    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
-    action: text('action').notNull(),
-    targetType: text('target_type').notNull(),
-    targetId: text('target_id').notNull(),
-    ipHash: text('ip_hash').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    // M8 expand: V1-08 columns, all nullable. The data procedure folds
-    // the old columns into these; event_type has no CHECK (the catalog
-    // in desain-auth 12.1 is enforced by code, not by constraint).
+    // Subject of the event. Null for events without an identified
+    // account (for example a failed login for an unknown email; the
+    // email is never recorded, in metadata or elsewhere).
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Account that performed the action; differs from the subject for
+    // admin actions.
     actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // From the catalog in desain-auth 12.1, enforced by code, not by
+    // a CHECK constraint.
     eventType: text('event_type'),
     ip: inet('ip'),
     userAgent: text('user_agent'),
+    // Non-secret detail only. Must never hold passwords, tokens,
+    // secrets, or credential hashes.
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (t) => [
-    index('audit_events_actor_created_idx').on(t.actorId, desc(t.createdAt)),
     index('audit_events_user_created_idx').on(t.userId, t.createdAt),
     index('audit_events_event_created_idx').on(t.eventType, t.createdAt),
     index('audit_events_created_idx').on(t.createdAt),
