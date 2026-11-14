@@ -1,6 +1,8 @@
 'use client'
+// Modified for the web fork on 2026-11-14; see FORK.md.
 
 import { ThemeProvider } from "@/components/theme-provider"
+import { isTauri } from "@/lib/platform/detect"
 import { CloseBehaviorGuard } from "@/components/close-behavior-guard"
 import useSettingStore from "@/stores/setting"
 import { useEffect, useRef, useState } from "react";
@@ -347,6 +349,11 @@ export default function RootLayout({
 
     void reportAppStart()
 
+    // Web fork (Fase 1, V2-08): runtime mode for the explicit step
+    // decisions below (steps 7, 11, 18). Desktop runs every step as
+    // upstream; web skips or no-ops only the steps named there.
+    const webMode = !isTauri()
+
     const initializeApp = async () => {
       try {
         await initSettingData()
@@ -358,8 +365,16 @@ export default function RootLayout({
         const { resumeWorkspacePathMoves } = await import('@/lib/sync/workspace-path-moves')
         resumeWorkspacePathMoves()
         setPluginsReady(true)
-        const { refreshSelfHostedSyncRuntime } = await import('@/lib/self-hosted-sync/lifecycle')
-        await refreshSelfHostedSyncRuntime()
+        // Web fork (Fase 1, V2-08): step 7 is skipped explicitly in web
+        // mode. Self-hosted sync is not part of the web MVP (AD-11), and
+        // this step reads the self_hosted_sync_profiles table that AD-05
+        // removed from the Postgres schema, so running it would fail even
+        // against a healthy database and kill steps 8-22 through the
+        // shared catch below. Desktop behavior is unchanged.
+        if (!webMode) {
+          const { refreshSelfHostedSyncRuntime } = await import('@/lib/self-hosted-sync/lifecycle')
+          await refreshSelfHostedSyncRuntime()
+        }
         const { runMemoryMaintenance } = await import('@/lib/memory/auto-memory')
         void runMemoryMaintenance()
         const {
@@ -368,7 +383,14 @@ export default function RootLayout({
         } = await import('@/db/memories')
         await reconcileMemoryEmbeddingModel()
         void reindexPendingMemories()
-        await initAutoDataSyncRuntime()
+        // Web fork (Fase 1, V2-08): step 11 is skipped explicitly in web
+        // mode. Auto data sync reads provider tokens from the store, and
+        // AD-16 forbids whole secrets from reaching the browser; remote
+        // sync protocols are also outside the web MVP (AD-11). Desktop
+        // behavior is unchanged.
+        if (!webMode) {
+          await initAutoDataSyncRuntime()
+        }
         if (cancelled) return
         const { initWikiRuntime } = await import('@/lib/wiki/runtime')
         const cleanupWiki = await initWikiRuntime()
@@ -383,7 +405,14 @@ export default function RootLayout({
         await useArticleStore.getState().initVectorIndexedFiles()
         if (cancelled) return
 
-        const cleanupQuickRecord = await initQuickRecordText()
+        // Web fork (Fase 1, V2-08): step 18 is an explicit no-op in web
+        // mode. There is no separate quick-record window in a browser
+        // (AD-20); the replacement is the record form in the main
+        // window. The no-op returns the same cleanup shape, so the
+        // cancelled/stop wiring below is unchanged. Without this,
+        // getCurrentWindow().listen() rejects and kills steps 19-22
+        // through the shared catch below. Desktop behavior is unchanged.
+        const cleanupQuickRecord: () => void = webMode ? () => {} : await initQuickRecordText()
         if (cancelled) {
           cleanupQuickRecord()
           return
