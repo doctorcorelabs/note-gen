@@ -8,6 +8,34 @@
       "when": 1794676581335,
       "tag": "0000_initial-schema-m1-m7",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794689969905,
+      "tag": "0001_m8-expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794690136886,
+      "tag": "0002_m8-tighten",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794690604409,
+      "tag": "0003_m8-contract-columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794691610105,
+      "tag": "0004_m8-contract-tables",
+      "breakpoints": true
     }
   ]
 }

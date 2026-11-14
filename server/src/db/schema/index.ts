@@ -2,7 +2,7 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Schema entry point: every table of waves M1 to M7, in dependency order.
+// Schema entry point: every table of waves M1 to M8, in dependency order.
 //
 // drizzle-kit reads this file (see server/drizzle.config.ts). The schema
 // object below is the single registry passed to drizzle(); endpoint
@@ -17,6 +17,7 @@
 // since they change no database object.
 
 export * from './m1-foundation.js';
+export * from './m8-auth.js';
 export * from './m2-records.js';
 export * from './m3-conversations.js';
 export * from './m4-canvas-files.js';
@@ -25,9 +26,7 @@ export * from './m6-wiki.js';
 export * from './m7-memory.js';
 
 import {
-  apiTokens,
   auditEvents,
-  devices,
   idempotencyKeys,
   sessions,
   settingRevisions,
@@ -37,6 +36,16 @@ import {
   workspaceMembers,
   workspaces,
 } from './m1-foundation.js';
+import {
+  accountActionTokens,
+  accountLockouts,
+  agentTokens,
+  installationState,
+  loginChallenges,
+  rateLimitBuckets,
+  recoveryCodes,
+  totpCredentials,
+} from './m8-auth.js';
 import { activityEvents, markTags, marks, notes, tags } from './m2-records.js';
 import { chatMessages, conversationCompactions, conversations } from './m3-conversations.js';
 import { canvases, fileEvents, files, imageAnalysisCache } from './m4-canvas-files.js';
@@ -48,16 +57,22 @@ import { memories, memoryJobs, memoryPolicies } from './m7-memory.js';
 // the bytea column builder) can leak into the Drizzle schema object.
 export const schema = {
   users,
-  devices,
   sessions,
   workspaces,
   workspaceMembers,
   settings,
   settingRevisions,
   secrets,
-  apiTokens,
   auditEvents,
   idempotencyKeys,
+  agentTokens,
+  totpCredentials,
+  recoveryCodes,
+  loginChallenges,
+  accountActionTokens,
+  rateLimitBuckets,
+  accountLockouts,
+  installationState,
   tags,
   marks,
   markTags,

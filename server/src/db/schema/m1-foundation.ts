@@ -4,21 +4,25 @@
 
 // Wave M1: foundation tables (auth, workspace, settings, secrets).
 //
-// Source: fase1/desain-sql-adapter.md section 1.2 (V1-03), wave M1.
+// Source: fase1/desain-sql-adapter.md section 1.2 (V1-03), wave M1,
+// with the auth shape of fase1/desain-auth.md section 1 (V1-08)
+// applied by the forward-only M8 migrations 0001-0004 (AD-25).
 // Table and column names are snake_case in Postgres; the service layer
 // maps them to camelCase JSON. Times are timestamptz in the database and
 // epoch milliseconds in the API. Status values use text plus CHECK, never
 // a Postgres enum type, so new values need no type migration.
 //
-// Reconciliation note (see laporan-db-schema.md): the auth design V1-08
-// owns the final shape of users, sessions, and tokens (assumption A2 in
-// V1-03). This file implements the V1-03 M1 shape exactly so the initial
-// migration holds 34 tables. Auth deltas from V1-08 (email login, role
-// and status columns, CSRF hash, credential epoch copies, TOTP and
-// lockout tables) arrive as a later forward-only migration owned by the
-// auth worker, not by editing this wave.
+// History: the 0000 migration holds the V1-03 M1 shape (login,
+// api_tokens, owner_id, devices table). Migration 0001 added the V1-08
+// columns and tables, migration 0002 tightened them after the data
+// procedure ran, migration 0003 removed the old M1 columns, and
+// migration 0004 removed the devices and api_tokens tables. This file
+// is the final, post-M8 shape. The contract phase needed two journal
+// entries because drizzle-kit emits DROP TABLE before DROP CONSTRAINT
+// in a single generate, which fails on the sessions FK; see
+// laporan-v3-01a-m8.md.
 
-import { desc, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
@@ -42,41 +46,43 @@ export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => 'bytea',
 });
 
+// IP address column type. drizzle-orm pg-core has no built-in inet
+// builder, so the type is declared explicitly, mirroring bytea above.
+// The postgres.js driver maps inet to and from string values.
+export const inet = customType<{ data: string; driverData: string }>({
+  dataType: () => 'inet',
+});
+
 export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    login: text('login').notNull(),
+    // The only login identifier. Uniqueness is case-insensitive via
+    // the lower() index below, without the citext extension (R1).
+    email: text('email').notNull(),
     passwordHash: text('password_hash').notNull(),
-    totpSecret: bytea('totp_secret'),
-    credentialEpoch: bigint('credential_epoch', { mode: 'number' }).notNull().default(0),
-    isAdmin: boolean('is_admin').notNull().default(false),
-    suspendedAt: timestamp('suspended_at', { withTimezone: true, mode: 'date' }),
+    passwordChangedAt: timestamp('password_changed_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    credentialEpoch: integer('credential_epoch').notNull().default(0),
+    role: text('role').notNull().default('user'),
+    status: text('status').notNull().default('active'),
+    totpEnabled: boolean('totp_enabled').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true, mode: 'date' }),
+    disabledAt: timestamp('disabled_at', { withTimezone: true, mode: 'date' }),
+    disabledReason: text('disabled_reason'),
   },
   (t) => [
-    // Login uniqueness is case-insensitive without the citext extension.
-    uniqueIndex('users_login_lower_key').using('btree', sql`lower(${t.login})`),
+    uniqueIndex('users_email_unique_idx').using('btree', sql`lower(${t.email})`),
+    index('users_status_idx').on(t.status),
+    check('users_role_check', sql`${t.role} IN ('user', 'admin')`),
+    check('users_status_check', sql`${t.status} IN ('active', 'disabled')`),
   ],
-);
-
-export const devices = pgTable(
-  'devices',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    deviceName: text('device_name').notNull(),
-    userAgentHash: text('user_agent_hash').notNull(),
-    lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
-  },
-  (t) => [index('devices_user_id_idx').on(t.userId)],
 );
 
 export const sessions = pgTable(
@@ -86,20 +92,32 @@ export const sessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    deviceId: uuid('device_id').references(() => devices.id, { onDelete: 'set null' }),
     // SHA-256 of the raw opaque session id. The raw value is never stored.
     sessionHash: text('session_hash').notNull(),
+    // SHA-256 of the raw CSRF token for this session.
+    csrfTokenHash: text('csrf_token_hash').notNull(),
+    // Copy of users.credential_epoch at session creation time.
+    credentialEpoch: integer('credential_epoch').notNull().default(0),
     deviceLabel: text('device_label').notNull(),
-    ipHash: text('ip_hash').notNull(),
-    userAgentHash: text('user_agent_hash').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-    idleExpiresAt: timestamp('idle_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    // Raw User-Agent, truncated to 512 characters by the service layer.
+    userAgent: text('user_agent'),
+    createdIp: inet('created_ip'),
+    lastSeenIp: inet('last_seen_ip'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    // created_at + 30 days, never extended. Idle expiry is computed in
+    // code from last_seen_at + 24 hours, not from a column.
+    absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    // Kept for audit compatibility (R6); revocation is a hard delete
+    // and the audit trail lives in audit_events.
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+    stepUpAt: timestamp('step_up_at', { withTimezone: true, mode: 'date' }),
   },
   (t) => [
     uniqueIndex('sessions_session_hash_key').on(t.sessionHash),
     index('sessions_user_id_idx').on(t.userId),
+    index('sessions_user_created_idx').on(t.userId, t.createdAt),
+    index('sessions_absolute_expires_idx').on(t.absoluteExpiresAt),
   ],
 );
 
@@ -107,7 +125,7 @@ export const workspaces = pgTable(
   'workspaces',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    ownerId: uuid('owner_id')
+    ownerUserId: uuid('owner_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
@@ -119,7 +137,7 @@ export const workspaces = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index('workspaces_owner_id_idx').on(t.ownerId)],
+  (t) => [index('workspaces_owner_user_id_idx').on(t.ownerUserId)],
 );
 
 export const workspaceMembers = pgTable(
@@ -132,10 +150,12 @@ export const workspaceMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.workspaceId, t.userId] }),
     check('workspace_members_role_check', sql`${t.role} IN ('owner', 'editor', 'viewer')`),
+    index('workspace_members_user_id_idx').on(t.userId),
   ],
 );
 
@@ -180,40 +200,32 @@ export const secrets = pgTable(
   (t) => [uniqueIndex('secrets_user_kind_ref_key').on(t.userId, t.kind, t.ref)],
 );
 
-export const apiTokens = pgTable(
-  'api_tokens',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    // SHA-256 of the raw token. The raw value is never stored.
-    tokenHash: text('token_hash').notNull(),
-    scopes: text('scopes').array().notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }),
-    lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
-    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
-  },
-  (t) => [
-    uniqueIndex('api_tokens_token_hash_key').on(t.tokenHash),
-    index('api_tokens_user_id_idx').on(t.userId),
-  ],
-);
-
 export const auditEvents = pgTable(
   'audit_events',
   {
     id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
-    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
-    action: text('action').notNull(),
-    targetType: text('target_type').notNull(),
-    targetId: text('target_id').notNull(),
-    ipHash: text('ip_hash').notNull(),
+    // Subject of the event. Null for events without an identified
+    // account (for example a failed login for an unknown email; the
+    // email is never recorded, in metadata or elsewhere).
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Account that performed the action; differs from the subject for
+    // admin actions.
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // From the catalog in desain-auth 12.1, enforced by code, not by
+    // a CHECK constraint.
+    eventType: text('event_type'),
+    ip: inet('ip'),
+    userAgent: text('user_agent'),
+    // Non-secret detail only. Must never hold passwords, tokens,
+    // secrets, or credential hashes.
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
-  (t) => [index('audit_events_actor_created_idx').on(t.actorId, desc(t.createdAt))],
+  (t) => [
+    index('audit_events_user_created_idx').on(t.userId, t.createdAt),
+    index('audit_events_event_created_idx').on(t.eventType, t.createdAt),
+    index('audit_events_created_idx').on(t.createdAt),
+  ],
 );
 
 export const idempotencyKeys = pgTable(
