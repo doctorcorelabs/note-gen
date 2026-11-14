@@ -39,6 +39,7 @@ import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerWorkspaceReadRoutes } from './routes/workspace-read.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -75,6 +76,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     version: deps.version,
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
+  });
+
+  // Workspace files, read side (V3-04a, kontrak 3.1): GET list, GET
+  // and HEAD file, GET scan, GET stat. Write, move, trash, media,
+  // and reconcile routes are registered by their own groups in
+  // their own commented blocks. No AppDeps field is added here: the
+  // read routes take the workspace root from config, and the
+  // revision workspace key defaults to the resolved root until the
+  // index worker injects the workspace UUID (desain assumption A1).
+  await registerWorkspaceReadRoutes(app, {
+    workspaceRoot: deps.config.workspaceRoot,
   });
 
   return app;
