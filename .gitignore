@@ -106,3 +106,21 @@ docs/.vitepress/cache
 # Generated browser workers
 /public/plugin-runtime.js
 /public/markdown-lexer.js
+
+# Fork web: data runtime dan artefak build server (jangan commit database dev atau hasil build)
+server/data/
+server/dist/
+server/coverage/
+infra/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Fork web: file env contoh BOLEH di-commit (nilai dummy saja, lihat seksi 2 dokumen hygiene)
+!.env.example
+!server/.env.example
+!infra/.env.example
+
+# Fork web: dokumen fork di root BOLEH di-commit (lihat seksi 3 dokumen hygiene)
+!FORK.md
