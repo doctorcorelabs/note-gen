@@ -26,9 +26,9 @@
 // kontrak section 1.5 (unknown JSON fields rejected with 400
 // validation_failed).
 //
-// Read-side conformance (list, GET/HEAD file, scan, stat) is NOT in
-// this file: no read route exists on any branch yet. The waiting
-// cases are listed in README-conformance.md in this directory.
+// Read-side conformance (list, GET/HEAD file, scan, stat) lives in
+// read-conformance.spec.ts in this directory (V3-04cR2), against
+// the real V3-04a read routes.
 
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
@@ -623,7 +623,11 @@ describe('PUT media with real modules', () => {
       headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'application/octet-stream' },
       payload: PNG_BYTES,
     });
-    const other = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    // Valid PNG bytes that differ from the stored file: media type
+    // validation (desain 3.7 step 1) runs before the guard check
+    // (step 3), so JPEG bytes for a .png target would answer 415
+    // before the guard is ever evaluated (see the next test).
+    const other = Buffer.concat([PNG_BYTES, Buffer.from([0x00])]);
     const res = await app.inject({
       method: 'PUT',
       url: '/api/workspace/media?path=img%2Fa.png',
@@ -634,6 +638,26 @@ describe('PUT media with real modules', () => {
     expect(errorBody(res).code).toBe('revision_conflict');
     expect(errorBody(res).details?.['currentPreview']).toBeNull();
     expect(errorBody(res).details?.['previewTruncated']).toBe(false);
+    expect(await readFile(join(root, 'img', 'a.png'))).toEqual(PNG_BYTES);
+  });
+
+  it('answers 415 for mismatched media bytes before evaluating a stale guard', async () => {
+    const { app, root } = await setup();
+    await app.inject({
+      method: 'PUT',
+      url: '/api/workspace/media?path=img%2Fa.png',
+      headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'application/octet-stream' },
+      payload: PNG_BYTES,
+    });
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/workspace/media?path=img%2Fa.png',
+      headers: { ...AUTH_HEADERS, 'if-match': '"sha256:stale"', 'content-type': 'application/octet-stream' },
+      payload: jpeg,
+    });
+    expect(res.statusCode).toBe(415);
+    expect(errorBody(res).code).toBe('unsupported_media_type');
     expect(await readFile(join(root, 'img', 'a.png'))).toEqual(PNG_BYTES);
   });
 });
