@@ -163,15 +163,19 @@ function main() {
   try {
     let totalTests = 0;
     let totalPass = 0;
+    let totalFail = 0;
     let totalSkipped = 0;
     const results = [];
     for (let i = 0; i < ADAPTER_SPECS.length; i += 1) {
       const result = runOne(ADAPTER_SPECS[i], i, workDir);
       results.push(result);
-      if (result.ok) {
+      if (result.counts) {
         totalTests += result.counts.tests;
         totalPass += result.counts.pass;
+        totalFail += result.counts.fail;
         totalSkipped += result.counts.skipped || 0;
+      }
+      if (result.ok) {
         console.log(
           `PASS ${result.spec} tests=${result.counts.tests} pass=${result.counts.pass} fail=0 skipped=${result.counts.skipped || 0}`,
         );
@@ -183,7 +187,7 @@ function main() {
     const passedFiles = results.filter((r) => r.ok).length;
     if (passedFiles !== ADAPTER_SPECS.length) {
       console.error(
-        `ADAPTER TESTS FAILED: ${passedFiles}/${ADAPTER_SPECS.length} files passed, ${totalTests} tests counted, ${totalPass} passed.`,
+        `ADAPTER TESTS FAILED: ${passedFiles}/${ADAPTER_SPECS.length} files passed, ${totalTests} tests counted, ${totalPass} passed, ${totalFail} failed, ${totalSkipped} skipped.`,
       );
       process.exit(1);
     }
