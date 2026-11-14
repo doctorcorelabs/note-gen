@@ -38,16 +38,21 @@ import {
 /**
  * Web invoke adapter: typed dispatch for Tauri-style commands.
  *
- * Dispatch order is binding and follows the router design:
+ * Dispatch order is binding and follows the router design (section 2.2):
  * 1. Boot and storefront stubs run locally and ignore all arguments.
  * 2. Gated commands reject locally with a gated rejection.
- * 3. Disabled commands reject locally through the default path.
- * 4. Unknown names reject locally through the default path. No HTTP.
- * 5. The reserved stream route rejects locally: SSE is not available
+ * 3. Disabled and unknown names reject locally through the default
+ *    path. No HTTP.
+ * 4. The reserved stream route rejects locally: SSE is not available
  *    in the MVP and no empty iterable is ever returned instead.
- * 6. Other backend routes validate arguments, resolve the dedicated
- *    endpoint from the route table, and call the registered handler.
- *    A route with no handler rejects with an explicit 501 error.
+ * 5. A BACKEND route from a phase that is not built yet rejects with
+ *    an explicit 501 before argument validation. A registered
+ *    handler is the signal that the endpoint exists, so a routed
+ *    command with a handler still goes through validation.
+ * 6. Phase 1 BACKEND routes validate arguments, resolve the
+ *    dedicated endpoint from the route table, and call the
+ *    registered handler. A route with no handler rejects with an
+ *    explicit 501 error.
  *
  * The adapter never guesses an endpoint from a command name, never
  * sends the command name as request data, never retries, and never
@@ -306,6 +311,16 @@ export class WebInvokeAdapter implements InvokeAdapter, ChannelAdapter {
     if (route.stream === true) {
       devLog(command, "not_implemented/stream");
       throw createStreamNotAvailableRejection(command, route.path);
+    }
+
+    // Design 2.2 step 4: a BACKEND route whose phase is not built yet
+    // rejects before argument validation, so a bad argument can never
+    // mask "not built yet" as a validation failure. Phase 1 routes
+    // always validate first (step 5) and reject with 501 only when no
+    // handler is registered for them.
+    if (route.phase !== "1" && !this.handlers.has(command)) {
+      devLog(command, "not_implemented/501");
+      throw createBackendNotImplementedRejection(route);
     }
 
     const validated = validateInvokeArgs(command, args);

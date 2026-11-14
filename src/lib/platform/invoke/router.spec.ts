@@ -146,6 +146,16 @@ test("unknown commands reject with the generic key", async () => {
     proposedMessageKeyForRejection("default", "screenshot"),
     PROPOSED_MESSAGE_KEYS.screenshot,
   );
+  // Prefixed vendor names are not invoke-router entries: they fall
+  // through the same default path (design 6.5).
+  const prefixed = await captureRejection(
+    adapter.invoke("plugin:clipboard|read_text"),
+  );
+  assert.equal(prefixed.code, "unavailable");
+  assert.equal(
+    proposedMessageKeyForRejection("default", "plugin:clipboard|read_text"),
+    PROPOSED_MESSAGE_KEYS.generic,
+  );
 });
 
 test("names covered by the AD-14 ban reject through the default path", async () => {
@@ -290,6 +300,9 @@ test("argument validation strips undefined and rejects non-JSON data", async () 
   assert.deepEqual(seenArgs, { query: "note" });
 
   const plain = new WebInvokeAdapter();
+  // Bad arguments are exercised on a phase 1 route: phase 1 routes
+  // validate before the 501 check, while unbuilt phases reject with
+  // 501 before validation (see the dispatch-order test below).
   for (const bad of [
     { fn: () => 1 },
     { when: new Date() },
@@ -299,17 +312,49 @@ test("argument validation strips undefined and rejects non-JSON data", async () 
     { nested: { list: [1, undefined] } },
   ]) {
     const error = await captureRejection(
-      plain.invoke("fuzzy_search", bad as Record<string, unknown>),
+      plain.invoke("execute_record_transaction", bad as Record<string, unknown>),
     );
     assert.equal(error.code, "invalid_argument");
   }
 });
 
 test("missing path placeholders reject locally", async () => {
-  const adapter = new WebInvokeAdapter();
+  const registry = createHandlerRegistry();
+  let calls = 0;
+  registry.register("cancel_ai_request", async () => {
+    calls += 1;
+    return true;
+  });
+  const adapter = createWebInvokeAdapter(registry);
   const error = await captureRejection(adapter.invoke("cancel_ai_request", {}));
   assert.equal(error.code, "invalid_argument");
   assert.match(error.reason ?? "", /requestId/);
+  assert.equal(calls, 0);
+});
+
+test("unbuilt phases reject with 501 before argument validation", async () => {
+  // Design 2.2 step 4: a BACKEND route outside phase 1 with no
+  // handler rejects as not built, even when the arguments are also
+  // invalid. A phase 1 route validates first, so the same bad
+  // arguments surface as a validation error instead.
+  const adapter = new WebInvokeAdapter();
+  const unbuilt = await captureRejection(
+    adapter.invoke("fuzzy_search", { fn: () => 1 }),
+  );
+  assert.equal(unbuilt.code, "not_implemented");
+  assert.match(unbuilt.reason ?? "", /HTTP 501/);
+  const phase1 = await captureRejection(
+    adapter.invoke("execute_record_transaction", { fn: () => 1 }),
+  );
+  assert.equal(phase1.code, "invalid_argument");
+  // Once a handler exists, the unbuilt-phase route validates too.
+  const registry = createHandlerRegistry();
+  registry.register("fuzzy_search", async () => []);
+  const withHandler = createWebInvokeAdapter(registry);
+  const validated = await captureRejection(
+    withHandler.invoke("fuzzy_search", { fn: () => 1 }),
+  );
+  assert.equal(validated.code, "invalid_argument");
 });
 
 test("handler failures never leak raw error text", async () => {
