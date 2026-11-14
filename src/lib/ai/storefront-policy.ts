@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 import { invoke } from '@tauri-apps/api/core'
 import { locale as getSystemLocale, platform as getPlatform } from '@tauri-apps/plugin-os'
 
@@ -67,7 +68,17 @@ export async function isMainlandChinaAppStore(): Promise<boolean> {
 
   // iOS must fail closed: if StoreKit is unavailable or has not returned a
   // trustworthy storefront yet, built-in OpenAI providers stay hidden.
-  if (getPlatform() === 'ios') {
+  // Web fork POC: platform() throws in a plain browser (no Tauri IPC), which
+  // used to kill initSettingData on every browser boot. Treat a throw as
+  // "not iOS" and fall through to the locale fallback below. In Tauri,
+  // platform() does not throw, so desktop behavior is unchanged.
+  let runtimePlatform: ReturnType<typeof getPlatform> | undefined
+  try {
+    runtimePlatform = getPlatform()
+  } catch {
+    runtimePlatform = undefined
+  }
+  if (runtimePlatform === 'ios') {
     return true
   }
 

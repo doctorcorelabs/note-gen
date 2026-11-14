@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 import createNextIntlPlugin from 'next-intl/plugin';
 import type { NextConfig } from "next";
 
@@ -17,7 +18,18 @@ const nextConfig: NextConfig = {
     silenceDeprecations: ['legacy-js-api'],
   },
   reactStrictMode: false,
-  turbopack: {},
+  turbopack: {
+    // POC (Fase 0, W12): Turbopack module aliases that replace the Tauri
+    // plugin-store and api/app modules with minimal web shims so the app can
+    // boot in a plain browser without Tauri IPC. These aliases are a POC
+    // shortcut only; Fase 1 replaces them with the central adapter registry
+    // from design F1. The alias targets are relative paths, the same form
+    // the next-intl plugin uses for its own Turbopack alias below.
+    resolveAlias: {
+      '@tauri-apps/plugin-store': './src/lib/platform/poc-store-shim.ts',
+      '@tauri-apps/api/app': './src/lib/platform/poc-app-shim.ts',
+    },
+  },
   devIndicators: false,
 };
 
@@ -27,7 +39,16 @@ const configuredNext = withNextIntl(nextConfig);
 // experimental.turbo key. Normalize the plugin output for Next.js 15.3.
 const legacyTurbo = configuredNext.experimental?.turbo;
 if (legacyTurbo) {
-  configuredNext.turbopack = { ...legacyTurbo, ...configuredNext.turbopack };
+  // Merge resolveAlias maps explicitly: a shallow spread would drop the
+  // next-intl alias (or the POC aliases) when both sides define the key.
+  configuredNext.turbopack = {
+    ...legacyTurbo,
+    ...configuredNext.turbopack,
+    resolveAlias: {
+      ...legacyTurbo.resolveAlias,
+      ...configuredNext.turbopack?.resolveAlias,
+    },
+  };
   if (configuredNext.experimental) delete configuredNext.experimental.turbo;
 }
 
