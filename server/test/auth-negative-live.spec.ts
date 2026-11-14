@@ -17,8 +17,17 @@
 // - EXTENDED (V3-02): POST /api/auth/totp/enroll/start exists. Gates
 //   the TOTP routes, the admin routes, and reset-confirm.
 //
-// What a passing gated test proves: the route is registered AND the
-// real hook denies it without a session (401) or rejects a bad
+// NOTE (V3-01cR2, 15 Nov 2026): the activation claim above does not
+// hold against the V3-01bR shape: buildApp registers auth routes
+// only when an AuthContext is injected, so these context-free probes
+// still skip on a merged tree (verified in a local assembly of
+// web-auth-tests + web-auth-core 2b7d95c8: 17 skipped). The
+// activation-capable successor is auth-negative-real.spec.ts, which
+// builds the context with an in-memory store. These probes are kept
+// as registration documentation, not as the live check.
+//
+// What a passing gated test would prove: the route is registered AND
+// the real hook denies it without a session (401) or rejects a bad
 // Origin (403) before any handler runs. The probes use buildApp with
 // no database pool and no injected verifiers, so they prove
 // registration plus deny-by-default wiring, NOT verifier correctness
