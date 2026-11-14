@@ -21,6 +21,11 @@
  * in web mode, where the web implementation reports the capability as
  * unavailable. The isTauri function is not part of any adapter; runtime
  * detection lives in detect.ts.
+ *
+ * Merge M9 reconciliation (audit V2-40): this file keeps the G0
+ * raw contract whole. The router-level types from V2-05
+ * (BackendRoute, transport, stream surface) moved to
+ * invoke/router.ts; the invoke/index.ts barrel was deleted.
  */
 export type InvokeArgs =
   | Record<string, unknown>
