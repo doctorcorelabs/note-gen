@@ -27,9 +27,15 @@ import type { HttpAdapter, HttpClientOptions } from "./interface";
  *   and must never be done silently. The MVP value is the empty list.
  * - Protocol-relative URLs (//host/path) resolve against the page
  *   scheme and are checked like any absolute URL, so they cannot
- *   bypass the guard. URLs with embedded credentials and URLs with a
- *   non-http(s) scheme are rejected. Error reasons name the origin
- *   only, never the full URL, so query tokens cannot leak into logs.
+ *   bypass the guard. The same holds for the other spellings the URL
+ *   parser normalizes into a foreign origin (leading whitespace,
+ *   backslashes in place of slashes): after resolution, a URL that
+ *   started out relative is allowed only when its resolved origin
+ *   still equals the expected origin, so no spelling can smuggle a
+ *   foreign origin past the check. URLs with embedded credentials
+ *   and URLs with a non-http(s) scheme are rejected. Error reasons
+ *   name the origin only, never the full URL, so query tokens cannot
+ *   leak into logs.
  *
  * ClientOptions mapping:
  * - `maxRedirections: 0` maps to `redirect: "manual"`. Any positive
@@ -129,8 +135,21 @@ function parseTarget(
 }
 
 function assertAllowedTarget(url: URL, wasRelative: boolean, baseOrigin: string | null): void {
+  // A URL that started out relative is allowed only when resolution
+  // kept it on the expected origin. Without this check, spellings
+  // the URL parser normalizes into a foreign origin ("//evil/x",
+  // "\\\\evil\\x", leading whitespace before "//evil/x") would
+  // resolve cross-origin yet sail through as "relative". When no
+  // page origin is known, the expected origin is the placeholder
+  // parse base, so only genuinely relative spellings pass.
   if (wasRelative) {
-    return;
+    const expected = baseOrigin ?? new URL(PLACEHOLDER_BASE).origin;
+    if (url.origin === expected) {
+      return;
+    }
+    // Resolved away from the expected origin: fall through to the
+    // absolute-URL checks below, which reject it unless the origin
+    // is the page origin or on the allowlist.
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw capabilityError(

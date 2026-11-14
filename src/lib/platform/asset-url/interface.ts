@@ -23,9 +23,16 @@
  *
  * The method stays synchronous, matching the upstream function, and
  * takes a workspace-relative path. Absolute OS paths have no meaning
- * in web mode and are rejected; callers that hold absolute paths
- * must resolve them to workspace-relative paths first (the existing
- * `convertImageByWorkspace` funnel in utils.ts already does this).
+ * in web mode and are rejected. This is a migration dependency, not
+ * a drop-in behavior: every upstream call site passes an absolute
+ * path today (the `convertImageByWorkspace` funnel in utils.ts joins
+ * the workspace root or app-data dir onto the relative path before
+ * calling `convertFileSrc`, and the chat, canvas, and screenshot
+ * call sites pass absolute paths directly). The G3 codemod must
+ * rewrite those call sites to pass the workspace-relative path, and
+ * the funnel to stop joining the root; this adapter cannot recover
+ * the relative path from an absolute one because it does not know
+ * the workspace root.
  */
 export interface AssetUrlOptions {
   /**
