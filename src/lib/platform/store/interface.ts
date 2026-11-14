@@ -9,7 +9,7 @@
  * the registry foundation design). V1-05 inventories the store surface
  * and fixes the registry mechanics but does not define the StoreHandle
  * shape, StoreOptions, or key classification; V1-02 defines all of
- * those from the installed @tauri-apps/plugin-store 2.3.0 surface.
+ * those from the installed plugin-store 2.3.0 surface.
  * This file therefore adopts the V1-02 surface and the V1-05 registry
  * placement (one interface.ts per adapter subdirectory, no per
  * subdirectory index.ts, callers import through the registry only).
@@ -41,7 +41,7 @@
  *   either point.
  *
  * This file has no runtime dependency on any adapter implementation
- * and must never import @tauri-apps/* or any *.tauri.ts / *.web.ts
+ * and must never import Tauri packages or any *.tauri.ts / *.web.ts
  * module. Implementations live beside it (store.tauri.ts,
  * store.web.ts) and the test fake lives in store.fake.ts.
  */
