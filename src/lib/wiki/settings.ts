@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 import { Store } from '@tauri-apps/plugin-store'
 import { assertWikiContextCurrent, captureWikiWorkspaceGuard, getWikiContext, getWikiDeviceId } from './context'
 import { emitWikiUpdated, setWikiMeta } from '@/db/wiki'
@@ -65,7 +66,7 @@ export async function getWikiSettings(contextId?: string): Promise<WikiSettings>
     started: stored.started ?? false,
     paused: stored.paused ?? false,
     modelId: stored.modelId ?? null,
-    language: stored.language ?? await store.get<string>(LANGUAGE_STORAGE_KEY) ?? 'zh',
+    language: stored.language ?? await store.get<string>(LANGUAGE_STORAGE_KEY) ?? 'en',
     languageClock: stored.languageClock ?? {},
     generation: stored.generation ?? 0,
     scopes: stored.scopes ?? [],

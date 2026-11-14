@@ -1,9 +1,15 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 import type { AbstractIntlMessages } from 'next-intl';
 
 export const SUPPORTED_LOCALES = ['en', 'zh'] as const;
 export type SupportedLocale = string;
 
-export const DEFAULT_LOCALE: SupportedLocale = 'zh';
+export const DEFAULT_LOCALE: SupportedLocale = 'en';
+// The zh catalog is the source of truth for message fallback: keys missing
+// from any locale resolve to zh strings. Keep this separate from
+// DEFAULT_LOCALE so changing the default UI language never changes which
+// catalog backs the fallback merge or override validation.
+export const FALLBACK_LOCALE: SupportedLocale = 'zh';
 export const LANGUAGE_STORAGE_KEY = 'app-language';
 
 export function isSupportedLocale(locale: string): locale is SupportedLocale {
@@ -68,10 +74,10 @@ export async function loadLocaleMessages(locale: SupportedLocale): Promise<Abstr
 export async function loadMessagesWithFallback(
   locale: SupportedLocale
 ): Promise<AbstractIntlMessages> {
-  const chinese = await loadLocaleMessages(DEFAULT_LOCALE);
-  let messages = locale === DEFAULT_LOCALE
-    ? chinese
-    : mergeMessages(await loadLocaleMessages('en'), chinese);
+  const fallback = await loadLocaleMessages(FALLBACK_LOCALE);
+  let messages = locale === FALLBACK_LOCALE
+    ? fallback
+    : mergeMessages(await loadLocaleMessages('en'), fallback);
 
   for (const [, languages] of [...pluginLanguages].sort(([a], [b]) => b.localeCompare(a))) {
     for (const language of languages) {
@@ -97,7 +103,7 @@ export function unregisterPluginLanguages(id: string) { if (pluginLanguages.dele
 
 export async function validateLanguageOverrides(messages: AbstractIntlMessages) {
   const { parse } = await import('@formatjs/icu-messageformat-parser')
-  const fallback = await loadLocaleMessages(DEFAULT_LOCALE)
+  const fallback = await loadLocaleMessages(FALLBACK_LOCALE)
   const signature = (text: string) => {
     const argumentsUsed = new Set<string>()
     const walk = (nodes: ReturnType<typeof parse>) => {

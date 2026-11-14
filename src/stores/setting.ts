@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 import { Store } from '@tauri-apps/plugin-store'
 import { emit } from '@tauri-apps/api/event'
 import { create } from 'zustand'
@@ -1025,7 +1026,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoUpdate: true,
   setAutoUpdate: (autoUpdate) => set({ autoUpdate }),
 
-  language: '简体中文',
+  language: 'English',
   setLanguage: (language) => set({ language }),
 
   appFontFamily: APP_FONT_SYSTEM_VALUE,

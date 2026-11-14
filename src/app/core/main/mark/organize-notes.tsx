@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-14; see FORK.md.
 "use client"
 import useSettingStore, { GenTemplate, GenTemplateRange } from "@/stores/setting"
 import useMarkStore from "@/stores/mark"
@@ -631,7 +632,7 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
       const embeddableImageCount = processedImageMarks.filter(item => Boolean(item.url)).length
 
       const store = await Store.load('store.json')
-      const locale = await store.get<string>('locale') || 'zh'
+      const locale = await store.get<string>('locale') || 'en'
 
       const request_content = `
         Here are text fragments recognized by OCR after screenshots:
