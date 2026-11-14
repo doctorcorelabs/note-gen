@@ -15,7 +15,7 @@
     "expectedGate": "Layers 1 and 2 RED when a copy is placed under src/ on a staging tree (1 specifier line, 1 raw Store.load, 1 __TAURI_INTERNALS__ mention). Not an engine case; excluded from totalCases.",
     "addedBy": "V3-16cR salvage, 15 November 2026"
   },
-  "totalCases": 39,
+  "totalCases": 43,
   "cases": [
     {
       "id": "g1-store-static",
@@ -58,6 +58,27 @@
       "notes": "Import dinamis dengan destruktur. Import dinamis dihapus dan pemakaian Store.load diganti pemanggilan registry langsung; tidak ada binding Store yang tersisa."
     },
     {
+      "id": "g1-store-dynamic-module",
+      "wave": "G1",
+      "specifiers": [
+        "@tauri-apps/plugin-store"
+      ],
+      "runSpecifier": "@tauri-apps/plugin-store",
+      "patterns": [
+        5,
+        6
+      ],
+      "kind": "auto",
+      "before": "g1-store-dynamic-module/before.ts",
+      "after": "g1-store-dynamic-module/after.ts",
+      "stagedAfters": [],
+      "stageOrderFlexible": false,
+      "identicalPair": false,
+      "confirmationNeeded": null,
+      "reportRequirement": null,
+      "notes": "Akses modul dinamis pola 6, varian kanonis Store (pola nyata src/lib/tag-sync.ts:122): module.Store.load diganti pemanggilan registry langsung; tidak ada pola module.<nama> yang tersisa. Mencakup varian .then dan varian await. Varian fs dicakup g1-fs-dynamic-module."
+    },
+    {
       "id": "g1-store-type-only",
       "wave": "G1",
       "specifiers": [
@@ -67,15 +88,15 @@
       "patterns": [
         3
       ],
-      "kind": "auto",
+      "kind": "manual-review",
       "before": "g1-store-type-only/before.ts",
       "after": "g1-store-type-only/after.ts",
       "stagedAfters": [],
       "stageOrderFlexible": false,
       "identicalPair": false,
       "confirmationNeeded": "Pemetaan nama tipe Store (kelas upstream) ke StoreHandle (tipe barrel trunk) adalah keputusan fixture ini, mengikuti pola nyata src/lib/managed-workspace.ts. V3-16a wajib mengonfirmasi pemetaan ini; bila mesin memakai nama lain, fixture ini diperbarui dan keputusan dicatat.",
-      "reportRequirement": null,
-      "notes": "Import type saja. Pola nyata: 2 berkas mengimpor import type { Store }. Tidak ada ekspor tipe bernama Store di barrel trunk; satu-satunya tipe handle adalah StoreHandle."
+      "reportRequirement": "Engine: the declaration is transformed (Store binding removed, platform import ensured) and the Store binding is listed in the report; engine output alone does not reach after.ts. The worker renames Store to StoreHandle, drops the platform import, and verifies the two real call sites by hand. The harness flags this file for manual type-rename review.",
+      "notes": "Import type saja. Pola nyata: 2 berkas mengimpor import type { Store }. Tidak ada ekspor tipe bernama Store di barrel trunk; satu-satunya tipe handle adalah StoreHandle. Mesin ter-push tidak punya pemetaan rename tipe: Store diperlakukan sebagai aksi platform, sehingga penulisan ulang ke StoreHandle adalah tindak lanjut manual terpandu laporan."
     },
     {
       "id": "g1-sql-funnel",
@@ -95,8 +116,8 @@
       "stageOrderFlexible": false,
       "identicalPair": true,
       "confirmationNeeded": null,
-      "reportRequirement": "Mesin wajib mencatat berkas ini sebagai MANUAL-REVIEW dan membiarkannya tidak berubah. Migrasi corong getDb ke operasi bertipe adalah pekerjaan tangan V3-14, bukan codemod import.",
-      "notes": "Pasangan identik yang disengaja. SqlAdapter trunk adalah stub AD-26 (hanya marker __sqlAdapterStub, tanpa permukaan callable) dan katalog operasi V2-24 hanya bertipe; tidak ada API platform.sql.load/execute/select yang sah untuk dipetakan Database ke sana. Codemod yang memetakan Database.load ke platform.sql secara buta akan menghasilkan kode yang tidak jalan. Bentuk migrasi lama desain V1-05 seksi 1.2 (ubah sumber Database dari registry) digantikan AD-26 dan rekonsiliasi W-4."
+      "reportRequirement": "Engine: the declaration is skipped with reason no-barrel-equivalent (QueryResult) and the file is left unchanged; the harness flags the file for manual review. Migrasi corong getDb ke operasi bertipe adalah pekerjaan tangan V3-14 (AD-26), bukan codemod import.",
+      "notes": "Pasangan identik yang disengaja. SqlAdapter trunk adalah stub AD-26 (hanya marker __sqlAdapterStub, tanpa permukaan callable) dan katalog operasi V2-24 hanya bertipe; tidak ada API platform.sql.load/execute/select yang sah untuk dipetakan Database ke sana. Codemod yang memetakan Database.load ke platform.sql secara buta akan menghasilkan kode yang tidak jalan. Bentuk migrasi lama desain V1-05 seksi 1.2 (ubah sumber Database dari registry) digantikan AD-26 dan rekonsiliasi W-4. Bentuk before mengikuti berkas corong nyata src/db/index.ts: satu deklarasi dengan import default Database + inline type QueryResult."
     },
     {
       "id": "g1-fs-static",
@@ -115,7 +136,7 @@
       "stagedAfters": [],
       "stageOrderFlexible": false,
       "identicalPair": false,
-      "confirmationNeeded": "Bentuk after fixture: nama lokal alias (fsRename) TIDAK dipertahankan sebagai binding; call site ditulis ulang ke platform.fs.rename. Bila V3-16a memilih mempertahankan binding lokal (mis. const alias), fixture alias ini dan fixture alias lain wajib diregenerasi dan keputusan dicatat.",
+      "confirmationNeeded": "Bentuk after fixture: nama lokal alias (fsRename) TIDAK dipertahankan sebagai binding; call site ditulis ulang ke platform.fs.rename. Bila V3-16a memilih mempertahankan binding lokal (mis. const alias), fixture alias ini dan fixture alias lain wajib diregenerasi dan keputusan dicatat. Mesin ter-push (3fc1b64d) berperilaku sama: aksi platform menghapus binding dan laporan mencatat nama lokal asal beserta pengganti; aksi barrel mempertahankan alias. Integrator mengesahkan tafsir ini terhadap wording desain.",
       "reportRequirement": null,
       "notes": "Banyak nama dalam satu pernyataan import, termasuk alias rename as fsRename dan nilai enum BaseDirectory. BaseDirectory diimpor dari barrel sebagai nilai (enum nyata di fs/interface.ts), bukan sebagai tipe."
     },
@@ -178,7 +199,7 @@
       "identicalPair": false,
       "confirmationNeeded": null,
       "reportRequirement": null,
-      "notes": "Akses modul dinamis pola 6 (pola nyata src/lib/tag-sync.ts): module.readTextFile diganti pemanggilan registry langsung; tidak ada pola module.<nama> yang tersisa. Mencakup varian .then dan varian await."
+      "notes": "Akses modul dinamis pola 6, varian fs (varian kanonis Store dari src/lib/tag-sync.ts dicakup g1-store-dynamic-module): module.readTextFile diganti pemanggilan registry langsung; tidak ada pola module.<nama> yang tersisa. Mencakup varian .then dan varian await."
     },
     {
       "id": "g2-core-invoke",
@@ -219,26 +240,6 @@
       "confirmationNeeded": null,
       "reportRequirement": null,
       "notes": "Konstruktor Channel menjadi factory createChannel (ChannelAdapter trunk). Properti onmessage pada handle dipertahankan. Pola nyata src/lib/ai/tauri-client.ts."
-    },
-    {
-      "id": "g2-core-istauri",
-      "wave": "G2",
-      "specifiers": [
-        "@tauri-apps/api/core"
-      ],
-      "runSpecifier": "@tauri-apps/api/core",
-      "patterns": [
-        1
-      ],
-      "kind": "auto",
-      "before": "g2-core-istauri/before.ts",
-      "after": "g2-core-istauri/after.ts",
-      "stagedAfters": [],
-      "stageOrderFlexible": false,
-      "identicalPair": false,
-      "confirmationNeeded": null,
-      "reportRequirement": null,
-      "notes": "isTauri dari api/core diganti isTauriRuntime dari barrel, mengikuti desain seksi 1.17. Barrel juga mengekspor nama isTauri; fixture ini memakai nama isTauriRuntime sesuai wording desain. Batas akhir desain: tidak ada pemanggil yang mengimpor isTauri sesudah G4."
     },
     {
       "id": "g2-http-static",
@@ -299,7 +300,7 @@
       "stagedAfters": [],
       "stageOrderFlexible": false,
       "identicalPair": false,
-      "confirmationNeeded": "Lihat catatan bentuk alias pada g1-fs-static: alias openDialog ditulis ulang ke platform.dialog.open. Desain seksi 1.5 menyatakan alias dipertahankan sebagai nama lokal; fixture ini menafsirkan itu sebagai jejak review (nama asal tercatat di manifest), bukan binding lokal di kode after, karena barrel trunk tidak mengekspor fungsi dialog mandiri. V3-16a wajib mengonfirmasi tafsir ini.",
+      "confirmationNeeded": "Lihat catatan bentuk alias pada g1-fs-static: alias openDialog ditulis ulang ke platform.dialog.open. Desain seksi 1.5 menyatakan alias dipertahankan sebagai nama lokal; fixture ini menafsirkan itu sebagai jejak review (nama asal tercatat di manifest), bukan binding lokal di kode after, karena barrel trunk tidak mengekspor fungsi dialog mandiri. V3-16a wajib mengonfirmasi tafsir ini. Mesin ter-push berperilaku sama seperti tafsir fixture ini (lihat catatan g1-fs-static).",
       "reportRequirement": null,
       "notes": "Seluruh permukaan DialogAdapter yang dipakai upstream: open (alias openDialog), save, confirm, ask, message."
     },
@@ -340,7 +341,7 @@
       "stageOrderFlexible": false,
       "identicalPair": false,
       "confirmationNeeded": null,
-      "reportRequirement": "Mesin wajib mencatat berkas ini sebagai MANUAL-REVIEW: keputusan per call site untuk openPath dan revealItemInDir wajib dicatat manusia (path workspace dipetakan ke unduhan; path OS melempar PlatformCapabilityError). Penulisan ulang importnya sendiri bersifat mekanis dan after menunjukkan bentuk targetnya.",
+      "reportRequirement": "Engine: declarations transformed; all three bindings listed with replacements. The harness flags the file for manual per-call-site decisions (openPath and revealItemInDir path mapping: workspace paths to downloads, OS paths raise PlatformCapabilityError). Engine reports carry no MANUAL-REVIEW flag; the flag is a harness interpretation.",
       "notes": "openUrl, openPath, revealItemInDir ke OpenerAdapter. Keputusan D-01 (bentuk path open/save ditolak eksplisit di web) mengikat pekerjaan dialog G3 secara umum; untuk opener, keputusan per call site mengikuti desain seksi 1.6 dan audit V2-12."
     },
     {
@@ -364,6 +365,26 @@
       "notes": "writeText, writeImage, writeHtml ke ClipboardAdapter. Tidak ada readText/readImage di permukaan Fase 1 desain; fixture ini tidak mengarangnya."
     },
     {
+      "id": "g3-clipboard-api-static",
+      "wave": "G3",
+      "specifiers": [
+        "tauri-plugin-clipboard-api"
+      ],
+      "runSpecifier": "tauri-plugin-clipboard-api",
+      "patterns": [
+        1
+      ],
+      "kind": "auto",
+      "before": "g3-clipboard-api-static/before.ts",
+      "after": "g3-clipboard-api-static/after.ts",
+      "stagedAfters": [],
+      "stageOrderFlexible": false,
+      "identicalPair": false,
+      "confirmationNeeded": null,
+      "reportRequirement": null,
+      "notes": "Spesifier vendor di luar himpunan @tauri-apps/*: 8 berkas/8 baris di tree trunk menurut recount V3-16b; mesin dan waves.json gate sama-sama memasukkannya di G3. Hitungan 21 spesifier desain seksi 1.17 hanya mencakup @tauri-apps/*, sehingga spesifier ini butuh kasus sendiri. Before memakai kutip ganda mengikuti berkas nyata clipboard-listener.tsx; seluruh nama dipetakan mesin ke ClipboardAdapter."
+    },
+    {
       "id": "g3-asset-convert",
       "wave": "G3",
       "specifiers": [
@@ -379,9 +400,9 @@
       "stagedAfters": [],
       "stageOrderFlexible": false,
       "identicalPair": false,
-      "confirmationNeeded": "Persyaratan mesin: jalan G2 atas spesifier api/core wajib TIDAK menyentuh import convertFileSrc (subset G3, 9 berkas menurut header allowlist). Mesin wajib mendukung pengecualian per nama atau pekerja G2 wajib mengecualikan ke-9 berkas itu dari daftar berkas. Bila mesin tidak mendukung pengecualian per nama, hal itu dicatat sebagai celah mesin, bukan sebagai kegagalan fixture.",
+      "confirmationNeeded": null,
       "reportRequirement": null,
-      "notes": "convertFileSrc dari api/core adalah subset G3, bukan G2, meskipun spesifiernya sama. After memakai platform.assetUrl.convertFileSrc (AssetUrlAdapter trunk, sinkron, mengembalikan string)."
+      "notes": "convertFileSrc dari api/core adalah subset G3, bukan G2, meskipun spesifiernya sama. After memakai platform.assetUrl.convertFileSrc (AssetUrlAdapter trunk, sinkron, mengembalikan string). TERJAWAB oleh mesin ter-push: jalan --wave G2 menunda convertFileSrc sebagai residual (gelombang binding G3); jalan --specifier api/core mengubahnya tanpa memandang gelombang, sehingga pekerja G2 memakai mode --wave atau mengecualikan berkas bila memakai mode --specifier."
     },
     {
       "id": "g4-window-static",
@@ -440,7 +461,7 @@
       "stageOrderFlexible": false,
       "identicalPair": false,
       "confirmationNeeded": null,
-      "reportRequirement": "Mesin wajib mencatat berkas ini sebagai MANUAL-REVIEW: satu-satunya situs konstruksi ukuran/posisi dimigrasi dengan verifikasi tangan.",
+      "reportRequirement": "Engine: the declaration is skipped with reason no-barrel-equivalent (LogicalSize/PhysicalPosition) and the file is left unchanged, including getCurrentWindow in the same declaration. The worker migrates all three bindings by hand with verification; the harness flags the file for manual review.",
       "notes": "Kelas LogicalSize dan PhysicalPosition tidak punya padanan konstruktor di platform: interface hanya bertipe sehingga tidak dapat menyediakan konstruktor. Situs konstruksi menjadi objek polos ({ type: 'Logical', width, height } dan { type: 'Physical', x, y }), mengikuti komentar window/interface.ts trunk; implementasi Tauri mengonversi objek itu ke kelas upstream secara internal."
     },
     {
@@ -505,6 +526,26 @@
       "notes": "platform, version, locale, arch dengan alias nyata (getRuntimePlatform, osVersion, getSystemLocale). platform(), version(), arch() sinkron; locale() async. Audit nilai 'web' adalah pekerjaan manual G4, bukan codemod buta."
     },
     {
+      "id": "g4-os-platform-collision",
+      "wave": "G4",
+      "specifiers": [
+        "@tauri-apps/plugin-os"
+      ],
+      "runSpecifier": "@tauri-apps/plugin-os",
+      "patterns": [
+        1
+      ],
+      "kind": "manual-review",
+      "before": "g4-os-platform-collision/before.ts",
+      "after": "g4-os-platform-collision/after.ts",
+      "stagedAfters": [],
+      "stageOrderFlexible": false,
+      "identicalPair": false,
+      "confirmationNeeded": null,
+      "reportRequirement": "Engine: the declaration is skipped with reason name-collision-platform and the file is left unchanged. The worker migrates all four bindings by hand and audits each platform() call site for the 'web' value; the harness flags the file for manual review.",
+      "notes": "Import platform TANPA alias (pola nyata developer-diagnostics.tsx dan berkas trunk lain): nama lokal platform bertabrakan dengan import registry, sehingga mesin melewati deklarasi dan pekerja memigrasi manual. Bandingkan g4-os-static (bentuk alias, mesin mengubah). Audit nilai 'web' adalah pekerjaan manual G4, bukan codemod buta."
+    },
+    {
       "id": "g4-app-version",
       "wave": "G4",
       "specifiers": [
@@ -524,6 +565,26 @@
       "confirmationNeeded": null,
       "reportRequirement": null,
       "notes": "getVersion, satu-satunya nama dari api/app, dilipat ke OsAdapter.getAppVersion (desain seksi 1.8). Mencakup varian statis dan varian import dinamis (pola nyata src/lib/sync/auto-data-sync-queue.ts)."
+    },
+    {
+      "id": "g4-core-istauri",
+      "wave": "G4",
+      "specifiers": [
+        "@tauri-apps/api/core"
+      ],
+      "runSpecifier": "@tauri-apps/api/core",
+      "patterns": [
+        1
+      ],
+      "kind": "auto",
+      "before": "g4-core-istauri/before.ts",
+      "after": "g4-core-istauri/after.ts",
+      "stagedAfters": [],
+      "stageOrderFlexible": false,
+      "identicalPair": false,
+      "confirmationNeeded": null,
+      "reportRequirement": null,
+      "notes": "isTauri dari api/core diganti isTauriRuntime dari barrel, mengikuti desain seksi 1.17. Barrel juga mengekspor nama isTauri; fixture ini memakai nama isTauriRuntime sesuai wording desain. Batas akhir desain: tidak ada pemanggil yang mengimpor isTauri sesudah G4. Tahap E menerima nama isTauri dari barrel (mesin mempertahankan nama; kedua nama adalah ekspor barrel untuk fungsi yang sama); tahap A memakai isTauriRuntime. Jalan --wave G2 menunda binding ini sebagai residual (gelombang binding G4); penutupan di G4."
     },
     {
       "id": "g4-notification-multiline",
@@ -644,29 +705,34 @@
       "stageOrderFlexible": false,
       "identicalPair": false,
       "confirmationNeeded": null,
-      "reportRequirement": "Mesin wajib mencatat berkas ini sebagai MANUAL-REVIEW: pemetaan kelas Update ke UpdateInfo dan perilaku check wajib diverifikasi tangan, termasuk penjagaan pemicu updater di layout (milik V3-21, AD-42 butir d).",
+      "reportRequirement": "Engine: the check declaration is transformed; the Update type declaration is skipped with reason no-barrel-equivalent. The worker renames Update to UpdateInfo by hand and verifies check behavior, including the updater trigger guard in layout (owned by V3-21, AD-42 item d); the harness flags the file for manual review.",
       "notes": "check dan tipe Update ke UpdaterAdapter. UpdaterAdapter trunk hanya punya check yang mengembalikan UpdateInfo atau null; UpdateInfo membawa version dan downloadAndInstall. Tidak ada kelas Update di barrel."
     },
     {
       "id": "g5-image-static",
       "wave": "G5",
       "specifiers": [
-        "@tauri-apps/api/image"
+        "@tauri-apps/api/image",
+        "@tauri-apps/plugin-clipboard-manager"
       ],
       "runSpecifier": "@tauri-apps/api/image",
+      "additionalRunSpecifiers": [
+        "@tauri-apps/plugin-clipboard-manager"
+      ],
       "patterns": [
         1,
-        4
+        4,
+        7
       ],
       "kind": "manual-review",
       "before": "g5-image-static/before.ts",
       "after": "g5-image-static/after.ts",
       "stagedAfters": [],
       "stageOrderFlexible": false,
-      "identicalPair": true,
+      "identicalPair": false,
       "confirmationNeeded": null,
-      "reportRequirement": "Mesin wajib mencatat berkas ini sebagai MANUAL-REVIEW dan membiarkannya tidak berubah. Resolusi manusia mengikuti penonaktifan rute screenshot di web (V3-21) dan pemakaian ClipboardAdapter.writeImage atas byte di call site nyata.",
-      "notes": "Pasangan identik yang disengaja. Barrel trunk tidak mengekspor Image; satu-satunya pemakaian nyata adalah TauriImage.fromBytes(png) sebagai masukan writeImage di rute screenshot (desain seksi 1.9). Tidak ada pemetaan mekanis yang sah; codemod buta atas berkas ini akan menghasilkan kode yang tidak jalan."
+      "reportRequirement": "Engine: the Image declaration is transformed (binding removed, platform import ensured) on the api/image run and the clipboard-manager declaration is transformed on its own run; both bindings are listed in the reports. The worker drops TauriImage.fromBytes, passes bytes to platform.clipboard.writeImage, and drops close() with the object. The harness flags the file for manual review.",
+      "notes": "Alur salin nyata rute screenshot: TauriImage.fromBytes(png) hanya perantara menuju writeImage, lalu image.close(). Barrel trunk tidak mengekspor Image; ClipboardAdapter.writeImage menerima byte langsung (desain seksi 1.9), sehingga keadaan akhir membuang konstruksi Image dan close(). Berkas ini menyentuh dua spesifier dari dua gelombang (clipboard G3, image G5): jalan clipboard-manager berjalan lebih dulu (additionalRunSpecifiers), lalu jalan api/image. Situs call site baru ditutup di G5 karena pemanggilan writeImage butuh byte, bukan objek Image. Perilaku rute di web dimiliki V3-21."
     },
     {
       "id": "edge-promise-all-batch",
@@ -687,14 +753,14 @@
         {
           "file": "edge-promise-all-batch/after-stage-window.ts",
           "runSpecifier": "@tauri-apps/api/window",
-          "description": "Sesudah jalan api/window: bagian window ditulis ulang ke platform, bagian webviewWindow tetap import dinamis tunggal."
+          "description": "Sesudah tindak lanjut pekerja atas jalan api/window: bagian window ditulis ulang ke platform, bagian webviewWindow tetap import dinamis tunggal."
         }
       ],
       "stageOrderFlexible": true,
       "identicalPair": false,
       "confirmationNeeded": null,
       "reportRequirement": null,
-      "notes": "Batch Promise.all atas dua import dinamis (pola nyata src/lib/editor-windows.ts dan markdown-export.ts). Mesin wajib menangani penulisan ulang parsial: satu jalan spesifier hanya mengubah bagiannya dan menyisakan batch yang tetap valid. Urutan tahap fleksibel; bentuk final yang mengikat."
+      "notes": "Batch Promise.all atas dua import dinamis (pola nyata src/lib/editor-windows.ts dan markdown-export.ts). Mesin melaporkan batch sebagai satu unit (alasan promise-all-batch) dan tidak mengubah berkas; pekerja menulis ulang batch sebagai satu unit per tahap, dan berkas tahap (after-stage-window.ts) adalah keadaan tahap-A pekerja, bukan output mesin. Urutan tahap fleksibel; bentuk final yang mengikat."
     },
     {
       "id": "edge-reexport",
@@ -713,7 +779,7 @@
       "stageOrderFlexible": false,
       "identicalPair": true,
       "confirmationNeeded": null,
-      "reportRequirement": "Mesin wajib melaporkan UNSUPPORTED untuk berkas ini dan TIDAK BOLEH melaporkan sukses. Berkas dibiarkan tidak berubah; manusia menyelesaikan re-ekspor dengan tangan dan gate wajib menandai berkas ini.",
+      "reportRequirement": "Engine: the file is left unchanged and the report carries note re-export-not-handled; the file status must not be transformed and no success may be claimed. A human resolves the re-export by hand and the gate must flag this file.",
       "notes": "Kasus tepi defensif: 0 re-ekspor dari @tauri-apps/* ada di src/ trunk (laporan G0). Fixture ini memastikan mesin tidak diam-diam melewatkan atau merusak re-ekspor bila pola itu muncul. Tidak ada bentuk after yang sah secara mekanis karena tidak ada nilai Store yang setara untuk dieksplor ulang dari barrel."
     },
     {
@@ -801,7 +867,7 @@
       "stagedAfters": [],
       "stageOrderFlexible": false,
       "identicalPair": false,
-      "confirmationNeeded": "Pola 8 bukan penulisan ulang import; mesin wajib menangani pola ini dalam mode yang sama atau mode terpisah yang terdokumentasi, atau melaporkannya sebagai celah mesin. Fixture ini tetap mengikat bentuk targetnya.",
+      "confirmationNeeded": "Pola 8 bukan penulisan ulang import. Mesin ter-push melaporkan marker lewat note tauri-internals-marker dalam jalan yang sama dan tidak pernah mengeditnya; integrator mengesahkan bahwa pelaporan itu cukup dan penulisan ulang manual mengikuti laporan. Fixture ini tetap mengikat bentuk targetnya.",
       "reportRequirement": null,
       "notes": "Pemakaian tanpa import langsung: window.__TAURI_INTERNALS__ dan varian globalThis diganti isTauriRuntime() dari barrel. Satu-satunya penyebutan marker yang sah sesudah migrasi ada di detect.ts."
     },
@@ -822,6 +888,27 @@
       "confirmationNeeded": null,
       "reportRequirement": null,
       "notes": "Penyebutan spesifier di dalam string literal dan komentar bukan import; mesin berbasis AST wajib membiarkannya. Batas mesin/gate: grep lapis 1 gate tetap cocok dengan string ini, sehingga manusia wajib mengonfirmasi bahwa penyebutan itu teks diagnostik, bukan import, sebelum gelombang dinyatakan selesai."
+    },
+    {
+      "id": "edge-quote-variants",
+      "wave": "EDGE",
+      "specifiers": [
+        "@tauri-apps/plugin-store"
+      ],
+      "runSpecifier": "@tauri-apps/plugin-store",
+      "patterns": [
+        1
+      ],
+      "kind": "auto",
+      "before": "edge-quote-variants/before.ts",
+      "after": "edge-quote-variants/after.ts",
+      "stagedAfters": [],
+      "stageOrderFlexible": false,
+      "identicalPair": false,
+      "confirmationNeeded": null,
+      "reportRequirement": null,
+      "notes": "Variasi bentuk pola 1 yang diwajibkan desain seksi 4.3: kutip ganda dan tanpa titik koma pada pernyataan import. Mesin berbasis AST wajib mengubahnya sama seperti bentuk kanonis; perbandingan bersifat semantik sehingga gaya kutip dan titik koma tidak signifikan."
     }
-  ]
+  ],
+  "engineBranchAtR2Audit": "origin/web-codemod-engine at 3fc1b64de65c39121601053a6d41d92ffdb1cf7d (V3-16aR, full engine + README) was fetched and run over these fixtures by V3-16cR2. Fixture expectations were aligned to that engine; see fase1/laporan-v3-16c-codemod-docs.md for per-case run results."
 }

@@ -2,8 +2,7 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 // Codemod fixture: g1-sql-funnel. Synthetic example.
 
-import { Database } from '@tauri-apps/plugin-sql';
-import type { QueryResult } from '@tauri-apps/plugin-sql';
+import Database, { type QueryResult } from '@tauri-apps/plugin-sql';
 
 let cached: Database | null = null;
 

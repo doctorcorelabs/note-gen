@@ -56,8 +56,8 @@ bukan atas tree repo.
 | `unsupported` | Mesin tidak boleh menulis ulang dan tidak boleh mengklaim sukses. | Mesin melaporkan UNSUPPORTED, membiarkan berkas tidak berubah, dan tidak melaporkan sukses atas berkas itu. |
 
 Pasangan identik (`identical: true` di manifest) adalah pasangan
-yang disengaja, bukan kesalahan salin: SQL funnel, api/image,
-re-ekspor, dan kasus no-op. Jangan "memperbaiki" pasangan identik
+yang disengaja, bukan kesalahan salin: SQL funnel, re-ekspor, dan
+kasus no-op. Jangan "memperbaiki" pasangan identik
 menjadi pasangan berbeda tanpa keputusan tercatat.
 
 ## Aturan perbandingan: semantik, dua tahap, bukan byte
@@ -130,6 +130,9 @@ fixture di tree kerja):
 2. Jalankan mesin satu spesifier per jalan, dengan daftar berkas
    eksplisit, tanpa flag tulis lebih dulu (dry-run) untuk membaca
    diff; lalu jalankan dengan flag tulis atas salinan staging.
+   Kasus dengan `additionalRunSpecifiers` di manifest dijalankan
+   dengan spesifier tambahan itu lebih dulu (urut daftar), lalu
+   `runSpecifier`.
 3. Bandingkan output dengan `after.ts` (atau berkas tahap) memakai
    aturan dua tahap di atas: tahap E atas import, tahap A atas
    keadaan akhir sesudah tindak lanjut terpandu laporan.
@@ -150,7 +153,8 @@ lengkap ada di luar repo: `fase1/panduan-codemod.md`.
 |---|---|---|---|---|
 | `g1-store-static` | G1 | `@tauri-apps/plugin-store` | 1 | auto |
 | `g1-store-dynamic` | G1 | `@tauri-apps/plugin-store` | 5 | auto |
-| `g1-store-type-only` | G1 | `@tauri-apps/plugin-store` | 3 | auto |
+| `g1-store-dynamic-module` | G1 | `@tauri-apps/plugin-store` | 5, 6 | auto |
+| `g1-store-type-only` | G1 | `@tauri-apps/plugin-store` | 3 | manual-review |
 | `g1-sql-funnel` | G1 | `@tauri-apps/plugin-sql` | 1, 3 | manual-review |
 | `g1-fs-static` | G1 | `@tauri-apps/plugin-fs` | 1, 4 | auto |
 | `g1-fs-type-only` | G1 | `@tauri-apps/plugin-fs` | 3 | auto |
@@ -158,13 +162,13 @@ lengkap ada di luar repo: `fase1/panduan-codemod.md`.
 | `g1-fs-dynamic-module` | G1 | `@tauri-apps/plugin-fs` | 5, 6 | auto |
 | `g2-core-invoke` | G2 | `@tauri-apps/api/core` | 1 | auto |
 | `g2-core-channel` | G2 | `@tauri-apps/api/core` | 1 | auto |
-| `g2-core-istauri` | G2 | `@tauri-apps/api/core` | 1 | auto |
 | `g2-http-static` | G2 | `@tauri-apps/plugin-http` | 1, 3, 4 | auto |
 | `g2-http-dynamic` | G2 | `@tauri-apps/plugin-http` | 5 | auto |
 | `g3-dialog-static` | G3 | `@tauri-apps/plugin-dialog` | 1, 4 | auto |
 | `g3-dialog-dynamic` | G3 | `@tauri-apps/plugin-dialog` | 5 | auto |
 | `g3-opener-static` | G3 | `@tauri-apps/plugin-opener` | 1 | manual-review |
 | `g3-clipboard-static` | G3 | `@tauri-apps/plugin-clipboard-manager` | 1 | auto |
+| `g3-clipboard-api-static` | G3 | `tauri-plugin-clipboard-api` | 1 | auto |
 | `g3-asset-convert` | G3 | `@tauri-apps/api/core` | 1 | auto |
 | `g4-window-static` | G4 | `@tauri-apps/api/window` | 1 | auto |
 | `g4-webviewwindow-static` | G4 | `@tauri-apps/api/webviewWindow` | 1 | auto |
@@ -172,14 +176,16 @@ lengkap ada di luar repo: `fase1/panduan-codemod.md`.
 | `g4-event-static` | G4 | `@tauri-apps/api/event` | 1 | auto |
 | `g4-event-type-only` | G4 | `@tauri-apps/api/event` | 3 | auto |
 | `g4-os-static` | G4 | `@tauri-apps/plugin-os` | 1, 4 | auto |
+| `g4-os-platform-collision` | G4 | `@tauri-apps/plugin-os` | 1 | manual-review |
 | `g4-app-version` | G4 | `@tauri-apps/api/app` | 1, 5 | auto |
+| `g4-core-istauri` | G4 | `@tauri-apps/api/core` | 1 | auto |
 | `g4-notification-multiline` | G4 | `@tauri-apps/plugin-notification` | 2 | auto |
 | `g5-shortcut-static` | G5 | `@tauri-apps/plugin-global-shortcut` | 1 | auto |
 | `g5-shell-static` | G5 | `@tauri-apps/plugin-shell` | 1 | auto |
 | `g5-process-static` | G5 | `@tauri-apps/plugin-process` | 1 | auto |
 | `g5-autostart-multiline` | G5 | `@tauri-apps/plugin-autostart` | 2, 4 | auto |
 | `g5-updater-static` | G5 | `@tauri-apps/plugin-updater` | 1, 3 | manual-review |
-| `g5-image-static` | G5 | `@tauri-apps/api/image` | 1, 4 | manual-review |
+| `g5-image-static` | G5 | `@tauri-apps/api/image`, `@tauri-apps/plugin-clipboard-manager` | 1, 4, 7 | manual-review |
 | `edge-promise-all-batch` | G4 | `@tauri-apps/api/window, @tauri-apps/api/webviewWindow` | 5, 7 | auto |
 | `edge-reexport` | EDGE | `@tauri-apps/plugin-store` | 0 | unsupported |
 | `edge-multi-specifier-staged` | EDGE | `@tauri-apps/plugin-store, @tauri-apps/api/core, @tauri-apps/api/event` | 7 | auto |
@@ -187,17 +193,22 @@ lengkap ada di luar repo: `fase1/panduan-codemod.md`.
 | `edge-other-wave-only` | EDGE | `@tauri-apps/plugin-shell` | 0 | no-op |
 | `edge-internals-no-import` | EDGE | `(none)` | 8 | auto |
 | `edge-string-literal` | EDGE | `(none)` | 0 | no-op |
+| `edge-quote-variants` | EDGE | `@tauri-apps/plugin-store` | 1 | auto |
 
 
-Hitungan: 39 kasus (32 kasus gelombang + 7 kasus ber-id edge-*).
-Per kolom gelombang di manifest: G1 8, G2 5, G3 5, G4 9 (8 kasus
-G4 + edge-promise-all-batch yang memang milik G4), G5 6, EDGE 6.
-Per kind: auto 30, manual-review 5, no-op 3, unsupported 1. Ke-21 spesifier `@tauri-apps/*` tercakup; kedelapan
-pola desain seksi 4.3 tercakup; re-ekspor tercakup sebagai kasus
-tepi defensif (0 kemunculan di tree trunk). Di luar 39 kasus itu,
-direktori `gate-violation/` (lihat seksi di bawah) adalah fixture
-pelanggaran yang disengaja untuk gate V3-16b; ia bukan kasus
-mesin dan tidak masuk hitungan 39.
+Hitungan: 43 kasus (35 kasus ber-id g* + 8 kasus ber-id edge-*).
+Per kolom gelombang di manifest: G1 9, G2 4, G3 6, G4 11 (10 kasus
+G4 + edge-promise-all-batch yang memang milik G4), G5 6, EDGE 7.
+Per kind: auto 32, manual-review 7, no-op 3, unsupported 1.
+Per pola (kasus multi-pola dihitung di tiap polanya): 1: 26,
+2: 2, 3: 6, 4: 6, 5: 7, 6: 2, 7: 3, 8: 1; 4 kasus berpola 0 adalah
+kasus tepi no-op/unsupported. Ke-22 spesifier yang dikenal mesin
+tercakup (21 `@tauri-apps/*` + `tauri-plugin-clipboard-api`);
+kedelapan pola desain seksi 4.3 tercakup; re-ekspor tercakup
+sebagai kasus tepi defensif (0 kemunculan di tree trunk). Di luar
+43 kasus itu, direktori `gate-violation/` (lihat seksi di bawah)
+adalah fixture pelanggaran yang disengaja untuk gate V3-16b; ia
+bukan kasus mesin dan tidak masuk hitungan 43.
 
 ## Fixture pelanggaran untuk gate (V3-16b)
 
@@ -251,23 +262,44 @@ mentah mesin. Opsi putusan: (a) mesin tetap import-only dan
 harness perbandingan dua tahap dipakai sebagai gate fixture;
 (b) mesin diperluas menulis ulang call site dan output mesin
 dibandingkan langsung dengan `after.ts`. Kedua opsi memakai
-`after.ts` yang sama sebagai keadaan akhir target.
+`after.ts` yang sama sebagai keadaan akhir target. Mesin ter-push
+(3fc1b64d) bersifat import-only; K-0 tetap menunggu putusan
+integrator.
 
 1. Bentuk alias: nama lokal alias tidak dipertahankan sebagai
    binding; call site ditulis ulang ke member expression platform.
    Terdampak: g1-fs-static, g2-http-static, g3-dialog-static,
-   g4-os-static, g5-autostart-multiline.
-2. Pemetaan tipe Store ke StoreHandle (g1-store-type-only).
-3. Pemetaan tipe Update ke UpdateInfo (g5-updater-static).
+   g4-os-static, g5-autostart-multiline. Mesin ter-push
+   berperilaku sama untuk aksi platform (binding dihapus, laporan
+   mencatat nama lokal asal); aksi barrel mempertahankan alias.
+   Integrator mengesahkan tafsir ini terhadap wording desain.
+2. Pemetaan tipe Store ke StoreHandle (g1-store-type-only):
+   mesin tidak punya pemetaan rename tipe dan memperlakukan Store
+   sebagai aksi platform; penulisan ulang ke StoreHandle adalah
+   tindak lanjut manual (kind manual-review).
+3. Pemetaan tipe Update ke UpdateInfo (g5-updater-static):
+   mesin mengubah deklarasi check dan melewati deklarasi tipe
+   Update (alasan no-barrel-equivalent); rename ke UpdateInfo
+   adalah tindak lanjut manual.
 4. Pengecualian subset convertFileSrc pada jalan G2 atas api/core
-   (g3-asset-convert): mesin mendukung pengecualian per nama, atau
-   pekerja G2 mengecualikan ke-9 berkas dari daftar berkas.
+   (g3-asset-convert): TERJAWAB oleh mesin ter-push. Jalan
+   --wave G2 menunda convertFileSrc sebagai residual; jalan
+   --specifier api/core mengubahnya. Pekerja G2 memakai mode
+   --wave atau mengecualikan ke-9 berkas bila memakai mode
+   --specifier.
 5. Penanganan pola 8 (`__TAURI_INTERNALS__`) oleh mesin
-   (edge-internals-no-import): mode yang sama atau mode terpisah
-   yang terdokumentasi.
-6. Perilaku mesin atas re-ekspor (edge-reexport): wajib
-   UNSUPPORTED + tidak sukses; bentuk pelaporan mengikuti kontrak
-   CLI mesin.
+   (edge-internals-no-import): mesin ter-push melaporkan marker
+   lewat note tauri-internals-marker dalam jalan yang sama dan
+   tidak pernah mengeditnya; integrator mengesahkan bahwa
+   pelaporan itu cukup.
+6. Perilaku mesin atas re-ekspor (edge-reexport): mesin
+   membiarkan berkas tidak berubah dan laporan membawa note
+   re-export-not-handled; harness memetakan itu ke UNSUPPORTED
+   dan tidak ada klaim sukses.
+7. Nama isTauri (g4-core-istauri): tahap E menerima nama isTauri
+   dari barrel (mesin mempertahankan nama); tahap A memakai
+   isTauriRuntime sesuai wording desain seksi 1.17. Kedua nama
+   adalah ekspor barrel untuk fungsi yang sama.
 
 ## Yang bukan tugas fixture
 

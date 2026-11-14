@@ -2,9 +2,8 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 // Codemod fixture: g5-image-static. Synthetic example.
 
-import { Image as TauriImage } from '@tauri-apps/api/image';
+import { platform } from '@/lib/platform';
 
-export async function imageFromBytes(png: Uint8Array): Promise<unknown> {
-  const image = await TauriImage.fromBytes(png);
-  return image;
+export async function copyScreenshot(png: Uint8Array): Promise<void> {
+  await platform.clipboard.writeImage(png);
 }

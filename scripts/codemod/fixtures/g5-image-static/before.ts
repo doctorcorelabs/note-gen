@@ -3,8 +3,13 @@
 // Codemod fixture: g5-image-static. Synthetic example.
 
 import { Image as TauriImage } from '@tauri-apps/api/image';
+import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 
-export async function imageFromBytes(png: Uint8Array): Promise<unknown> {
+export async function copyScreenshot(png: Uint8Array): Promise<void> {
   const image = await TauriImage.fromBytes(png);
-  return image;
+  try {
+    await writeImage(image);
+  } finally {
+    await image.close();
+  }
 }
