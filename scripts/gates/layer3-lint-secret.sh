@@ -126,7 +126,7 @@ else
       echo "layer3: targeted ESLint over $(wc -l < "$tmpdir/existing.txt" | tr -d ' ') file(s)"
       eslint_rc=0
       # eslint exits 1 when errors exist; capture JSON regardless.
-      xargs -a "$tmpdir/existing.txt" -d '\n' ./node_modules/.bin/eslint --format json --no-warn-ignored > "$tmpdir/eslint.json" 2> "$tmpdir/eslint.err" || eslint_rc=$?
+      xargs -a "$tmpdir/existing.txt" -d '\n' ./node_modules/.bin/eslint --format json > "$tmpdir/eslint.json" 2> "$tmpdir/eslint.err" || eslint_rc=$?
       if [ ! -s "$tmpdir/eslint.json" ]; then
         echo "layer3: FAIL: ESLint produced no JSON output; stderr:"
         sed 's/^/  /' "$tmpdir/eslint.err" | head -n 20
