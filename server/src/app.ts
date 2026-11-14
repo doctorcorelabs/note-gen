@@ -38,7 +38,9 @@ import {
 import { registerErrorHandling } from './plugins/error-handler.js';
 import { buildLoggerOptions } from './plugins/logging.js';
 import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js';
+import { registerDbRoutes } from './routes/db.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { createDefaultDbRouteDeps } from './services/db/deps.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -76,6 +78,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checkTimeoutMs: deps.config.checkTimeoutMs,
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
+
+  // Db/transactions routes (kontrak-api-kanonis.md section 3.4):
+  // POST /api/transactions and POST /api/db/batch. Kind handlers
+  // are registered into dbDeps.registry by the handler workers
+  // (see services/db/registry.ts); until they land, unregistered
+  // W1 kinds answer 500 and W2 kinds answer 410, never fake
+  // success.
+  const dbDeps = createDefaultDbRouteDeps(deps.config);
+  await registerDbRoutes(app, dbDeps);
 
   return app;
 }
