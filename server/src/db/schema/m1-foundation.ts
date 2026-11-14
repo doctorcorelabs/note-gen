@@ -10,13 +10,14 @@
 // epoch milliseconds in the API. Status values use text plus CHECK, never
 // a Postgres enum type, so new values need no type migration.
 //
-// Reconciliation note (see laporan-db-schema.md): the auth design V1-08
-// owns the final shape of users, sessions, and tokens (assumption A2 in
-// V1-03). This file implements the V1-03 M1 shape exactly so the initial
-// migration holds 34 tables. Auth deltas from V1-08 (email login, role
-// and status columns, CSRF hash, credential epoch copies, TOTP and
-// lockout tables) arrive as a later forward-only migration owned by the
-// auth worker, not by editing this wave.
+// M8 expand state (migration 0001): this file carries BOTH the M1 shape
+// and the additive V1-08 columns. Old columns (login, is_admin,
+// suspended_at, totp_secret, device_id, ip_hash, user_agent_hash,
+// expires_at, idle_expires_at, actor_id, action, target_type,
+// target_id, owner_id) are still present; they are removed only by the
+// contract migration 0003, after the data procedure and the tighten
+// migration 0002. Do not read this intermediate state as the final
+// shape; the final shape is documented in laporan-v3-01a-m8.md.
 
 import { desc, sql } from 'drizzle-orm';
 import {
@@ -42,6 +43,13 @@ export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => 'bytea',
 });
 
+// IP address column type. drizzle-orm pg-core has no built-in inet
+// builder, so the type is declared explicitly, mirroring bytea above.
+// The postgres.js driver maps inet to and from string values.
+export const inet = customType<{ data: string; driverData: string }>({
+  dataType: () => 'inet',
+});
+
 export const users = pgTable(
   'users',
   {
@@ -57,10 +65,25 @@ export const users = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    // M8 expand: V1-08 columns. email stays nullable until the data
+    // procedure backfills it and migration 0002 tightens it.
+    email: text('email'),
+    passwordChangedAt: timestamp('password_changed_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    role: text('role').notNull().default('user'),
+    status: text('status').notNull().default('active'),
+    totpEnabled: boolean('totp_enabled').notNull().default(false),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true, mode: 'date' }),
+    disabledAt: timestamp('disabled_at', { withTimezone: true, mode: 'date' }),
+    disabledReason: text('disabled_reason'),
   },
   (t) => [
     // Login uniqueness is case-insensitive without the citext extension.
     uniqueIndex('users_login_lower_key').using('btree', sql`lower(${t.login})`),
+    index('users_status_idx').on(t.status),
+    check('users_role_check', sql`${t.role} IN ('user', 'admin')`),
+    check('users_status_check', sql`${t.status} IN ('active', 'disabled')`),
   ],
 );
 
@@ -96,10 +119,23 @@ export const sessions = pgTable(
     idleExpiresAt: timestamp('idle_expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+    // M8 expand: V1-08 columns. csrf_token_hash and absolute_expires_at
+    // stay nullable until the data procedure invalidates pre-M8 sessions
+    // and migration 0002 tightens them.
+    csrfTokenHash: text('csrf_token_hash'),
+    credentialEpoch: integer('credential_epoch').notNull().default(0),
+    userAgent: text('user_agent'),
+    createdIp: inet('created_ip'),
+    lastSeenIp: inet('last_seen_ip'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true, mode: 'date' }),
+    stepUpAt: timestamp('step_up_at', { withTimezone: true, mode: 'date' }),
   },
   (t) => [
     uniqueIndex('sessions_session_hash_key').on(t.sessionHash),
     index('sessions_user_id_idx').on(t.userId),
+    index('sessions_user_created_idx').on(t.userId, t.createdAt),
+    index('sessions_absolute_expires_idx').on(t.absoluteExpiresAt),
   ],
 );
 
@@ -110,6 +146,10 @@ export const workspaces = pgTable(
     ownerId: uuid('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    // M8 expand: owner_user_id without a foreign key yet. The data
+    // procedure backfills it from owner_id; migration 0002 adds the
+    // NOT NULL constraint, the RESTRICT foreign key, and the index.
+    ownerUserId: uuid('owner_user_id'),
     name: text('name').notNull(),
     config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
     storageQuotaBytes: bigint('storage_quota_bytes', { mode: 'number' }),
@@ -132,10 +172,14 @@ export const workspaceMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
+    // M8 expand: backfilled by the column default (migration time) for
+    // pre-existing rows; recorded in laporan-v3-01a-m8.md.
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.workspaceId, t.userId] }),
     check('workspace_members_role_check', sql`${t.role} IN ('owner', 'editor', 'viewer')`),
+    index('workspace_members_user_id_idx').on(t.userId),
   ],
 );
 
@@ -212,8 +256,22 @@ export const auditEvents = pgTable(
     targetId: text('target_id').notNull(),
     ipHash: text('ip_hash').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    // M8 expand: V1-08 columns, all nullable. The data procedure folds
+    // the old columns into these; event_type has no CHECK (the catalog
+    // in desain-auth 12.1 is enforced by code, not by constraint).
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    eventType: text('event_type'),
+    ip: inet('ip'),
+    userAgent: text('user_agent'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
   },
-  (t) => [index('audit_events_actor_created_idx').on(t.actorId, desc(t.createdAt))],
+  (t) => [
+    index('audit_events_actor_created_idx').on(t.actorId, desc(t.createdAt)),
+    index('audit_events_user_created_idx').on(t.userId, t.createdAt),
+    index('audit_events_event_created_idx').on(t.eventType, t.createdAt),
+    index('audit_events_created_idx').on(t.createdAt),
+  ],
 );
 
 export const idempotencyKeys = pgTable(

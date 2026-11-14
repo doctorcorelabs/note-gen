@@ -8,6 +8,13 @@
       "when": 1794676581335,
       "tag": "0000_initial-schema-m1-m7",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794689969905,
+      "tag": "0001_m8-expand",
+      "breakpoints": true
     }
   ]
 }
