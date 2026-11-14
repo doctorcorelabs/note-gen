@@ -17,6 +17,10 @@
  * The local wrapper in src/lib/sync/encode-fetch.ts bypasses this fetch
  * and talks to the plugin over raw invoke commands; its G2 migration is
  * owned by the HttpAdapter implementation work, not by this signature.
+ *
+ * Merge M11 reconciliation (audit V2-40): G0 wins whole. The
+ * branch interface is mechanically identical to G0 (verified
+ * comment-stripped).
  */
 export interface ProxyConfig {
   url: string;

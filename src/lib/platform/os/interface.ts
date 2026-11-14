@@ -23,6 +23,10 @@
  *
  * The upstream type names Platform and Arch are renamed OsPlatform and
  * OsArch here so the platform barrel stays unambiguous.
+ *
+ * Merge M11 reconciliation (audit V2-40): G0 wins whole. The
+ * branch interface is mechanically identical to G0 (verified
+ * comment-stripped).
  */
 export type OsPlatform =
   | "linux"
