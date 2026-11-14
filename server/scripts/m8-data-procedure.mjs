@@ -56,7 +56,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 
-const EMAIL_PATTERN = '^[^\s@]+@[^\s@]+\\.[^\s@]+$';
+const EMAIL_PATTERN = '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$';
 const INT32_MIN = -2147483648;
 const INT32_MAX = 2147483647;
 
@@ -224,9 +224,13 @@ async function runBackfill() {
     }
 
     // Pre-checks: read-only, before any write. Counts only.
-    const badLogin = await sql.unsafe(
-      `SELECT COUNT(*)::bigint AS n FROM "public"."users" WHERE btrim("login") !~ '${EMAIL_PATTERN}'`,
-    );
+    // Parameterized on purpose: the pattern travels as a bound value,
+    // so no SQL string-literal escaping can change what the regex
+    // sees. See laporan-v3-01a-m8.md for the escape defect this
+    // replaces (a plain JS literal collapsed the whitespace class
+    // into the letter s and refused valid logins).
+    const badLogin = await sql`
+      SELECT COUNT(*)::bigint AS n FROM "public"."users" WHERE btrim("login") !~ ${EMAIL_PATTERN}`;
     if (Number(badLogin[0].n) > 0) {
       failClosed('check-login-email', `non-email logins=${badLogin[0].n}; escalate, do not invent emails.`);
     }
