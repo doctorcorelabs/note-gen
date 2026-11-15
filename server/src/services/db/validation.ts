@@ -10,9 +10,14 @@
 // 1. The body must be a JSON object whose only field is `operations`.
 //    Unknown fields, including workspaceId/workspace_id, are rejected
 //    with validation_failed and details.fields (kontrak 1.1, 1.5).
-// 2. `operations` must be an array of at most 50 entries (kontrak
-//    3.4, CT-X5). An empty array is a valid no-op: the contract sets
-//    a maximum and no minimum.
+// 2. `operations` must be a non-empty array of at most 50 entries
+//    (kontrak 3.4, CT-X5). An empty array is rejected with
+//    validation_failed and details.fields: it carries no operation,
+//    so it is an invalid body, not an unknown kind (kontrak 6.2:
+//    invalid_operation is only for an unknown kind or a kind from
+//    the wrong group). Rejecting here keeps the failure a 400 at
+//    the validation boundary instead of a 500 from dispatch when
+//    no database is available (finding 41a, VRF-3A-32).
 // 3. Each operation must be an object with a string `kind`.
 // 4. Forbidden fields on an operation (sql, query, statement, table,
 //    columns, raw, workspaceId, workspace_id, operations) are
@@ -80,6 +85,11 @@ export function validateDbOperations(body: unknown, group: DbOpGroup): DbOperati
   }
   if (!Array.isArray(operations)) {
     throw validationFailed([{ field: 'operations', issue: 'must be an array' }]);
+  }
+  if (operations.length === 0) {
+    throw validationFailed([
+      { field: 'operations', issue: 'must contain at least 1 operation' },
+    ]);
   }
   if (operations.length > DB_MAX_OPERATIONS_PER_REQUEST) {
     throw validationFailed([

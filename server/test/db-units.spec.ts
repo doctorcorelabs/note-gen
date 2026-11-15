@@ -164,6 +164,35 @@ describe('validateDbOperations', () => {
       expect((error as ApiError).statusCode).toBe(400);
     }
   });
+
+  it('rejects an empty operations array with validation_failed on both endpoints', () => {
+    for (const group of ['read', 'write'] as const) {
+      try {
+        validateDbOperations({ operations: [] }, group);
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).code).toBe('validation_failed');
+        expect((error as ApiError).statusCode).toBe(400);
+        expect((error as ApiError).details).toEqual({
+          fields: [{ field: 'operations', issue: 'must contain at least 1 operation' }],
+        });
+      }
+    }
+  });
+
+  it('rejects missing and non-array operations with validation_failed', () => {
+    for (const body of [{}, { operations: null }, { operations: 'nope' }, { operations: 42 }]) {
+      try {
+        validateDbOperations(body, 'read');
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).code).toBe('validation_failed');
+        expect((error as ApiError).statusCode).toBe(400);
+      }
+    }
+  });
 });
 
 describe('validateIdempotencyKey', () => {
