@@ -57,6 +57,38 @@ import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 import { createProductionSettingsDeps } from './services/settings/index.js';
 import { createDefaultDbRouteDeps } from './services/db/deps.js';
 
+// Db kind handlers (V3-13b): one direct import per handler file,
+// no barrel (see services/db/deps.ts wiring pattern).
+import { HANDLER_KIND as canvasesCreateKind, handle as canvasesCreate, validate as validateCanvasesCreate } from './services/db/canvases-create.js';
+import { HANDLER_KIND as canvasesGetKind, handle as canvasesGet, validate as validateCanvasesGet } from './services/db/canvases-get.js';
+import { HANDLER_KIND as canvasesListKind, handle as canvasesList, validate as validateCanvasesList } from './services/db/canvases-list.js';
+import { HANDLER_KIND as canvasesRestoreKind, handle as canvasesRestore, validate as validateCanvasesRestore } from './services/db/canvases-restore.js';
+import { HANDLER_KIND as canvasesSaveKind, handle as canvasesSave, validate as validateCanvasesSave } from './services/db/canvases-save.js';
+import { HANDLER_KIND as canvasesSoftDeleteKind, handle as canvasesSoftDelete, validate as validateCanvasesSoftDelete } from './services/db/canvases-soft-delete.js';
+import { HANDLER_KIND as compactionsInsertKind, handle as compactionsInsert, validate as validateCompactionsInsert } from './services/db/compactions-insert.js';
+import { HANDLER_KIND as compactionsListByConversationKind, handle as compactionsListByConversation, validate as validateCompactionsListByConversation } from './services/db/compactions-list-by-conversation.js';
+import { HANDLER_KIND as conversationsCreateKind, handle as conversationsCreate, validate as validateConversationsCreate } from './services/db/conversations-create.js';
+import { HANDLER_KIND as conversationsDeleteKind, handle as conversationsDelete, validate as validateConversationsDelete } from './services/db/conversations-delete.js';
+import { HANDLER_KIND as conversationsGetKind, handle as conversationsGet, validate as validateConversationsGet } from './services/db/conversations-get.js';
+import { HANDLER_KIND as conversationsListKind, handle as conversationsList, validate as validateConversationsList } from './services/db/conversations-list.js';
+import { HANDLER_KIND as conversationsUpdateKind, handle as conversationsUpdate, validate as validateConversationsUpdate } from './services/db/conversations-update.js';
+import { HANDLER_KIND as imageCacheGetKind, handle as imageCacheGet, validate as validateImageCacheGet } from './services/db/image-cache-get.js';
+import { HANDLER_KIND as imageCachePutKind, handle as imageCachePut, validate as validateImageCachePut } from './services/db/image-cache-put.js';
+import { HANDLER_KIND as memoriesCreateKind, handle as memoriesCreate, validate as validateMemoriesCreate } from './services/db/memories-create.js';
+import { HANDLER_KIND as memoriesDeleteKind, handle as memoriesDelete, validate as validateMemoriesDelete } from './services/db/memories-delete.js';
+import { HANDLER_KIND as memoriesGetKind, handle as memoriesGet, validate as validateMemoriesGet } from './services/db/memories-get.js';
+import { HANDLER_KIND as memoriesListKind, handle as memoriesList, validate as validateMemoriesList } from './services/db/memories-list.js';
+import { HANDLER_KIND as memoriesStatsKind, handle as memoriesStats, validate as validateMemoriesStats } from './services/db/memories-stats.js';
+import { HANDLER_KIND as memoriesUpdateKind, handle as memoriesUpdate, validate as validateMemoriesUpdate } from './services/db/memories-update.js';
+import { HANDLER_KIND as messagesAppendKind, handle as messagesAppend, validate as validateMessagesAppend } from './services/db/messages-append.js';
+import { HANDLER_KIND as messagesDeleteKind, handle as messagesDelete, validate as validateMessagesDelete } from './services/db/messages-delete.js';
+import { HANDLER_KIND as messagesGetKind, handle as messagesGet, validate as validateMessagesGet } from './services/db/messages-get.js';
+import { HANDLER_KIND as messagesListByConversationKind, handle as messagesListByConversation, validate as validateMessagesListByConversation } from './services/db/messages-list-by-conversation.js';
+import { HANDLER_KIND as messagesListByTagKind, handle as messagesListByTag, validate as validateMessagesListByTag } from './services/db/messages-list-by-tag.js';
+import { HANDLER_KIND as messagesUpdateKind, handle as messagesUpdate, validate as validateMessagesUpdate } from './services/db/messages-update.js';
+import { HANDLER_KIND as policyGetKind, handle as policyGet, validate as validatePolicyGet } from './services/db/policy-get.js';
+import { HANDLER_KIND as policyPutKind, handle as policyPut, validate as validatePolicyPut } from './services/db/policy-put.js';
+
 export interface AppDeps {
   config: ServerConfig;
   pool: HealthDbPool | null;
@@ -166,6 +198,38 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // unregistered W1 kinds answer 500 and W2 kinds answer 410,
   // never fake success.
   const dbDeps = createDefaultDbRouteDeps(deps.config);
+  // Register V3-13b handlers (kinds owned by V3-13b per
+  // fase1/pembagian-handler-kind.md). Unregistered kinds keep
+  // answering 500 (W1) / 410 (W2) until their merge lands.
+  dbDeps.registry.registerWrite(canvasesCreateKind, { validate: validateCanvasesCreate, handle: canvasesCreate });
+  dbDeps.registry.registerRead(canvasesGetKind, { validate: validateCanvasesGet, handle: canvasesGet });
+  dbDeps.registry.registerRead(canvasesListKind, { validate: validateCanvasesList, handle: canvasesList });
+  dbDeps.registry.registerWrite(canvasesRestoreKind, { validate: validateCanvasesRestore, handle: canvasesRestore });
+  dbDeps.registry.registerWrite(canvasesSaveKind, { validate: validateCanvasesSave, handle: canvasesSave });
+  dbDeps.registry.registerWrite(canvasesSoftDeleteKind, { validate: validateCanvasesSoftDelete, handle: canvasesSoftDelete });
+  dbDeps.registry.registerWrite(compactionsInsertKind, { validate: validateCompactionsInsert, handle: compactionsInsert });
+  dbDeps.registry.registerRead(compactionsListByConversationKind, { validate: validateCompactionsListByConversation, handle: compactionsListByConversation });
+  dbDeps.registry.registerWrite(conversationsCreateKind, { validate: validateConversationsCreate, handle: conversationsCreate });
+  dbDeps.registry.registerWrite(conversationsDeleteKind, { validate: validateConversationsDelete, handle: conversationsDelete });
+  dbDeps.registry.registerRead(conversationsGetKind, { validate: validateConversationsGet, handle: conversationsGet });
+  dbDeps.registry.registerRead(conversationsListKind, { validate: validateConversationsList, handle: conversationsList });
+  dbDeps.registry.registerWrite(conversationsUpdateKind, { validate: validateConversationsUpdate, handle: conversationsUpdate });
+  dbDeps.registry.registerRead(imageCacheGetKind, { validate: validateImageCacheGet, handle: imageCacheGet });
+  dbDeps.registry.registerWrite(imageCachePutKind, { validate: validateImageCachePut, handle: imageCachePut });
+  dbDeps.registry.registerWrite(memoriesCreateKind, { validate: validateMemoriesCreate, handle: memoriesCreate });
+  dbDeps.registry.registerWrite(memoriesDeleteKind, { validate: validateMemoriesDelete, handle: memoriesDelete });
+  dbDeps.registry.registerRead(memoriesGetKind, { validate: validateMemoriesGet, handle: memoriesGet });
+  dbDeps.registry.registerRead(memoriesListKind, { validate: validateMemoriesList, handle: memoriesList });
+  dbDeps.registry.registerRead(memoriesStatsKind, { validate: validateMemoriesStats, handle: memoriesStats });
+  dbDeps.registry.registerWrite(memoriesUpdateKind, { validate: validateMemoriesUpdate, handle: memoriesUpdate });
+  dbDeps.registry.registerWrite(messagesAppendKind, { validate: validateMessagesAppend, handle: messagesAppend });
+  dbDeps.registry.registerWrite(messagesDeleteKind, { validate: validateMessagesDelete, handle: messagesDelete });
+  dbDeps.registry.registerRead(messagesGetKind, { validate: validateMessagesGet, handle: messagesGet });
+  dbDeps.registry.registerRead(messagesListByConversationKind, { validate: validateMessagesListByConversation, handle: messagesListByConversation });
+  dbDeps.registry.registerRead(messagesListByTagKind, { validate: validateMessagesListByTag, handle: messagesListByTag });
+  dbDeps.registry.registerWrite(messagesUpdateKind, { validate: validateMessagesUpdate, handle: messagesUpdate });
+  dbDeps.registry.registerRead(policyGetKind, { validate: validatePolicyGet, handle: policyGet });
+  dbDeps.registry.registerWrite(policyPutKind, { validate: validatePolicyPut, handle: policyPut });
   await registerDbRoutes(app, dbDeps);
 
   return app;
