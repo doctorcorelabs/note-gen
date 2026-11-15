@@ -709,10 +709,11 @@ describe('keyword search', () => {
   it('rejects tagId and type combined with scope=files', async () => {
     const counter = countingPort(fixtureItems());
     const app = await searchApp(counter);
-    for (const params of [
+    const cases: Record<string, string>[] = [
       { q: 'gagal', scope: 'files', tagId: '3' },
       { q: 'gagal', scope: 'files', type: 'text' },
-    ]) {
+    ];
+    for (const params of cases) {
       const res = await app.inject({ method: 'GET', url: searchUrl(params), headers: SESSION_HEADERS });
       expect(res.statusCode).toBe(400);
       assertErrorBody(res.json(), 'validation_failed');
@@ -723,14 +724,15 @@ describe('keyword search', () => {
   it('rejects a non-integer, zero, or empty tagId and an empty type', async () => {
     const counter = countingPort(fixtureItems());
     const app = await searchApp(counter);
-    for (const params of [
+    const cases: Record<string, string>[] = [
       { q: 'gagal', tagId: 'abc' },
       { q: 'gagal', tagId: '0' },
       { q: 'gagal', tagId: '3.5' },
       { q: 'gagal', tagId: '' },
       { q: 'gagal', type: '' },
       { q: 'gagal', type: ' , ' },
-    ]) {
+    ];
+    for (const params of cases) {
       const res = await app.inject({ method: 'GET', url: searchUrl(params), headers: SESSION_HEADERS });
       expect(res.statusCode).toBe(400);
       assertErrorBody(res.json(), 'validation_failed');
