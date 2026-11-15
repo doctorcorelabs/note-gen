@@ -171,6 +171,10 @@ describe('step-up gating helper', () => {
 });
 
 describe('POST /api/auth/step-up success', () => {
+  // Timeout raised: the first test pays the app-build cost, which
+  // exceeds the 5000 ms default under shared-CPU load (precedent:
+  // V3-01cR2 in auth-negative-lifecycle.spec.ts); the assertions are
+  // unchanged.
   it('rotates the session, stamps stepUpAt, returns only the new CSRF token, and kills the old session id', async () => {
     const { fixture, app } = await setup();
     const before = await seedLoggedInUser(fixture, app, { email: USER_EMAIL, password: USER_PASSWORD });
@@ -200,7 +204,7 @@ describe('POST /api/auth/step-up success', () => {
     expect(fixture.store.auditEvents.some((event) => event.eventType === 'step_up_succeeded')).toBe(true);
     const user = await fixture.store.findUserById(before.userId);
     expect(user?.credentialEpoch).toBe(1);
-  });
+  }, 15000);
 
   it('the old CSRF token is rejected for the rotated session', async () => {
     const { fixture, app } = await setup();
