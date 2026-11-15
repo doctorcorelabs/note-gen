@@ -211,9 +211,35 @@ export function checkMigrations(dbOk: boolean): CheckResult {
   return { status: 'skipped', latencyMs: null, detail: 'no_migration_registry_in_fase_0', error: null };
 }
 
-// Worker check. Fase 0 has no worker and no heartbeat table, so the check
-// is always skipped, regardless of database state. Skipped means "not
-// applicable", not "worker healthy".
+// Worker check: contract set in wave 3A (V3-39c).
+//
+// Honest skipped result. No worker is deployed in the MVP and no
+// heartbeat table exists in the M1-M7 schema, so there is no heartbeat
+// source this check could read. The check therefore stays skipped with
+// the locked Fase 0 detail, performs no I/O (no pool, no disk), and
+// returns the same value in every database state. Skipped means "not
+// applicable", never "worker healthy": this task makes no claim of a
+// real worker check.
+//
+// Blocking rule: a skipped worker never blocks readiness. The ok rule
+// in runReadyChecks is unchanged (db ok, workspace ok, migrations not
+// failed); pgvector and worker results do not decide it. This function
+// must keep returning skipped until the promotion below lands;
+// changing the status without a real heartbeat source would be a false
+// report either way (ok would claim a healthy worker, fail would block
+// deploys that have no worker by design).
+//
+// Promotion contract (future work, wave 5 / T16, NOT this task): when
+// a worker is deployed together with a heartbeat table and writer, this
+// check reads the newest heartbeat using the database clock, fresh
+// means ok, older than 300000 ms means fail with WORKER_STALE, no
+// heartbeat row at all means fail with WORKER_NO_HEARTBEAT, and a dead
+// database means fail with DB_UNAVAILABLE; the check then becomes hard.
+// The promotion changes this signature and both call sites
+// (runReadyChecks and the emergency envelope), and it needs the
+// heartbeat schema plus a contract amendment if the ReadyChecks shape
+// changes. Sequencing: V3-15 (wave 3B) adds the real checkMigrations
+// above this contract and must not change checkWorker.
 export function checkWorker(): CheckResult {
   return { status: 'skipped', latencyMs: null, detail: 'no_worker_in_fase_0', error: null };
 }
