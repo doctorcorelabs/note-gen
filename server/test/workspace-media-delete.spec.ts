@@ -240,6 +240,36 @@ describe('inspectMediaDeleteTarget: no media-kind rejection', () => {
     expect(plan.media?.mimeType).toBe('image/jpeg');
   });
 
+  it('does not trust the extension when bytes match no signature: octet-stream, still deletable', async () => {
+    const { ports: testPorts } = await setupPorts();
+    await seed('assets/broken.png', Buffer.from([0x01, 0x02, 0x03, 0x04, 0x05, 0x06]));
+    const plan = await inspectMediaDeleteTarget(testPorts, 'assets/broken.png', 'file');
+    expect(plan.media?.kind).toBe('media');
+    expect(plan.media?.detectedType).toBe('unknown');
+    expect(plan.media?.mimeType).toBe('application/octet-stream');
+    expect(plan.media?.disposition).toBe('attachment');
+  });
+
+  it('does not reject an HTML file: it classifies as other with octet-stream serving facts', async () => {
+    const { ports: testPorts } = await setupPorts();
+    await seed('assets/page.html', '<!doctype html><html></html>');
+    const plan = await inspectMediaDeleteTarget(testPorts, 'assets/page.html', 'file');
+    expect(plan.media?.kind).toBe('other');
+    expect(plan.media?.detectedType).toBe('html');
+    expect(plan.media?.mimeType).toBe('application/octet-stream');
+    expect(plan.media?.disposition).toBe('attachment');
+  });
+
+  it('serves an SVG extension as octet-stream even when the bytes are a PNG', async () => {
+    const { ports: testPorts } = await setupPorts();
+    await seed('assets/fake.svg', PNG_BYTES);
+    const plan = await inspectMediaDeleteTarget(testPorts, 'assets/fake.svg', 'file');
+    expect(plan.media?.kind).toBe('media');
+    expect(plan.media?.detectedType).toBe('png');
+    expect(plan.media?.mimeType).toBe('application/octet-stream');
+    expect(plan.media?.disposition).toBe('attachment');
+  });
+
   it('classifies by extension alone when no bytes are supplied', () => {
     expect(classifyMediaPath('assets/pic.png')).toEqual({
       kind: 'media',

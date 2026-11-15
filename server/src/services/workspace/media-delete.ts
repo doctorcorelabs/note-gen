@@ -22,7 +22,9 @@
 // 1. Revision. A media file has a revision computed over its binary
 //    bytes with the same section 3.1 formula as text (7.4). The
 //    trash metadata row carries that last revision for the file
-//    (5.1: revision is null only for folders). This module computes
+//    (5.1 metadata field; 7.4 applies the same section 3.1 formula
+//    to binary bytes, so a media file carries a revision and only
+//    folders carry null). This module computes
 //    it before the move, because the revision binds the path and
 //    must never be reused across a move or restore (lib/revision.ts
 //    header; 5.2 restore recomputes when the path changes).
@@ -228,7 +230,6 @@ const EXPECTED_TYPE_BY_EXT: Record<string, string> = {
   '.ogg': 'ogg',
   '.oga': 'ogg',
   '.zip': 'zip',
-  '.svg': 'svg',
 };
 
 const MIME_BY_TYPE: Record<string, string> = {
@@ -254,26 +255,12 @@ function servingFacts(
   detectedType: string | null,
   extension: string,
 ): { mimeType: string | null; disposition: 'inline' | 'attachment' | null } {
-  if (detectedType !== null && KNOWN_DETECTED_TYPES.has(detectedType)) {
-    if (detectedType === 'svg') {
-      // SVG is always attachment + octet-stream, never inline (7.3
-      // step 5), even when the bytes genuinely are SVG.
-      return { mimeType: 'application/octet-stream', disposition: 'attachment' };
-    }
-    return {
-      mimeType: MIME_BY_TYPE[detectedType] as string,
-      disposition: INLINE_TYPES.has(detectedType) ? 'inline' : 'attachment',
-    };
-  }
-  const expected = EXPECTED_TYPE_BY_EXT[extension];
-  if (expected !== undefined) {
-    if (expected === 'svg') {
-      return { mimeType: 'application/octet-stream', disposition: 'attachment' };
-    }
-    return {
-      mimeType: MIME_BY_TYPE[expected] as string,
-      disposition: INLINE_TYPES.has(expected) ? 'inline' : 'attachment',
-    };
+  // Extension-first rules that bytes never override: SVG is always
+  // attachment + octet-stream, never inline (7.3 step 5), and text
+  // extensions have no magic, so their text mime type stands even
+  // though detection reports 'unknown' for prose bytes.
+  if (extension === '.svg') {
+    return { mimeType: 'application/octet-stream', disposition: 'attachment' };
   }
   if (extension === '.md') {
     return { mimeType: 'text/markdown', disposition: 'attachment' };
@@ -281,10 +268,36 @@ function servingFacts(
   if (extension === '.txt') {
     return { mimeType: 'text/plain', disposition: 'attachment' };
   }
+  if (detectedType === 'svg') {
+    return { mimeType: 'application/octet-stream', disposition: 'attachment' };
+  }
+  if (detectedType === 'html') {
+    // HTML bytes must never inherit an inline image mime type from
+    // the extension: serving them inline from the same origin is
+    // exactly what 7.3 step 4 forbids for uploads.
+    return { mimeType: 'application/octet-stream', disposition: 'attachment' };
+  }
+  if (detectedType !== null && KNOWN_DETECTED_TYPES.has(detectedType)) {
+    return {
+      mimeType: MIME_BY_TYPE[detectedType] as string,
+      disposition: INLINE_TYPES.has(detectedType) ? 'inline' : 'attachment',
+    };
+  }
   if (detectedType !== null) {
     // Bytes were read but matched no signature: the upload rule
     // (7.3 step 4) serves such files as attachment + octet-stream.
+    // The extension alone is not trusted once the bytes contradict
+    // it; a .png name over random bytes is not an image.
     return { mimeType: 'application/octet-stream', disposition: 'attachment' };
+  }
+  // No bytes were supplied (extension-only classification): the
+  // extension is the only fact available.
+  const expected = EXPECTED_TYPE_BY_EXT[extension];
+  if (expected !== undefined) {
+    return {
+      mimeType: MIME_BY_TYPE[expected] as string,
+      disposition: INLINE_TYPES.has(expected) ? 'inline' : 'attachment',
+    };
   }
   return { mimeType: null, disposition: null };
 }
