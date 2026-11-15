@@ -399,7 +399,7 @@ describe("reconciled catalog membership", () => {
     expect(SQL_WRITE_OP_KINDS.length).toBe(40);
     expect(SQL_OP_KINDS.length).toBe(catalogHasMessagesGet ? 74 : 73);
     expect(new Set(SQL_OP_KINDS).size).toBe(SQL_OP_KINDS.length);
-    const readSet = new Set(SQL_READ_OP_KINDS);
+    const readSet = new Set<string>(SQL_READ_OP_KINDS);
     for (const kind of SQL_WRITE_OP_KINDS) {
       expect(readSet.has(kind)).toBe(false);
     }
@@ -448,24 +448,20 @@ describe("unified operation expressibility", () => {
   });
 
   it("rejects a ghost kind as a unified operation", () => {
-    // Type-level pin: the assignment below must not typecheck.
+    // Type-level pin: the single-line assignment below must not
+    // typecheck (kept on one line so the error lands on the line the
+    // directive covers).
     // @ts-expect-error ghost kinds have no unified operation (D/G 6.3).
-    const ghost: ReconciledOperation = {
-      kind: "knowledge.claimSource",
-      sourceType: "record",
-      sourceId: "1",
-    };
+    const ghost: ReconciledOperation = { kind: "knowledge.claimSource", sourceType: "record", sourceId: "1" };
     expect(ghost).toBeDefined();
   });
 
   it("rejects an operation carrying a SQL field", () => {
-    // Type-level pin: excess-property checking must refuse the field.
+    // Type-level pin: excess-property checking must refuse the
+    // field (kept on one line so the error lands on the line the
+    // directive covers).
     // @ts-expect-error no unified operation carries a SQL field (AD-26).
-    const smuggled: ReconciledOperation = {
-      kind: "marks.get",
-      id: 1,
-      sql: "select 1",
-    };
+    const smuggled: ReconciledOperation = { kind: "marks.get", id: 1, sql: "select 1" };
     expect(smuggled).toBeDefined();
   });
 });
