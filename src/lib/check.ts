@@ -1,4 +1,4 @@
-import { platform } from "@tauri-apps/plugin-os";
+import { isTauri, platform } from "@/lib/platform";
 
 // 缓存平台检测结果
 let cachedResult: boolean | null = null;
@@ -12,7 +12,17 @@ export function isMobileDevice() {
   }
 
   try {
-    const platformName = platform();
+    const platformName = platform.os.platform();
+    if (platformName === 'web') {
+      // No Tauri shell: fall back to the user agent, as the old throw path did.
+      if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+        const userAgent = navigator.userAgent.toLowerCase();
+        cachedResult = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+        return cachedResult;
+      }
+      cachedResult = false;
+      return false;
+    }
     cachedResult = platformName === 'android' || platformName === 'ios';
     return cachedResult;
   } catch (error) {
@@ -35,13 +45,6 @@ export function checkIsTauri(): boolean {
     return cachedTauriResult;
   }
 
-  try {
-    // 尝试调用 Tauri API，如果成功则说明在 Tauri 环境中
-    platform();
-    cachedTauriResult = true;
-    return true;
-  } catch {
-    cachedTauriResult = false;
-    return false;
-  }
+  cachedTauriResult = isTauri();
+  return cachedTauriResult;
 }

@@ -6,5 +6,4 @@
 # at G2; developer-tools.ts closes at G4. The canonical mention in
 # src/lib/platform/detect.ts is not listed here; the guard excludes it.
 src/lib/agent/debug-log.ts
-src/lib/developer-tools.ts
 src/lib/tauri-event-listener.ts

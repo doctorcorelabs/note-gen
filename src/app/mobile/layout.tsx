@@ -7,6 +7,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 import dynamic from "next/dynamic"
 import { applyThemeColors } from "@/lib/theme-utils"
 import { applyAppFontFamily } from "@/lib/font-settings"
+import { platform } from "@/lib/platform"
 import dayjs from "dayjs"
 import zh from "dayjs/locale/zh-cn";
 import en from "dayjs/locale/en";
@@ -167,8 +168,7 @@ export default function RootLayout({
           import('@/lib/mcp/init'),
           import('@/lib/sync/sync-push-queue'),
         ])
-        const { platform } = await import('@tauri-apps/plugin-os')
-        if (platform() === 'ios') {
+        if (platform.os.platform() === 'ios') {
           try {
             const { restoreSavedIOSFolderAccess } = await import('@/lib/sync/cloud-folder')
             await restoreSavedIOSFolderAccess()

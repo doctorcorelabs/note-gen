@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { listen } from '@tauri-apps/api/event'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
 import { MoreHorizontal, Pin, PinOff } from 'lucide-react'
@@ -106,7 +104,7 @@ export default function EditorWindowPage() {
       return
     }
     await removeEditorWindowSession(currentSession.id)
-    await getCurrentWindow().destroy()
+    await platform.window.getCurrentWindow().destroy()
   }, [queueSave])
 
   const discardAndClose = useCallback(async () => {
@@ -114,13 +112,13 @@ export default function EditorWindowPage() {
     if (!currentSession) return
     closingRef.current = true
     await removeEditorWindowSession(currentSession.id)
-    await getCurrentWindow().destroy()
+    await platform.window.getCurrentWindow().destroy()
   }, [])
 
   useEffect(() => {
     let disposed = false
     let removeListener: (() => void) | undefined
-    void listen<boolean>(DEVELOPER_MODE_CHANGED_EVENT, (event) => {
+    void platform.event.listen<boolean>(DEVELOPER_MODE_CHANGED_EVENT, (event) => {
       useSettingStore.setState({ developerMode: event.payload === true })
     }).then(async (unlisten) => {
       removeListener = unlisten
@@ -141,7 +139,7 @@ export default function EditorWindowPage() {
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('session')
-    setIsMacOS(platform() === 'macos')
+    setIsMacOS(platform.os.platform() === 'macos')
     if (!id) {
       setError(t('missing'))
       return
@@ -172,7 +170,7 @@ export default function EditorWindowPage() {
       setError(reason instanceof Error ? reason.message : String(reason))
     })
 
-    const editorWindow = getCurrentWindow()
+    const editorWindow = platform.window.getCurrentWindow()
     let removeCloseListener: (() => void) | undefined
     void editorWindow.onCloseRequested(event => {
       event.preventDefault()
@@ -197,14 +195,14 @@ export default function EditorWindowPage() {
   useEffect(() => {
     if (!session) return
     const status = saving ? ` · ${t('saving')}` : dirty ? ` · ${t('unsaved')}` : ''
-    void getCurrentWindow().setTitle(`${session.tab.name}${status}`).catch(error => {
+    void platform.window.getCurrentWindow().setTitle(`${session.tab.name}${status}`).catch(error => {
       console.error('Failed to update editor window title:', error)
     })
   }, [dirty, saving, session, t])
 
   const toggleAlwaysOnTop = useCallback(async () => {
     const next = !alwaysOnTop
-    await getCurrentWindow().setAlwaysOnTop(next)
+    await platform.window.getCurrentWindow().setAlwaysOnTop(next)
     setAlwaysOnTop(next)
   }, [alwaysOnTop])
 

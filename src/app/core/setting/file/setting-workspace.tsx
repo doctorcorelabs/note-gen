@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import useSettingStore from "@/stores/setting"
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { BaseDirectory, exists, mkdir } from "@tauri-apps/plugin-fs"
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import useArticleStore from "@/stores/article"
 import { useSkillsStore } from "@/stores/skills"
@@ -47,7 +47,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
   // 选择工作区目录
   async function handleSelectWorkspace() {
     try {
-      if (platform() === 'ios') {
+      if (platform.os.platform() === 'ios') {
         const selected = await pickIOSSyncFolder()
         if (selected) await switchWorkspace(selected.path, selected)
         return
@@ -101,7 +101,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
     if (!await prepareWorkspaceSwitch()) return
 
     const previousWorkspacePath = workspacePath
-    const isIOS = platform() === 'ios'
+    const isIOS = platform.os.platform() === 'ios'
     const previousIOSAccess = isIOS ? await getIOSWorkspaceFolderAccess() : null
     setSwitchingWorkspace(true)
     let nextIOSAccess = selectedIOSAccess

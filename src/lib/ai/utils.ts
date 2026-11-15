@@ -3,7 +3,7 @@ import { Store } from "@tauri-apps/plugin-store";
 import type OpenAI from 'openai';
 import { AiConfig } from "@/app/core/setting/config";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { platform } from "@tauri-apps/plugin-os";
+import { platform } from "@/lib/platform";
 import { createTauriOpenAIClient, normalizeReasoningEffort, type OpenAICompatibleClient } from "./tauri-client";
 import {
   AGENT_CORE_PROMPT_VERSION,
@@ -206,7 +206,7 @@ export async function convertImageToBase64(imageUrl: string): Promise<string | n
     try {
       const url = new URL(imageUrl)
       filePath = decodeURIComponent(url.pathname)
-      if (platform() === 'windows' && filePath.startsWith('/')) {
+      if (platform.os.platform() === 'windows' && filePath.startsWith('/')) {
         filePath = filePath.substring(1)
       }
     } catch {

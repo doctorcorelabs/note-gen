@@ -1,9 +1,9 @@
 import emitter from '@/lib/emitter';
-import {getCurrentWebviewWindow} from '@tauri-apps/api/webviewWindow';
+import { platform } from '@/lib/platform';
 
 export default function initShowWindow() {
     emitter.on('openWindow', async () => {
-        const window = getCurrentWebviewWindow()
+        const window = platform.window.getCurrentWebviewWindow()
         if (!window) return
         if (!(await window.isVisible())) {
             await window.show()

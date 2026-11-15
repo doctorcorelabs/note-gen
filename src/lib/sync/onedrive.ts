@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { fetch } from '@tauri-apps/plugin-http'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 
 import type { CloudFolderObject } from './cloud-folder'
@@ -48,7 +48,7 @@ export function logOneDriveTiming(
   startedAt: number,
   details: OneDriveTimingDetails = {},
 ): void {
-  const currentPlatform = platform()
+  const currentPlatform = platform.os.platform()
   if (currentPlatform !== 'android' && currentPlatform !== 'ios') return
   recordSyncTiming(operation, startedAt, details, 'OneDriveTiming')
 }
@@ -220,7 +220,7 @@ function retryDelayMs(response: Response | null, attempt: number): number {
 }
 
 function oneDriveRequestConcurrency(): number {
-  const currentPlatform = platform()
+  const currentPlatform = platform.os.platform()
   return currentPlatform === 'android' || currentPlatform === 'ios'
     ? MOBILE_REQUEST_CONCURRENCY
     : DESKTOP_REQUEST_CONCURRENCY
@@ -396,7 +396,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 async function oauthRequest<T>(path: string, body: URLSearchParams): Promise<{ response: Response; data: T }> {
   const startedAt = Date.now()
   const response = await fetchWithTransientRetry(async () => {
-    if (platform() === 'android' || platform() === 'ios') {
+    if (platform.os.platform() === 'android' || platform.os.platform() === 'ios') {
       const result = await invoke<NativeOAuthResponse>('microsoft_oauth_request', {
         path,
         form: Object.fromEntries(body.entries()),
@@ -426,7 +426,7 @@ async function saveTokens(response: OneDriveTokenResponse, fallbackRefreshToken 
     scope: response.scope || ONE_DRIVE_SCOPE,
   } satisfies OneDriveAuthTokens
   const store = await Store.load('store.json')
-  const currentPlatform = platform()
+  const currentPlatform = platform.os.platform()
   if (currentPlatform === 'android' || currentPlatform === 'ios') {
     await invoke(`set_${currentPlatform}_secure_value`, {
       key: ONE_DRIVE_TOKEN_KEY,
@@ -444,7 +444,7 @@ async function saveTokens(response: OneDriveTokenResponse, fallbackRefreshToken 
 async function readStoredTokens(): Promise<OneDriveAuthTokens | null> {
   const store = await Store.load('store.json')
   const legacyTokens = await store.get<OneDriveAuthTokens>(ONE_DRIVE_TOKEN_KEY) ?? null
-  const currentPlatform = platform()
+  const currentPlatform = platform.os.platform()
   if (currentPlatform !== 'android' && currentPlatform !== 'ios') return legacyTokens
 
   try {
@@ -1076,7 +1076,7 @@ export async function disconnectOneDrive(): Promise<void> {
   tokenRefreshPromise = null
   await clearCloudFolderTreeCache()
   const store = await Store.load('store.json')
-  const currentPlatform = platform()
+  const currentPlatform = platform.os.platform()
   if (currentPlatform === 'android' || currentPlatform === 'ios') {
     await invoke(`delete_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
   }

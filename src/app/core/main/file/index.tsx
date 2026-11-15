@@ -5,7 +5,7 @@ import { FileManager } from "./file-manager"
 import useArticleStore from "@/stores/article"
 import useClipboardStore from "@/stores/clipboard"
 import { isMobileDevice } from "@/lib/check"
-import { platform } from "@tauri-apps/plugin-os"
+import { platform } from "@/lib/platform"
 import { isEditableKeyboardTarget } from "@/lib/is-editable-keyboard-target"
 import { flattenFileTree, getFileSelectionEntries, toClipboardItems } from "./file-selection"
 import { useTranslations } from 'next-intl'
@@ -54,7 +54,7 @@ function useFileManagerShortcuts() {
   // 检测当前平台
   useEffect(() => {
     try {
-      const p = platform()
+      const p = platform.os.platform()
       if (p === 'macos') {
         setCurrentPlatform('macos')
       } else if (p === 'windows') {

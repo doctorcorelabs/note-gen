@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import useSettingStore, { CUSTOM_CSS_CHANGED_EVENT } from '@/stores/setting'
 
@@ -26,7 +26,7 @@ export function CustomCssController() {
       })
       .catch(() => undefined)
 
-    const unlistenPromise = listen<string>(CUSTOM_CSS_CHANGED_EVENT, event => {
+    const unlistenPromise = platform.event.listen<string>(CUSTOM_CSS_CHANGED_EVENT, event => {
       if (disposed || typeof event.payload !== 'string') return
       if (useSettingStore.getState().customCss !== event.payload) {
         useSettingStore.setState({ customCss: event.payload })

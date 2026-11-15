@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { cloneDeep } from "lodash-es";
 import { computedParentPath, getCurrentFolder, joinRelativePath } from "@/lib/path";
 import { cn } from '@/lib/utils'
+import { platform } from '@/lib/platform'
 import useSettingStore from '@/stores/setting'
 import { isWritingAssetsFolder } from '@/lib/writing-assets-path'
 import { isSkillsFolder } from "@/lib/skills/utils"
@@ -860,8 +861,7 @@ export function FolderItem({
   useEffect(() => {
     const detectPlatform = async () => {
       try {
-        const { platform } = await import('@tauri-apps/plugin-os')
-        const p = platform()
+        const p = platform.os.platform()
         if (p === 'macos') {
           setCurrentPlatform('macos')
         } else if (p === 'windows') {

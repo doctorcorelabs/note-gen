@@ -26,7 +26,7 @@ import { initMcp } from "@/lib/mcp/init"
 import { reportAppStart } from "@/lib/event-report"
 import { TopAppBar, WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
 import { Store } from '@tauri-apps/plugin-store'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
 import { TextSizeProvider } from "@/contexts/text-size-context"
 import { SyncConfirmDialog } from "@/components/sync-confirm-dialog"
@@ -81,7 +81,7 @@ export default function RootLayout({
       if (typeof request.pluginId === 'string') openPluginInstall(request.pluginId)
     }
     const registerPluginInstallListener = async () => {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       unlistenPluginInstall = await window.listen<{ pluginId: string }>('plugin-install-request', (event) => handlePluginInstall(event.payload))
       const pending = await invoke<Array<{ pluginId: string }>>('drain_pending_plugin_install_requests')
       if (!cancelled) pending.forEach(handlePluginInstall)
@@ -129,7 +129,7 @@ export default function RootLayout({
     }
 
     const registerOpenFileListener = async () => {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       const unlisten = await window.listen<string[]>('open-files', (event) => {
         void openMarkdownFiles(event.payload)
       })
@@ -218,7 +218,7 @@ export default function RootLayout({
       const currentPin = await store.get<boolean>('pin')
       const nextPin = !currentPin
 
-      await getCurrentWindow().setAlwaysOnTop(nextPin)
+      await platform.window.getCurrentWindow().setAlwaysOnTop(nextPin)
       await store.set('pin', nextPin)
       await store.save()
       emitter.emit('window-pin-changed', nextPin)
@@ -283,7 +283,7 @@ export default function RootLayout({
     }
 
     const registerTrayListeners = async () => {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       const trayActionUnlisten = await window.listen<string>('tray-action', (event) => {
         void handleTrayAction(event.payload)
       })

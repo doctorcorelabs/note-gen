@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform } from '@/lib/platform'
 import { message } from '@tauri-apps/plugin-dialog'
 import { BaseDirectory, exists, remove } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
@@ -77,7 +77,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
         title: t('dataClearedRestartTitle'),
         kind: 'info',
       })
-      await getCurrentWindow().close()
+      await platform.window.getCurrentWindow().close()
     } finally {
       setPendingAction(null)
     }

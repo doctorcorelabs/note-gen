@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Store } from '@tauri-apps/plugin-store'
 import { executeRecordTransaction, getDb } from '@/db'
@@ -140,7 +140,7 @@ export async function connectWithBrowser(input: {
     const authorization = await client.createDeviceAuthorization({
       deviceId: keyPair.deviceId,
       deviceName: input.deviceName,
-      platform: platform(),
+      platform: platform.os.platform(),
       encryptionPublicKey: keyPair.publicKey,
     })
     await openUrl(authorization.verificationUriComplete)
@@ -698,7 +698,7 @@ function loginWithDeviceIdentity(
     ...(input.totpCode ? { totpCode: input.totpCode } : {}),
     deviceId: identity.deviceId,
     deviceName: input.deviceName,
-    platform: platform(),
+    platform: platform.os.platform(),
     encryptionPublicKey: identity.publicKey,
   })
 }

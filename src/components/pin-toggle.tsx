@@ -5,7 +5,7 @@ import { Pin, PinOff } from "lucide-react"
 import { useTranslations } from 'next-intl'
 
 import { Button } from "@/components/ui/button"
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { platform } from '@/lib/platform';
 import { useState, useEffect } from "react";
 import { Store } from "@tauri-apps/plugin-store";
 import emitter from "@/lib/emitter";
@@ -37,7 +37,7 @@ export function PinToggle() {
     const store = await Store.load('store.json')
     const newPinState = !isPin
     setIsPin(newPinState)
-    const window = getCurrentWindow()
+    const window = platform.window.getCurrentWindow()
     await window.setAlwaysOnTop(newPinState)
     await store.set('pin', newPinState)
     await store.save()

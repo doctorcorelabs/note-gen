@@ -12,7 +12,7 @@ import { insertMark, Mark } from "@/db/marks";
 import { uint8ArrayToBase64, uploadFile } from "@/lib/sync/github";
 import { RepoNames } from "@/lib/sync/github.types";
 import { CheckCircle, CircleX } from "lucide-react";
-import { listen } from "@tauri-apps/api/event";
+import { platform } from "@/lib/platform";
 import { convertBytesToSize } from "@/lib/utils";
 import { getImageRecognitionProgressText } from "@/lib/image-recognition-progress";
 import { getDefaultRecordSaveTagId } from '@/lib/record-save-target'
@@ -147,7 +147,7 @@ export function Clipboard() {
   }
 
   useEffect(() => {
-    listen('tauri://focus', readHandler)
+    platform.event.listen('tauri://focus', readHandler)
   }, [])
 
   return (

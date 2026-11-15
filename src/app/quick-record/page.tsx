@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { hasText, readText } from 'tauri-plugin-clipboard-api'
 import { useTranslations } from 'next-intl'
@@ -113,7 +113,7 @@ export default function QuickRecordPage() {
       // Ignore malformed drafts from older versions.
     }
     const setup = async () => {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       await window.setTitle(t('record.mark.text.title'))
       for (const registration of [
         () => window.onCloseRequested(event => {

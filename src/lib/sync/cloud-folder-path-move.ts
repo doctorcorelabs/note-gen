@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { getWorkspacePath } from '@/lib/workspace'
 import type { CloudFolderConfig } from '@/types/sync'
 import { isOneDriveConfig, oneDriveMovePath, type OneDrivePathMoveOptions } from './onedrive'
@@ -32,7 +32,7 @@ export async function moveCloudFolderPath(
     || target.startsWith(`${source}/`) || source.startsWith(`${target}/`)) throw new Error('Invalid cloud folder rename paths')
   if (!await options.assertCurrent()) throw new Error('SYNC_SWITCH_STALE')
   if (isOneDriveConfig(config)) return oneDriveMovePath(config, source, target, options)
-  if (platform() !== 'android' || !config.path.startsWith('content://')) {
+  if (platform.os.platform() !== 'android' || !config.path.startsWith('content://')) {
     const workspace = await getWorkspacePath()
     if (!workspace.isCustom || physicalPath(workspace.path) !== physicalPath(config.path)) {
       throw new Error('Cloud folder rename requires the selected folder to be the current workspace')

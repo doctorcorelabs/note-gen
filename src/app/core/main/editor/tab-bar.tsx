@@ -8,8 +8,7 @@ import { isWikiFolderPath } from '@/lib/wiki/path'
 import { isWritingAssetsFolder } from '@/lib/writing-assets-path'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, FileLock, FilePlus2, FileText, Folder, Globe2, LockKeyholeOpen, Maximize2, MessageSquareText, MoreHorizontal, PackageOpen, Palette, PanelBottom, PanelLeft, PanelRight, PanelTop, Pin, PinOff, Plus, Redo2, RotateCw, Undo2, X } from 'lucide-react'
-import { platform } from '@tauri-apps/plugin-os'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
@@ -316,7 +315,7 @@ export function TabBar({
   }, [activeCanvasId, isActiveGroup])
 
   useEffect(() => {
-    try { setCurrentPlatform(platform()) } catch { setCurrentPlatform('') }
+    try { setCurrentPlatform(platform.os.platform()) } catch { setCurrentPlatform('') }
   }, [])
 
   useEffect(() => {
@@ -402,7 +401,7 @@ export function TabBar({
       event.stopPropagation()
       if (event.repeat) return
       if (!canCloseActiveTab) {
-        if (checkIsTauri()) void getCurrentWindow().hide()
+        if (checkIsTauri()) void platform.window.getCurrentWindow().hide()
         return
       }
       onCloseTab(activeTabId)

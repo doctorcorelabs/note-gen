@@ -1,11 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { invoke, isTauri } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { platform } from '@tauri-apps/plugin-os'
+import { isTauri, platform } from '@/lib/platform'
+import { invoke } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification'
 import { Bell, Mic, Monitor } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -53,7 +51,7 @@ export function SystemPermissions() {
       return
     }
     try {
-      const currentPlatform = platform()
+      const currentPlatform = platform.os.platform()
       setCurrentPlatform(currentPlatform)
       // Each query fails independently so one unavailable API does not hide
       // another permission's state.
@@ -74,7 +72,7 @@ export function SystemPermissions() {
         setStatus('systemManaged')
         return
       }
-      setStatus(await isPermissionGranted() ? 'granted' : 'notGranted')
+      setStatus(await platform.notification.isPermissionGranted() ? 'granted' : 'notGranted')
     } catch (error) {
       console.error('Failed to read notification permission:', error)
       setStatus('unavailable')
@@ -92,7 +90,7 @@ export function SystemPermissions() {
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisibilityChange)
     if (isTauri()) {
-      void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      void platform.window.getCurrentWindow().onFocusChanged(({ payload: focused }) => {
         if (focused) void refresh()
       }).then(dispose => {
         if (disposed) dispose()
@@ -113,7 +111,7 @@ export function SystemPermissions() {
     setBusy(true)
     try {
       if (kind === 'notification') {
-        await requestPermission()
+        await platform.notification.requestPermission()
       } else if (kind === 'screen') {
         await invoke<boolean>('request_screen_capture_permission')
       } else {

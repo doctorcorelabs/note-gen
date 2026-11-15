@@ -5,7 +5,7 @@ import { RefreshCw } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Store } from '@tauri-apps/plugin-store'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 
 import { ActivityHeatmap } from '@/components/activity/activity-heatmap'
 import { Button } from '@/components/ui/button'
@@ -466,7 +466,7 @@ export function MobileMePage({
       return tMe('sync.localOnly')
     }
 
-    const cloudFolderName = platform() === 'ios' && cloudFolderProvider !== 'oneDrive'
+    const cloudFolderName = platform.os.platform() === 'ios' && cloudFolderProvider !== 'oneDrive'
       ? tSync('iCloud.title')
       : tSync('oneDrive.title')
     return getBackupProviderName(

@@ -1,6 +1,5 @@
-import { getVersion } from '@tauri-apps/api/app'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
 import {
   PLUGIN_ERROR_CODES,
   PluginError,
@@ -61,7 +60,7 @@ export async function invokePluginBackend<T>(
 
 export async function getPluginPlatform(): Promise<PluginPlatform> {
   if (!checkIsTauri()) return 'desktop'
-  const current = platform()
+  const current = platform.os.platform()
   if (current === 'ios') return 'ios'
   if (current === 'android') return 'android'
   return 'desktop'
@@ -69,12 +68,12 @@ export async function getPluginPlatform(): Promise<PluginPlatform> {
 
 export async function getAppVersion(): Promise<string> {
   if (!checkIsTauri()) return '0.0.0'
-  return getVersion()
+  return platform.os.getAppVersion()
 }
 
 export async function listInstalledPluginPackages(): Promise<InstalledPlugin[]> {
   if (!checkIsTauri()) return []
-  const current = platform()
+  const current = platform.os.platform()
   if (current === 'ios' || current === 'android') return []
   return invokePluginBackend<InstalledPlugin[]>('plugin_list_installed')
 }

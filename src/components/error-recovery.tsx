@@ -16,11 +16,10 @@ import {
   Trash2Icon,
 } from 'lucide-react'
 import { Store } from '@tauri-apps/plugin-store'
-import { getVersion } from '@tauri-apps/api/app'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
 import { appConfigDir, appDataDir, join } from '@tauri-apps/api/path'
 import { exists, remove } from '@tauri-apps/plugin-fs'
-import { platform, version as osVersion } from '@tauri-apps/plugin-os'
 import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { save } from '@tauri-apps/plugin-dialog'
@@ -156,9 +155,9 @@ export function ErrorRecovery({
         page: `${window.location.pathname}${window.location.search}`,
       }
       try {
-        nextDiagnosticContext.appVersion = await getVersion()
-        nextDiagnosticContext.platform = platform()
-        nextDiagnosticContext.osVersion = osVersion()
+        nextDiagnosticContext.appVersion = await platform.os.getAppVersion()
+        nextDiagnosticContext.platform = platform.os.platform()
+        nextDiagnosticContext.osVersion = platform.os.version()
       } catch (diagnosticError) {
         console.error('读取诊断环境失败:', diagnosticError)
       }

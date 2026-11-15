@@ -1,5 +1,6 @@
 import type { OpenTabInfo } from '@/stores/article'
 import { checkIsTauri } from '@/lib/check'
+import { platform } from '@/lib/platform'
 import { getDefaultArticleAbsolutePath, getWorkspacePath, isAbsoluteFsPath } from '@/lib/workspace'
 import { editorPathsCouldReferToSameFile, editorPathsReferToSameFile, isEditorPathMutationLocked } from '@/lib/editor-deactivation'
 
@@ -99,8 +100,7 @@ export async function focusEditorWindowForPath(
   const absolutePath = isAbsoluteFsPath(path)
     ? normalizePath(path)
     : (await resolveEditorWindowPath(tab)).absolutePath
-  const [{ getAllWebviewWindows }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
+  const [{ Store }] = await Promise.all([
     import('@tauri-apps/plugin-store'),
   ])
   const store = await Store.load(EDITOR_WINDOW_STORE)
@@ -108,7 +108,7 @@ export async function focusEditorWindowForPath(
     .filter(validSession)
     .find(item => normalizePath(item.absolutePath) === absolutePath)
   if (!session) return false
-  const editorWindow = (await getAllWebviewWindows())
+  const editorWindow = (await platform.window.getAllWebviewWindows())
     .find(window => window.label === `editor-${session.id}`)
   if (!editorWindow) {
     await store.delete(session.id)
@@ -130,12 +130,11 @@ export async function hasEditorWindowForPaths(paths: readonly string[], workspac
     editorPathsCouldReferToSameFile(candidate, path, workspaceRoot)
   ))
   if ([...openingEditorWindowPaths].some(isAffected)) return true
-  const [{ getAllWebviewWindows }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
+  const [{ Store }] = await Promise.all([
     import('@tauri-apps/plugin-store'),
   ])
   const store = await Store.load(EDITOR_WINDOW_STORE)
-  const [sessions, windows] = await Promise.all([store.values<unknown>(), getAllWebviewWindows()])
+  const [sessions, windows] = await Promise.all([store.values<unknown>(), platform.window.getAllWebviewWindows()])
   const sessionsByLabel = new Map<string, EditorWindowSession>(sessions.filter(validSession).map(session => [`editor-${session.id}`, session] as const))
   return [...openingEditorWindowPaths].some(isAffected)
     || windows.some(window => {
@@ -165,8 +164,7 @@ async function createEditorWindow(
   tab: OpenTabInfo,
   { absolutePath, workspaceRoot, workspaceIsCustom }: Awaited<ReturnType<typeof resolveEditorWindowPath>>,
 ) {
-  const [{ WebviewWindow, getAllWebviewWindows }, { Store }, { exists }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
+  const [{ Store }, { exists }] = await Promise.all([
     import('@tauri-apps/plugin-store'),
     import('@tauri-apps/plugin-fs'),
   ])
@@ -175,7 +173,7 @@ async function createEditorWindow(
   const sessions = (await store.values<unknown>()).filter(validSession)
   const existingSession = sessions.find(session => normalizePath(session.absolutePath) === absolutePath)
   if (existingSession) {
-    const existingWindow = (await getAllWebviewWindows())
+    const existingWindow = (await platform.window.getAllWebviewWindows())
       .find(window => window.label === `editor-${existingSession.id}`)
     if (existingWindow) {
       await existingWindow.show()
@@ -197,7 +195,7 @@ async function createEditorWindow(
   await store.set(id, session)
   await store.save()
 
-  const editorWindow = new WebviewWindow(`editor-${id}`, {
+  const editorWindow = platform.window.createWebviewWindow(`editor-${id}`, {
     url: `/editor-window?session=${encodeURIComponent(id)}`,
     title: 'NoteGen',
     width: 920,
@@ -219,11 +217,10 @@ async function createEditorWindow(
 
 export async function restoreEditorWindows() {
   if (!checkIsTauri()) return
-  const [{ WebviewWindow, getAllWebviewWindows }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
+  const [{ Store }] = await Promise.all([
     import('@tauri-apps/plugin-store'),
   ])
-  const openLabels = new Set((await getAllWebviewWindows()).map(window => window.label))
+  const openLabels = new Set((await platform.window.getAllWebviewWindows()).map(window => window.label))
   const store = await Store.load(EDITOR_WINDOW_STORE)
   const sessions = (await store.values<unknown>()).filter(validSession)
 
@@ -233,7 +230,7 @@ export async function restoreEditorWindows() {
     if (isEditorPathMutationLocked(session.absolutePath, session.workspaceRoot)) continue
     if ([...openingEditorWindowPaths].some(path => editorPathsReferToSameFile(path, session.absolutePath))) continue
     openingEditorWindowPaths.add(session.absolutePath)
-    const editorWindow = new WebviewWindow(label, {
+    const editorWindow = platform.window.createWebviewWindow(label, {
       url: `/editor-window?session=${encodeURIComponent(session.id)}`,
       title: 'NoteGen',
       width: 920,

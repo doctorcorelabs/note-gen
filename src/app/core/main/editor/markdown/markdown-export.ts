@@ -10,6 +10,7 @@ import { WikiMetadata } from './wiki-metadata-extension'
 import StarterKit from '@tiptap/starter-kit'
 import { renderMarkdownExportFragment } from '@/lib/markdown/export-document'
 import { checkIsTauri } from '@/lib/check'
+import { platform } from '@/lib/platform'
 import { resolveImagePathFromMarkdown } from '@/lib/markdown-image-path'
 import { convertImageByWorkspace } from '@/lib/utils'
 import { getFilePathOptions } from '@/lib/workspace'
@@ -508,9 +509,7 @@ function createPrintFrame(html: string) {
 }
 
 async function openTauriPrintWindow(html: string, title: string, outputPath?: string) {
-  const [{ once }, { WebviewWindow }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/event'),
-    import('@tauri-apps/api/webviewWindow'),
+  const [{ Store }] = await Promise.all([
     import('@tauri-apps/plugin-store'),
   ])
   const documentKey = `document-${crypto.randomUUID()}`
@@ -555,7 +554,7 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
 
     void (async () => {
       if (completionEvent) {
-        removeCompletionListener = await once<{ success: boolean; error?: string }>(completionEvent, (event) => {
+        removeCompletionListener = await platform.event.once<{ success: boolean; error?: string }>(completionEvent, (event) => {
           if (event.payload.success) {
             finish(true)
           } else {
@@ -564,7 +563,7 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
         })
       }
 
-      const printWindow = new WebviewWindow(windowLabel, {
+      const printWindow = platform.window.createWebviewWindow(windowLabel, {
         url: `/print?key=${encodeURIComponent(documentKey)}`,
         title: outputPath ? `${title} - 正在导出 PDF` : `${title} - PDF 打印预览`,
         width: 900,
@@ -594,10 +593,9 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
   const fileName = getMarkdownExportBaseName(source.baseName)
 
   if (checkIsTauri()) {
-    const { platform } = await import('@tauri-apps/plugin-os')
     let outputPath: string | undefined
 
-    if (platform() === 'macos') {
+    if (platform.os.platform() === 'macos') {
       const selectedPath = await save({
         title: '导出 PDF',
         defaultPath: `${fileName}.pdf`,

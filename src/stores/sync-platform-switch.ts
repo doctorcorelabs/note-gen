@@ -5,6 +5,7 @@ import { Store } from '@tauri-apps/plugin-store'
 import useSettingStore from './setting'
 import useSyncStore from './sync'
 import emitter from '@/lib/emitter'
+import { platform } from '@/lib/platform'
 import { inspectSyncEngineSwitch, pauseSyncEngine, type SyncEngineSwitchReview } from '@/lib/sync/engine-switch'
 import { finishAutoDataSyncRepositoryChange, prepareAutoDataSyncForRepositoryChange } from '@/lib/sync/auto-data-sync-queue'
 import {
@@ -855,10 +856,9 @@ export async function recoverSelfHostedSwitchBackup() {
     )
     const { getCurrentWorkspaceRoot } = await import('@/lib/self-hosted-sync/workspaces')
     const activeRoot = await getCurrentWorkspaceRoot()
-    const { platform } = await import('@tauri-apps/plugin-os')
     const normalizeRoot = (root: string) => {
       const normalized = root.normalize('NFC').replaceAll('\\', '/').replace(/\/+$/, '')
-      return platform() === 'windows' ? normalized.toLowerCase() : normalized
+      return platform.os.platform() === 'windows' ? normalized.toLowerCase() : normalized
     }
     const activeBinding = bindings.find(binding => normalizeRoot(binding.localRoot) === normalizeRoot(activeRoot))
     const currentLibraries = [

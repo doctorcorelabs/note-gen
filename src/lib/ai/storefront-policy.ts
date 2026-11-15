@@ -1,6 +1,6 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
 import { invoke } from '@tauri-apps/api/core'
-import { locale as getSystemLocale, platform as getPlatform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 
 import type { AiConfig } from '@/app/core/setting/config'
 
@@ -72,9 +72,9 @@ export async function isMainlandChinaAppStore(): Promise<boolean> {
   // used to kill initSettingData on every browser boot. Treat a throw as
   // "not iOS" and fall through to the locale fallback below. In Tauri,
   // platform() does not throw, so desktop behavior is unchanged.
-  let runtimePlatform: ReturnType<typeof getPlatform> | undefined
+  let runtimePlatform: ReturnType<typeof platform.os.platform> | undefined
   try {
-    runtimePlatform = getPlatform()
+    runtimePlatform = platform.os.platform()
   } catch {
     runtimePlatform = undefined
   }
@@ -86,7 +86,7 @@ export async function isMainlandChinaAppStore(): Promise<boolean> {
   // storefront yet. Use the device region only as a conservative fallback;
   // an available StoreKit storefront always takes precedence.
   try {
-    const systemLocale = await getSystemLocale()
+    const systemLocale = await platform.os.locale()
     return /(?:^|[-_])CN$/i.test(systemLocale || '')
   } catch (error) {
     console.warn('[storefront-policy] failed to read system locale', error)

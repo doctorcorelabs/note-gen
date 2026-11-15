@@ -1,5 +1,5 @@
 import { invoke, transformCallback } from '@tauri-apps/api/core'
-import type { Event, EventCallback, EventName, EventTarget, UnlistenFn } from '@tauri-apps/api/event'
+import type { Event, EventCallback, EventName, EventTarget, UnlistenFn } from '@/lib/platform'
 
 interface CallbackRegistry {
   unregisterCallback: (id: number) => void

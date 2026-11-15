@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type FormEvent } from 'react'
 import Image from 'next/image'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { ArrowLeft, ArrowRight, Bookmark, ChevronDown, ChevronRight, CircleAlert, Clock3, ExternalLink, Globe2, House, RotateCw, Search, Star, X } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -284,7 +284,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
     if (!checkIsTauri()) return
     let cancelled = false
     let unlisten: (() => void) | undefined
-    void listen<BrowserLocation>('browser:location', event => {
+    void platform.event.listen<BrowserLocation>('browser:location', event => {
       if (resettingRef.current || event.payload.tabId !== tabId || !normalizeAddress(event.payload.url)) return
       createdRef.current = true
       setNativeReady(true)

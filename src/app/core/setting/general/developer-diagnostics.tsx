@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getVersion } from '@tauri-apps/api/app'
+import { platform } from '@/lib/platform'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { arch, locale, platform, version } from '@tauri-apps/plugin-os'
 import { Check, ClipboardCopy, Download, Eye, ScrollText, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -52,8 +51,8 @@ export function DeveloperDiagnostics() {
       const settings = useSettingStore.getState()
       const sync = useSyncStore.getState()
       const [appVersion, systemLocale, selfHosted] = await Promise.all([
-        getVersion().catch(() => null),
-        locale().catch(() => null),
+        platform.os.getAppVersion().catch(() => null),
+        platform.os.locale().catch(() => null),
         getSelfHostedDiagnosticSummary(),
       ])
       const logs = getRuntimeLogs()
@@ -182,9 +181,9 @@ export function DeveloperDiagnostics() {
 function readSystemInformation() {
   try {
     return {
-      platform: platform(),
-      osVersion: version(),
-      arch: arch(),
+      platform: platform.os.platform(),
+      osVersion: platform.os.version(),
+      arch: platform.os.arch(),
     }
   } catch {
     return {

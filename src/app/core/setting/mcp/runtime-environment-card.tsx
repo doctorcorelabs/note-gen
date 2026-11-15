@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, CheckCircle2, ChevronDown, TerminalSquare } from 'lucide-react'
-import { listen } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item'
@@ -70,7 +70,7 @@ export function RuntimeEnvironmentCard() {
     let unlisten: (() => void) | undefined
 
     async function bindListener() {
-      unlisten = await listen<MCPInstallProgressEvent>('mcp-runtime-install', (event) => {
+      unlisten = await platform.event.listen<MCPInstallProgressEvent>('mcp-runtime-install', (event) => {
         const payload = event.payload
         if (!payload || payload.recipeId !== activeRecipeIdRef.current) {
           return

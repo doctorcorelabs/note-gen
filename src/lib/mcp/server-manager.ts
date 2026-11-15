@@ -1,5 +1,5 @@
 import { MCPClient } from './client'
-import { listen } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
 import { useMcpStore } from '@/stores/mcp'
 import type {
   MCPServerConfig,
@@ -54,12 +54,12 @@ export class MCPServerManager {
   private ensureEventListeners(): Promise<void> {
     if (this.eventSetup) return this.eventSetup
     this.eventSetup = Promise.all([
-      listen<{ serverId: string; message?: { method?: string } }>('mcp://notification', event => {
+      platform.event.listen<{ serverId: string; message?: { method?: string } }>('mcp://notification', event => {
         if (event.payload.message?.method === 'notifications/tools/list_changed') {
           void this.refreshServerTools(event.payload.serverId)
         }
       }),
-      listen<{ serverId: string; error?: string }>('mcp://closed', event => {
+      platform.event.listen<{ serverId: string; error?: string }>('mcp://closed', event => {
         if (!this.clients.has(event.payload.serverId)) return
         this.clients.delete(event.payload.serverId)
         useMcpStore.getState().setServerState(event.payload.serverId, {

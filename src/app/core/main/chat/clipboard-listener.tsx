@@ -2,7 +2,8 @@
 import { clear, hasImage, hasText, readImageBase64, readText } from "tauri-plugin-clipboard-api";
 import { useEffect, useRef } from 'react';
 import { BaseDirectory, exists, mkdir, writeFile } from '@tauri-apps/plugin-fs';
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/platform";
+import { platform } from "@/lib/platform";
 import { v4 as uuid } from "uuid";
 import useChatStore from "@/stores/chat";
 import useTagStore from "@/stores/tag";
@@ -70,7 +71,7 @@ export function ClipboardListener() {
     let unlisten: UnlistenFn | undefined;
     
     async function initListen() {
-      unlisten = await listen('tauri://focus', readHandler)
+      unlisten = await platform.event.listen('tauri://focus', readHandler)
     }
     initListen()
 

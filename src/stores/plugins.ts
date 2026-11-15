@@ -1,6 +1,6 @@
 import { getPluginDisplayLocations, pluginDisplayKey, type PluginDisplayLocation } from '@/lib/plugins/display-preferences'
 import { getPluginRevocation } from '@/lib/plugins/internal-types'
-import { emit, listen } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
 import { isPluginError, PluginError } from '@notegen/plugin-api'
 import { create } from 'zustand'
 import { getWorkspacePath } from '@/lib/workspace'
@@ -409,7 +409,7 @@ function isPersistedState(value: unknown): value is PersistedPluginsStateV1 {
 async function broadcastPersistedState(packagesChanged: boolean): Promise<void> {
   if (isStandaloneEditorWindow()) return
   try {
-    await emit<PluginStateChangedPayload>(PLUGIN_STATE_CHANGED_EVENT, {
+    await platform.event.emit<PluginStateChangedPayload>(PLUGIN_STATE_CHANGED_EVENT, {
       sourceId: stateSourceId,
       packagesChanged,
       state: persistedState,
@@ -569,7 +569,7 @@ async function startPluginStateSync(
   startPluginStatePolling(set, get)
   if (stateSyncStarted) return
   if (stateSyncPromise) return stateSyncPromise
-  stateSyncPromise = listen<PluginStateChangedPayload>(PLUGIN_STATE_CHANGED_EVENT, (event) => {
+  stateSyncPromise = platform.event.listen<PluginStateChangedPayload>(PLUGIN_STATE_CHANGED_EVENT, (event) => {
     const payload = event.payload
     if (!payload || payload.sourceId === stateSourceId || !isPersistedState(payload.state)) return
     void queueSynchronizedState(payload.state, set, get)

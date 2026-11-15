@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { isTauri, platform } from '@/lib/platform'
 
 export function supportsNativeDeveloperTools(): boolean {
-  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in globalThis)) return false
+  if (typeof window === 'undefined' || !isTauri()) return false
   try {
-    const currentPlatform = platform()
+    const currentPlatform = platform.os.platform()
     return currentPlatform !== 'android' && currentPlatform !== 'ios'
   } catch {
     return false

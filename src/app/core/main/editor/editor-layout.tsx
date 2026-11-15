@@ -16,8 +16,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { Store } from '@tauri-apps/plugin-store'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Layout } from 'react-resizable-panels'
 import { useTranslations } from 'next-intl'
@@ -1117,7 +1116,7 @@ export function EditorLayout() {
         && tab.autoCreated
         && getEditorGroupIds(currentLayout.root).length === 1
       if (!group || !tab || onlyPlaceholder) {
-        void getCurrentWindow().hide()
+        void platform.window.getCurrentWindow().hide()
         return
       }
       handleCloseTabRef.current(group.id, group.activeTabId)
@@ -1715,7 +1714,7 @@ export function EditorLayout() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return
       let currentPlatform = ''
-      try { currentPlatform = platform() } catch { currentPlatform = '' }
+      try { currentPlatform = platform.os.platform() } catch { currentPlatform = '' }
       const isMac = currentPlatform === 'macos'
       const navigationDirection = isMac
         ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey

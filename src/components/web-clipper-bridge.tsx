@@ -1,7 +1,7 @@
 'use client'
 
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 
@@ -331,10 +331,10 @@ export function WebClipperBridge() {
     let unlistenRequest: (() => void) | undefined
 
     const start = async () => {
-      unlistenPairing = await listen<WebClipperPairingRequest>('web-clipper://pairing-request', event => {
+      unlistenPairing = await platform.event.listen<WebClipperPairingRequest>('web-clipper://pairing-request', event => {
         setPairing(event.payload)
       })
-      unlistenRequest = await listen<WebClipperBridgeRequest>('web-clipper://request', event => {
+      unlistenRequest = await platform.event.listen<WebClipperBridgeRequest>('web-clipper://request', event => {
         const request = event.payload
         void (async () => {
           try {

@@ -1,8 +1,6 @@
 import emitter from '@/lib/emitter'
 import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { emitTo } from '@tauri-apps/api/event'
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { getTags } from '@/db/tags'
 import { insertExternalMark } from '@/db/marks'
@@ -19,16 +17,16 @@ let opening: Promise<void> | undefined
 
 async function openQuickRecordWindow() {
   await invoke('remember_quick_record_foreground')
-  const existing = await WebviewWindow.getByLabel(QUICK_RECORD_WINDOW)
+  const existing = await platform.window.getWebviewWindowByLabel(QUICK_RECORD_WINDOW)
   if (existing) {
     await existing.show()
     await existing.unminimize()
     await existing.setFocus()
-    await emitTo(QUICK_RECORD_WINDOW, 'quick-record-open')
+    await platform.event.emitTo(QUICK_RECORD_WINDOW, 'quick-record-open')
     return
   }
 
-  const window = new WebviewWindow(QUICK_RECORD_WINDOW, {
+  const window = platform.window.createWebviewWindow(QUICK_RECORD_WINDOW, {
     url: '/quick-record',
     title: 'NoteGen',
     width: 460,
@@ -49,10 +47,10 @@ async function openQuickRecordWindow() {
 }
 
 export default async function initQuickRecordText() {
-  const unlisten = await getCurrentWindow().listen<QuickRecordRequest>('quick-record-request', event => {
+  const unlisten = await platform.window.getCurrentWindow().listen<QuickRecordRequest>('quick-record-request', event => {
     const request = event.payload
     const respond = (response: Omit<QuickRecordResponse, 'id'>) =>
-      emitTo(QUICK_RECORD_WINDOW, 'quick-record-response', { ...response, id: request.id })
+      platform.event.emitTo(QUICK_RECORD_WINDOW, 'quick-record-response', { ...response, id: request.id })
 
     void (async () => {
       const tags = await getTags()
