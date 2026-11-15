@@ -253,7 +253,10 @@ describe('registration dump', () => {
         verifyCsrf: async () => true,
         verifyOrigin: () => true,
       });
-      await app.ready();
+      // No explicit ready() here: the capture hook below must be
+      // added before the app boots (Fastify rejects addHook after
+      // boot), and the first inject() boots it. printRoutes works
+      // on the built app before boot, as in the rf2 prototype.
       const tree = app.printRoutes();
       const parsed = parsePrintRoutes(tree);
       expect(parsed.length).toBeGreaterThan(0);

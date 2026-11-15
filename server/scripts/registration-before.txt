@@ -1,0 +1,271 @@
+# registration dump: deterministic, no timestamps, no random values, no absolute paths
+# variant: buildApp with injected test auth + permissive verifiers (all route groups present)
+# counts: printRoutes pairs=46 declared pairs=34 unique paths=30 handlers=54 (reads=27 writes=27) groups=9 unregistered kinds=20
+## printRoutes
+└── /
+    └── api/
+        ├── health (GET, HEAD)
+        │   └── /
+        │       ├── live (GET, HEAD)
+        │       └── ready (GET, HEAD)
+        ├── auth/
+        │   ├── se
+        │   │   ├── tup (POST)
+        │   │   └── ssions (GET, HEAD)
+        │   │       └── /
+        │   │           └── :id (DELETE)
+        │   ├── log
+        │   │   ├── in (POST)
+        │   │   │   └── /totp (POST)
+        │   │   └── out (POST)
+        │   │       └── -all (POST)
+        │   ├── csrf (GET, HEAD)
+        │   ├── me (GET, HEAD)
+        │   └── register (POST)
+        ├── workspace/
+        │   ├── list (GET, HEAD)
+        │   ├── file (GET, HEAD, PUT)
+        │   │   └── /
+        │   │       ├── append (POST)
+        │   │       └── patch (POST)
+        │   ├── s
+        │   │   ├── can (GET, HEAD)
+        │   │   └── tat (GET, HEAD)
+        │   └── media (POST, PUT)
+        ├── settings (GET, HEAD, PATCH)
+        │   └── /
+        │       ├── revision (GET, HEAD)
+        │       └── secrets/
+        │           ├── status (GET, HEAD)
+        │           └── ai-providers (PUT)
+        │               └── /
+        │                   └── :providerKey (DELETE)
+        ├── transactions (POST)
+        ├── d
+        │   ├── b/batch (POST)
+        │   └── ocuments/parse (POST)
+        ├── backups/restore (POST)
+        └── csp-reports (POST)
+## routes (34 declared pairs, sorted by path then method)
+ 15 GET /api/auth/csrf group=auth-core methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/auth/csrf"}
+ 11 POST /api/auth/login group=auth-core methods=scalar config={"method":"POST","requiresAuth":false,"url":"/api/auth/login"}
+ 12 POST /api/auth/login/totp group=auth-core methods=scalar config={"method":"POST","requiresAuth":false,"url":"/api/auth/login/totp"}
+ 13 POST /api/auth/logout group=auth-core methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/auth/logout"}
+ 14 POST /api/auth/logout-all group=auth-core methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/auth/logout-all"}
+ 17 GET /api/auth/me group=auth-core methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/auth/me"}
+ 19 POST /api/auth/register group=auth-core methods=scalar config={"method":"POST","requiresAuth":false,"url":"/api/auth/register"}
+  8 GET /api/auth/sessions group=auth-core methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/auth/sessions"}
+ 10 DELETE /api/auth/sessions/:id group=auth-core methods=scalar config={"method":"DELETE","requiresAuth":true,"url":"/api/auth/sessions/:id"}
+  7 POST /api/auth/setup group=auth-core methods=scalar config={"method":"POST","requiresAuth":false,"url":"/api/auth/setup"}
+ 45 POST /api/backups/restore group=stubs methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/backups/restore"}
+ 46 POST /api/csp-reports group=csp-reports methods=scalar config={"method":"POST","url":"/api/csp-reports"}
+ 43 POST /api/db/batch group=db methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/db/batch"}
+ 44 POST /api/documents/parse group=stubs methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/documents/parse"}
+  1 GET /api/health group=health methods=scalar config={"method":"GET","requiresAuth":false,"url":"/api/health"}
+  3 GET /api/health/live group=health methods=scalar config={"method":"GET","requiresAuth":false,"url":"/api/health/live"}
+  5 GET /api/health/ready group=health methods=scalar config={"method":"GET","requiresAuth":false,"url":"/api/health/ready"}
+ 33 GET /api/settings group=settings methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/settings"}
+ 35 PATCH /api/settings group=settings methods=scalar config={"method":"PATCH","requiresAuth":true,"url":"/api/settings"}
+ 36 GET /api/settings/revision group=settings methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/settings/revision"}
+ 40 PUT /api/settings/secrets/ai-providers group=secrets methods=scalar config={"method":"PUT","requiresAuth":true,"url":"/api/settings/secrets/ai-providers"}
+ 41 DELETE /api/settings/secrets/ai-providers/:providerKey group=secrets methods=scalar config={"method":"DELETE","requiresAuth":true,"url":"/api/settings/secrets/ai-providers/:providerKey"}
+ 38 GET /api/settings/secrets/status group=secrets methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/settings/secrets/status"}
+ 42 POST /api/transactions group=db methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/transactions"}
+ 22 GET /api/workspace/file group=workspace-read methods=array config={"method":["GET","HEAD"],"requiresAuth":true,"url":"/api/workspace/file"}
+ 23 HEAD /api/workspace/file group=workspace-read methods=array config={"method":["GET","HEAD"],"requiresAuth":true,"url":"/api/workspace/file"}
+ 24 PUT /api/workspace/file group=workspace-write methods=scalar config={"method":"PUT","requiresAuth":true,"url":"/api/workspace/file"}
+ 25 POST /api/workspace/file/append group=workspace-write methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/workspace/file/append"}
+ 26 POST /api/workspace/file/patch group=workspace-write methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/workspace/file/patch"}
+ 20 GET /api/workspace/list group=workspace-read methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/workspace/list"}
+ 31 POST /api/workspace/media group=workspace-write methods=scalar config={"method":"POST","requiresAuth":true,"url":"/api/workspace/media"}
+ 32 PUT /api/workspace/media group=workspace-write methods=scalar config={"method":"PUT","requiresAuth":true,"url":"/api/workspace/media"}
+ 27 GET /api/workspace/scan group=workspace-read methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/workspace/scan"}
+ 29 GET /api/workspace/stat group=workspace-read methods=scalar config={"method":"GET","requiresAuth":true,"url":"/api/workspace/stat"}
+## routes-all (46 printRoutes pairs, traversal order)
+  1 GET /api/health declared=yes group=health
+  2 HEAD /api/health declared=no group=health
+  3 GET /api/health/live declared=yes group=health
+  4 HEAD /api/health/live declared=no group=health
+  5 GET /api/health/ready declared=yes group=health
+  6 HEAD /api/health/ready declared=no group=health
+  7 POST /api/auth/setup declared=yes group=auth-core
+  8 GET /api/auth/sessions declared=yes group=auth-core
+  9 HEAD /api/auth/sessions declared=no group=auth-core
+ 10 DELETE /api/auth/sessions/:id declared=yes group=auth-core
+ 11 POST /api/auth/login declared=yes group=auth-core
+ 12 POST /api/auth/login/totp declared=yes group=auth-core
+ 13 POST /api/auth/logout declared=yes group=auth-core
+ 14 POST /api/auth/logout-all declared=yes group=auth-core
+ 15 GET /api/auth/csrf declared=yes group=auth-core
+ 16 HEAD /api/auth/csrf declared=no group=auth-core
+ 17 GET /api/auth/me declared=yes group=auth-core
+ 18 HEAD /api/auth/me declared=no group=auth-core
+ 19 POST /api/auth/register declared=yes group=auth-core
+ 20 GET /api/workspace/list declared=yes group=workspace-read
+ 21 HEAD /api/workspace/list declared=no group=workspace-read
+ 22 GET /api/workspace/file declared=yes group=workspace-read
+ 23 HEAD /api/workspace/file declared=yes group=workspace-read
+ 24 PUT /api/workspace/file declared=yes group=workspace-write
+ 25 POST /api/workspace/file/append declared=yes group=workspace-write
+ 26 POST /api/workspace/file/patch declared=yes group=workspace-write
+ 27 GET /api/workspace/scan declared=yes group=workspace-read
+ 28 HEAD /api/workspace/scan declared=no group=workspace-read
+ 29 GET /api/workspace/stat declared=yes group=workspace-read
+ 30 HEAD /api/workspace/stat declared=no group=workspace-read
+ 31 POST /api/workspace/media declared=yes group=workspace-write
+ 32 PUT /api/workspace/media declared=yes group=workspace-write
+ 33 GET /api/settings declared=yes group=settings
+ 34 HEAD /api/settings declared=no group=settings
+ 35 PATCH /api/settings declared=yes group=settings
+ 36 GET /api/settings/revision declared=yes group=settings
+ 37 HEAD /api/settings/revision declared=no group=settings
+ 38 GET /api/settings/secrets/status declared=yes group=secrets
+ 39 HEAD /api/settings/secrets/status declared=no group=secrets
+ 40 PUT /api/settings/secrets/ai-providers declared=yes group=secrets
+ 41 DELETE /api/settings/secrets/ai-providers/:providerKey declared=yes group=secrets
+ 42 POST /api/transactions declared=yes group=db
+ 43 POST /api/db/batch declared=yes group=db
+ 44 POST /api/documents/parse declared=yes group=stubs
+ 45 POST /api/backups/restore declared=yes group=stubs
+ 46 POST /api/csp-reports declared=yes group=csp-reports
+## handlers (54, registration order)
+  1 write canvases.create validate=yes
+  2 read canvases.get validate=yes
+  3 read canvases.list validate=yes
+  4 write canvases.restore validate=yes
+  5 write canvases.save validate=yes
+  6 write canvases.softDelete validate=yes
+  7 write compactions.insert validate=yes
+  8 read compactions.listByConversation validate=yes
+  9 write conversations.create validate=yes
+ 10 write conversations.delete validate=yes
+ 11 read conversations.get validate=yes
+ 12 read conversations.list validate=yes
+ 13 write conversations.update validate=yes
+ 14 read imageCache.get validate=yes
+ 15 write imageCache.put validate=yes
+ 16 write memories.create validate=yes
+ 17 write memories.delete validate=yes
+ 18 read memories.get validate=yes
+ 19 read memories.list validate=yes
+ 20 read memories.stats validate=yes
+ 21 write memories.update validate=yes
+ 22 write messages.append validate=yes
+ 23 write messages.delete validate=yes
+ 24 read messages.get validate=yes
+ 25 read messages.listByConversation validate=yes
+ 26 read messages.listByTag validate=yes
+ 27 write messages.update validate=yes
+ 28 read policy.get validate=yes
+ 29 write policy.put validate=yes
+ 30 read knowledge.getSource validate=yes
+ 31 read knowledge.listSources validate=yes
+ 32 write knowledge.removeSource validate=yes
+ 33 read knowledge.stats validate=yes
+ 34 write knowledge.updateStatus validate=yes
+ 35 write knowledge.upsertSource validate=yes
+ 36 write vector.replaceChunks validate=no
+ 37 read vector.summaries validate=yes
+ 38 write wiki.commitRevision validate=no
+ 39 read wiki.findRevisionByInputHash validate=yes
+ 40 read wiki.getActiveRevisions validate=yes
+ 41 read wiki.getMeta validate=yes
+ 42 read wiki.getPage validate=yes
+ 43 read wiki.getRevision validate=yes
+ 44 read wiki.getSegment validate=yes
+ 45 read wiki.getSourceState validate=yes
+ 46 read wiki.listJobs validate=yes
+ 47 read wiki.listPages validate=yes
+ 48 read wiki.listSourceStates validate=yes
+ 49 write wiki.putMeta validate=no
+ 50 write wiki.putSegment validate=no
+ 51 write wiki.removeJob validate=no
+ 52 write wiki.upsertJob validate=no
+ 53 write wiki.upsertPage validate=no
+ 54 write wiki.upsertSource validate=no
+## handlers-sorted (54, sorted by kind)
+write canvases.create validate=yes
+read canvases.get validate=yes
+read canvases.list validate=yes
+write canvases.restore validate=yes
+write canvases.save validate=yes
+write canvases.softDelete validate=yes
+write compactions.insert validate=yes
+read compactions.listByConversation validate=yes
+write conversations.create validate=yes
+write conversations.delete validate=yes
+read conversations.get validate=yes
+read conversations.list validate=yes
+write conversations.update validate=yes
+read imageCache.get validate=yes
+write imageCache.put validate=yes
+read knowledge.getSource validate=yes
+read knowledge.listSources validate=yes
+write knowledge.removeSource validate=yes
+read knowledge.stats validate=yes
+write knowledge.updateStatus validate=yes
+write knowledge.upsertSource validate=yes
+write memories.create validate=yes
+write memories.delete validate=yes
+read memories.get validate=yes
+read memories.list validate=yes
+read memories.stats validate=yes
+write memories.update validate=yes
+write messages.append validate=yes
+write messages.delete validate=yes
+read messages.get validate=yes
+read messages.listByConversation validate=yes
+read messages.listByTag validate=yes
+write messages.update validate=yes
+read policy.get validate=yes
+write policy.put validate=yes
+write vector.replaceChunks validate=no
+read vector.summaries validate=yes
+write wiki.commitRevision validate=no
+read wiki.findRevisionByInputHash validate=yes
+read wiki.getActiveRevisions validate=yes
+read wiki.getMeta validate=yes
+read wiki.getPage validate=yes
+read wiki.getRevision validate=yes
+read wiki.getSegment validate=yes
+read wiki.getSourceState validate=yes
+read wiki.listJobs validate=yes
+read wiki.listPages validate=yes
+read wiki.listSourceStates validate=yes
+write wiki.putMeta validate=no
+write wiki.putSegment validate=no
+write wiki.removeJob validate=no
+write wiki.upsertJob validate=no
+write wiki.upsertPage validate=no
+write wiki.upsertSource validate=no
+## unregistered-kinds (20, sorted by kind)
+write activity.insert
+read activity.list
+write marks.create
+write marks.deletePermanent
+read marks.get
+read marks.list
+read marks.listByTag
+write marks.restore
+write marks.saveTagIds
+write marks.softDelete
+write marks.update
+write marks.updateTags
+write notes.insert
+read notes.latestByTag
+write tags.create
+write tags.delete
+read tags.get
+read tags.list
+write tags.rename
+write tags.reorder
+## groups (9, first-appearance order in printRoutes traversal)
+  1 health routes=3 paths=3
+  2 auth-core routes=10 paths=10
+  3 workspace-read routes=5 paths=4
+  4 workspace-write routes=5 paths=4
+  5 settings routes=3 paths=2
+  6 secrets routes=3 paths=3
+  7 db routes=2 paths=2
+  8 stubs routes=2 paths=2
+  9 csp-reports routes=1 paths=1
