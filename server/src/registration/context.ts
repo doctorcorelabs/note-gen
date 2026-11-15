@@ -3,15 +3,16 @@
 // See LICENSE and FORK.md.
 
 // Registration context for route group adapters (AD-61; desain
-// registrasi programatik section 3.2). Frozen on v1: exactly the
-// fields the current buildApp route block uses, no more. Adding a
-// field follows the same rule as adding an AppDeps field
-// (amendment only, recorded in DECISIONS.md).
+// registrasi programatik section 3.2). Frozen: exactly the fields
+// the current buildApp route block uses, plus the AD-81 amendment
+// below. Adding a field follows the same rule as adding an AppDeps
+// field (amendment only, recorded in DECISIONS.md).
 
 import type { FastifyInstance } from 'fastify';
 import type { AuthContext } from '../auth/context.js';
 import type { ServerConfig } from '../config.js';
 import type { HealthDbPool } from '../db/pool.js';
+import type { CloseRegistry } from './close-registry.js';
 
 export interface RegistrationContext {
   app: FastifyInstance;
@@ -19,4 +20,8 @@ export interface RegistrationContext {
   pool: HealthDbPool | null;
   version: string;
   auth?: AuthContext;
+  // AD-81 amendment: shared close registry (B-12). The auth-core
+  // adapter appends the auth close step and registers the single
+  // onClose hook; the db adapter appends the db close step.
+  close: CloseRegistry;
 }
