@@ -1,0 +1,1 @@
+{"after":[],"bind":null,"calls":[{"args":"app","fn":"registerCspReportRoutes"}],"comment":"CSP reports (V3-39b; kontrak 3.11): POST /api/csp-reports only. No session, no CSP header set here.","condition":null,"handlerScan":false,"id":"csp","imports":[{"from":"./routes/csp-reports.js","names":["registerCspReportRoutes"]}],"order":80,"setup":[]}
