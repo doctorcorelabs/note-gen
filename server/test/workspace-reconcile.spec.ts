@@ -458,18 +458,25 @@ describe('POST /api/workspace/reconcile', () => {
       { payload: { full: false }, code: 'validation_failed' },
       { payload: { unknownField: true }, code: 'validation_failed' },
       { payload: [1, 2], code: 'invalid_json' },
-      { payload: null, code: 'invalid_json' },
     ];
     for (const { payload, code } of cases) {
       const response = await app.inject({
         method: 'POST',
         url: RECONCILE_PATH,
-        payload,
-        headers: AUTHED_HEADERS,
+        payload: JSON.stringify(payload),
+        headers: { ...AUTHED_HEADERS, 'content-type': 'application/json' },
       });
       expect(response.statusCode).toBe(400);
       assertErrorBody(response.json(), code);
     }
+    const nullBody = await app.inject({
+      method: 'POST',
+      url: RECONCILE_PATH,
+      payload: 'null',
+      headers: { ...AUTHED_HEADERS, 'content-type': 'application/json' },
+    });
+    expect(nullBody.statusCode).toBe(400);
+    assertErrorBody(nullBody.json(), 'invalid_json');
     const malformed = await app.inject({
       method: 'POST',
       url: RECONCILE_PATH,
@@ -675,7 +682,9 @@ describe('POST /api/workspace/reconcile', () => {
       headers: AUTHED_HEADERS,
     });
     expect(response.statusCode).toBe(503);
-    assertErrorBody(response.json(), 'service_unavailable');
+    const body = response.json() as ErrorBody;
+    expect(body.error.code).toBe('service_unavailable');
+    expect(body.error.retryable).toBe(true);
   });
 
   it('answers 401 without a session, 403 for bad origin, and 403 for bad CSRF', async () => {

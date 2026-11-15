@@ -39,21 +39,21 @@
 // workspace block, in contract order (AD-40).
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { getPrincipal } from '../../middleware/auth-hook.js';
-import { ApiError, successEnvelope } from '../../plugins/envelope.js';
+import { getPrincipal } from '../middleware/auth-hook.js';
+import { ApiError, successEnvelope } from '../plugins/envelope.js';
 import {
   fieldError,
   rejectUnknownFields,
   requireJsonObject,
-} from '../../services/workspace/write-guards.js';
-import type { WorkspaceIdentityResolver } from '../../services/workspace/write-ports.js';
+} from '../services/workspace/write-guards.js';
+import type { WorkspaceIdentityResolver } from '../services/workspace/write-ports.js';
 import {
   ReconcileJobRegistry,
   createReconcileJobId,
   runReconcileScan,
   type ReconcileIndexPort,
   type ReconcileRepairPort,
-} from '../../services/workspace/reconcile.js';
+} from '../services/workspace/reconcile.js';
 
 export const RECONCILE_PATH = '/api/workspace/reconcile';
 
