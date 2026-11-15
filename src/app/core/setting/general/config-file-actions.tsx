@@ -1,6 +1,6 @@
 'use client'
 
-import { relaunch } from '@tauri-apps/plugin-process'
+import { platform } from '@/lib/platform'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { BaseDirectory, copyFile, readTextFile } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
@@ -59,7 +59,7 @@ export function ConfigFileActions() {
       if (isMobileDevice()) {
         toast({ description: t('importConfigSuccessMobile') })
       } else {
-        await relaunch()
+        await platform.process.relaunch()
       }
     } catch (error) {
       toast({

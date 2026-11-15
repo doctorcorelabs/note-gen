@@ -7,7 +7,7 @@ import {
 import * as React from "react"
 import { TooltipButton } from "@/components/tooltip-button"
 import useArticleStore from "@/stores/article"
-import { open } from '@tauri-apps/plugin-shell';
+import { platform } from '@/lib/platform';
 import useSettingStore from "@/stores/setting"
 import { RepoNames } from "@/lib/sync/github.types"
 import { GitlabInstanceType } from "@/lib/sync/gitlab.types"
@@ -84,7 +84,7 @@ export function FileToolbar() {
         return
     }
 
-    open(`${baseUrl}/${username}/${repoName}`)
+    platform.opener.openUrl(`${baseUrl}/${username}/${repoName}`)
   }
 
 

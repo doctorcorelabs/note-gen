@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { exit } from '@tauri-apps/plugin-process'
+import { platform } from '@/lib/platform'
 import { Power } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -51,7 +51,7 @@ export function CloseBehaviorGuard() {
           </AlertDialogAction>
           <AlertDialogAction
             variant="destructive"
-            onClick={() => void exit(0)}
+            onClick={() => void platform.process.exit(0)}
           >
             {t('quit')}
           </AlertDialogAction>

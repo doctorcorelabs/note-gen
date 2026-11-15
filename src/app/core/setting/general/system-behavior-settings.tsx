@@ -1,11 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  disable as disableAutostart,
-  enable as enableAutostart,
-  isEnabled as isAutostartEnabled,
-} from '@tauri-apps/plugin-autostart'
+import { platform } from '@/lib/platform'
 import { AppWindow, PanelTopClose, Rocket } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -47,7 +43,7 @@ export function SystemBehaviorSettings() {
 
     async function loadAutostartState() {
       try {
-        const enabled = await isAutostartEnabled()
+        const enabled = await platform.autostart.isEnabled()
         if (!cancelled) setAutostart(enabled)
       } catch (error) {
         console.error('Failed to read autostart state:', error)
@@ -67,11 +63,11 @@ export function SystemBehaviorSettings() {
     setAutostartLoading(true)
     try {
       if (enabled) {
-        await enableAutostart()
+        await platform.autostart.enable()
       } else {
-        await disableAutostart()
+        await platform.autostart.disable()
       }
-      setAutostart(await isAutostartEnabled())
+      setAutostart(await platform.autostart.isEnabled())
     } catch (error) {
       console.error('Failed to update autostart state:', error)
       toast({
@@ -87,14 +83,14 @@ export function SystemBehaviorSettings() {
     setAutostartLoading(true)
     try {
       if (enabled && autostart) {
-        await disableAutostart()
-        await enableAutostart()
+        await platform.autostart.disable()
+        await platform.autostart.enable()
       }
       await setAutostartMinimized(enabled)
     } catch (error) {
       console.error('Failed to update minimized autostart state:', error)
       try {
-        setAutostart(await isAutostartEnabled())
+        setAutostart(await platform.autostart.isEnabled())
       } catch (stateError) {
         console.error('Failed to refresh autostart state:', stateError)
       }

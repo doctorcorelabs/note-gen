@@ -88,7 +88,6 @@ src/app/core/main/file/file-item.tsx:@tauri-apps/plugin-os:G4
 src/app/core/main/file/file-manager.tsx:@tauri-apps/plugin-fs:G1
 src/app/core/main/file/file-manager.tsx:@tauri-apps/plugin-store:G1
 src/app/core/main/file/file-more-menu.tsx:@tauri-apps/plugin-dialog:G3
-src/app/core/main/file/file-toolbar.tsx:@tauri-apps/plugin-shell:G5
 src/app/core/main/file/file-tree-action-policy.ts:@tauri-apps/plugin-store:G1
 src/app/core/main/file/folder-item/delete-folder-utils.ts:@tauri-apps/plugin-fs:G1
 src/app/core/main/file/folder-item/delete-folder-utils.ts:@tauri-apps/plugin-store:G1
@@ -146,17 +145,13 @@ src/app/core/main/mark/organize-notes.tsx:@tauri-apps/plugin-fs:G1
 src/app/core/main/mark/organize-notes.tsx:@tauri-apps/plugin-store:G1
 src/app/core/main/page.tsx:@tauri-apps/plugin-store:G1
 src/app/core/main/status-bar-order.tsx:@tauri-apps/plugin-store:G1
-src/app/core/setting/about/setting-about.tsx:@tauri-apps/plugin-shell:G5
-src/app/core/setting/about/updater.tsx:@tauri-apps/plugin-process:G5
 src/app/core/setting/ai/create.tsx:@tauri-apps/plugin-store:G1
-src/app/core/setting/ai/default-models.tsx:@tauri-apps/plugin-shell:G5
 src/app/core/setting/ai/modelSelect.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/ai/page.tsx:@tauri-apps/plugin-dialog:G3
 src/app/core/setting/ai/page.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/audio/setting.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/backup/backup-settings.tsx:@tauri-apps/plugin-dialog:G3
 src/app/core/setting/backup/backup-settings.tsx:@tauri-apps/plugin-opener:G3
-src/app/core/setting/backup/backup-settings.tsx:@tauri-apps/plugin-process:G5
 src/app/core/setting/backup/backup-settings.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/components/model-select.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/file/setting-workspace.tsx:@tauri-apps/plugin-dialog:G3
@@ -169,7 +164,6 @@ src/app/core/setting/general/advanced-settings.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/general/app-lock-settings.tsx:@tauri-apps/api/core:G2
 src/app/core/setting/general/config-file-actions.tsx:@tauri-apps/plugin-dialog:G3
 src/app/core/setting/general/config-file-actions.tsx:@tauri-apps/plugin-fs:G1
-src/app/core/setting/general/config-file-actions.tsx:@tauri-apps/plugin-process:G5
 src/app/core/setting/general/config-file-actions.tsx:@tauri-apps/plugin-store:G1
 src/app/core/setting/general/developer-diagnostics.tsx:@tauri-apps/api/app:G4
 src/app/core/setting/general/developer-diagnostics.tsx:@tauri-apps/plugin-clipboard-manager:G3
@@ -177,7 +171,6 @@ src/app/core/setting/general/developer-diagnostics.tsx:@tauri-apps/plugin-dialog
 src/app/core/setting/general/developer-diagnostics.tsx:@tauri-apps/plugin-fs:G1
 src/app/core/setting/general/developer-diagnostics.tsx:@tauri-apps/plugin-os:G4
 src/app/core/setting/general/interface-settings/custom-theme.tsx:@tauri-apps/plugin-store:G1
-src/app/core/setting/general/system-behavior-settings.tsx:@tauri-apps/plugin-autostart:G5
 src/app/core/setting/general/system-permissions.tsx:@tauri-apps/api/core:G2
 src/app/core/setting/general/system-permissions.tsx:@tauri-apps/api/window:G4
 src/app/core/setting/general/system-permissions.tsx:@tauri-apps/plugin-notification:G4
@@ -265,15 +258,11 @@ src/app/quick-record/page.tsx:@tauri-apps/plugin-store:G1
 src/app/quick-record/page.tsx:tauri-plugin-clipboard-api:G3
 src/app/screenshot-pin/page.tsx:@tauri-apps/api/core:G2
 src/app/screenshot-pin/page.tsx:@tauri-apps/api/event:G4
-src/app/screenshot-pin/page.tsx:@tauri-apps/api/image:G5
 src/app/screenshot-pin/page.tsx:@tauri-apps/api/window:G4
-src/app/screenshot-pin/page.tsx:@tauri-apps/plugin-clipboard-manager:G3
 src/app/screenshot-pin/page.tsx:@tauri-apps/plugin-dialog:G3
 src/app/screenshot-pin/page.tsx:@tauri-apps/plugin-fs:G1
 src/app/screenshot/page.tsx:@tauri-apps/api/core:G2
-src/app/screenshot/page.tsx:@tauri-apps/api/image:G5
 src/app/screenshot/page.tsx:@tauri-apps/api/window:G4
-src/app/screenshot/page.tsx:@tauri-apps/plugin-clipboard-manager:G3
 src/app/screenshot/page.tsx:@tauri-apps/plugin-dialog:G3
 src/app/screenshot/page.tsx:@tauri-apps/plugin-fs:G1
 src/components/app-footbar.tsx:@tauri-apps/plugin-store:G1
@@ -285,7 +274,6 @@ src/components/chat-ui/response-controls.tsx:@tauri-apps/api/core:G2
 src/components/chat-ui/response-controls.tsx:tauri-plugin-clipboard-api:G3
 src/components/close-behavior-guard.tsx:@tauri-apps/api/event:G4
 src/components/close-behavior-guard.tsx:@tauri-apps/api/window:G4
-src/components/close-behavior-guard.tsx:@tauri-apps/plugin-process:G5
 src/components/custom-css-controller.tsx:@tauri-apps/api/event:G4
 src/components/custom-css-controller.tsx:@tauri-apps/plugin-store:G1
 src/components/desktop-screenshot-bridge.tsx:@tauri-apps/api/core:G2
@@ -299,13 +287,11 @@ src/components/error-recovery.tsx:@tauri-apps/plugin-dialog:G3
 src/components/error-recovery.tsx:@tauri-apps/plugin-fs:G1
 src/components/error-recovery.tsx:@tauri-apps/plugin-opener:G3
 src/components/error-recovery.tsx:@tauri-apps/plugin-os:G4
-src/components/error-recovery.tsx:@tauri-apps/plugin-process:G5
 src/components/error-recovery.tsx:@tauri-apps/plugin-store:G1
 src/components/local-mcp-bridge.tsx:@tauri-apps/api/core:G2
 src/components/local-mcp-bridge.tsx:@tauri-apps/api/event:G4
 src/components/mobile-record-tools.tsx:@tauri-apps/plugin-fs:G1
 src/components/mobile-statusbar.tsx:@tauri-apps/api/core:G2
-src/components/open-broswer.tsx:@tauri-apps/plugin-shell:G5
 src/components/pin-toggle.tsx:@tauri-apps/api/window:G4
 src/components/pin-toggle.tsx:@tauri-apps/plugin-store:G1
 src/components/search-dialog.tsx:@tauri-apps/plugin-store:G1
@@ -646,7 +632,6 @@ src/stores/setting.ts:@tauri-apps/api/app:G4
 src/stores/setting.ts:@tauri-apps/api/event:G4
 src/stores/setting.ts:@tauri-apps/plugin-store:G1
 src/stores/settingsSync.ts:@tauri-apps/plugin-store:G1
-src/stores/shortcut.ts:@tauri-apps/plugin-global-shortcut:G5
 src/stores/shortcut.ts:@tauri-apps/plugin-store:G1
 src/stores/sidebar.ts:@tauri-apps/plugin-store:G1
 src/stores/skills.ts:@tauri-apps/plugin-store:G1
@@ -658,5 +643,4 @@ src/stores/tag.ts:@tauri-apps/plugin-store:G1
 src/stores/update.ts:@tauri-apps/api/core:G2
 src/stores/update.ts:@tauri-apps/plugin-http:G2
 src/stores/update.ts:@tauri-apps/plugin-store:G1
-src/stores/update.ts:@tauri-apps/plugin-updater:G5
 src/stores/vector.ts:@tauri-apps/plugin-store:G1

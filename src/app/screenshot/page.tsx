@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from 'react'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
-import { Image as TauriImage } from '@tauri-apps/api/image'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { ArrowUpRight, Check, Circle, Copy, Download, MousePointer2, Pencil, Pin, Redo2, ScanLine, Square, Type, Undo2, X } from 'lucide-react'
@@ -205,8 +204,7 @@ export default function ScreenshotPage() {
         await invoke('complete_desktop_screenshot', { sessionId: context.sessionId, pngBase64: bytesToBase64(png) })
         completed = true
       } else if (action === 'copy') {
-        const image = await TauriImage.fromBytes(png)
-        try { await writeImage(image) } finally { await image.close() }
+        await platform.clipboard.writeImage(png)
         await invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
         completed = true
       } else {

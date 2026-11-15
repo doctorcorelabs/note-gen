@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { Store } from '@tauri-apps/plugin-store'
-import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut'
+import { platform } from '@/lib/platform'
 import { globalShortcutIdentity, normalizeGlobalShortcut } from '@/lib/global-shortcut'
 import emitter from '@/lib/emitter'
 
@@ -44,7 +44,7 @@ function serializeUpdate(operation: () => Promise<void>) {
 }
 
 async function registerShortcut(shortcut: Shortcut) {
-  await register(shortcut.value, (event) => {
+  await platform.shortcut.register(shortcut.value, (event) => {
     const state = useShortcutStore.getState()
     if (event.state !== 'Pressed' || state.recordingShortcut || !state.activeShortcuts.some((item) => (
       item.key === shortcut.key && globalShortcutIdentity(item.value) === globalShortcutIdentity(shortcut.value)
@@ -86,7 +86,7 @@ const useShortcutStore = create<SettingState>((set, get) => ({
       try {
         // A webview reload leaves native registrations alive with the old JS
         // channel. Rebind only these app-owned settings; preserve other keys.
-        if (await isRegistered(value)) await unregister(value)
+        if (await platform.shortcut.isRegistered(value)) await platform.shortcut.unregister(value)
         await registerShortcut({ ...shortcut, value })
         activeShortcuts.push({ ...shortcut, value })
       } catch (error) {
@@ -132,11 +132,11 @@ const useShortcutStore = create<SettingState>((set, get) => ({
       await store.set('shortcuts', nextShortcuts)
       await store.save()
       saved = true
-      if (previous?.value && changedRegistration) await unregister(previous.value)
+      if (previous?.value && changedRegistration) await platform.shortcut.unregister(previous.value)
     } catch (error) {
       console.error('Failed to update shortcuts:', error)
       if (value && changedRegistration) {
-        await unregister(value).catch((cleanupError) => console.error('Failed to release new shortcut:', cleanupError))
+        await platform.shortcut.unregister(value).catch((cleanupError) => console.error('Failed to release new shortcut:', cleanupError))
       }
       try {
         const store = await Store.load('store.json')

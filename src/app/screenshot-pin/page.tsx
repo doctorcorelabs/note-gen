@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { Image as TauriImage } from '@tauri-apps/api/image'
+import { platform } from '@/lib/platform'
 import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition } from '@tauri-apps/api/window'
-import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { Check, Copy, Download, NotebookPen, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
@@ -177,8 +176,7 @@ export default function ScreenshotPinPage() {
       // The native command only reads the PNG belonging to this pin window.
       const png = new Uint8Array(await invoke<ArrayBuffer>('read_pinned_screenshot'))
       if (action === 'copy') {
-        const image = await TauriImage.fromBytes(png)
-        try { await writeImage(image) } finally { await image.close() }
+        await platform.clipboard.writeImage(png)
         if (mountedRef.current) setCopied(true)
       } else {
         const filename = `NoteGen-${new Date().toISOString().replace(/[:.]/g, '-')}.png`

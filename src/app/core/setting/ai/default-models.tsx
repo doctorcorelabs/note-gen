@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Gem, Move3D, MessageSquare } from "lucide-react";
 import Image from 'next/image';
-import { open } from '@tauri-apps/plugin-shell'
+import { platform } from '@/lib/platform'
 import { NoteGenModelLabel } from '@/components/notegen-model-label'
 import { NOTEGEN_LIMITED_MODEL } from '@/lib/ai/sponsored-model-limits'
 
@@ -51,7 +51,7 @@ export default function DefaultModelsSection() {
   ];
 
   function openInBrowser() {
-    open('https://cloud.siliconflow.cn/i/O2ciJeZw')
+    platform.opener.openUrl('https://cloud.siliconflow.cn/i/O2ciJeZw')
   }
 
   return (
@@ -91,7 +91,7 @@ export default function DefaultModelsSection() {
             unoptimized
           />
         </Button>
-        <Button variant="ghost" className="h-auto w-fit p-0" onClick={() => open('https://aihubmix.com/?aff=6rfO')}>
+        <Button variant="ghost" className="h-auto w-fit p-0" onClick={() => platform.opener.openUrl('https://aihubmix.com/?aff=6rfO')}>
           <Image
             src={aiHubMixImageUrl}
             alt="AIHubMix"

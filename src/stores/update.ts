@@ -1,7 +1,8 @@
 import { Store } from '@tauri-apps/plugin-store'
 import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
-import { check, Update } from '@tauri-apps/plugin-updater'
+import type { UpdateInfo } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { compareVersions, extractVersionText } from '@/lib/version'
 
@@ -27,8 +28,8 @@ interface UpdateState {
   hasUpdate: boolean
   setHasUpdate: (hasUpdate: boolean) => void
   
-  update: Update | null
-  setUpdate: (update: Update | null) => void
+  update: UpdateInfo | null
+  setUpdate: (update: UpdateInfo | null) => void
   
   latestVersion: string
   setLatestVersion: (version: string) => void
@@ -134,7 +135,7 @@ const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       // Never fall back to the legacy MSI target if installation detection fails.
       const target = await invoke<string | null>('get_desktop_update_target')
-      const update = await check({
+      const update = await platform.updater.check({
         timeout: 5000,
         ...(target ? { target } : {}),
       })
