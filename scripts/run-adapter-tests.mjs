@@ -58,8 +58,10 @@ const ESBUILD_BIN = join(REPO_ROOT, "node_modules", ".bin", "esbuild");
 // Explicit list, sorted. See the header: this list is the suite.
 const ADAPTER_SPECS = [
   "src/lib/platform/__tests__/v2-12-web-dialog-opener-clipboard.spec.ts",
+  "src/lib/platform/__tests__/v3b-11c-registry-wiring.spec.ts",
   "src/lib/platform/asset/asset.web.test.ts",
   "src/lib/platform/autostart/autostart.web.spec.ts",
+  "src/lib/platform/dialog/dialog-wiring.spec.ts",
   "src/lib/platform/event/event.bus.test.ts",
   "src/lib/platform/fs/fs.web.contract.test.ts",
   "src/lib/platform/http/http.web.test.ts",
@@ -70,7 +72,10 @@ const ADAPTER_SPECS = [
   "src/lib/platform/process/process.web.spec.ts",
   "src/lib/platform/shell/shell.web.spec.ts",
   "src/lib/platform/shortcut/shortcut.registry.test.ts",
+  "src/lib/platform/store/key-schema.spec.ts",
   "src/lib/platform/store/store.fake.spec.ts",
+  "src/lib/platform/store/store.tauri.spec.ts",
+  "src/lib/platform/store/store.web.spec.ts",
   "src/lib/platform/updater/updater.web.spec.ts",
 ];
 
@@ -89,9 +94,22 @@ const WEB_NODE_SPECS = [
 // node:test lists below (see vitest.config.ts); keep the two in
 // sync. A Vitest-style suite must never be added to the node:test
 // lists: it would fail loudly here instead of passing.
-const VITEST_SPECS = ["src/lib/web/csrf.spec.ts"];
+const VITEST_SPECS = [
+  "src/lib/platform/sql/db-client.spec.ts",
+  "src/lib/platform/sql/reconciled-forms.spec.ts",
+  "src/lib/platform/sql/sql.web.spec.ts",
+  "src/lib/web/csrf.spec.ts",
+];
 
 const NODE_TEST_SPECS = [...ADAPTER_SPECS, ...WEB_NODE_SPECS];
+
+// Specs that need --test-force-exit: they open persistent handles
+// (BroadcastChannel) that keep the event loop alive after the tests
+// finish, hanging the runner without the flag. The flag must stay
+// per-spec: applied globally it truncates other specs' counts.
+const FORCE_EXIT_SPECS = new Set([
+  "src/lib/platform/__tests__/v3b-11c-registry-wiring.spec.ts",
+]);
 
 function discoverSpecs(dir, out) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -131,7 +149,13 @@ function runOne(spec, index, workDir) {
   if (esbuild.status !== 0) {
     return { spec, ok: false, detail: `esbuild failed (exit ${esbuild.status}):\n${esbuild.stderr || esbuild.stdout || ""}` };
   }
-  const run = spawnSync(process.execPath, ["--test", "--test-reporter=tap", bundle], { encoding: "utf8" });
+  // Per-spec --test-force-exit (see FORCE_EXIT_SPECS): only specs
+  // that open persistent handles get the flag. A global flag was
+  // tried and REVERTED: it silently cut counted tests in specs
+  // without persistent handles (key-schema 49 to 36, store.fake
+  // 25 to 23, errors 96 to 54 in run 3 of G-3B4 gating).
+  const forceExit = FORCE_EXIT_SPECS.has(spec) ? ["--test-force-exit"] : [];
+  const run = spawnSync(process.execPath, ["--test", ...forceExit, "--test-reporter=tap", bundle], { encoding: "utf8" });
   const stdout = run.stdout || "";
   const counts = parseTapFooter(stdout);
   if (counts === null) {
