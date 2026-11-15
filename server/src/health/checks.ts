@@ -31,6 +31,11 @@ import {
   unlink as fsUnlink,
 } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import {
+  assessMigrationDrift,
+  readMigrationManifest,
+  type MigrationManifest,
+} from '../db/migrate.js';
 import type { HealthDbPool } from '../db/pool.js';
 
 export type CheckStatus = 'ok' | 'fail' | 'skipped';
@@ -198,17 +203,134 @@ export async function checkPgvector(
   }
 }
 
-// Migrations check. Fase 0 has no migration registry, so the check is
-// skipped when the database is reachable. When the database is down, the
-// check fails with DB_UNAVAILABLE even in Fase 0, because migration status
-// cannot be determined at all without the database. The real drift check
-// plugs in here in Fase 1; the contract (drift means 503) is already
-// locked by the design document.
-export function checkMigrations(dbOk: boolean): CheckResult {
+// Dependencies for the real migrations check (V3-15, wave 3B). The
+// pool is the same application pool the db check uses, never a second
+// DSN. The manifest is injectable so the comparison is testable with
+// a fake DB handle; by default it is read from the migrations folder
+// on disk through readMigrationManifest. The applied-hash reader is
+// injectable too: by default it is the journal query through the
+// pool, and a test may inject a runner that returns the applied
+// digests directly, in which case the pool is not connected for the
+// journal read. The check is opt-in: only a caller that passes these
+// deps gets the real drift comparison.
+export interface MigrationCheckDeps {
+  pool: HealthDbPool | null;
+  timeoutMs: number;
+  manifest?: MigrationManifest;
+  readManifest?: () => Promise<MigrationManifest>;
+  readAppliedHashes?: () => Promise<string[]>;
+}
+
+// Migrations check. Reads the applied journal digests through the
+// passed-in pool, compares them against the expected manifest with
+// assessMigrationDrift (both directions: missing tags and unexpected
+// digests), and fails with MIGRATION_DRIFT on any difference, which
+// blocks readiness through the unchanged rule in runReadyChecks. The
+// detail names the drift direction in the fixed vocabulary only:
+// migrations_missing when expected tags are absent, migrations_unexpected
+// when stored digests match no expected file, migration_drift when
+// both directions differ at once. The tags and digests themselves
+// never enter the result: the fixed vocabulary above keeps them out
+// of the HTTP response, and the exact values stay available to the
+// operator through assessMigrationDrift via checkMigrationDrift,
+// which reports the same comparison outside the health response.
+//
+// States:
+// - Database down: fail with DB_UNAVAILABLE, as in Fase 0.
+// - No deps passed: skipped with check_not_configured. Server wiring
+//   passes the deps (V3-15 full wiring, waiting on trunk state); until
+//   then the check honestly reports that it is not wired, and skipped
+//   still does not block readiness.
+// - Journal table or schema missing: treated as zero applied, so a
+//   fresh database fails with MIGRATION_DRIFT, never skipped.
+// - Any other failure (query error, timeout, unreadable manifest):
+//   fail with a fixed machine code. This function never throws.
+export async function checkMigrations(
+  dbOk: boolean,
+  deps?: MigrationCheckDeps,
+): Promise<CheckResult> {
   if (!dbOk) {
     return { status: 'fail', latencyMs: null, detail: 'db_unavailable', error: 'DB_UNAVAILABLE' };
   }
-  return { status: 'skipped', latencyMs: null, detail: 'no_migration_registry_in_fase_0', error: null };
+  if (deps === undefined) {
+    return { status: 'skipped', latencyMs: null, detail: 'check_not_configured', error: null };
+  }
+  if (deps.pool === null) {
+    return { status: 'fail', latencyMs: null, detail: 'db_unavailable', error: 'DB_UNAVAILABLE' };
+  }
+  const start = Date.now();
+  const elapsed = (): number => Date.now() - start;
+  let manifest: MigrationManifest;
+  try {
+    manifest = deps.manifest ?? (await (deps.readManifest ?? readMigrationManifest)());
+  } catch {
+    return { status: 'fail', latencyMs: elapsed(), detail: 'manifest_unavailable', error: 'MIGRATION_MANIFEST_UNAVAILABLE' };
+  }
+  let timedOut = false;
+  let client: Awaited<ReturnType<HealthDbPool['connect']>> | undefined;
+  try {
+    let appliedHashes: string[];
+    if (deps.readAppliedHashes !== undefined) {
+      // Injected runner: the caller supplies the applied digests
+      // directly, so no pool connection is opened for the journal
+      // read. A missing journal table or schema reported by the
+      // runner means zero applied, exactly as in the pool path.
+      try {
+        appliedHashes = await withTimeout(deps.readAppliedHashes(), deps.timeoutMs);
+      } catch (err) {
+        const code = errorCodeOf(err);
+        if (code === '42P01' || code === '3F000') {
+          appliedHashes = [];
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      client = await withTimeout(deps.pool.connect(), deps.timeoutMs);
+      const remaining = Math.max(0, deps.timeoutMs - elapsed());
+      let rows: Array<Record<string, unknown>>;
+      try {
+        const result = await withTimeout(
+          client.query(
+            'SELECT "hash" FROM "drizzle"."__drizzle_migrations" ORDER BY "created_at" ASC, "hash" ASC',
+          ),
+          remaining,
+        );
+        rows = result.rows;
+      } catch (err) {
+        const code = errorCodeOf(err);
+        if (code === '42P01' || code === '3F000') {
+          rows = [];
+        } else {
+          throw err;
+        }
+      }
+      appliedHashes = rows
+        .map((row) => row['hash'])
+        .filter((hash): hash is string => typeof hash === 'string');
+    }
+    const drift = assessMigrationDrift(manifest, appliedHashes);
+    if (drift.current) {
+      return { status: 'ok', latencyMs: elapsed(), detail: 'migrations_current', error: null };
+    }
+    const detail =
+      drift.missingTags.length > 0 && drift.unexpectedHashes.length > 0
+        ? 'migration_drift'
+        : drift.missingTags.length > 0
+          ? 'migrations_missing'
+          : 'migrations_unexpected';
+    return { status: 'fail', latencyMs: elapsed(), detail, error: 'MIGRATION_DRIFT' };
+  } catch (err) {
+    if (err instanceof CheckTimeoutError) {
+      timedOut = true;
+      return { status: 'fail', latencyMs: elapsed(), detail: 'check_timed_out', error: 'MIGRATION_CHECK_TIMEOUT' };
+    }
+    return { status: 'fail', latencyMs: elapsed(), detail: 'check_failed', error: 'MIGRATION_CHECK_FAILED' };
+  } finally {
+    if (client !== undefined) {
+      client.release(timedOut ? new Error('health check timeout') : undefined);
+    }
+  }
 }
 
 // Worker check: contract set in wave 3A (V3-39c).
@@ -365,6 +487,10 @@ export interface ReadyCheckDeps {
   checkTimeoutMs: number;
   overallTimeoutMs: number;
   workspaceFs?: WorkspaceFs;
+  // Optional until server wiring passes it (V3-15 full wiring). When
+  // absent, the migrations check reports skipped and readiness is
+  // decided exactly as before; when present, drift blocks readiness.
+  migrationCheck?: MigrationCheckDeps;
 }
 
 // Runs the readiness checks. db and workspace run in parallel; the
@@ -381,7 +507,7 @@ export async function runReadyChecks(deps: ReadyCheckDeps): Promise<{ checks: Re
   ]);
   const dbOk = db.status === 'ok';
   const pgvector = await checkPgvector(deps.pool, dbOk, Math.min(deps.checkTimeoutMs, remaining()));
-  const migrations = checkMigrations(dbOk);
+  const migrations = await checkMigrations(dbOk, deps.migrationCheck);
   const worker = checkWorker();
   const checks: ReadyChecks = { db, workspace, migrations, pgvector, worker };
   const ok = db.status === 'ok' && workspace.status === 'ok' && migrations.status !== 'fail';
