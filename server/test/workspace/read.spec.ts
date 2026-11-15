@@ -551,6 +551,43 @@ describe('workspace read routes', () => {
     expectError(res, 404, 'not_found');
   });
 
+  it('paths through a regular file answer 404 not_found on all read routes (ENOTDIR)', async () => {
+    const through = 'read.md/child.md';
+    const checks = [
+      { method: 'GET', url: `/api/workspace/file${q({ path: through })}` },
+      { method: 'HEAD', url: `/api/workspace/file${q({ path: through })}` },
+      { method: 'GET', url: `/api/workspace/list${q({ path: through })}` },
+      { method: 'GET', url: `/api/workspace/scan${q({ folder: through })}` },
+      { method: 'GET', url: `/api/workspace/stat${q({ path: through })}` },
+    ] as const;
+    for (const check of checks) {
+      const res = await app.inject({ ...check, headers: { cookie: VALID_COOKIE } });
+      expect(res.statusCode).toBe(404);
+      if (check.method !== 'HEAD') {
+        expectError(res, 404, 'not_found');
+      }
+    }
+  });
+
+  it('an overlong single segment answers 404 not_found on all read routes (ENAMETOOLONG)', async () => {
+    const longSegment = `${'a'.repeat(1020)}.md`;
+    expect(Buffer.byteLength(longSegment, 'utf8')).toBe(1024);
+    const checks = [
+      { method: 'GET', url: `/api/workspace/file${q({ path: longSegment })}` },
+      { method: 'HEAD', url: `/api/workspace/file${q({ path: longSegment })}` },
+      { method: 'GET', url: `/api/workspace/list${q({ path: longSegment })}` },
+      { method: 'GET', url: `/api/workspace/scan${q({ folder: longSegment })}` },
+      { method: 'GET', url: `/api/workspace/stat${q({ path: longSegment })}` },
+    ] as const;
+    for (const check of checks) {
+      const res = await app.inject({ ...check, headers: { cookie: VALID_COOKIE } });
+      expect(res.statusCode).toBe(404);
+      if (check.method !== 'HEAD') {
+        expectError(res, 404, 'not_found');
+      }
+    }
+  });
+
   it('traversal and absolute paths are rejected with invalid_path', async () => {
     const bad = ['../escape.md', 'a/../../escape.md', '/abs.md', 'C:/win.md', '..', 'a/../b.md'];
     for (const badPath of bad) {

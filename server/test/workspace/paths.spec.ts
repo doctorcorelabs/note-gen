@@ -184,6 +184,22 @@ describe('assertNoSymlinkComponents', () => {
       assertNoSymlinkComponents(join(dir, 'gone'), validateWorkspacePath('a.md')),
     ).rejects.toThrow(WorkspaceRootUnavailableError);
   });
+
+  it('treats a path through a regular file like a missing tail (ENOTDIR)', async () => {
+    const rootReal = await realpath(dir);
+    const result = await assertNoSymlinkComponents(
+      dir,
+      validateWorkspacePath('sub/file.md/child.md'),
+    );
+    expect(result).toBe(join(rootReal, 'sub', 'file.md', 'child.md'));
+  });
+
+  it('treats an overlong segment like a missing tail (ENAMETOOLONG)', async () => {
+    const rootReal = await realpath(dir);
+    const longSegment = `${'n'.repeat(296)}.md`;
+    const result = await assertNoSymlinkComponents(dir, validateWorkspacePath(longSegment));
+    expect(result).toBe(join(rootReal, longSegment));
+  });
 });
 
 describe('text file classification', () => {

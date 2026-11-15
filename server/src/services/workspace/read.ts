@@ -189,6 +189,15 @@ function mapPathError(error: unknown): ApiError {
   if (error instanceof WorkspaceRootUnavailableError) {
     return ApiError.serviceUnavailable();
   }
+  // Defense in depth: a raw ENOTDIR/ENAMETOOLONG escaping the path
+  // walk still names an absent path on the read side, never a
+  // server fault.
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === 'ENOTDIR' || code === 'ENAMETOOLONG') {
+      return ApiError.notFound();
+    }
+  }
   throw error;
 }
 
@@ -293,7 +302,7 @@ async function readFileNoFollow(fsPath: string): Promise<Buffer | null> {
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'code' in error) {
       const code = (error as { code?: unknown }).code;
-      if (code === 'ENOENT' || code === 'ELOOP' || code === 'ENOTDIR') {
+      if (code === 'ENOENT' || code === 'ELOOP' || code === 'ENOTDIR' || code === 'ENAMETOOLONG') {
         return null;
       }
     }

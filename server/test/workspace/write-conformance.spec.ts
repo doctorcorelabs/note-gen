@@ -661,3 +661,101 @@ describe('PUT media with real modules', () => {
     expect(await readFile(join(root, 'img', 'a.png'))).toEqual(PNG_BYTES);
   });
 });
+
+describe('paths through a file and overlong names on writes (ENOTDIR/ENAMETOOLONG)', () => {
+  // Writes answer 400 invalid_path here, not 404: desain 8.6 maps
+  // invalid write paths to 400, katalog 6.2 lists "terlalu panjang"
+  // under invalid_path, and the write service already maps ENOTDIR
+  // from its disk reads to invalid_path. Reads answer 404 for the
+  // same paths (see read.spec.ts); the asymmetry is the designed
+  // 400-vs-404 matrix, and 500 is wrong on both sides.
+  const LONG_SEGMENT = `${'a'.repeat(1020)}.md`;
+
+  function multipartUpload(path: string, bytes: Buffer): { headers: Record<string, string>; payload: Buffer } {
+    const boundary = 'fix02boundary';
+    const head = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="path"\r\n\r\n${path}\r\n` +
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n` +
+        'Content-Type: image/png\r\n\r\n',
+      'utf8',
+    );
+    const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+    return {
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: Buffer.concat([head, bytes, tail]),
+    };
+  }
+
+  it('PUT file through a regular file and overlong names answers 400 invalid_path', async () => {
+    const { app, root } = await setup();
+    await createViaPut(app, 'blocker.md', 'kept');
+    for (const path of ['blocker.md/child.md', LONG_SEGMENT]) {
+      const res = await app.inject({
+        method: 'PUT',
+        url: fileUrl(path),
+        headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'text/plain' },
+        payload: 'x',
+      });
+      expect(res.statusCode).toBe(400);
+      expect(errorBody(res).code).toBe('invalid_path');
+    }
+    expect(await readFile(join(root, 'blocker.md'), 'utf8')).toBe('kept');
+  });
+
+  it('append and patch through a regular file and overlong names answer 400 invalid_path', async () => {
+    const { app, root } = await setup();
+    await createViaPut(app, 'blocker.md', 'kept');
+    for (const path of ['blocker.md/child.md', LONG_SEGMENT]) {
+      const encoded = encodeURIComponent(path);
+      const appended = await app.inject({
+        method: 'POST',
+        url: `/api/workspace/file/append?path=${encoded}`,
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+        payload: JSON.stringify({ expectedRevision: 'sha256:x', content: 'x' }),
+      });
+      expect(appended.statusCode).toBe(400);
+      expect(errorBody(appended).code).toBe('invalid_path');
+      const patched = await app.inject({
+        method: 'POST',
+        url: `/api/workspace/file/patch?path=${encoded}`,
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+        payload: JSON.stringify({ expectedRevision: 'sha256:x', startLine: 1, endLine: 2, replacement: 'x\n' }),
+      });
+      expect(patched.statusCode).toBe(400);
+      expect(errorBody(patched).code).toBe('invalid_path');
+    }
+    expect(await readFile(join(root, 'blocker.md'), 'utf8')).toBe('kept');
+  });
+
+  it('PUT media through a regular file and overlong names answers 400 invalid_path', async () => {
+    const { app, root } = await setup();
+    await createViaPut(app, 'blocker.md', 'kept');
+    const longPng = `${'a'.repeat(1020)}.png`;
+    for (const path of ['blocker.md/pic.png', longPng]) {
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/api/workspace/media?path=${encodeURIComponent(path)}`,
+        headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'application/octet-stream' },
+        payload: PNG_BYTES,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(errorBody(res).code).toBe('invalid_path');
+    }
+    expect(await readFile(join(root, 'blocker.md'), 'utf8')).toBe('kept');
+  });
+
+  it('POST media through a regular file answers 400 invalid_path', async () => {
+    const { app, root } = await setup();
+    await createViaPut(app, 'blocker.md', 'kept');
+    const { headers, payload } = multipartUpload('blocker.md/pic.png', PNG_BYTES);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/workspace/media',
+      headers: { ...AUTH_HEADERS, ...headers, 'if-none-match': '*' },
+      payload,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(errorBody(res).code).toBe('invalid_path');
+    expect(await readFile(join(root, 'blocker.md'), 'utf8')).toBe('kept');
+  });
+});
