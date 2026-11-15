@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 
 import { canvasDocumentToSvg } from '@/lib/canvas/static-export'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,7 @@ export function CanvasThumbnail({ project, compact = false }: { project: CanvasP
   const thumbnailSourceKey = `${project.thumbnailPath || 'missing'}:${project.thumbnailRevision || project.updatedAt}`
   const fallbackActive = failedSourceKey === thumbnailSourceKey
   const source = project.thumbnailPath && !fallbackActive
-    ? `${convertFileSrc(project.thumbnailPath)}?v=${project.thumbnailRevision || project.updatedAt}`
+    ? `${platform.assetUrl.convertFileSrc(project.thumbnailPath)}?v=${project.thumbnailRevision || project.updatedAt}`
     : fallback
 
   return (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { copyFile, exists, mkdir, readDir, writeTextFile } from '@tauri-apps/plugin-fs'
 import { appDataDir, join } from '@tauri-apps/api/path'
 import { invoke } from '@tauri-apps/api/core'
@@ -95,7 +95,7 @@ export function useMarkdownImport() {
 
     setIsImporting(true)
     try {
-      const selectedPath = await openDialog({
+      const selectedPath = await platform.dialog.open({
         directory: true,
         multiple: false,
         title: t('importMarkdown'),
@@ -135,7 +135,7 @@ export function useMarkdownImport() {
 
     setIsImporting(true)
     try {
-      const selectedPath = await openDialog({
+      const selectedPath = await platform.dialog.open({
         multiple: false,
         filters: [{ name: 'Notion Export', extensions: ['zip'] }],
         title: t('importNotion'),
@@ -178,7 +178,7 @@ export function useMarkdownImport() {
 
     setIsImporting(true)
     try {
-      const selected = await openDialog({
+      const selected = await platform.dialog.open({
         multiple: true,
         directory: false,
         filters: [{

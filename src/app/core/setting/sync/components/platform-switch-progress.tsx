@@ -30,6 +30,7 @@ import {
   type SwitchOperationProgress, type SwitchResolution, type SwitchStrategy,
 } from '@/lib/sync/platform-switch-plan'
 import { cn } from '@/lib/utils'
+import { platform as registryPlatform } from '@/lib/platform'
 import type { SelfHostedSwitchPreview } from '@/lib/self-hosted-sync/switch-preview'
 import useSettingStore from '@/stores/setting'
 import {
@@ -501,8 +502,7 @@ export function PlatformSwitchProgress() {
             {state.recovered && <p>{p('nativeRecoveredLocation', { path: useSettingStore.getState().workspacePath })}</p>}
             <Button type="button" variant="outline" size="sm" onClick={() => void (async () => {
               if (!/^self-hosted-switch-backups\/\d+-[a-f0-9-]+$/.test(state.selfHostedBackupPath!)) throw new Error('SELF_HOSTED_BACKUP_INVALID')
-              const [{ appDataDir, join }, { openPath }] = await Promise.all([import('@tauri-apps/api/path'), import('@tauri-apps/plugin-opener')])
-              await openPath(await join(await appDataDir(), state.selfHostedBackupPath!))
+              await registryPlatform.opener.openPath(await registryPlatform.path.join(await registryPlatform.path.appDataDir(), state.selfHostedBackupPath!))
             })().catch(failure => toast({ title: p('failed'), description: String(failure), variant: 'destructive' }))}><FolderOpen data-icon="inline-start" />{p('nativeOpenBackup')}</Button>
           </AlertDescription></Alert>}
         {step === 'confirm' && <FieldGroup>

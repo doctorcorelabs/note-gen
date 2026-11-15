@@ -1,7 +1,6 @@
 import { appDataDir, join } from '@tauri-apps/api/path'
-import { save } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { copyFile, lstat } from '@tauri-apps/plugin-fs'
-import { openPath } from '@tauri-apps/plugin-opener'
 import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { getWorkspacePath } from '@/lib/workspace'
 
@@ -205,7 +204,7 @@ export async function resolveChatArtifact(href: string, context: ChatArtifactCon
 /** Call only from an explicit user action, never while rendering model output. */
 export async function openChatArtifact(href: string, context: ChatArtifactContext): Promise<void> {
   const artifact = await resolveChatArtifact(href, context)
-  try { await openPath(artifact.absolutePath) } catch { throw new ChatArtifactError('OPEN_FAILED') }
+  try { await platform.opener.openPath(artifact.absolutePath) } catch { throw new ChatArtifactError('OPEN_FAILED') }
 }
 
 /** A native Save dialog grants the chosen destination; the source stays allowlisted. */
@@ -213,7 +212,7 @@ export async function saveChatArtifactAs(href: string, context: ChatArtifactCont
   const artifact = await resolveChatArtifact(href, context)
   let destination: string | null
   try {
-    destination = await save({
+    destination = await platform.dialog.save({
       defaultPath: artifact.name,
       filters: /^[a-z0-9]{1,16}$/i.test(artifact.extension)
         ? [{ name: artifact.extension.toUpperCase(), extensions: [artifact.extension] }]

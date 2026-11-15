@@ -1,6 +1,6 @@
 'use client'
 
-import { save } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import type { JSONContent } from '@tiptap/core'
 import TaskItem from '@tiptap/extension-task-item'
@@ -230,7 +230,7 @@ async function saveTextExport(
   filterName: string,
 ) {
   if (checkIsTauri()) {
-    const selectedPath = await save({
+    const selectedPath = await platform.dialog.save({
       title: '导出',
       defaultPath: filename,
       filters: [{ name: filterName, extensions: [extension] }],
@@ -594,11 +594,11 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
   const fileName = getMarkdownExportBaseName(source.baseName)
 
   if (checkIsTauri()) {
-    const { platform } = await import('@tauri-apps/plugin-os')
+    const { platform: osPlatform } = await import('@tauri-apps/plugin-os')
     let outputPath: string | undefined
 
-    if (platform() === 'macos') {
-      const selectedPath = await save({
+    if (osPlatform() === 'macos') {
+      const selectedPath = await platform.dialog.save({
         title: '导出 PDF',
         defaultPath: `${fileName}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }],

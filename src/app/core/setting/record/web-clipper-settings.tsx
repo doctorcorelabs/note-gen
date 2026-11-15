@@ -1,7 +1,7 @@
 'use client'
 
 import { invoke } from '@tauri-apps/api/core'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { Download, ExternalLink, Scissors } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
@@ -70,7 +70,7 @@ export function WebClipperSettings() {
   async function openInstallPage() {
     try {
       const websiteLocale = locale.toLocaleLowerCase().startsWith('zh') ? 'cn' : 'en'
-      await openUrl(`https://notegen.top/${websiteLocale}/web-clipper/download`)
+      await platform.opener.openUrl(`https://notegen.top/${websiteLocale}/web-clipper/download`)
     } catch (error) {
       toast({
         title: t('installOpenFailed'),

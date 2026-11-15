@@ -7,7 +7,7 @@ import { MarkList } from './mark-list'
 import useMarkStore from "@/stores/mark"
 import { Button } from "@/components/ui/button"
 import { clearTrash } from "@/db/marks"
-import { confirm } from '@tauri-apps/plugin-dialog';
+import { platform } from '@/lib/platform';
 import { filterMarks, getTrashRecordFilters } from "./mark-filters";
 
 export function NoteSidebar() {
@@ -16,7 +16,7 @@ export function NoteSidebar() {
   const visibleTrashMarks = React.useMemo(() => filterMarks(marks, getTrashRecordFilters()), [marks])
 
   async function handleClearTrash() {
-    const res = await confirm(`${t('record.trash.confirm')}\n${t('record.trash.syncWarning')}`, {
+    const res = await platform.dialog.confirm(`${t('record.trash.confirm')}\n${t('record.trash.syncWarning')}`, {
       title: t('record.trash.title'),
       kind: 'warning',
     })

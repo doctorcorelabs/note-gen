@@ -1,5 +1,5 @@
 'use client'
-import { clear, hasImage, hasText, readImageBase64, readText } from "tauri-plugin-clipboard-api";
+import { platform } from "@/lib/platform";
 import { useEffect, useRef } from 'react';
 import { BaseDirectory, exists, mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
@@ -18,8 +18,8 @@ export function ClipboardListener() {
     const isEnabled = await store.get<boolean>('clipboardMonitor')
     if (!isEnabled) return
     if (loading) return
-    const hasImageRes = await hasImage()
-    const hasTextRes = await hasText()
+    const hasImageRes = await platform.clipboard.hasImage()
+    const hasTextRes = await platform.clipboard.hasText()
 
     if (hasImageRes) {
       await handleImage()
@@ -33,11 +33,11 @@ export function ClipboardListener() {
     if (!isClipboardFolderExists) {
       await mkdir('clipboard', { baseDir: BaseDirectory.AppData })
     }
-    const image = await readImageBase64()
+    const image = await platform.clipboard.readImageBase64()
     const uint8Array = Uint8Array.from(atob(image), c => c.charCodeAt(0)) || new Uint8Array()
     const path = `clipboard/${uuid()}.png`
     await writeFile(path, uint8Array, { baseDir: BaseDirectory.AppData })
-    await clear()
+    await platform.clipboard.clear()
     await insert({
       role: 'system',
       content: '',
@@ -49,7 +49,7 @@ export function ClipboardListener() {
   }
 
   async function handleText() {
-    const text = await readText()
+    const text = await platform.clipboard.readText()
     const chatsContent = chatsRef.current.map(item => item.content)
     if (!chatsContent.includes(text)) {
       await insert({

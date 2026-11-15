@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { ResponsiveSelect } from "@/components/responsive-select";
-import { confirm } from '@tauri-apps/plugin-dialog';
+import { platform } from '@/lib/platform';
 import {
   Dialog,
   DialogContent,
@@ -90,7 +90,7 @@ export function SettingTemplate({id, icon}: {id: string, icon?: React.ReactNode}
   }
 
   function deleteTemplateHandler(id: string) {
-    confirm(t('settings.template.deleteConfirm')).then(async (res) => {
+    platform.dialog.confirm(t('settings.template.deleteConfirm')).then(async (res) => {
       if (res) {
         setTemplateList(templateList.filter(item => item.id !== id));
       }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { platform } from '@/lib/platform'
 import { useLocale, useTranslations } from 'next-intl'
 import { Code2, Download, FileCode2, FolderOpen, Terminal, Trash2, TriangleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -76,9 +77,8 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
   async function exportDiagnostics() {
     setError(null)
     try {
-      const { save } = await import('@tauri-apps/plugin-dialog')
       const { writeTextFile } = await import('@tauri-apps/plugin-fs')
-      const path = await save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
+      const path = await platform.dialog.save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
       if (!path) return
       await writeTextFile(path, JSON.stringify({
         appVersion: useSettingStore.getState().version,
@@ -117,8 +117,7 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
   async function chooseDevelopmentDirectory() {
     setError(null)
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
+      const selected = await platform.dialog.open({
         directory: true,
         multiple: false,
         title: t('developer.chooseFolder'),

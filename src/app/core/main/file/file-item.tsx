@@ -10,9 +10,9 @@ import { moveSelfHostedWorkspacePath } from '@/lib/self-hosted-sync/files'
 import { withWorkspacePathMove } from '@/lib/sync/workspace-path-moves'
 import { Copy, Download, ExternalLink, File, FileCode, FileJson, FileLock, FileText, FileUp, FolderOpen, ImageIcon, LoaderCircle, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, useCallback } from "react";
-import { platform } from '@tauri-apps/plugin-os';
+import { platform as osPlatform } from '@tauri-apps/plugin-os';
 import { cloneDeep } from "lodash-es";
-import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { platform } from "@/lib/platform";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";
 import { toast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
@@ -580,7 +580,7 @@ export function FileItem({
     const workspace = await getWorkspacePath()
     const isMobile = isMobileDevice()
     const targetPath = isMobile ? path.split('/').slice(0, -1).join('/') : path
-    const openInFileManager = isMobile ? openPath : revealItemInDir
+    const openInFileManager = isMobile ? platform.opener.openPath : platform.opener.revealItemInDir
 
     if (workspace.isCustom) {
       const pathOptions = await getFilePathOptions(targetPath)
@@ -783,7 +783,7 @@ export function FileItem({
 
   useEffect(() => {
     try {
-      const p = platform()
+      const p = osPlatform()
       if (p === 'macos') {
         setCurrentPlatform('macos')
       } else if (p === 'windows') {

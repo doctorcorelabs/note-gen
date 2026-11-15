@@ -25,6 +25,7 @@ import { AgentPermissionModeSelect } from "./agent-permission-mode"
 import { AgentPendingMessageList } from "./agent-pending-message-list"
 import { ContextUsageIndicator } from "./context-usage-indicator"
 import { readFile, readTextFile, writeFile, BaseDirectory, exists, mkdir, stat } from "@tauri-apps/plugin-fs"
+import { platform } from '@/lib/platform'
 import { ShineBorder } from "@/components/ui/shine-border"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -991,8 +992,7 @@ export const ChatInput = React.memo(function ChatInput() {
       }
 
       // PC端使用 Tauri dialog
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
+      const selected = await platform.dialog.open({
         multiple: true,
         filters: [{
           name: 'Images',
@@ -1019,8 +1019,7 @@ export const ChatInput = React.memo(function ChatInput() {
 
   async function handleSelectLocalFiles() {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({ multiple: true, directory: false })
+      const selected = await platform.dialog.open({ multiple: true, directory: false })
       if (!selected) return
       const paths = Array.isArray(selected) ? selected : [selected]
       const results = await Promise.allSettled(paths.map(createFileAttachment))
@@ -1037,8 +1036,7 @@ export const ChatInput = React.memo(function ChatInput() {
 
   async function handleSelectLocalFolders() {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({ multiple: true, directory: true })
+      const selected = await platform.dialog.open({ multiple: true, directory: true })
       if (!selected) return
       const paths = Array.isArray(selected) ? selected : [selected]
       const results = await Promise.allSettled(paths.map(createFolderAttachment))

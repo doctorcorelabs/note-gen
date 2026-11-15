@@ -32,7 +32,7 @@ import { v4 as uuidv4 } from 'uuid'
 import emitter from '@/lib/emitter'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { isMobileDevice as checkIsMobileDevice } from '@/lib/check'
-import { hasText, readText } from 'tauri-plugin-clipboard-api'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { invoke } from '@tauri-apps/api/core'
 import { toast } from '@/hooks/use-toast'
@@ -89,9 +89,9 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
       // 如果勾选了 checkbox，立即读取剪贴板
       if (checked) {
         try {
-          const hasTextRes = await hasText()
+          const hasTextRes = await platform.clipboard.hasText()
           if (hasTextRes) {
-            const clipboardText = await readText()
+            const clipboardText = await platform.clipboard.readText()
             if (clipboardText && isValidUrl(clipboardText)) {
               setUrl(clipboardText)
             }
@@ -113,9 +113,9 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
     }
 
     try {
-      const hasTextRes = await hasText()
+      const hasTextRes = await platform.clipboard.hasText()
       if (hasTextRes) {
-        const clipboardText = await readText()
+        const clipboardText = await platform.clipboard.readText()
         if (clipboardText && isValidUrl(clipboardText)) {
           setUrl(clipboardText)
         }

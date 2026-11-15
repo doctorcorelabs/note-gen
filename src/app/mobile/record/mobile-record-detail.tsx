@@ -14,7 +14,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { AudioPlayer } from '@/components/audio-player'
 import { LocalImage } from '@/components/local-image'
@@ -294,7 +294,7 @@ export function MobileRecordDetail({ markId, isActive }: MobileRecordDetailProps
 
   async function handleOpenLink(url: string) {
     if (!isHttpUrl(url)) return
-    await openUrl(url)
+    await platform.opener.openUrl(url)
   }
 
   async function handleDelete() {

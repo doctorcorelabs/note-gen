@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { Check, Download, ExternalLink, RefreshCw, Settings2 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -77,7 +77,7 @@ export function SkillEnvironmentDialog({ skillId, scope, onChanged }: { skillId:
 
   const openDownload = async (url: string) => {
     try {
-      await openUrl(url)
+      await platform.opener.openUrl(url)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     }

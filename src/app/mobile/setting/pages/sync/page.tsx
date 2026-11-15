@@ -3,8 +3,8 @@
 import { FileDown, Loader2, RefreshCcw } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { confirm } from '@tauri-apps/plugin-dialog'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { Store } from '@tauri-apps/plugin-store'
 import { GithubSync } from '@/app/core/setting/sync/github-sync'
 import { GiteeSync } from '@/app/core/setting/sync/gitee-sync'
@@ -50,7 +50,7 @@ function isRepoSyncPlatform(platformName: MobileSyncPlatform): platformName is S
 export default function SyncPage() {
   const t = useTranslations()
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
-  const currentPlatform = platform()
+  const currentPlatform = osPlatform()
   const isIOS = currentPlatform === 'ios'
   const isAndroid = currentPlatform === 'android'
   const {
@@ -260,7 +260,7 @@ export default function SyncPage() {
 
   async function handleExcludeSensitiveConfigChange(checked: boolean) {
     if (!checked) {
-      const accepted = await confirm(t('settings.sync.autoDataSyncPrivacyDisableConfirm'), {
+      const accepted = await platform.dialog.confirm(t('settings.sync.autoDataSyncPrivacyDisableConfirm'), {
         title: t('settings.sync.autoDataSyncPrivacyTitle'),
         kind: 'warning',
       })

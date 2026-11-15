@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { ArrowRightLeft, FolderOpen, Loader2, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -182,7 +182,7 @@ export function ICloudFolderSync({ onActiveProviderChange }: ICloudFolderSyncPro
 
   async function migrateWorkspace() {
     if (!config.path || migrating) return
-    const accepted = await confirm(t('migrationConfirm'), {
+    const accepted = await platform.dialog.confirm(t('migrationConfirm'), {
       title: t('migrationConfirmTitle'),
       kind: 'warning',
     })

@@ -20,10 +20,9 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { appConfigDir, appDataDir, join } from '@tauri-apps/api/path'
 import { exists, remove } from '@tauri-apps/plugin-fs'
-import { platform, version as osVersion } from '@tauri-apps/plugin-os'
-import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
+import { platform as osPlatform, version as osVersion } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { save } from '@tauri-apps/plugin-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -157,7 +156,7 @@ export function ErrorRecovery({
       }
       try {
         nextDiagnosticContext.appVersion = await getVersion()
-        nextDiagnosticContext.platform = platform()
+        nextDiagnosticContext.platform = osPlatform()
         nextDiagnosticContext.osVersion = osVersion()
       } catch (diagnosticError) {
         console.error('读取诊断环境失败:', diagnosticError)
@@ -242,9 +241,9 @@ export function ErrorRecovery({
       const configDirectory = await appConfigDir()
       const databasePath = await join(configDirectory, 'note.db')
       if (await exists(databasePath)) {
-        await revealItemInDir(databasePath)
+        await platform.opener.revealItemInDir(databasePath)
       } else {
-        await openPath(configDirectory)
+        await platform.opener.openPath(configDirectory)
       }
       setActionMessage('已在文件管理器中打开数据目录。修改文件前请先退出 NoteGen 并做好备份。')
       setActiveAction(null)
@@ -313,7 +312,7 @@ export function ErrorRecovery({
   function exportFullBackup() {
     void runRecovery('export-backup', async () => {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const outputPath = await save({
+      const outputPath = await platform.dialog.save({
         title: '导出 NoteGen 完整数据备份',
         defaultPath: `note-gen-full-backup-${timestamp}.zip`,
         filters: [{
@@ -380,7 +379,7 @@ export function ErrorRecovery({
       const issueUrl = new URL(GITHUB_BUG_REPORT_URL)
       issueUrl.searchParams.set('template', 'bug_report.yml')
       issueUrl.searchParams.set('title', '[bug] 应用进入错误恢复模式')
-      await openUrl(issueUrl)
+      await platform.opener.openUrl(issueUrl)
       setActionMessage(
         diagnosticsCopied
           ? '已打开 GitHub Bug 反馈页面，错误信息也已复制，请粘贴到报错日志中并补充复现步骤。'

@@ -22,7 +22,7 @@ import {
 } from '@xyflow/react'
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js'
 import { toPng, toSvg } from 'html-to-image'
-import { open, save } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { BaseDirectory, exists, mkdir, readFile, readTextFile, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import {
   AlignCenterHorizontal,
@@ -1209,7 +1209,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         imageName = file.name
         imageData = new Uint8Array(await file.arrayBuffer())
       } else {
-        const sourcePath = await open({
+        const sourcePath = await platform.dialog.open({
           multiple: false,
           filters: [{ name: t('nodes.image'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }],
         })
@@ -1927,7 +1927,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       const safeTitle = projectTitle.replace(/[\\/:*?"<>|]/g, '-').trim() || 'NoteGen-Canvas'
       const extension = format
 
-      const path = await save({
+      const path = await platform.dialog.save({
         filters: [{ name: format.toUpperCase(), extensions: [extension] }],
         defaultPath: `${safeTitle}.${extension}`,
       })
@@ -1995,7 +1995,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       const project = projects.find(item => item.id === canvasId)
       const title = project?.title || t('untitled')
       const safeTitle = title.replace(/[\\/:*?"<>|]/g, '-').trim() || 'NoteGen-Canvas'
-      const path = await save({
+      const path = await platform.dialog.save({
         defaultPath: `${safeTitle}.${format === 'canvas' ? 'canvas.json' : 'mmd'}`,
         filters: [{ name: format === 'canvas' ? 'NoteGen Canvas' : 'Mermaid', extensions: format === 'canvas' ? ['json'] : ['mmd'] }],
       })
@@ -2027,7 +2027,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
 
   const importCanvasFile = useCallback(async () => {
     try {
-      const path = await open({
+      const path = await platform.dialog.open({
         multiple: false,
         filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
       })

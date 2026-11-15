@@ -7,7 +7,7 @@ import { BaseDirectory, exists, mkdir, readFile, writeFile } from "@tauri-apps/p
 import { ImagePlus } from "lucide-react"
 import useSettingStore from "@/stores/setting"
 import { v4 as uuid } from 'uuid'
-import { open } from '@tauri-apps/plugin-dialog';
+import { platform } from '@/lib/platform';
 import { uploadImage } from "@/lib/imageHosting"
 import { useRef, useEffect, useCallback } from 'react'
 import { isMobileDevice } from '@/lib/check'
@@ -162,7 +162,7 @@ export function ControlImage() {
         return
       }
 
-      const filePaths = await open({
+      const filePaths = await platform.dialog.open({
         multiple: true,
         directory: false,
         filters: [{

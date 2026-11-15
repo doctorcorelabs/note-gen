@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { File, FolderOpen, ExternalLink } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
-import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { appDataDir } from '@tauri-apps/api/path'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 
@@ -123,12 +123,12 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
       if (workspace.isCustom) {
         // 自定义工作区：使用绝对路径
         const pathOptions = await getFilePathOptions(filePath)
-        await openPath(pathOptions.path)
+        await platform.opener.openPath(pathOptions.path)
       } else {
         // 默认工作区：使用 AppData 目录
         const appDir = await appDataDir()
         const { join } = await import('@tauri-apps/api/path')
-        await openPath(await join(appDir, 'article', filePath))
+        await platform.opener.openPath(await join(appDir, 'article', filePath))
       }
     } catch (error) {
       console.error('Failed to open file:', error)
@@ -141,7 +141,7 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
       const workspace = await getWorkspacePath()
       const isMobile = isMobileDevice()
       const targetPath = isMobile ? filePath.split('/').slice(0, -1).join('/') : filePath
-      const openInFileManager = isMobile ? openPath : revealItemInDir
+      const openInFileManager = isMobile ? platform.opener.openPath : platform.opener.revealItemInDir
 
       if (workspace.isCustom) {
         const pathOptions = await getFilePathOptions(targetPath)

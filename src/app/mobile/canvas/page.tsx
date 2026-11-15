@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import {
   BrainCircuit,
   CalendarDays,
@@ -77,7 +77,7 @@ function MobileCanvasThumbnail({ project }: { project: CanvasProject }) {
   const thumbnailSourceKey = `${project.thumbnailPath || 'missing'}:${project.thumbnailRevision || project.updatedAt}`
   const fallbackActive = failedSourceKey === thumbnailSourceKey
   const source = project.thumbnailPath && !fallbackActive
-    ? `${convertFileSrc(project.thumbnailPath)}?v=${project.thumbnailRevision || project.updatedAt}`
+    ? `${platform.assetUrl.convertFileSrc(project.thumbnailPath)}?v=${project.thumbnailRevision || project.updatedAt}`
     : fallback
 
   return (

@@ -1,6 +1,6 @@
 'use client'
 
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import {
   ArrowDownAZ,
   Calendar,
@@ -136,7 +136,7 @@ export function FileMoreMenu({
 
   async function handleUploadFiles() {
     if (!await ensureSyncConfigured()) return
-    const accepted = await confirm(t(syncStaticAssets ? 'uploadFilesWithAssetsWarning' : 'uploadFilesWarning'), {
+    const accepted = await platform.dialog.confirm(t(syncStaticAssets ? 'uploadFilesWithAssetsWarning' : 'uploadFilesWarning'), {
       title: t('uploadFiles'),
       kind: 'warning',
     })
@@ -221,7 +221,7 @@ export function FileMoreMenu({
 
   async function handleUploadKnowledgeBase() {
     if (!await ensureSyncConfigured()) return
-    const accepted = await confirm(t('uploadPrivacyWarning'), {
+    const accepted = await platform.dialog.confirm(t('uploadPrivacyWarning'), {
       title: t('uploadKnowledgeBase'),
       kind: 'warning',
     })
@@ -243,7 +243,7 @@ export function FileMoreMenu({
 
   async function handleDownloadKnowledgeBase() {
     if (!await ensureSyncConfigured()) return
-    const accepted = await confirm(t('downloadOverwriteWarning'), {
+    const accepted = await platform.dialog.confirm(t('downloadOverwriteWarning'), {
       title: t('downloadKnowledgeBase'),
       kind: 'warning',
     })

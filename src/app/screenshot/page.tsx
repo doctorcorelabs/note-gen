@@ -1,11 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from 'react'
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
-import { Image as TauriImage } from '@tauri-apps/api/image'
+import { platform } from '@/lib/platform'
+import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
-import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { ArrowUpRight, Check, Circle, Copy, Download, MousePointer2, Pencil, Pin, Redo2, ScanLine, Square, Type, Undo2, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -205,8 +203,7 @@ export default function ScreenshotPage() {
         await invoke('complete_desktop_screenshot', { sessionId: context.sessionId, pngBase64: bytesToBase64(png) })
         completed = true
       } else if (action === 'copy') {
-        const image = await TauriImage.fromBytes(png)
-        try { await writeImage(image) } finally { await image.close() }
+        await platform.clipboard.writeImage(png)
         await invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
         completed = true
       } else {
@@ -215,7 +212,7 @@ export default function ScreenshotPage() {
         // Native save panels must sit above the capture windows, including macOS shielding windows.
         await invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: true })
         try {
-          path = await save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] })
+          path = await platform.dialog.save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] })
         } finally {
           await invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: false })
         }
@@ -277,7 +274,7 @@ export default function ScreenshotPage() {
       await new Promise<void>((resolve, reject) => {
         image.onload = () => resolve()
         image.onerror = () => reject(new Error('Screenshot image could not be loaded'))
-        image.src = convertFileSrc(next.imagePath)
+        image.src = platform.assetUrl.convertFileSrc(next.imagePath)
       })
       if (disposed) { image.src = ''; return }
       imageRef.current = image

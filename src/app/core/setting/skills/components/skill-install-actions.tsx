@@ -3,9 +3,8 @@
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { appDataDir, join } from '@tauri-apps/api/path'
-import { open } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { mkdir } from '@tauri-apps/plugin-fs'
-import { openPath } from '@tauri-apps/plugin-opener'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, FileArchive, FolderInput, FolderOpen, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -47,7 +46,7 @@ export function SkillInstallActions({
     try {
       const skillsDirectory = await getSkillsDirectory(scope)
       await mkdir(skillsDirectory, { recursive: true })
-      await openPath(skillsDirectory)
+      await platform.opener.openPath(skillsDirectory)
     } catch (error) {
       console.error('Failed to open Skills directory:', error)
       toast({
@@ -60,7 +59,7 @@ export function SkillInstallActions({
 
   const handleImport = async (sourceKind: SkillSourceKind) => {
     try {
-      const sourcePath = await open(sourceKind === 'directory'
+      const sourcePath = await platform.dialog.open(sourceKind === 'directory'
         ? {
             title: t('selectSkillFolder'),
             directory: true,

@@ -1,6 +1,6 @@
 'use client'
 
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { ArrowDownAZ, Calendar, Clock, Cloud, Database, DatabaseZap, Download, EllipsisVertical, LoaderCircle, PackageOpen, RefreshCw, SortAsc, SortDesc, Upload } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect } from 'react'
@@ -108,7 +108,7 @@ export function CloudLibraryMenu({
 
   async function handleUploadAll() {
     if (!await ensureSyncConfigured()) return
-    const accepted = await confirm(t(syncStaticAssets ? 'uploadFilesWithAssetsWarning' : 'uploadFilesWarning'), {
+    const accepted = await platform.dialog.confirm(t(syncStaticAssets ? 'uploadFilesWithAssetsWarning' : 'uploadFilesWarning'), {
       title: t('uploadFiles'),
       kind: 'warning',
     })
@@ -141,7 +141,7 @@ export function CloudLibraryMenu({
 
   async function handleUploadKnowledgeBase() {
     if (!await ensureSyncConfigured()) return
-    const accepted = await confirm(t('uploadPrivacyWarning'), {
+    const accepted = await platform.dialog.confirm(t('uploadPrivacyWarning'), {
       title: t('uploadKnowledgeBase'),
       kind: 'warning',
     })
@@ -167,7 +167,7 @@ export function CloudLibraryMenu({
 
   async function handleDownloadKnowledgeBase() {
     if (!await ensureSyncConfigured()) return
-    const accepted = await confirm(t('downloadOverwriteWarning'), {
+    const accepted = await platform.dialog.confirm(t('downloadOverwriteWarning'), {
       title: t('downloadKnowledgeBase'),
       kind: 'warning',
     })

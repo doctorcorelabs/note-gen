@@ -1,12 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
+import { invoke } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { Image as TauriImage } from '@tauri-apps/api/image'
 import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition } from '@tauri-apps/api/window'
-import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
-import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { Check, Copy, Download, NotebookPen, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -177,12 +175,11 @@ export default function ScreenshotPinPage() {
       // The native command only reads the PNG belonging to this pin window.
       const png = new Uint8Array(await invoke<ArrayBuffer>('read_pinned_screenshot'))
       if (action === 'copy') {
-        const image = await TauriImage.fromBytes(png)
-        try { await writeImage(image) } finally { await image.close() }
+        await platform.clipboard.writeImage(png)
         if (mountedRef.current) setCopied(true)
       } else {
         const filename = `NoteGen-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
-        const path = await save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] })
+        const path = await platform.dialog.save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] })
         if (path) await writeFile(path, png)
       }
     } catch (cause) {
@@ -334,7 +331,7 @@ export default function ScreenshotPinPage() {
         <div ref={imageAreaRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden" title={t('hint')}
           onPointerDown={event => { if (event.button === 0) { event.preventDefault(); dragWindow() } }}
           onDoubleClick={() => resize(1)} onContextMenu={event => event.preventDefault()} style={{ cursor: busy ? 'wait' : 'grab' }}>
-          {context && <img src={convertFileSrc(context.imagePath)} alt={t('imageAlt')} draggable={false} className="pointer-events-none shrink-0 object-contain"
+          {context && <img src={platform.assetUrl.convertFileSrc(context.imagePath)} alt={t('imageAlt')} draggable={false} className="pointer-events-none shrink-0 object-contain"
             style={{ width: context.imageWidth / sourceScale * zoom, height: context.imageHeight / sourceScale * zoom, maxWidth: '100%', maxHeight: '100%' }}
             onLoad={() => { setLoaded(true); updateZoom(); void showWindow() }}
             onError={() => { setError(t('loadError')); void showWindow() }} />}

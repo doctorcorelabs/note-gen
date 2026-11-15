@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Store } from '@tauri-apps/plugin-store'
-import { hasText, readText } from 'tauri-plugin-clipboard-api'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
@@ -55,8 +55,8 @@ export default function QuickRecordPage() {
     // Clipboard access is optional and must never overwrite an existing draft.
     if (textRef.current || pendingRef.current) return
     try {
-      if (await hasText()) {
-        const value = await readText()
+      if (await platform.clipboard.hasText()) {
+        const value = await platform.clipboard.readText()
         if (!textRef.current && !pendingRef.current && value) changeText(value)
       }
     } catch (error) {

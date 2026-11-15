@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import dayjs from 'dayjs'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -357,7 +357,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
 
   async function handleDelete(mark: Mark) {
     if (trashState) {
-      const accepted = await confirm(`${t('record.mark.toolbar.deleteForever')}?\n${t('record.trash.syncWarning')}`, {
+      const accepted = await platform.dialog.confirm(`${t('record.mark.toolbar.deleteForever')}?\n${t('record.trash.syncWarning')}`, {
         title: t('record.trash.title'),
         kind: 'warning',
       })
@@ -375,7 +375,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
   }
 
   async function handleClearTrash() {
-    const accepted = await confirm(`${t('record.trash.confirm')}\n${t('record.trash.syncWarning')}`, {
+    const accepted = await platform.dialog.confirm(`${t('record.trash.confirm')}\n${t('record.trash.syncWarning')}`, {
       title: t('record.trash.title'),
       kind: 'warning',
     })
@@ -404,7 +404,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
   async function handleDeleteSelected() {
     const targets = filteredRecords.filter((item: Mark) => selectedIds.has(item.id))
     if (trashState && targets.length > 0) {
-      const accepted = await confirm(`${t('record.mark.toolbar.deleteSelectedForever', { count: targets.length })}\n${t('record.trash.syncWarning')}`, {
+      const accepted = await platform.dialog.confirm(`${t('record.mark.toolbar.deleteSelectedForever', { count: targets.length })}\n${t('record.trash.syncWarning')}`, {
         title: t('record.trash.title'),
         kind: 'warning',
       })

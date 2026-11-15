@@ -11,7 +11,7 @@ import {
   Star,
   WifiOff,
 } from 'lucide-react'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -165,7 +165,7 @@ export function MarketplaceTab({ query, onQueryChange, onInstalled, installPlugi
   }, [appVersion, catalog, installPluginId, installedById, marketLoading, onInstallRequestHandled])
 
   function openExternal(url: string) {
-    void openUrl(url).catch((reason) => {
+    void platform.opener.openUrl(url).catch((reason) => {
       setOperationError(reason instanceof Error ? reason.message : String(reason))
     })
   }

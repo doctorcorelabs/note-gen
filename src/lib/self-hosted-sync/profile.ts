@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { executeRecordTransaction, getDb } from '@/db'
 import { SelfHostedApiError, SelfHostedClient, normalizeServerUrl } from './client'
@@ -140,10 +140,10 @@ export async function connectWithBrowser(input: {
     const authorization = await client.createDeviceAuthorization({
       deviceId: keyPair.deviceId,
       deviceName: input.deviceName,
-      platform: platform(),
+      platform: osPlatform(),
       encryptionPublicKey: keyPair.publicKey,
     })
-    await openUrl(authorization.verificationUriComplete)
+    await platform.opener.openUrl(authorization.verificationUriComplete)
     const deadline = Date.now() + authorization.expiresIn * 1_000
     try {
       while (Date.now() < deadline) {
@@ -698,7 +698,7 @@ function loginWithDeviceIdentity(
     ...(input.totpCode ? { totpCode: input.totpCode } : {}),
     deviceId: identity.deviceId,
     deviceName: input.deviceName,
-    platform: platform(),
+    platform: osPlatform(),
     encryptionPublicKey: identity.publicKey,
   })
 }

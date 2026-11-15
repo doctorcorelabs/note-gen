@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl"
 import useMarkStore from "@/stores/mark"
 import useTagStore from "@/stores/tag"
 import { appDataDir } from "@tauri-apps/api/path"
-import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener"
+import { platform } from "@/lib/platform"
 import { toast } from "@/hooks/use-toast"
 import { fetchAiDesc } from "@/lib/ai/description"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -120,11 +120,11 @@ function ImageItem({ mark }: { mark: Mark }) {
     if (!action?.path) return
 
     if (action.mode === 'reveal') {
-      await revealItemInDir(action.path)
+      await platform.opener.revealItemInDir(action.path)
       return
     }
 
-    await openPath(action.path)
+    await platform.opener.openPath(action.path)
   }
 
   async function handelShowInFile(e?: React.MouseEvent) {
@@ -133,7 +133,7 @@ function ImageItem({ mark }: { mark: Mark }) {
     const action = getMarkOpenAction(mark, appDir, 'file')
     if (!action?.path) return
 
-    await openPath(action.path)
+    await platform.opener.openPath(action.path)
   }
 
   async function handleCopyLink(e?: React.MouseEvent) {

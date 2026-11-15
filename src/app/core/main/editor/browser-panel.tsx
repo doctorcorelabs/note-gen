@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps, type For
 import Image from 'next/image'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { ArrowLeft, ArrowRight, Bookmark, ChevronDown, ChevronRight, CircleAlert, Clock3, ExternalLink, Globe2, House, RotateCw, Search, Star, X } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useTheme } from 'next-themes'
@@ -626,7 +626,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
           <Star data-icon="inline-start" className={cn(isBookmarked && 'fill-current text-primary')} />
         </BrowserToolbarButton>
         <ControlLink pageUrl={!homeVisible ? url : undefined} browserTabId={tabId} browserToolbar />
-        <BrowserToolbarButton tooltip={t('browserOpenExternal')} variant="ghost" size="icon-sm" disabled={!url || homeVisible} onClick={() => { if (url) void openUrl(url) }}><ExternalLink data-icon="inline-start" /></BrowserToolbarButton>
+        <BrowserToolbarButton tooltip={t('browserOpenExternal')} variant="ghost" size="icon-sm" disabled={!url || homeVisible} onClick={() => { if (url) void platform.opener.openUrl(url) }}><ExternalLink data-icon="inline-start" /></BrowserToolbarButton>
       </div>
       <div ref={slotRef} className="relative min-h-0 w-full min-w-0 flex-1 overflow-hidden">
         {pageSnapshot && <div aria-hidden="true" className="absolute inset-0 bg-background bg-[length:100%_100%] bg-no-repeat" style={{ backgroundImage: `url("${pageSnapshot}")` }} />}

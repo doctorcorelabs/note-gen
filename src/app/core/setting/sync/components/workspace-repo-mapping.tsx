@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { appDataDir, join } from '@tauri-apps/api/path'
-import { openPath } from '@tauri-apps/plugin-opener'
+import { platform as registryPlatform } from '@/lib/platform'
 import {
   ArrowDown,
   ArrowRight,
@@ -540,7 +540,7 @@ export function WorkspaceRepoMapping({
   async function handleOpenWorkspace(workspacePath: string) {
     try {
       const resolvedPath = workspacePath || defaultWorkspacePath || await join(await appDataDir(), 'article')
-      await openPath(resolvedPath)
+      await registryPlatform.opener.openPath(resolvedPath)
     } catch (error) {
       console.error('Failed to open workspace path:', error)
     }
