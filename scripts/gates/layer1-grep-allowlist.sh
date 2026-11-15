@@ -17,9 +17,12 @@
 # legitimately shrink the counts. A delta alone never fails this layer.
 #
 # api/core is special: it closes at G2 except the convertFileSrc
-# subset, which closes at G3. In G2 mode this layer delegates the
-# api/core remainder to check-api-core-subset.mjs, which inspects the
-# imported bindings instead of trusting the allowlist wave column.
+# subset, which closes at G3, and the isTauri binding, which closes
+# at G4 (AD-86 gate exception, self-expiring at G4). In G2 and G3
+# modes this layer delegates the api/core remainder to
+# check-api-core-subset.mjs, which inspects the imported bindings
+# instead of trusting the allowlist wave column. At G4 the delegation
+# ends: api/core must have 0 lines, including isTauri.
 #
 # Usage (from the repo root):
 #   sh scripts/gates/layer1-grep-allowlist.sh [--wave G1|G2|G3|G4|G5|all]
@@ -171,12 +174,20 @@ if [ -n "$WAVE" ]; then
       console.log(out.join('\n'));
     " $wanted)
     for spec in $wave_specs; do
-      if [ "$spec" = "@tauri-apps/api/core" ] && [ "$WAVE" = "G2" ]; then
-        echo "layer1: api/core at G2: delegating to binding check (convertFileSrc subset closes at G3)"
-        if node scripts/gates/check-api-core-subset.mjs; then
-          echo "layer1: api/core G2 remainder PASS (convertFileSrc-only)"
+      if [ "$spec" = "@tauri-apps/api/core" ] && { [ "$WAVE" = "G2" ] || [ "$WAVE" = "G3" ]; }; then
+        if [ "$WAVE" = "G2" ]; then
+          echo "layer1: api/core at G2: delegating to binding check (convertFileSrc subset closes at G3, isTauri closes at G4)"
         else
-          echo "layer1: FAIL: api/core G2 remainder check failed (see output above)"
+          echo "layer1: api/core at G3: delegating to binding check (isTauri-only remainder closes at G4)"
+        fi
+        if node scripts/gates/check-api-core-subset.mjs --wave "$WAVE"; then
+          if [ "$WAVE" = "G2" ]; then
+            echo "layer1: api/core G2 remainder PASS (convertFileSrc-only and deferred-G4)"
+          else
+            echo "layer1: api/core G3 remainder PASS (isTauri-only)"
+          fi
+        else
+          echo "layer1: FAIL: api/core $WAVE remainder check failed (see output above)"
           failures=$((failures + 1))
         fi
         continue

@@ -1,39 +1,60 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
-// api/core subset check for wave G2.
+// api/core subset check for waves G2/G3.
 //
 // @tauri-apps/api/core closes at G2 except the convertFileSrc subset,
-// which closes at G3 (V1-05 section 4.2). The allowlist wave column
+// which closes at G3 (V1-05 section 4.2), and the isTauri binding,
+// which closes at G4 (AD-86 gate exception). The allowlist wave column
 // marks all 75 api/core pairs G2, so the gate must not trust that
 // column for this specifier. This script inspects the imported
 // bindings of every @tauri-apps/api/core import outside
-// src/lib/platform/ and fails when any import still brings in invoke,
-// Channel, or transformCallback, an unknown binding, or a namespace
-// import that cannot be classified.
+// src/lib/platform/ and fails when any import still brings in a
+// binding that must already have closed, an unknown binding, or a
+// namespace import that cannot be classified.
+//
+// In G2 mode (default) the allowed remainder is convertFileSrc and/or
+// isTauri. A convertFileSrc-only file passes as OK. A file whose
+// api/core bindings are only isTauri, or convertFileSrc plus isTauri,
+// passes as DEFERRED-G4: the isTauri remainder is allowed only until
+// G4, when layer 1 requires 0 api/core lines including isTauri. The
+// exception is narrow (only isTauri), bounded (only G2/G3 gate
+// modes), and self-expiring (no DEFERRED-G4 verdict exists at G4).
+// In G3 mode (--wave G3) only isTauri may remain: convertFileSrc and
+// the G2 bindings fail, because both waves have closed.
 //
 // A file passes only when every one of its api/core imports is
-// convertFileSrc-only (static or dynamic). Files that only mention
-// convertFileSrc in comments, or import it through a local funnel
-// such as src/lib/utils.ts, do not import api/core and are not listed.
+// within the allowed remainder for the selected wave (static or
+// dynamic). Files that only mention convertFileSrc or isTauri in
+// comments, or import through a local funnel such as src/lib/utils.ts,
+// do not import api/core and are not listed.
 //
-// Usage: node scripts/gates/check-api-core-subset.mjs [--root <dir>]
-// Exit 0 when the remainder is convertFileSrc-only, 1 otherwise.
+// Usage: node scripts/gates/check-api-core-subset.mjs [--root <dir>] [--wave G2|G3]
+// Exit 0 when the remainder is within the allowed set, 1 otherwise.
 
 import fs from "node:fs";
 import path from "node:path";
 
 const G2_BINDINGS = new Set(["invoke", "Channel", "transformCallback"]);
+const G3_BINDINGS = new Set(["convertFileSrc"]);
+const G4_BINDINGS = new Set(["isTauri"]);
 const SPEC = "@tauri-apps/api/core";
 
 function parseArgs(argv) {
-  const out = { root: process.cwd() };
+  const out = { root: process.cwd(), wave: "G2" };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--root") {
       out.root = argv[i + 1];
       i += 1;
+    } else if (argv[i] === "--wave") {
+      out.wave = argv[i + 1];
+      i += 1;
+      if (out.wave !== "G2" && out.wave !== "G3") {
+        console.error(`check-api-core-subset: unknown wave: ${out.wave} (expected G2 or G3)`);
+        process.exit(2);
+      }
     } else if (argv[i] === "--help" || argv[i] === "-h") {
-      console.log("Usage: node scripts/gates/check-api-core-subset.mjs [--root <dir>]");
+      console.log("Usage: node scripts/gates/check-api-core-subset.mjs [--root <dir>] [--wave G2|G3]");
       process.exit(0);
     } else {
       console.error(`check-api-core-subset: unknown argument: ${argv[i]}`);
@@ -129,7 +150,7 @@ function bindingsOf(statementText) {
 }
 
 function main() {
-  const { root } = parseArgs(process.argv.slice(2));
+  const { root, wave } = parseArgs(process.argv.slice(2));
   const srcDir = path.join(root, "src");
   const platformDir = path.join(srcDir, "lib", "platform");
   const files = walk(srcDir, []).filter((f) => !f.startsWith(platformDir + path.sep));
@@ -160,8 +181,14 @@ function main() {
     }
     const names = [...allNames].sort();
     const hasConvert = allNames.has("convertFileSrc");
+    const hasIsTauri = allNames.has("isTauri");
     const hasG2 = names.some((n) => G2_BINDINGS.has(n));
-    const hasOther = names.some((n) => n !== "convertFileSrc" && !G2_BINDINGS.has(n));
+    // Allowed remainder for the selected wave. G2 allows convertFileSrc
+    // and isTauri; G3 allows only isTauri (AD-86). G2 bindings are
+    // never in the allowed set: they fail in both modes.
+    const allowed = wave === "G3" ? G4_BINDINGS : new Set([...G3_BINDINGS, ...G4_BINDINGS]);
+    const isUnknown = (n) => !allowed.has(n) && !G2_BINDINGS.has(n) && !G3_BINDINGS.has(n);
+    const hasOther = names.some(isUnknown);
     const rel = path.relative(root, file);
     if (namespace) {
       rows.push({ file: rel, verdict: "FAIL", detail: "namespace import of api/core cannot be classified; review manually" });
@@ -169,12 +196,17 @@ function main() {
     } else if (hasG2) {
       rows.push({ file: rel, verdict: "FAIL", detail: `still imports G2 binding(s): ${names.filter((n) => G2_BINDINGS.has(n)).join(", ")}` });
       failures += 1;
-    } else if (hasOther) {
-      rows.push({ file: rel, verdict: "FAIL", detail: `unknown api/core binding(s): ${names.filter((n) => n !== "convertFileSrc" && !G2_BINDINGS.has(n)).join(", ")}` });
+    } else if (wave === "G3" && hasConvert) {
+      rows.push({ file: rel, verdict: "FAIL", detail: "still imports G3 binding(s): convertFileSrc" });
       failures += 1;
-    } else if (empty && !hasConvert) {
+    } else if (hasOther) {
+      rows.push({ file: rel, verdict: "FAIL", detail: `unknown api/core binding(s): ${names.filter(isUnknown).join(", ")}` });
+      failures += 1;
+    } else if (empty && !hasConvert && !hasIsTauri) {
       rows.push({ file: rel, verdict: "FAIL", detail: "api/core import with no classifiable bindings; review manually" });
       failures += 1;
+    } else if (hasIsTauri) {
+      rows.push({ file: rel, verdict: "DEFERRED-G4", detail: "isTauri remainder (closes at G4; AD-86 exception expires at G4)" });
     } else if (hasConvert && names.length === 1) {
       rows.push({ file: rel, verdict: "OK", detail: "convertFileSrc-only remainder (closes at G3)" });
     } else {
@@ -185,7 +217,8 @@ function main() {
 
   for (const row of rows) console.log(`${row.verdict} ${row.file} :: ${row.detail}`);
   const ok = rows.filter((r) => r.verdict === "OK").length;
-  console.log(`check-api-core-subset: ${rows.length} file(s) mention api/core, ${ok} convertFileSrc-only remainder, ${failures} failure(s)`);
+  const deferred = rows.filter((r) => r.verdict === "DEFERRED-G4").length;
+  console.log(`check-api-core-subset: ${rows.length} file(s) mention api/core, ${ok} convertFileSrc-only remainder, ${deferred} deferred-G4 remainder, ${failures} failure(s) (wave ${wave})`);
   if (failures > 0) {
     console.log("check-api-core-subset: FAIL");
     process.exit(1);
