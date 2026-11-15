@@ -5,8 +5,9 @@ generates `server/src/services/db/handlers.generated.ts`, which
 exports one function, `registerDbHandlers(registry)`, for the db
 adapter (`db.registration.ts`). It is the handler-scan half of the
 AD-61 hybrid mechanism; the route-level generator
-(`scripts/generate-registration.mjs`, sibling worker) assembles
-adapters and is a separate file.
+(`scripts/generate-registration.mjs`) imports `buildHandlersOutput()`
+from this file and assembles adapters, so one invocation covers both
+generated files.
 
 ## Commands
 
@@ -14,6 +15,11 @@ adapters and is a separate file.
 - Drift check: `node scripts/scan-db-handlers.mjs --check` (exit 1
   when the checked-in file differs from a fresh scan, naming the
   first differing line)
+
+Standalone runs are for debug only. The drift gate is
+`node scripts/generate-registration.mjs --check`, which checks both
+generated files in one invocation; per-file checks are forbidden as
+a gate (desain section 6.1 item 3).
 
 ## Rules
 
@@ -35,6 +41,7 @@ adapters and is a separate file.
   environment) and follows desain-registrasi-programatik.md
   section 8.1. Never edit the generated file by hand; regenerate
   to resolve conflicts.
-- Until the scan is folded into the route-level generator, run
-  both `--check` commands as the drift gate; the fold-in must
-  update the GENERATED header in the same commit.
+- The scan is folded into the route-level generator: the GENERATED
+  header names `scripts/generate-registration.mjs` as the regenerate
+  command, and standalone output is byte-identical to the
+  generator's handler output (shared `buildHandlersOutput()`).

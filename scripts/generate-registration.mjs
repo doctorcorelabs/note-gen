@@ -3,11 +3,12 @@
 // See LICENSE and FORK.md.
 //
 // Generate server/src/routes-generated.ts from handwritten per-group
-// registration adapters (AD-61 hybrid mechanism).
+// registration adapters, and server/src/services/db/handlers.generated.ts
+// from the db handler scan (AD-61 hybrid mechanism).
 //
 // Usage:
-//   node scripts/generate-registration.mjs            # write the module
-//   node scripts/generate-registration.mjs --check    # fail if the checked-in
+//   node scripts/generate-registration.mjs            # write both modules
+//   node scripts/generate-registration.mjs --check    # fail if either checked-in
 //                                                       module differs from a
 //                                                       fresh generation
 //
@@ -25,27 +26,40 @@
 // hand-written in server/src/app.ts, in their frozen order. Only the route
 // blocks move into adapters plus this generated index, in rank order.
 //
-// This is the route tier of the generator only. The db handler scan tier
-// (handlers.generated.ts, design section 8.1) is a separate increment and
-// is intentionally not implemented here; this script reads no handler
-// files and writes no handler output. Its --check mode therefore guards
-// routes-generated.ts only.
+// This generator covers both tiers of the hybrid mechanism. The route
+// tier assembles adapters into server/src/routes-generated.ts (design
+// section 8.2). The db handler tier scans handler files into
+// server/src/services/db/handlers.generated.ts (design section 8.1)
+// by importing the scan logic from scripts/scan-db-handlers.mjs; that
+// file remains the scan implementation, runnable standalone for debug,
+// but it is not a gate. One invocation of this script writes both
+// files, and one --check invocation guards both: per-file checks are
+// forbidden as a gate (design section 6.1 item 3). Both outputs are
+// fully computed and validated before the first file is written, so a
+// handler-stage validation failure never leaves one fresh file and one
+// stale file behind (design section 6.2, atomic pair rule).
 //
-// Output is fully deterministic (sorted inputs, rank order, no timestamps,
-// no environment reads), so --check detects any hand edit of the generated
-// module. Any validation failure aborts before writing anything: there
-// are no warnings that allow generation to continue.
+// Both outputs are fully deterministic (sorted inputs, rank order, no
+// timestamps, no environment reads), so --check detects any hand edit
+// of either generated module. Any validation failure aborts before
+// writing anything: there are no warnings that allow generation to
+// continue.
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  buildHandlersOutput,
+  HANDLERS_GENERATED_ABS,
+  HANDLERS_GENERATED_REL,
+} from './scan-db-handlers.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const ROUTES_DIR = join(ROOT, 'server', 'src', 'routes');
-const OUT_FILE = join(ROOT, 'server', 'src', 'routes-generated.ts');
+const ROUTES_OUT_FILE = join(ROOT, 'server', 'src', 'routes-generated.ts');
 
 const ROUTES_DIR_LABEL = 'server/src/routes';
-const OUT_FILE_LABEL = 'server/src/routes-generated.ts';
+const ROUTES_OUT_LABEL = 'server/src/routes-generated.ts';
 
 function fail(message) {
   throw new Error(`generate-registration: ${message}`);
@@ -133,7 +147,7 @@ function readAdapters() {
   return adapters;
 }
 
-function generate(adapters) {
+function generateRoutes(adapters) {
   const lines = [];
   lines.push('// SPDX-License-Identifier: GPL-3.0-only');
   lines.push('// This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.');
@@ -167,10 +181,44 @@ function generate(adapters) {
 function usage() {
   return [
     'Usage:',
-    '  node scripts/generate-registration.mjs           write server/src/routes-generated.ts',
-    '  node scripts/generate-registration.mjs --check   fail if the checked-in module differs',
+    '  node scripts/generate-registration.mjs           write both generated files',
+    '  node scripts/generate-registration.mjs --check   fail if either checked-in file differs',
+    'Generated files:',
+    '  server/src/routes-generated.ts',
+    '  server/src/services/db/handlers.generated.ts',
     '',
   ].join('\n');
+}
+
+function firstDifferenceLine(current, fresh) {
+  const currentLines = current.split('\n');
+  const freshLines = fresh.split('\n');
+  let first = 0;
+  while (first < Math.min(currentLines.length, freshLines.length) && currentLines[first] === freshLines[first]) {
+    first += 1;
+  }
+  return first + 1;
+}
+
+function checkOne(label, absPath, fresh) {
+  let current;
+  try {
+    current = readFileSync(absPath, 'utf8');
+  } catch {
+    return `${label} does not exist; run the generator without --check first`;
+  }
+  if (current !== fresh) {
+    return `drift detected: ${label} differs from a fresh generation (first difference at line ${firstDifferenceLine(current, fresh)}); regenerate or revert the hand edit`;
+  }
+  return null;
+}
+
+function writeOne(label, absPath, output) {
+  try {
+    writeFileSync(absPath, output);
+  } catch {
+    fail(`${label}: cannot be written`);
+  }
 }
 
 function main(argv) {
@@ -183,30 +231,29 @@ function main(argv) {
     fail(`unknown arguments: ${argv.join(' ')}`);
   }
   const check = argv.length === 1;
+  // Atomic pair rule (design section 6.2): compute both outputs, with
+  // all validation, before writing the first file.
   const adapters = readAdapters();
-  const output = generate(adapters);
-  const summary = `${adapters.length} adapters (${adapters.map((a) => `${a.order} ${a.id}`).join(', ')})`;
+  const routesOutput = generateRoutes(adapters);
+  const handlers = buildHandlersOutput();
+  const routesSummary = `${adapters.length} adapters (${adapters.map((a) => `${a.order} ${a.id}`).join(', ')})`;
+  const summary = `${routesSummary}; ${handlers.counts}`;
   if (check) {
-    let current;
-    try {
-      current = readFileSync(OUT_FILE, 'utf8');
-    } catch {
-      fail(`${OUT_FILE_LABEL} does not exist; run the generator without --check first`);
+    // One invocation checks both files and names every differing file
+    // (design section 6.1 items 2-3). Check mode writes nothing.
+    const problems = [
+      checkOne(ROUTES_OUT_LABEL, ROUTES_OUT_FILE, routesOutput),
+      checkOne(HANDLERS_GENERATED_REL, HANDLERS_GENERATED_ABS, handlers.output),
+    ].filter((p) => p !== null);
+    if (problems.length > 0) {
+      fail(problems.join('\n'));
     }
-    if (current !== output) {
-      const currentLines = current.split('\n');
-      const freshLines = output.split('\n');
-      let first = 0;
-      while (first < Math.min(currentLines.length, freshLines.length) && currentLines[first] === freshLines[first]) {
-        first += 1;
-      }
-      fail(`drift detected: ${OUT_FILE_LABEL} differs from a fresh generation (first difference at line ${first + 1}); regenerate or revert the hand edit`);
-    }
-    process.stderr.write(`registration up to date: ${summary}\n`);
+    process.stderr.write(`registration up to date: ${summary}\n${handlers.uncoveredLine}`);
     return 0;
   }
-  writeFileSync(OUT_FILE, output);
-  process.stderr.write(`wrote ${OUT_FILE_LABEL}: ${summary}\n`);
+  writeOne(ROUTES_OUT_LABEL, ROUTES_OUT_FILE, routesOutput);
+  writeOne(HANDLERS_GENERATED_REL, HANDLERS_GENERATED_ABS, handlers.output);
+  process.stderr.write(`wrote ${ROUTES_OUT_LABEL}: ${routesSummary}\nwrote ${HANDLERS_GENERATED_REL}: ${handlers.counts}\n${handlers.uncoveredLine}`);
   return 0;
 }
 
