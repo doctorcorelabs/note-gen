@@ -53,6 +53,7 @@ import { registerWorkspaceWriteRoutes } from './routes/workspace-write.js';
 import { registerSecretsRoutes } from './routes/secrets.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerDbRoutes } from './routes/db.js';
+import { registerStubRoutes } from './routes/stubs.js';
 import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 import { createProductionSettingsDeps } from './services/settings/index.js';
 import { createDefaultDbRouteDeps } from './services/db/deps.js';
@@ -288,6 +289,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   dbDeps.registry.registerWrite(wikiUpsertSourceKind, { handle: wikiUpsertSource });
 
   await registerDbRoutes(app, dbDeps);
+
+  // Explicit 501 stubs (V3-39a; kontrak-api-kanonis.md section 7):
+  // backup restore and document parse. One commented block per
+  // group (AD-40 pattern), in merge order. The stubs answer 501
+  // only after the auth hook passes, with no side effects.
+  await registerStubRoutes(app, { maxBodyBytes: deps.config.maxBodyBytes });
 
   return app;
 }
