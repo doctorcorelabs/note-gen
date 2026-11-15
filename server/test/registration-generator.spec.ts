@@ -85,8 +85,42 @@ import {
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GENERATOR_PATH = join(REPO_ROOT, 'scripts', 'generate-registration.mjs');
+const SCANNER_PATH = join(REPO_ROOT, 'scripts', 'scan-db-handlers.mjs');
 const HAS_GENERATOR = existsSync(GENERATOR_PATH);
+const HAS_SCANNER = existsSync(SCANNER_PATH);
 const EM_DASH = '\u2014';
+
+interface CliResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+// The real generator imports the scan implementation from
+// scripts/scan-db-handlers.mjs (GEN-INT, AD-81), so a repo-shaped
+// fixture tree needs BOTH scripts copied in before either entry point
+// runs. Copying only the generator makes every CLI run fail with a
+// module-not-found error instead of exercising the generator.
+function installScripts(root: string): void {
+  const scriptsDir = join(root, 'scripts');
+  mkdirSync(scriptsDir, { recursive: true });
+  writeFileSync(join(scriptsDir, 'generate-registration.mjs'), readFileSync(GENERATOR_PATH, 'utf8'), 'utf8');
+  writeFileSync(join(scriptsDir, 'scan-db-handlers.mjs'), readFileSync(SCANNER_PATH, 'utf8'), 'utf8');
+}
+
+function runScript(root: string, scriptName: string, args: string[]): CliResult {
+  installScripts(root);
+  const result = spawnSync(process.execPath, [join(root, 'scripts', scriptName), ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+function runGeneratorCli(root: string, args: string[]): CliResult {
+  return runScript(root, 'generate-registration.mjs', args);
+}
 
 const createdRoots: string[] = [];
 
@@ -578,6 +612,18 @@ describe('registration generator handler accounting (fixture)', () => {
     expect(() => generateRegistration(root, { write: false })).toThrow(/not in the catalog/);
   });
 
+  it('kinds.ts without a parseable catalog array fails hard (V-15)', () => {
+    for (const kinds of [
+      'export const DB_WRITE_OP_KINDS = [\n  \'canvases.create\',\n] as const;\n',
+      'export const DB_READ_OP_KINDS = readKinds;\n\nexport const DB_WRITE_OP_KINDS = [\n  \'canvases.create\',\n] as const;\n',
+    ]) {
+      const files = defaultFiles();
+      files['server/src/services/db/kinds.ts'] = kinds;
+      const root = createTree(files);
+      expect(() => generateRegistration(root, { write: false })).toThrow(/cannot parse DB_READ_OP_KINDS \(V-15\)/);
+    }
+  });
+
   it('handler without validate emits the handle-only form; handler with validate emits the validate form', () => {
     const root = createTree(defaultFiles());
     const { handlers } = generateRegistration(root, { write: false });
@@ -691,16 +737,7 @@ describe('registration scan against the real tree (fixture scanner, real files)'
 
 describe.skipIf(!HAS_GENERATOR)('real generator CLI conformance (activates when B-01 lands)', () => {
   function runCli(root: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
-    const scriptsDir = join(root, 'scripts');
-    mkdirSync(scriptsDir, { recursive: true });
-    const generatorCopy = join(scriptsDir, 'generate-registration.mjs');
-    writeFileSync(generatorCopy, readFileSync(GENERATOR_PATH, 'utf8'), 'utf8');
-    const result = spawnSync(process.execPath, [generatorCopy, ...args], {
-      cwd: root,
-      encoding: 'utf8',
-      timeout: 30000,
-    });
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+    return runGeneratorCli(root, args);
   }
 
   it('CLI writes both outputs and exits 0', () => {
@@ -774,3 +811,281 @@ describe.skipIf(!HAS_GENERATOR)('real generator CLI conformance (activates when 
     expect(existsSync(join(root, 'server/src/routes-generated.ts'))).toBe(false);
   });
 });
+
+describe.skipIf(!HAS_GENERATOR || !HAS_SCANNER)(
+  'real generator CLI handler-level contract (AD-81 O-GEN-1(d))',
+  () => {
+    const ROUTES_OUT = 'server/src/routes-generated.ts';
+    const HANDLERS_OUT = 'server/src/services/db/handlers.generated.ts';
+
+    function corruptLine(path: string, needle: string): number {
+      const lines = readFileSync(path, 'utf8').split('\n');
+      const index = lines.findIndex((line) => line.includes(needle));
+      expect(index).toBeGreaterThan(0);
+      lines[index] = '  // manually corrupted line';
+      writeFileSync(path, lines.join('\n'), 'utf8');
+      return index + 1;
+    }
+
+    function expectNoOutputs(root: string): void {
+      expect(existsSync(join(root, ROUTES_OUT))).toBe(false);
+      expect(existsSync(join(root, HANDLERS_OUT))).toBe(false);
+    }
+
+    it('CLI --check fails when only routes-generated.ts is corrupted, naming the file and first differing line', () => {
+      const root = createTree(defaultFiles());
+      expect(runGeneratorCli(root, []).status).toBe(0);
+      const routesPath = join(root, ROUTES_OUT);
+      const handlersPath = join(root, HANDLERS_OUT);
+      const handlersBefore = readFileSync(handlersPath, 'utf8');
+      const diffLine = corruptLine(routesPath, 'await registerHealthGroup(ctx);');
+      const corruptedRoutes = readFileSync(routesPath, 'utf8');
+      const run = runGeneratorCli(root, ['--check']);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('server/src/routes-generated.ts');
+      expect(run.stderr).toContain(`first difference at line ${diffLine}`);
+      expect(run.stderr).not.toContain('handlers.generated.ts');
+      expect(readFileSync(routesPath, 'utf8')).toBe(corruptedRoutes);
+      expect(readFileSync(handlersPath, 'utf8')).toBe(handlersBefore);
+    });
+
+    it('CLI --check fails when only handlers.generated.ts is corrupted, naming the file and first differing line', () => {
+      const root = createTree(defaultFiles());
+      expect(runGeneratorCli(root, []).status).toBe(0);
+      const routesPath = join(root, ROUTES_OUT);
+      const handlersPath = join(root, HANDLERS_OUT);
+      const routesBefore = readFileSync(routesPath, 'utf8');
+      const diffLine = corruptLine(handlersPath, 'registry.registerRead');
+      const corruptedHandlers = readFileSync(handlersPath, 'utf8');
+      const run = runGeneratorCli(root, ['--check']);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('server/src/services/db/handlers.generated.ts');
+      expect(run.stderr).toContain(`first difference at line ${diffLine}`);
+      expect(run.stderr).not.toContain('routes-generated.ts');
+      expect(readFileSync(handlersPath, 'utf8')).toBe(corruptedHandlers);
+      expect(readFileSync(routesPath, 'utf8')).toBe(routesBefore);
+    });
+
+    it('CLI --check names both files with their first differing lines when both drift', () => {
+      const root = createTree(defaultFiles());
+      expect(runGeneratorCli(root, []).status).toBe(0);
+      const routesLine = corruptLine(join(root, ROUTES_OUT), 'await registerHealthGroup(ctx);');
+      const handlersLine = corruptLine(join(root, HANDLERS_OUT), 'registry.registerRead');
+      const run = runGeneratorCli(root, ['--check']);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain(
+        `server/src/routes-generated.ts differs from a fresh generation (first difference at line ${routesLine})`,
+      );
+      expect(run.stderr).toContain(
+        `server/src/services/db/handlers.generated.ts differs from a fresh generation (first difference at line ${handlersLine})`,
+      );
+    });
+
+    it('CLI --check writes nothing: hash snapshot unchanged on pass and on failure', () => {
+      const root = createTree(defaultFiles());
+      expect(runGeneratorCli(root, []).status).toBe(0);
+      const routesPath = join(root, ROUTES_OUT);
+      const handlersPath = join(root, HANDLERS_OUT);
+      const snapshot = (): string[] => [
+        sha256(readFileSync(routesPath, 'utf8')),
+        sha256(readFileSync(handlersPath, 'utf8')),
+      ];
+      const fresh = snapshot();
+      expect(runGeneratorCli(root, ['--check']).status).toBe(0);
+      expect(snapshot()).toEqual(fresh);
+      corruptLine(handlersPath, 'registry.registerRead');
+      const corrupted = snapshot();
+      expect(corrupted).not.toEqual(fresh);
+      expect(runGeneratorCli(root, ['--check']).status).toBe(1);
+      expect(snapshot()).toEqual(corrupted);
+    });
+
+    it('CLI handler-stage failure in write mode exits 1 and leaves both pre-existing outputs byte-identical (atomic pair)', () => {
+      const root = createTree(defaultFiles());
+      const routesPath = join(root, ROUTES_OUT);
+      const handlersPath = join(root, HANDLERS_OUT);
+      writeFileSync(routesPath, 'sentinel-routes\n', 'utf8');
+      writeFileSync(handlersPath, 'sentinel-handlers\n', 'utf8');
+      writeFileSync(
+        join(root, 'server/src/services/db/orphan.ts'),
+        handlerSource('nope.unknown', true),
+        'utf8',
+      );
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('nope.unknown');
+      expect(run.stderr).toContain('not in the kinds.ts catalog');
+      expect(readFileSync(routesPath, 'utf8')).toBe('sentinel-routes\n');
+      expect(readFileSync(handlersPath, 'utf8')).toBe('sentinel-handlers\n');
+    });
+
+    it('CLI handler without HANDLER_KIND fails hard (V-9) and writes nothing', () => {
+      const files = defaultFiles();
+      files['server/src/services/db/orphan.ts'] = 'export async function handle(): Promise<void> {}\n';
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('orphan.ts');
+      expect(run.stderr).toContain('no HANDLER_KIND export');
+      expectNoOutputs(root);
+    });
+
+    it('CLI handler without handle fails hard (V-10) and writes nothing', () => {
+      const files = defaultFiles();
+      files['server/src/services/db/orphan.ts'] = "export const HANDLER_KIND = 'marks.list' as const;\n";
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('orphan.ts');
+      expect(run.stderr).toContain('no exported async handle function');
+      expectNoOutputs(root);
+    });
+
+    it('CLI handler kind outside the catalog fails hard (V-11) and writes nothing', () => {
+      const files = defaultFiles();
+      files['server/src/services/db/orphan.ts'] = handlerSource('nope.unknown', true);
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('nope.unknown');
+      expect(run.stderr).toContain('not in the kinds.ts catalog');
+      expectNoOutputs(root);
+    });
+
+    it('CLI duplicate kind fails hard (V-12) and writes nothing', () => {
+      const files = defaultFiles();
+      files['server/src/services/db/marks-list-copy.ts'] = handlerSource('marks.list', true);
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('duplicate kind "marks.list"');
+      expectNoOutputs(root);
+    });
+
+    it('CLI kind in both catalog lists fails hard (V-13) and writes nothing', () => {
+      const files = defaultFiles();
+      files['server/src/services/db/kinds.ts'] = kindsSource(['marks.list'], ['marks.list']);
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('marks.list');
+      expect(run.stderr).toContain('is in both read and write lists');
+      expectNoOutputs(root);
+    });
+
+    it('CLI handler alias-collision fixture fails hard and writes nothing (V-14; kebab-case check fires first)', () => {
+      // The fixture suite pins the V-14 alias-collision message itself.
+      // The real scanner additionally rejects non-kebab stems before
+      // alias comparison, so fooBar.ts fails the stem check first.
+      // What this CLI case pins is the fail-hard contract: exit 1,
+      // the offending file named, and no output written.
+      const files = defaultFiles();
+      // The real scanner rejects an empty catalog list (V-15), so the
+      // writes list keeps one kind; a catalog kind without a handler
+      // file is not an error (section 6.3 item 4).
+      files['server/src/services/db/kinds.ts'] = kindsSource(['marks.list', 'tags.list'], ['canvases.create']);
+      files['server/src/services/db/foo-bar.ts'] = handlerSource('marks.list', true);
+      files['server/src/services/db/fooBar.ts'] = handlerSource('tags.list', true);
+      delete files['server/src/services/db/marks-list.ts'];
+      delete files['server/src/services/db/canvases-get.ts'];
+      delete files['server/src/services/db/canvases-create.ts'];
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('fooBar');
+      expect(run.stderr).toContain('kebab-case');
+      expectNoOutputs(root);
+    });
+
+    it('CLI kinds.ts without a parseable catalog array fails hard (V-15) and writes nothing', () => {
+      for (const kinds of [
+        'export const DB_WRITE_OP_KINDS = [\n  \'canvases.create\',\n] as const;\n',
+        'export const DB_READ_OP_KINDS = readKinds;\n\nexport const DB_WRITE_OP_KINDS = [\n  \'canvases.create\',\n] as const;\n',
+      ]) {
+        const files = defaultFiles();
+        files['server/src/services/db/kinds.ts'] = kinds;
+        const root = createTree(files);
+        const run = runGeneratorCli(root, []);
+        expect(run.status).toBe(1);
+        expect(run.stderr).toContain('kinds.ts');
+        expect(run.stderr).toContain('cannot find DB_READ_OP_KINDS');
+        expectNoOutputs(root);
+      }
+    });
+
+    it('standalone scan output is byte-identical to the generator handlers output', () => {
+      const scanRoot = createTree(defaultFiles());
+      const genRoot = createTree(defaultFiles());
+      expect(runScript(scanRoot, 'scan-db-handlers.mjs', []).status).toBe(0);
+      expect(runGeneratorCli(genRoot, []).status).toBe(0);
+      const scanned = readFileSync(join(scanRoot, HANDLERS_OUT), 'utf8');
+      const generated = readFileSync(join(genRoot, HANDLERS_OUT), 'utf8');
+      expect(scanned).toBe(generated);
+      expect(sha256(scanned)).toBe(sha256(generated));
+      expect(existsSync(join(scanRoot, ROUTES_OUT))).toBe(false);
+      expect(runScript(genRoot, 'scan-db-handlers.mjs', ['--check']).status).toBe(0);
+    });
+
+    // KNOWN GAPS documented by GEN-AUDIT (fase1/laporan-gen-audit.md,
+    // findings T-1 and T-2). These cases assert the CURRENT behavior
+    // (exit 0) so each gap stays visible; they are NOT the desired
+    // behavior. Wave 4 hardening must flip them to exit 1 and update
+    // the expectations here. The generator is deliberately NOT fixed
+    // by this suite.
+
+    it('KNOWN GAP T-1: side-effect import of another adapter exits 0 (desired: exit 1)', () => {
+      const files = defaultFiles();
+      files['server/src/routes/stubs.registration.ts'] =
+        "import './health.registration.js';\n" + adapterSource('stubs', 140);
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(0);
+      expect(existsSync(join(root, ROUTES_OUT))).toBe(true);
+      expect(existsSync(join(root, HANDLERS_OUT))).toBe(true);
+    });
+
+    it('KNOWN GAP T-1: dynamic import of another adapter exits 0 (desired: exit 1)', () => {
+      const files = defaultFiles();
+      files['server/src/routes/stubs.registration.ts'] =
+        "import type { RegistrationContext } from '../registration/context.js';\n" +
+        '\n' +
+        "export const REGISTRATION_ID = 'stubs' as const;\n" +
+        'export const REGISTRATION_ORDER = 140;\n' +
+        'export async function registerGroup(ctx: RegistrationContext): Promise<void> {\n' +
+        "  await import('./health.registration.js');\n" +
+        '  void ctx;\n' +
+        '}\n';
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(0);
+      expect(existsSync(join(root, ROUTES_OUT))).toBe(true);
+    });
+
+    it('KNOWN GAP T-2: adapter exports present only in comments exit 0 (desired: exit 1)', () => {
+      const files = defaultFiles();
+      files['server/src/routes/stubs.registration.ts'] =
+        "// export const REGISTRATION_ID = 'stubs' as const;\n" +
+        '// export const REGISTRATION_ORDER = 140;\n' +
+        '// export async function registerGroup(ctx: RegistrationContext): Promise<void> {}\n' +
+        'export const dummy = 1;\n';
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(0);
+      expect(readFileSync(join(root, ROUTES_OUT), 'utf8')).toContain('registerStubsGroup');
+    });
+
+    it('KNOWN GAP T-2: handler exports present only in a block comment exit 0 (desired: exit 1)', () => {
+      const files = defaultFiles();
+      files['server/src/services/db/tags-list.ts'] =
+        '/*\n' +
+        "export const HANDLER_KIND = 'tags.list' as const;\n" +
+        'export async function handle(): Promise<void> {}\n' +
+        '*/\n' +
+        'export const dummy = 1;\n';
+      const root = createTree(files);
+      const run = runGeneratorCli(root, []);
+      expect(run.status).toBe(0);
+      expect(readFileSync(join(root, HANDLERS_OUT), 'utf8')).toContain('tagsListKind');
+    });
+  },
+);
