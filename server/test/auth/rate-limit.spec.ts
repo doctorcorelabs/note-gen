@@ -108,6 +108,10 @@ describe('progressive lockout', () => {
   it('locks after 5 consecutive failures for 15 minutes', async () => {
     const store = new FakeAuthStore();
     const now = new Date(TEST_NOW_MS);
+    const fresh = await checkLockout(store, 'u-1', TEST_NOW_MS);
+    expect(fresh.locked).toBe(false);
+    expect(fresh.lockoutLevel).toBe(0);
+    expect(fresh.lockoutDurationMs).toBe(0);
     for (let i = 0; i < 4; i += 1) {
       await recordLoginFailureLockout(store, 'u-1', now);
       expect((await checkLockout(store, 'u-1', TEST_NOW_MS)).locked).toBe(false);
@@ -116,6 +120,8 @@ describe('progressive lockout', () => {
     const locked = await checkLockout(store, 'u-1', TEST_NOW_MS);
     expect(locked.locked).toBe(true);
     expect(locked.retryAfterSeconds).toBe(900);
+    expect(locked.lockoutLevel).toBe(1);
+    expect(locked.lockoutDurationMs).toBe(15 * 60 * 1000);
   });
 
   it('does not extend a lockout with attempts made while locked', async () => {

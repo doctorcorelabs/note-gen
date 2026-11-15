@@ -289,6 +289,23 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
     if (user !== null) {
       const lockout = await checkLockout(store, user.id, nowMs);
       if (lockout.locked) {
+        // One login_locked event per locked attempt (katalog 12.1):
+        // repeated attempts inside the lockout window each write
+        // one event, so the audit trail shows every enforcement.
+        // Best-effort like the sibling login events: a failed audit
+        // write logs a warning and never changes the 429.
+        await recordAudit(
+          store,
+          {
+            userId: user.id,
+            actorUserId: null,
+            eventType: 'login_locked',
+            ip: ip ?? null,
+            userAgent: truncateUserAgent(requestUserAgent(request)),
+            metadata: { lockoutLevel: lockout.lockoutLevel, lockoutDurationMs: lockout.lockoutDurationMs },
+          },
+          auditFailed(request, 'login_locked'),
+        );
         sendRateLimited(reply, request.id, lockout.retryAfterSeconds);
         return reply;
       }
