@@ -54,6 +54,7 @@ import { registerSecretsRoutes } from './routes/secrets.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerDbRoutes } from './routes/db.js';
 import { registerStubRoutes } from './routes/stubs.js';
+import { registerCspReportRoutes } from './routes/csp-reports.js';
 import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 import { createProductionSettingsDeps } from './services/settings/index.js';
 import { createDefaultDbRouteDeps } from './services/db/deps.js';
@@ -295,6 +296,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // group (AD-40 pattern), in merge order. The stubs answer 501
   // only after the auth hook passes, with no side effects.
   await registerStubRoutes(app, { maxBodyBytes: deps.config.maxBodyBytes });
+
+  // CSP reports (V3-39b; kontrak 3.11): POST /api/csp-reports only.
+  // One commented block per group (AD-40 pattern), in merge order.
+  // No session, no CSP header set here; directive values belong to
+  // the hardening wave (O-07). See routes/csp-reports.ts.
+  await registerCspReportRoutes(app);
 
   return app;
 }

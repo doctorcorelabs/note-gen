@@ -526,9 +526,9 @@ describe('hook exemptions are method-scoped [real hook, test-only routes]', () =
 
   beforeAll(async () => {
     app = await buildApp({ config: testConfig(), pool: null, version: VERSION });
-    app.post('/api/csp-reports', async (_request, reply) => {
-      reply.code(204).send();
-    });
+    // No test-only POST /api/csp-reports route: the real route
+    // landed with V3-39b, and Fastify rejects a duplicate
+    // registration. The POST case below exercises the real route.
     app.get('/api/csp-reports', async () => successEnvelope({ ok: true }));
     app.get('/api/backups/downloads/:token', async () => successEnvelope({ ok: true }));
     app.post('/api/backups/downloads/:token', async () => successEnvelope({ ok: true }));
@@ -539,7 +539,16 @@ describe('hook exemptions are method-scoped [real hook, test-only routes]', () =
   });
 
   it('POST /api/csp-reports passes without a session and answers 204', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/csp-reports' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/csp-reports',
+      payload: {
+        'csp-report': {
+          'document-uri': 'https://app.example.invalid/notes/a',
+          'violated-directive': 'script-src',
+        },
+      },
+    });
     expect(res.statusCode).toBe(204);
     expect(res.body).toBe('');
   });
