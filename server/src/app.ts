@@ -89,6 +89,34 @@ import { HANDLER_KIND as messagesUpdateKind, handle as messagesUpdate, validate 
 import { HANDLER_KIND as policyGetKind, handle as policyGet, validate as validatePolicyGet } from './services/db/policy-get.js';
 import { HANDLER_KIND as policyPutKind, handle as policyPut, validate as validatePolicyPut } from './services/db/policy-put.js';
 
+// Db kind handlers (V3-13c): one direct import per handler file,
+// no barrel (see services/db/deps.ts wiring pattern).
+import { HANDLER_KIND as knowledgeGetSourceKind, handle as knowledgeGetSource, validate as validateKnowledgeGetSource } from './services/db/knowledge-get-source.js';
+import { HANDLER_KIND as knowledgeListSourcesKind, handle as knowledgeListSources, validate as validateKnowledgeListSources } from './services/db/knowledge-list-sources.js';
+import { HANDLER_KIND as knowledgeRemoveSourceKind, handle as knowledgeRemoveSource, validate as validateKnowledgeRemoveSource } from './services/db/knowledge-remove-source.js';
+import { HANDLER_KIND as knowledgeStatsKind, handle as knowledgeStats, validate as validateKnowledgeStats } from './services/db/knowledge-stats.js';
+import { HANDLER_KIND as knowledgeUpdateStatusKind, handle as knowledgeUpdateStatus, validate as validateKnowledgeUpdateStatus } from './services/db/knowledge-update-status.js';
+import { HANDLER_KIND as knowledgeUpsertSourceKind, handle as knowledgeUpsertSource, validate as validateKnowledgeUpsertSource } from './services/db/knowledge-upsert-source.js';
+import { HANDLER_KIND as vectorReplaceChunksKind, handle as vectorReplaceChunks } from './services/db/vector-replace-chunks.js';
+import { HANDLER_KIND as vectorSummariesKind, handle as vectorSummaries, validate as validateVectorSummaries } from './services/db/vector-summaries.js';
+import { HANDLER_KIND as wikiCommitRevisionKind, handle as wikiCommitRevision } from './services/db/wiki-commit-revision.js';
+import { HANDLER_KIND as wikiFindRevisionByInputHashKind, handle as wikiFindRevisionByInputHash, validate as validateWikiFindRevisionByInputHash } from './services/db/wiki-find-revision-by-input-hash.js';
+import { HANDLER_KIND as wikiGetActiveRevisionsKind, handle as wikiGetActiveRevisions, validate as validateWikiGetActiveRevisions } from './services/db/wiki-get-active-revisions.js';
+import { HANDLER_KIND as wikiGetMetaKind, handle as wikiGetMeta, validate as validateWikiGetMeta } from './services/db/wiki-get-meta.js';
+import { HANDLER_KIND as wikiGetPageKind, handle as wikiGetPage, validate as validateWikiGetPage } from './services/db/wiki-get-page.js';
+import { HANDLER_KIND as wikiGetRevisionKind, handle as wikiGetRevision, validate as validateWikiGetRevision } from './services/db/wiki-get-revision.js';
+import { HANDLER_KIND as wikiGetSegmentKind, handle as wikiGetSegment, validate as validateWikiGetSegment } from './services/db/wiki-get-segment.js';
+import { HANDLER_KIND as wikiGetSourceStateKind, handle as wikiGetSourceState, validate as validateWikiGetSourceState } from './services/db/wiki-get-source-state.js';
+import { HANDLER_KIND as wikiListJobsKind, handle as wikiListJobs, validate as validateWikiListJobs } from './services/db/wiki-list-jobs.js';
+import { HANDLER_KIND as wikiListPagesKind, handle as wikiListPages, validate as validateWikiListPages } from './services/db/wiki-list-pages.js';
+import { HANDLER_KIND as wikiListSourceStatesKind, handle as wikiListSourceStates, validate as validateWikiListSourceStates } from './services/db/wiki-list-source-states.js';
+import { HANDLER_KIND as wikiPutMetaKind, handle as wikiPutMeta } from './services/db/wiki-put-meta.js';
+import { HANDLER_KIND as wikiPutSegmentKind, handle as wikiPutSegment } from './services/db/wiki-put-segment.js';
+import { HANDLER_KIND as wikiRemoveJobKind, handle as wikiRemoveJob } from './services/db/wiki-remove-job.js';
+import { HANDLER_KIND as wikiUpsertJobKind, handle as wikiUpsertJob } from './services/db/wiki-upsert-job.js';
+import { HANDLER_KIND as wikiUpsertPageKind, handle as wikiUpsertPage } from './services/db/wiki-upsert-page.js';
+import { HANDLER_KIND as wikiUpsertSourceKind, handle as wikiUpsertSource } from './services/db/wiki-upsert-source.js';
+
 export interface AppDeps {
   config: ServerConfig;
   pool: HealthDbPool | null;
@@ -230,6 +258,35 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   dbDeps.registry.registerWrite(messagesUpdateKind, { validate: validateMessagesUpdate, handle: messagesUpdate });
   dbDeps.registry.registerRead(policyGetKind, { validate: validatePolicyGet, handle: policyGet });
   dbDeps.registry.registerWrite(policyPutKind, { validate: validatePolicyPut, handle: policyPut });
+  // Register V3-13c handlers (kinds owned by V3-13c per
+  // fase1/pembagian-handler-kind.md). Unregistered kinds keep
+  // answering 500 (W1) / 410 (W2) until their merge lands.
+  dbDeps.registry.registerRead(knowledgeGetSourceKind, { validate: validateKnowledgeGetSource, handle: knowledgeGetSource });
+  dbDeps.registry.registerRead(knowledgeListSourcesKind, { validate: validateKnowledgeListSources, handle: knowledgeListSources });
+  dbDeps.registry.registerWrite(knowledgeRemoveSourceKind, { validate: validateKnowledgeRemoveSource, handle: knowledgeRemoveSource });
+  dbDeps.registry.registerRead(knowledgeStatsKind, { validate: validateKnowledgeStats, handle: knowledgeStats });
+  dbDeps.registry.registerWrite(knowledgeUpdateStatusKind, { validate: validateKnowledgeUpdateStatus, handle: knowledgeUpdateStatus });
+  dbDeps.registry.registerWrite(knowledgeUpsertSourceKind, { validate: validateKnowledgeUpsertSource, handle: knowledgeUpsertSource });
+  dbDeps.registry.registerWrite(vectorReplaceChunksKind, { handle: vectorReplaceChunks });
+  dbDeps.registry.registerRead(vectorSummariesKind, { validate: validateVectorSummaries, handle: vectorSummaries });
+  dbDeps.registry.registerWrite(wikiCommitRevisionKind, { handle: wikiCommitRevision });
+  dbDeps.registry.registerRead(wikiFindRevisionByInputHashKind, { validate: validateWikiFindRevisionByInputHash, handle: wikiFindRevisionByInputHash });
+  dbDeps.registry.registerRead(wikiGetActiveRevisionsKind, { validate: validateWikiGetActiveRevisions, handle: wikiGetActiveRevisions });
+  dbDeps.registry.registerRead(wikiGetMetaKind, { validate: validateWikiGetMeta, handle: wikiGetMeta });
+  dbDeps.registry.registerRead(wikiGetPageKind, { validate: validateWikiGetPage, handle: wikiGetPage });
+  dbDeps.registry.registerRead(wikiGetRevisionKind, { validate: validateWikiGetRevision, handle: wikiGetRevision });
+  dbDeps.registry.registerRead(wikiGetSegmentKind, { validate: validateWikiGetSegment, handle: wikiGetSegment });
+  dbDeps.registry.registerRead(wikiGetSourceStateKind, { validate: validateWikiGetSourceState, handle: wikiGetSourceState });
+  dbDeps.registry.registerRead(wikiListJobsKind, { validate: validateWikiListJobs, handle: wikiListJobs });
+  dbDeps.registry.registerRead(wikiListPagesKind, { validate: validateWikiListPages, handle: wikiListPages });
+  dbDeps.registry.registerRead(wikiListSourceStatesKind, { validate: validateWikiListSourceStates, handle: wikiListSourceStates });
+  dbDeps.registry.registerWrite(wikiPutMetaKind, { handle: wikiPutMeta });
+  dbDeps.registry.registerWrite(wikiPutSegmentKind, { handle: wikiPutSegment });
+  dbDeps.registry.registerWrite(wikiRemoveJobKind, { handle: wikiRemoveJob });
+  dbDeps.registry.registerWrite(wikiUpsertJobKind, { handle: wikiUpsertJob });
+  dbDeps.registry.registerWrite(wikiUpsertPageKind, { handle: wikiUpsertPage });
+  dbDeps.registry.registerWrite(wikiUpsertSourceKind, { handle: wikiUpsertSource });
+
   await registerDbRoutes(app, dbDeps);
 
   return app;
