@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 
 export type ManagedBackupSchedule = 'disabled' | 'daily' | 'weekly'
@@ -99,7 +99,7 @@ export async function createManagedBackup(
   try {
     const store = await Store.load('store.json')
     const workspacePath = (await store.get<string>('workspacePath')) ?? ''
-    const backup = await invoke<ManagedBackupInfo>('create_managed_backup', {
+    const backup = await platform.invoke.invoke<ManagedBackupInfo>('create_managed_backup', {
       backupDir: current.directory,
       workspacePath,
       retention: current.retention,
@@ -117,7 +117,7 @@ export async function createManagedBackup(
 
 export async function listManagedBackups(directory: string): Promise<ManagedBackupInfo[]> {
   if (!directory) return []
-  return invoke<ManagedBackupInfo[]>('list_managed_backups', { backupDir: directory })
+  return platform.invoke.invoke<ManagedBackupInfo[]>('list_managed_backups', { backupDir: directory })
 }
 
 export async function restoreManagedBackup(
@@ -128,7 +128,7 @@ export async function restoreManagedBackup(
   if (usePlatformSwitchStore.getState().platform || await (await Store.load('store.json')).get('platformSwitchRecovery')) {
     throw new Error('Finish or recover the sync platform switch before restoring a backup')
   }
-  return invoke<ManagedBackupRestoreResult>('restore_managed_backup', {
+  return platform.invoke.invoke<ManagedBackupRestoreResult>('restore_managed_backup', {
     backupPath,
     currentWorkspacePath,
   })

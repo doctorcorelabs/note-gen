@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { join } from '@tauri-apps/api/path'
 import { getDb } from '@/db'
@@ -51,7 +51,7 @@ async function uploadAssetBytesInScope(input: AssetUploadInput & { plaintext: Ui
     localRoot: input.localRoot, relativePath: input.relativePath, keyVersion: input.keyVersion, plaintextHash,
   }, async () => {
     signal.throwIfAborted()
-    const encrypted = await invoke<EncryptedBytes>('self_hosted_encrypt_bytes', {
+    const encrypted = await platform.invoke.invoke<EncryptedBytes>('self_hosted_encrypt_bytes', {
       key, plaintext: bytesToBase64Url(plaintext), associatedData,
     })
     signal.throwIfAborted()
@@ -155,7 +155,7 @@ export async function downloadAsset(input: {
     if (!associatedData.startsWith(prefix) || associatedData.length === prefix.length) {
       throw new Error('blob_associated_data_invalid')
     }
-    const plaintext = await invoke<string>('self_hosted_decrypt_packed_bytes', {
+    const plaintext = await platform.invoke.invoke<string>('self_hosted_decrypt_packed_bytes', {
       key,
       packedCiphertext: bytesToBase64Url(ciphertext),
       // Renames keep the original blob bytes, so authentication must use the

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { appDataDir, join } from '@tauri-apps/api/path'
 import { exists, lstat, readFile } from '@tauri-apps/plugin-fs'
 import { getDb } from '@/db'
@@ -187,7 +187,7 @@ export async function applyPersonalAssetDownloads(assets: PreparedPersonalAsset[
     if (currentHash === asset.hash) continue
     if (currentHash !== asset.observedLocalHash) throw new Error('SELF_HOSTED_PERSONAL_ASSET_CONFLICT')
     assertActive()
-    await invoke('self_hosted_atomic_write', {
+    await platform.invoke.invoke('self_hosted_atomic_write', {
       workspaceId: asset.workspaceId, workspaceRoot: root, relativePath: asset.path,
       contents: bytesToBase64Url(asset.bytes), expectedHash: asset.hash,
     })

@@ -1,5 +1,5 @@
 import emitter from '@/lib/emitter'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { emitTo } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -18,7 +18,7 @@ import { QUICK_RECORD_WINDOW, type QuickRecordRequest, type QuickRecordResponse 
 let opening: Promise<void> | undefined
 
 async function openQuickRecordWindow() {
-  await invoke('remember_quick_record_foreground')
+  await platform.invoke.invoke('remember_quick_record_foreground')
   const existing = await WebviewWindow.getByLabel(QUICK_RECORD_WINDOW)
   if (existing) {
     await existing.show()

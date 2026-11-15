@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { getWorkspacePath } from '@/lib/workspace'
 import type { CloudFolderConfig } from '@/types/sync'
@@ -46,7 +46,7 @@ export async function moveCloudFolderPath(
     const payload = { rootUri: config.path.trim(), source, target }
     let expected = options.expected
     if (!expected) {
-      const snapshot = await invoke<AndroidPathMoveSnapshot | null>('snapshot_android_cloud_folder_path', payload)
+      const snapshot = await platform.invoke.invoke<AndroidPathMoveSnapshot | null>('snapshot_android_cloud_folder_path', payload)
       if (!snapshot) return { status: 'missing' }
       expected = JSON.stringify(snapshot)
       await options.rememberSource(expected)
@@ -60,7 +60,7 @@ export async function moveCloudFolderPath(
       || new Set(snapshot.files.map(file => file.path)).size !== snapshot.files.length) {
       throw new Error('Invalid Android cloud folder rename snapshot')
     }
-    const moved = await invoke<AndroidPathMoveSnapshot>('move_android_cloud_folder_path', {
+    const moved = await platform.invoke.invoke<AndroidPathMoveSnapshot>('move_android_cloud_folder_path', {
       ...payload, expectedIdentity: snapshot.identity, expectedSnapshotJson: expected,
     })
     const after = new Map(moved.files.map(file => [file.path, file.hash]))

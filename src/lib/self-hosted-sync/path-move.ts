@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
@@ -143,8 +143,8 @@ export async function moveSelfHostedRemotePath(
     || within(source.toLowerCase(), target.toLowerCase()) || within(target.toLowerCase(), source.toLowerCase())) {
     throw new Error('自托管重命名源路径和目标路径无效或互相包含')
   }
-  source = await invoke<string>('self_hosted_move_source_path', { relativePath: source })
-  target = (await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: target })).normalized
+  source = await platform.invoke.invoke<string>('self_hosted_move_source_path', { relativePath: source })
+  target = (await platform.invoke.invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: target })).normalized
   const binding = await activeBinding()
   if (!binding) throw new Error('自托管工作区未绑定或已断开')
   const context = identity(binding)
@@ -193,7 +193,7 @@ export async function moveSelfHostedRemotePath(
           if (payload.domain !== domain(object.kind as PathKind) || typeof payload.relativePath !== 'string') {
             throw new Error('自托管远端路径载荷无效')
           }
-          const path = await invoke<string>('self_hosted_move_source_path', { relativePath: payload.relativePath })
+          const path = await platform.invoke.invoke<string>('self_hosted_move_source_path', { relativePath: payload.relativePath })
           const casefold = path.toLowerCase()
           if (paths.has(casefold)) throw new Error('自托管远端路径存在大小写冲突')
           paths.add(casefold)
@@ -265,7 +265,7 @@ export async function moveSelfHostedRemotePath(
         objectId: string, kind: PathKind, oldPath: string | null, newPath: string,
         payload: Record<string, unknown>, revision: string | null, keyVersion: number, blobRefs: string[],
       ) => {
-        const portable = await invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath: newPath })
+        const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath: newPath })
         const key = await loadWorkspaceKey(binding.workspaceId, keyVersion)
         const movedPayload = { ...payload, relativePath: portable.normalized }
         if (oldPath !== null && typeof payload.blobId === 'string') {
@@ -286,7 +286,7 @@ export async function moveSelfHostedRemotePath(
           objectId, kind, source: oldPath, target: portable.normalized, targetCasefold: portable.caseFolded,
           contentHash: typeof payload.plaintextHash === 'string' ? payload.plaintextHash
             : kind === 'note' && typeof payload.content === 'string'
-              ? await invoke<string>('self_hosted_sha256', { value: payload.content }) : null,
+              ? await platform.invoke.invoke<string>('self_hosted_sha256', { value: payload.content }) : null,
           blobRefs, commandId, command: JSON.stringify(command),
         })
       }

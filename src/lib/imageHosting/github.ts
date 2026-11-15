@@ -1,5 +1,6 @@
 import { Store } from "@tauri-apps/plugin-store";
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { GithubError, GithubRepoInfo } from "../sync/github.types";
 import { toast } from '@/hooks/use-toast';
 import { v4 as uuid } from 'uuid';
@@ -39,7 +40,7 @@ export async function createImageRepo(name: string, isPrivate?: boolean) {
     };
     
     const url = 'https://api.github.com/user/repos';
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
     
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json() as GithubRepoInfo;
@@ -77,7 +78,7 @@ export async function checkImageRepoState(name: string) {
   };
   
   const url = `https://api.github.com/repos/${githubUsername}/${name}`;
-  const response = await fetch(url, requestOptions);
+  const response = await platform.http.fetch(url, requestOptions);
   
   if (response.status >= 200 && response.status < 300) {
     const data = await response.json();
@@ -132,7 +133,7 @@ export async function uploadImageByGithub(file: File) {
     
     const url = `https://api.github.com/repos/${username}/${repoName}/contents/${filename}`;
     const data = await withGithubRepoWriteLock(String(username), repoName, async () => {
-      const response = await fetch(url, requestOptions);
+      const response = await platform.http.fetch(url, requestOptions);
       if (response.status >= 200 && response.status < 300) return await response.json();
 
       const errorData = await response.json();
@@ -146,7 +147,7 @@ export async function uploadImageByGithub(file: File) {
     const jsdelivr = await store.get('jsdelivr')
     let imageUrl = data.content.download_url
     if (jsdelivr) {
-      await fetch(`https://purge.jsdelivr.net/gh/${username}/${repoName}@main/${data.content.name}`)
+      await platform.http.fetch(`https://purge.jsdelivr.net/gh/${username}/${repoName}@main/${data.content.name}`)
       imageUrl = `https://cdn.jsdelivr.net/gh/${username}/${repoName}@main/${data.content.name}`
     }
     return imageUrl
@@ -194,7 +195,7 @@ export async function getImageFiles({ path }: { path: string }) {
     const url = `https://api.github.com/repos/${githubImageUsername}/${repoName}/contents/${path}`;
     
     try {
-      const response = await fetch(url, requestOptions);
+      const response = await platform.http.fetch(url, requestOptions);
       if (response.status >= 200 && response.status < 300) {
         const data = await response.json();
         return data;

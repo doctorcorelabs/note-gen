@@ -1,4 +1,5 @@
-import { fetch, type ClientOptions } from '@tauri-apps/plugin-http'
+import type { ClientOptions } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 
 export type RemoteMutationObservation<T> =
   | { state: 'applied'; value: T }
@@ -50,7 +51,7 @@ export async function fetchRemoteRead(url: string, options: Omit<RequestInit, 'm
   }
   return recoverRemoteRead(() => {
     if (options.signal?.aborted) throw new DOMException('Request canceled', 'AbortError')
-    return fetch(url, {
+    return platform.http.fetch(url, {
       ...options, method, headers: new Headers(options.headers),
       connectTimeout: options.connectTimeout ?? 10_000,
       maxRedirections: options.maxRedirections ?? 0,

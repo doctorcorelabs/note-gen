@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
 
 export function supportsNativeDeveloperTools(): boolean {
@@ -13,15 +13,15 @@ export function supportsNativeDeveloperTools(): boolean {
 
 export async function openDeveloperTools(): Promise<void> {
   if (!supportsNativeDeveloperTools()) return
-  await invoke('open_developer_tools')
+  await platform.invoke.invoke('open_developer_tools')
 }
 
 export async function closeDeveloperTools(): Promise<void> {
   if (!supportsNativeDeveloperTools()) return
-  await invoke('close_developer_tools')
+  await platform.invoke.invoke('close_developer_tools')
 }
 
 export async function isDeveloperToolsOpen(): Promise<boolean> {
   if (!supportsNativeDeveloperTools()) return false
-  return invoke<boolean>('is_developer_tools_open')
+  return platform.invoke.invoke<boolean>('is_developer_tools_open')
 }

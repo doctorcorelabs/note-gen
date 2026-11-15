@@ -1,5 +1,6 @@
 import { Store } from '@tauri-apps/plugin-store'
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 import { collectMarkdownFiles } from '@/lib/files'
@@ -201,7 +202,7 @@ export class FolderSync {
 
     // 使用 git tree API 获取指定路径下的所有文件
     const url = `https://api.github.com/repos/${githubUsername}/${repo}/git/trees/main?recursive=1`
-    const response = await fetch(url, { method: 'GET', headers, proxy })
+    const response = await platform.http.fetch(url, { method: 'GET', headers, proxy })
 
     if (!response.ok) return {}
 
@@ -266,7 +267,7 @@ export class FolderSync {
       const beforeWrite = async () => { for (const file of capturedFiles) await file.beforeWrite?.() }
       const postObject = async (resource: string, body: string) => {
         const response = await recoverRemoteMutation({ beforeWrite,
-          send: () => fetch(`${baseUrl}${resource}`, { method: 'POST', headers: new Headers(headers), body, proxy }),
+          send: () => platform.http.fetch(`${baseUrl}${resource}`, { method: 'POST', headers: new Headers(headers), body, proxy }),
           // Tree and commit objects remain unreachable until the separate ref CAS.
           reconcile: async () => ({ state: 'unchanged' }),
         })
@@ -279,7 +280,7 @@ export class FolderSync {
       const candidate = oid(commit.sha)
       const body = JSON.stringify({ sha: candidate, force: false })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(`${baseUrl}/git/refs/heads/${encodeURIComponent(branch)}`, {
+        send: () => platform.http.fetch(`${baseUrl}/git/refs/heads/${encodeURIComponent(branch)}`, {
           method: 'PATCH', headers: new Headers(headers), body, proxy,
         }),
         reconcile: async () => {
@@ -375,7 +376,7 @@ export class FolderSync {
     const url = `${apiBaseUrl}/repos/${giteaUsername}/${repo}/contents${encodedPath ? '/' + encodedPath : ''}`
 
     try {
-      const response = await fetch(url, { method: 'GET', headers, proxy })
+      const response = await platform.http.fetch(url, { method: 'GET', headers, proxy })
 
       if (!response.ok) {
         console.error('[Gitea] 获取文件列表失败:', response.status)
@@ -504,7 +505,7 @@ export class FolderSync {
         }) })
       const beforeWrite = async () => { for (const file of capturedFiles) await file.beforeWrite?.() }
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(`${baseUrl}/repository/commits`, { method: 'POST', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(`${baseUrl}/repository/commits`, { method: 'POST', headers: new Headers(headers), body, proxy }),
         reconcile: async () => {
           const current = await readVersions(await readHead(initiallyEmpty))
           if (current.every((version, index) => version?.sha === desired[index])) {

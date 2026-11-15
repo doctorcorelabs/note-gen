@@ -3,7 +3,8 @@ import { assertConditionalResponse } from './write-condition'
 import { toast } from '@/hooks/use-toast';
 import { Store } from '@tauri-apps/plugin-store';
 import { v4 as uuid } from 'uuid';
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { buildRemoteLogicalPath, buildRepoContentPath, buildRepoContentsEndpoint, debugSyncPath, readSyncResponseJson, encodeRemoteFileContent, decodeBase64ToBytes, pickNestedFileEntry } from './remote-file'
 import { readGitTreeDirectory, remoteRecord } from './directory-listing'
 import { fetchGiteeRead, isGiteeConnectionError } from './gitee-request'
@@ -326,7 +327,7 @@ export async function uploadFile(
       const body = JSON.stringify({ access_token: accessToken, content: base64Content,
         message: message || `Upload ${filename || id}`, branch, sha })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(url, { method: sha ? 'PUT' : 'POST', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(url, { method: sha ? 'PUT' : 'POST', headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGiteeUpload(baseUrl, logicalPath, branch, accessToken, proxy, sha || null, desiredVersion),
       });
       if (guarded) await assertGiteeConditionalResponse(response, sha || null, logicalPath);
@@ -345,7 +346,7 @@ export async function uploadFile(
         const postBody = JSON.stringify({ access_token: accessToken, content: base64Content,
           message: message || `Upload ${filename || id}`, branch })
         const postResponse = await recoverRemoteMutation({ beforeWrite,
-          send: () => fetch(url, { method: 'POST', headers: new Headers(headers), body: postBody, proxy }),
+          send: () => platform.http.fetch(url, { method: 'POST', headers: new Headers(headers), body: postBody, proxy }),
           reconcile: () => reconcileGiteeUpload(baseUrl, logicalPath, branch, accessToken, proxy, null, desiredVersion),
         });
         if (postResponse.status >= 200 && postResponse.status < 300) {
@@ -512,7 +513,7 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
         let response: Response
         try {
           // The native wrapper mutates init, so every attempt gets fresh options.
-          response = await fetch(url, {
+          response = await platform.http.fetch(url, {
             method: 'DELETE', headers: new Headers(headers), body, proxy,
             connectTimeout: 10_000, maxRedirections: 0,
           })
@@ -728,7 +729,7 @@ export async function createSyncRepo(name: string, isPrivate?: boolean) {
     
     const url = `https://gitee.com/api/v5/user/repos`;
     
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json();
       return data;

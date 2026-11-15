@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Store } from '@tauri-apps/plugin-store'
@@ -181,8 +181,8 @@ export async function connectWithBrowser(input: {
 
 export async function ensurePersonalWorkspace(profileId: string) {
   const { profile, client } = await authenticatedClient(profileId)
-  const workspaceKey = await invoke<string>('self_hosted_generate_workspace_key')
-  const encryptedName = await invoke<EncryptedPayload>('self_hosted_encrypt', {
+  const workspaceKey = await platform.invoke.invoke<string>('self_hosted_generate_workspace_key')
+  const encryptedName = await platform.invoke.invoke<EncryptedPayload>('self_hosted_encrypt', {
     key: workspaceKey,
     plaintext: '个人数据',
     associatedData: 'workspace-name:v1',
@@ -540,15 +540,15 @@ function secretKey(profileId: string, name: string) {
 }
 
 export function secureSet(key: string, value: string) {
-  return invoke<void>('self_hosted_secure_set', { key, value })
+  return platform.invoke.invoke<void>('self_hosted_secure_set', { key, value })
 }
 
 export function secureGet(key: string) {
-  return invoke<string | null>('self_hosted_secure_get', { key })
+  return platform.invoke.invoke<string | null>('self_hosted_secure_get', { key })
 }
 
 export function secureDelete(key: string) {
-  return invoke<void>('self_hosted_secure_delete', { key })
+  return platform.invoke.invoke<void>('self_hosted_secure_delete', { key })
 }
 
 export function isSelfHostedSecureStorageError(error: unknown): boolean {
@@ -559,7 +559,7 @@ export function isSelfHostedSecureStorageError(error: unknown): boolean {
 // Background preparation must never reset the native failure latch. Only
 // explicit login, connection review and retry actions may request access again.
 export async function retrySecureStorageAccess() {
-  await invoke<void>('self_hosted_secure_retry_access')
+  await platform.invoke.invoke<void>('self_hosted_secure_retry_access')
   const { getSelfHostedSyncRuntime } = await import('./runtime')
   getSelfHostedSyncRuntime().allowSecureStorageRetry()
 }
@@ -675,7 +675,7 @@ async function loadOrCreateDeviceIdentity(preferredDeviceId?: string): Promise<D
 }
 
 async function rotateDeviceIdentity(deviceId: string): Promise<DeviceIdentity> {
-  const generated = await invoke<DeviceKeyPair>('self_hosted_generate_device_key_pair')
+  const generated = await platform.invoke.invoke<DeviceKeyPair>('self_hosted_generate_device_key_pair')
   const store = await Store.load('store.json')
   await Promise.all([
     secureSet('device.identity.private-key', generated.privateKey),

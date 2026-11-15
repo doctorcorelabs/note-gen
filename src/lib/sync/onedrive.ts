@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
-import { fetch } from '@tauri-apps/plugin-http'
+import { platform } from '@/lib/platform'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { Store } from '@tauri-apps/plugin-store'
 
@@ -397,7 +396,7 @@ async function oauthRequest<T>(path: string, body: URLSearchParams): Promise<{ r
   const startedAt = Date.now()
   const response = await fetchWithTransientRetry(async () => {
     if (osPlatform() === 'android' || osPlatform() === 'ios') {
-      const result = await invoke<NativeOAuthResponse>('microsoft_oauth_request', {
+      const result = await platform.invoke.invoke<NativeOAuthResponse>('microsoft_oauth_request', {
         path,
         form: Object.fromEntries(body.entries()),
       })
@@ -406,7 +405,7 @@ async function oauthRequest<T>(path: string, body: URLSearchParams): Promise<{ r
         headers: result.retryAfter ? { 'retry-after': result.retryAfter } : undefined,
       })
     }
-    return fetch(`${AUTHORITY_BASE_URL}/${path}`, {
+    return platform.http.fetch(`${AUTHORITY_BASE_URL}/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -428,7 +427,7 @@ async function saveTokens(response: OneDriveTokenResponse, fallbackRefreshToken 
   const store = await Store.load('store.json')
   const currentPlatform = osPlatform()
   if (currentPlatform === 'android' || currentPlatform === 'ios') {
-    await invoke(`set_${currentPlatform}_secure_value`, {
+    await platform.invoke.invoke(`set_${currentPlatform}_secure_value`, {
       key: ONE_DRIVE_TOKEN_KEY,
       value: JSON.stringify(tokens),
     })
@@ -449,19 +448,19 @@ async function readStoredTokens(): Promise<OneDriveAuthTokens | null> {
 
   try {
     const startedAt = Date.now()
-    const value = await invoke<string | null>(`get_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
+    const value = await platform.invoke.invoke<string | null>(`get_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
     logOneDriveTiming('secureTokenRead', startedAt, { found: Boolean(value) })
     if (value) {
       const tokens = parseStoredTokens(value)
       if (tokens) return tokens
-      await invoke(`delete_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
+      await platform.invoke.invoke(`delete_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
     }
   } catch (error) {
     console.warn(`Failed to read OneDrive tokens from ${currentPlatform} secure storage:`, error)
   }
 
   if (!legacyTokens) return null
-  await invoke(`set_${currentPlatform}_secure_value`, {
+  await platform.invoke.invoke(`set_${currentPlatform}_secure_value`, {
     key: ONE_DRIVE_TOKEN_KEY,
     value: JSON.stringify(legacyTokens),
   })
@@ -536,7 +535,7 @@ async function graphRequest(
 ): Promise<Response | null> {
   const operation = graphOperation(pathOrUrl, init.method || 'GET')
   const request = async (accessToken: string) => {
-    const send = () => fetch(pathOrUrl.startsWith('http') ? pathOrUrl : `${GRAPH_BASE_URL}${pathOrUrl}`, {
+    const send = () => platform.http.fetch(pathOrUrl.startsWith('http') ? pathOrUrl : `${GRAPH_BASE_URL}${pathOrUrl}`, {
       ...init,
       headers: { ...init.headers, Authorization: `Bearer ${accessToken}` },
     })
@@ -617,7 +616,7 @@ async function oneDriveContentRequest(
     : `${GRAPH_BASE_URL}/me/drive/special/approot:/${encodePath(key)}:/content`
   const request = async (accessToken: string) => scheduleOneDriveNetworkRequest(
     'downloadContent',
-    () => fetchWithTransientRetry(() => fetch(url, {
+    () => fetchWithTransientRetry(() => platform.http.fetch(url, {
       redirect: 'manual',
       headers: { Authorization: `Bearer ${accessToken}` },
     }), 'graph:downloadContent'),
@@ -655,7 +654,7 @@ async function oneDriveContentRequest(
     const downloadResponse = await scheduleOneDriveNetworkRequest(
       'downloadRedirectContent',
       () => fetchWithTransientRetry(
-        () => fetch(downloadUrl),
+        () => platform.http.fetch(downloadUrl),
         'downloadRedirectContent',
       ),
     )
@@ -838,7 +837,7 @@ async function oneDriveSessionRequest(
   try {
     const response = await scheduleOneDriveNetworkRequest(operation, async () => {
       await assertQueuedOneDriveWrite(beforeWrite)
-      return retry ? fetchWithTransientRetry(() => fetch(url, init), operation) : fetch(url, init)
+      return retry ? fetchWithTransientRetry(() => platform.http.fetch(url, init), operation) : platform.http.fetch(url, init)
     })
     if (!response.ok) return response
     const body = await response.arrayBuffer()
@@ -1078,7 +1077,7 @@ export async function disconnectOneDrive(): Promise<void> {
   const store = await Store.load('store.json')
   const currentPlatform = osPlatform()
   if (currentPlatform === 'android' || currentPlatform === 'ios') {
-    await invoke(`delete_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
+    await platform.invoke.invoke(`delete_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
   }
   await store.delete(ONE_DRIVE_TOKEN_KEY)
   await store.save()
@@ -1160,7 +1159,7 @@ export async function oneDriveDownloadBytes(
   const downloadUrl = item['@microsoft.graph.downloadUrl'] || (cached && itemEtag(cached) === itemEtag(item) ? cached['@microsoft.graph.downloadUrl'] : undefined)
   if (downloadUrl) {
     response = await scheduleOneDriveNetworkRequest('downloadContent',
-      () => fetchWithTransientRetry(() => fetch(downloadUrl), 'downloadContent'))
+      () => fetchWithTransientRetry(() => platform.http.fetch(downloadUrl), 'downloadContent'))
   }
   if (!response?.ok) {
     const result = await oneDriveContentRequest(config, normalized, item.id)

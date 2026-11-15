@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { Store } from '@tauri-apps/plugin-store'
 import { getVersion } from '@tauri-apps/api/app'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { appConfigDir, appDataDir, join } from '@tauri-apps/api/path'
 import { exists, remove } from '@tauri-apps/plugin-fs'
 import { platform as osPlatform, version as osVersion } from '@tauri-apps/plugin-os'
@@ -305,7 +305,7 @@ export function ErrorRecovery({
         console.warn('数据库连接未打开或关闭失败，将继续尝试删除:', databaseCloseError)
       }
 
-      await invoke('delete_local_database')
+      await platform.invoke.invoke('delete_local_database')
       await relaunch()
     })
   }
@@ -327,7 +327,7 @@ export function ErrorRecovery({
         return
       }
 
-      const savedPath = await invoke<string>('export_app_data', { outputPath })
+      const savedPath = await platform.invoke.invoke<string>('export_app_data', { outputPath })
       setActionMessage(`完整数据备份已导出到：${savedPath}`)
       setActiveAction(null)
     })

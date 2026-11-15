@@ -1,5 +1,5 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { locale as getSystemLocale, platform as getPlatform } from '@tauri-apps/plugin-os'
 
 import type { AiConfig } from '@/app/core/setting/config'
@@ -38,7 +38,7 @@ export async function getAppStorefrontCountryCode(): Promise<string | null> {
   }
 
   if (!storefrontCountryCodePromise) {
-    storefrontCountryCodePromise = invoke<string | null>('get_app_storefront_country_code')
+    storefrontCountryCodePromise = platform.invoke.invoke<string | null>('get_app_storefront_country_code')
       .then(countryCode => {
         const normalizedCountryCode = countryCode?.trim().toUpperCase() || null
         if (normalizedCountryCode) {

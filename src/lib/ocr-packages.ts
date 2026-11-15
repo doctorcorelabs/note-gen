@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 
 const ACTIVE_OCR_PROVIDER_STORE_KEY = 'activeOcrProviderId'
@@ -20,7 +20,7 @@ async function getStore() {
 }
 
 export async function getInstalledOcrProviders(): Promise<OcrProviderPackage[]> {
-  return invoke<OcrProviderPackage[]>('list_ocr_providers')
+  return platform.invoke.invoke<OcrProviderPackage[]>('list_ocr_providers')
 }
 
 export async function getActiveOcrProviderId(): Promise<string | null> {
@@ -58,7 +58,7 @@ export async function runInstalledOcrProvider({
   imagePath: string
   languages: string[]
 }): Promise<string> {
-  return invoke<string>('run_ocr_provider', {
+  return platform.invoke.invoke<string>('run_ocr_provider', {
     providerId,
     imagePath,
     languages,

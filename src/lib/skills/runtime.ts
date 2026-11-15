@@ -1,5 +1,5 @@
 import { appDataDir } from '@tauri-apps/api/path'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { BaseDirectory, exists, mkdir, readDir, readFile } from '@tauri-apps/plugin-fs'
 import { getWorkspacePath } from '@/lib/workspace'
 import { isMobileDevice } from '@/lib/check'
@@ -340,7 +340,7 @@ async function hashText(text: string): Promise<string> {
 
 export async function inspectSkillPython(skillId: string, scope?: SkillScope, expectedWorkspaceIdentity?: string): Promise<SkillPythonStatus> {
   const context = await getSkillRuntimeContext(skillId, scope, true, expectedWorkspaceIdentity)
-  return await invoke<SkillPythonStatus>('inspect_skill_python', {
+  return await platform.invoke.invoke<SkillPythonStatus>('inspect_skill_python', {
     request: {
       skillId,
       skillRoot: context.skillDir,
@@ -371,7 +371,7 @@ export async function installSkillPythonDependencies(
 
 export async function inspectSkillEnvironment(skillId: string, scope?: SkillScope, expectedWorkspaceIdentity?: string): Promise<SkillEnvironmentStatus> {
   const context = await getSkillRuntimeContext(skillId, scope, true, expectedWorkspaceIdentity)
-  return invoke<SkillEnvironmentStatus>('inspect_skill_environment', {
+  return platform.invoke.invoke<SkillEnvironmentStatus>('inspect_skill_environment', {
     request: { skillId, skillRoot: context.skillDir, runtimeDir: context.runtimeDir },
   })
 }
@@ -451,14 +451,14 @@ async function invokeWithSkillCancellation<T>(
   signal?.throwIfAborted()
   const { executionId } = request
   const abortHandler = () => {
-    void invoke('cancel_skill_script', { executionId }).catch(error => {
+    void platform.invoke.invoke('cancel_skill_script', { executionId }).catch(error => {
       console.error('[skill-runtime] Failed to kill aborted process', error)
     })
   }
   signal?.addEventListener('abort', abortHandler, { once: true })
 
   try {
-    return await invoke<T>(command, { request })
+    return await platform.invoke.invoke<T>(command, { request })
   } finally {
     signal?.removeEventListener('abort', abortHandler)
   }

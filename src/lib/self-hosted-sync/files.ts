@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { getDb } from '@/db'
 import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
@@ -39,7 +39,7 @@ export async function moveSelfHostedWorkspacePath(sourceRelativePath: string, ta
   const normalizedSourcePath = workspaceRelativePath(sourceRelativePath, workspaceRoot)
   const normalizedTargetPath = workspaceRelativePath(targetRelativePath, workspaceRoot)
   if (!normalizedSourcePath || !normalizedTargetPath) return false
-  await withSelfHostedPrepareLock(workspaceId, () => invoke('self_hosted_move_path', {
+  await withSelfHostedPrepareLock(workspaceId, () => platform.invoke.invoke('self_hosted_move_path', {
     workspaceId,
     workspaceRoot,
     sourceRelativePath: normalizedSourcePath,
@@ -62,13 +62,13 @@ export async function writeSelfHostedWorkspaceText(relativePath: string, content
   const bytes = new TextEncoder().encode(content)
   let binary = ''
   bytes.forEach(byte => { binary += String.fromCharCode(byte) })
-  await invoke('self_hosted_atomic_write', {
+  await platform.invoke.invoke('self_hosted_atomic_write', {
     workspaceId: binding.workspaceId,
     objectId: mappings[0]?.objectId ?? null,
     workspaceRoot: binding.workspaceRoot,
     relativePath: normalizedPath,
     contents: btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''),
-    expectedHash: await invoke<string>('self_hosted_sha256', { value: content }),
+    expectedHash: await platform.invoke.invoke<string>('self_hosted_sha256', { value: content }),
   })
   return true
 }
@@ -98,7 +98,7 @@ export async function deleteSelfHostedWorkspacePath(
   )
   const mapping = mappings.find(item => item.relativePath === normalizedPath)
   if (mapping?.kind === 'folder' || (!mapping && pathKind === 'folder')) {
-    await invoke('self_hosted_delete_directory', {
+    await platform.invoke.invoke('self_hosted_delete_directory', {
       workspaceId: binding.workspaceId,
       objectId: mapping?.objectId ?? null,
       workspaceRoot: binding.workspaceRoot,
@@ -106,7 +106,7 @@ export async function deleteSelfHostedWorkspacePath(
       allowNonEmpty: true,
     })
   } else {
-    await invoke('self_hosted_delete_file', {
+    await platform.invoke.invoke('self_hosted_delete_file', {
       workspaceId: binding.workspaceId,
       objectId: mapping?.objectId ?? null,
       workspaceRoot: binding.workspaceRoot,

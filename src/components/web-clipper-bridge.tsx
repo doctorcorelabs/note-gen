@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { listen } from '@tauri-apps/api/event'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
@@ -182,7 +182,7 @@ async function resolveRequest(
   result?: unknown,
   error?: BridgeError
 ) {
-  await invoke('resolve_web_clipper_request', {
+  await platform.invoke.invoke('resolve_web_clipper_request', {
     body: {
       requestId,
       result: result ?? null,
@@ -392,12 +392,12 @@ export function WebClipperBridge() {
           }
         })()
       })
-      await invoke('set_web_clipper_ready', { ready: true })
+      await platform.invoke.invoke('set_web_clipper_ready', { ready: true })
 
       if (disposed) {
         unlistenPairing?.()
         unlistenRequest?.()
-        await invoke('set_web_clipper_ready', { ready: false })
+        await platform.invoke.invoke('set_web_clipper_ready', { ready: false })
       }
     }
 
@@ -406,7 +406,7 @@ export function WebClipperBridge() {
       disposed = true
       unlistenPairing?.()
       unlistenRequest?.()
-      void invoke('set_web_clipper_ready', { ready: false })
+      void platform.invoke.invoke('set_web_clipper_ready', { ready: false })
     }
   }, [t, toast])
 
@@ -414,7 +414,7 @@ export function WebClipperBridge() {
     if (!pairing || responding) return
     setResponding(true)
     try {
-      await invoke(approved ? 'approve_web_clipper_pairing' : 'reject_web_clipper_pairing', {
+      await platform.invoke.invoke(approved ? 'approve_web_clipper_pairing' : 'reject_web_clipper_pairing', {
         id: pairing.id,
       })
       setPairing(null)

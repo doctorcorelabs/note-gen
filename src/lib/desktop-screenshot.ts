@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 
 export interface DesktopScreenshotResult {
   sessionId: string
@@ -16,7 +16,7 @@ let opening: Promise<string> | undefined
 
 export function beginDesktopScreenshot() {
   if (!opening) {
-    opening = invoke<string>('begin_desktop_screenshot').finally(() => {
+    opening = platform.invoke.invoke<string>('begin_desktop_screenshot').finally(() => {
       opening = undefined
     })
   }

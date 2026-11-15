@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { appDataDir, join } from '@tauri-apps/api/path'
 import { open } from '@tauri-apps/plugin-dialog'
 import { mkdir } from '@tauri-apps/plugin-fs'
@@ -76,7 +76,7 @@ export function SkillInstallActions({
 
       setIsImporting(true)
       const workspace = scope === 'project' ? await getWorkspacePath() : null
-      const skillName = await invoke<string>('import_skill', {
+      const skillName = await platform.invoke.invoke<string>('import_skill', {
         sourcePath,
         sourceKind,
         scope,

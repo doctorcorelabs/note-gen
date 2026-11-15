@@ -1,4 +1,4 @@
-import { fetch } from '@tauri-apps/plugin-http'
+import { platform } from '@/lib/platform'
 import type {
   ApiErrorBody, ClientSession, ServerCapabilities, SyncCommandResult,
   SyncBootstrapPage, SyncEventsPage, SyncSession, WorkspaceCapability,
@@ -340,7 +340,7 @@ export class SelfHostedClient {
 
   async uploadBlobPart(workspaceId: string, uploadId: string, partNumber: number, bytes: Uint8Array, signal?: AbortSignal) {
     return boundedRequest(async requestSignal => {
-      const response = await fetch(
+      const response = await platform.http.fetch(
         `${this.baseUrl}/v1/workspaces/${workspaceId}/blobs/uploads/${uploadId}/parts/${partNumber}`,
         {
           method: 'PUT',
@@ -373,7 +373,7 @@ export class SelfHostedClient {
 
   async downloadBlob(workspaceId: string, blobId: string, signal?: AbortSignal) {
     return boundedRequest(async requestSignal => {
-      const response = await fetch(`${this.baseUrl}/v1/workspaces/${workspaceId}/blobs/${blobId}`, {
+      const response = await platform.http.fetch(`${this.baseUrl}/v1/workspaces/${workspaceId}/blobs/${blobId}`, {
         signal: requestSignal,
         connectTimeout: 15_000,
         maxRedirections: 0,
@@ -490,7 +490,7 @@ export class SelfHostedClient {
     signal?: AbortSignal
   } = {}): Promise<T> {
     return boundedRequest(async signal => {
-      const response = await fetch(`${this.baseUrl}${path}`, {
+      const response = await platform.http.fetch(`${this.baseUrl}${path}`, {
         method: options.method ?? 'GET',
         signal,
         connectTimeout: 15_000,

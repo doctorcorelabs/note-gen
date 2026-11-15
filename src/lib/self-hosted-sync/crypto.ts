@@ -1,5 +1,5 @@
 import { parseSyncJson } from '@/lib/sync/remote-file'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { secureGet } from './profile'
 
 export interface EncryptedPayload {
@@ -15,11 +15,11 @@ export function objectAssociatedData(workspaceId: string, objectId: string, kind
 }
 
 export function structuredObjectId(workspaceId: string, domain: string, localKey: string) {
-  return invoke<string>('self_hosted_structured_object_id', { workspaceId, domain, localKey })
+  return platform.invoke.invoke<string>('self_hosted_structured_object_id', { workspaceId, domain, localKey })
 }
 
 export async function encryptJson(key: string, value: unknown, associatedData: string) {
-  return invoke<EncryptedPayload>('self_hosted_encrypt', {
+  return platform.invoke.invoke<EncryptedPayload>('self_hosted_encrypt', {
     key,
     plaintext: JSON.stringify(value),
     associatedData,
@@ -32,7 +32,7 @@ export async function decryptJson<T>(
   ciphertext: string,
   associatedData: string,
 ): Promise<T> {
-  const plaintext = await invoke<string>('self_hosted_decrypt', {
+  const plaintext = await platform.invoke.invoke<string>('self_hosted_decrypt', {
     key, nonce, ciphertext, associatedData,
   })
   return parseSyncJson<T>(plaintext, `selfHosted / ${associatedData}`)
@@ -44,7 +44,7 @@ export function decryptText(
   ciphertext: string,
   associatedData: string,
 ) {
-  return invoke<string>('self_hosted_decrypt', {
+  return platform.invoke.invoke<string>('self_hosted_decrypt', {
     key, nonce, ciphertext, associatedData,
   })
 }
@@ -54,7 +54,7 @@ export async function decryptPackedJson<T>(
   packedCiphertext: string,
   associatedData: string,
 ): Promise<T> {
-  const plaintext = await invoke<string>('self_hosted_decrypt_packed', {
+  const plaintext = await platform.invoke.invoke<string>('self_hosted_decrypt_packed', {
     key, packedCiphertext, associatedData,
   })
   return parseSyncJson<T>(plaintext, `selfHosted / ${associatedData}`)

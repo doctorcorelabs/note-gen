@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { join } from '@tauri-apps/api/path'
 import { exists, remove } from '@tauri-apps/plugin-fs'
 
@@ -36,7 +36,7 @@ export async function moveEntriesToSystemTrash(relativePaths: string[], workspac
     if (isMobileDevice()) {
       for (const path of paths) await remove(path, { recursive: true })
     } else {
-      await invoke('move_paths_to_trash', { paths })
+      await platform.invoke.invoke('move_paths_to_trash', { paths })
     }
   }
   return journaled + paths.length

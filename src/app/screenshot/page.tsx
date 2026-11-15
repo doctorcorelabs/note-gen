@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from 'react'
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { Image as TauriImage } from '@tauri-apps/api/image'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
@@ -180,7 +181,7 @@ export default function ScreenshotPage() {
     if (busyRef.current) return
     try {
       const sessionId = context?.sessionId || new URLSearchParams(window.location.search).get('sessionId')
-      if (sessionId) await invoke('cancel_desktop_screenshot', { sessionId })
+      if (sessionId) await platform.invoke.invoke('cancel_desktop_screenshot', { sessionId })
       else await getCurrentWindow().close()
     } catch (cause) {
       console.error('Unable to cancel screenshot:', cause)
@@ -199,29 +200,29 @@ export default function ScreenshotPage() {
     try {
       const png = await exportScreenshot(imageRef.current, viewport, current.selection, current.annotations)
       if (action === 'pin') {
-        await invoke('pin_screenshot', { sessionId: context.sessionId, pngBase64: bytesToBase64(png) })
+        await platform.invoke.invoke('pin_screenshot', { sessionId: context.sessionId, pngBase64: bytesToBase64(png) })
         completed = true
       } else if (action === 'record') {
-        await invoke('complete_desktop_screenshot', { sessionId: context.sessionId, pngBase64: bytesToBase64(png) })
+        await platform.invoke.invoke('complete_desktop_screenshot', { sessionId: context.sessionId, pngBase64: bytesToBase64(png) })
         completed = true
       } else if (action === 'copy') {
         const image = await TauriImage.fromBytes(png)
         try { await writeImage(image) } finally { await image.close() }
-        await invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
+        await platform.invoke.invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
         completed = true
       } else {
         const filename = `NoteGen-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
         let path: string | null
         // Native save panels must sit above the capture windows, including macOS shielding windows.
-        await invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: true })
+        await platform.invoke.invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: true })
         try {
           path = await save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] })
         } finally {
-          await invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: false })
+          await platform.invoke.invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: false })
         }
         if (path) {
           await writeFile(path, png)
-          await invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
+          await platform.invoke.invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
           completed = true
         }
       }
@@ -256,7 +257,7 @@ export default function ScreenshotPage() {
     // The main window reports the error without coming to the foreground.
     const sessionId = new URLSearchParams(window.location.search).get('sessionId')
     if (sessionId) {
-      try { await invoke('fail_desktop_screenshot', { sessionId }) }
+      try { await platform.invoke.invoke('fail_desktop_screenshot', { sessionId }) }
       catch (closeError) { console.error('Unable to release failed screenshot:', closeError) }
     }
   }, [t])
@@ -267,7 +268,7 @@ export default function ScreenshotPage() {
     const initialise = async () => {
       document.documentElement.style.fontSize = '100%'
       setViewport({ width: window.innerWidth, height: window.innerHeight })
-      const next = await invoke<ScreenshotContext>('get_desktop_screenshot')
+      const next = await platform.invoke.invoke<ScreenshotContext>('get_desktop_screenshot')
       if (disposed) return
       const requestedSession = new URLSearchParams(window.location.search).get('sessionId')
       if (!requestedSession || requestedSession !== next.sessionId) throw new Error('Expired screenshot session')
@@ -286,7 +287,7 @@ export default function ScreenshotPage() {
       setReady(true)
       unlisten = await getCurrentWindow().onCloseRequested(event => {
         event.preventDefault()
-        if (!busyRef.current) void invoke('cancel_desktop_screenshot', { sessionId: next.sessionId }).catch(cause => {
+        if (!busyRef.current) void platform.invoke.invoke('cancel_desktop_screenshot', { sessionId: next.sessionId }).catch(cause => {
           console.error('Unable to cancel screenshot:', cause)
           setError(t('actionError'))
         })
@@ -385,7 +386,7 @@ export default function ScreenshotPage() {
     let disposed = false
     readySessionRef.current = context.sessionId
     // Hidden webviews may suspend animation frames; the preceding effect has drawn synchronously.
-    void invoke('ready_desktop_screenshot', { sessionId: context.sessionId }).catch(cause => {
+    void platform.invoke.invoke('ready_desktop_screenshot', { sessionId: context.sessionId }).catch(cause => {
       if (!disposed) void reportLoadFailure(cause)
     })
     return () => { disposed = true }

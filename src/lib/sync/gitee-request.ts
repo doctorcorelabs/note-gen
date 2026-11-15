@@ -1,4 +1,5 @@
-import { fetch, type ClientOptions } from '@tauri-apps/plugin-http'
+import type { ClientOptions } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { isRemoteConnectionError } from './remote-mutation-recovery'
 
 export type GiteeReadOptions = Omit<RequestInit, 'method' | 'body'> & ClientOptions
@@ -52,7 +53,7 @@ export async function fetchGiteeRead(url: string, options: GiteeReadOptions = {}
     try {
       // Tauri's wrapper deletes its native options from init. Clone them and
       // Headers for every attempt so retries retain timeouts and proxy settings.
-      return await fetch(url, {
+      return await platform.http.fetch(url, {
         ...readOptions,
         method: 'GET',
         headers: new Headers(readOptions.headers),

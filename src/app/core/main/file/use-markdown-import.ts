@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { copyFile, exists, mkdir, readDir, writeTextFile } from '@tauri-apps/plugin-fs'
 import { appDataDir, join } from '@tauri-apps/api/path'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import { getWorkspacePath } from '@/lib/workspace'
@@ -149,7 +149,7 @@ export function useMarkdownImport() {
       const targetDir = workspace.isCustom
         ? workspace.path
         : await join(await appDataDir(), 'article')
-      const copiedCount = await invoke<number>('import_notion_zip', {
+      const copiedCount = await platform.invoke.invoke<number>('import_notion_zip', {
         zipPath: selectedPath,
         targetDir,
       })

@@ -1,5 +1,6 @@
 import { conditionalHeaders, assertConditionalResponse, type RemoteWriteCondition } from './write-condition'
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { WebDAVConfig } from '@/types/sync'
 import { buildRepoContentPath, debugSyncPath, debugSyncPerf } from './remote-file'
 import { withRemotePathWriteLock } from './remote-write-lock'
@@ -162,7 +163,7 @@ function isPropfindSuccess(status: number) {
 
 async function propfindUrl(url: string, config: WebDAVConfig, proxy?: Proxy) {
   const startedAt = getPerfNow()
-  const response = await fetch(url, {
+  const response = await platform.http.fetch(url, {
     method: 'PROPFIND',
     headers: {
       'Authorization': buildAuthHeader(config.username, config.password),
@@ -256,7 +257,7 @@ async function inspectParentCollection(
 
   const parentKey = getParentKey(key)
   const parentUrl = buildWebDAVUrl(config, parentKey)
-  const response = await fetch(parentUrl, {
+  const response = await platform.http.fetch(parentUrl, {
     method: 'PROPFIND',
     headers: {
       'Authorization': buildAuthHeader(config.username, config.password),
@@ -306,7 +307,7 @@ async function mkcolFullPath(
   const url = `${baseUrl}/${encodedFullPath}`
   const response = await recoverRemoteMutation<Response>({
     beforeWrite,
-    send: () => fetch(url, {
+    send: () => platform.http.fetch(url, {
       method: 'MKCOL', headers: { Authorization: buildAuthHeader(config.username, config.password) }, proxy,
     }),
     reconcile: () => recoverRemoteRead(async () => {
@@ -564,7 +565,7 @@ async function webdavUploadRaw(
     const conditions = conditionalHeaders(frozenCondition)
     const response = await recoverRemoteMutation<Response>({
       beforeWrite,
-      send: () => fetch(url, {
+      send: () => platform.http.fetch(url, {
         method: 'PUT',
         headers: {
           ...conditions, Authorization: buildAuthHeader(config.username, config.password),
@@ -650,7 +651,7 @@ async function webdavDownloadBytesInternal(
 
     const url = buildWebDAVUrl(config, key)
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': buildAuthHeader(config.username, config.password)
@@ -764,7 +765,7 @@ async function webdavDeleteRaw(
     const conditions = conditionalHeaders(frozenCondition)
     const response = await recoverRemoteMutation<Response>({
       beforeWrite,
-      send: () => fetch(url, {
+      send: () => platform.http.fetch(url, {
         method: 'DELETE',
         headers: { ...conditions, Authorization: buildAuthHeader(config.username, config.password) },
         proxy,
@@ -803,7 +804,7 @@ export async function webdavHeadObject(
 
     const url = buildWebDAVUrl(config, key)
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'HEAD',
       headers: {
         'Authorization': buildAuthHeader(config.username, config.password)
@@ -878,7 +879,7 @@ export async function webdavListObjects(
     })
 
     const directoryUrl = `${baseUrl}/${encodedFullPrefix}`
-    const response = await fetch(directoryUrl, {
+    const response = await platform.http.fetch(directoryUrl, {
       method: 'PROPFIND',
       headers: {
         'Authorization': buildAuthHeader(config.username, config.password),
@@ -1126,7 +1127,7 @@ async function webdavMovePathRaw(
       controller = new AbortController()
       timeout = setTimeout(() => controller.abort(), 15_000)
     }
-    const send = () => fetch(url, {
+    const send = () => platform.http.fetch(url, {
       method, headers: { ...headers, ...extraHeaders }, body,
       proxy, signal: controller.signal, connectTimeout: 15_000,
       // Never forward credentials or a mutation across an HTTP redirect.
@@ -1153,7 +1154,7 @@ async function webdavMovePathRaw(
             throw failure(stage, '服务端返回了不同路径的重定向，待办已保留')
           }
           await current()
-          response = await fetch(redirected.toString(), {
+          response = await platform.http.fetch(redirected.toString(), {
             method, headers: { ...headers, ...extraHeaders }, body,
             proxy, signal: controller.signal, connectTimeout: 15_000, maxRedirections: 0,
           })

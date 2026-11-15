@@ -1,5 +1,5 @@
 import { getDb } from '@/db'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { encryptJson, decryptPackedJson, encodeUtf8Base64Url, loadWorkspaceKey, objectAssociatedData } from './crypto'
 import { getSelfHostedSyncRuntime } from './runtime'
@@ -222,10 +222,10 @@ async function openCollaborativeBinding(binding: DocumentBinding, generationActi
       await assertCollaborationEntry()
       await assertBindingPermissions(binding)
       assertActive()
-      await invoke('self_hosted_atomic_write', {
+      await platform.invoke.invoke('self_hosted_atomic_write', {
         workspaceId: binding.workspaceId, objectId: null, workspaceRoot: input.localRoot,
         relativePath: input.relativePath, contents: encodeUtf8Base64Url(input.local),
-        expectedHash: await invoke<string>('self_hosted_sha256', { value: input.local }),
+        expectedHash: await platform.invoke.invoke<string>('self_hosted_sha256', { value: input.local }),
       })
       const database = await getDb()
       assertActive()
@@ -643,7 +643,7 @@ async function assertBindingPermissions(binding: DocumentBinding, writing = fals
 
 async function resolveDocument(localRoot: string, relativePath: string, assertActive: () => void): Promise<DocumentBinding> {
   const database = await getDb()
-  const portable = await invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', {
+  const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', {
     relativePath,
   })
   const rows = await database.select<Array<{ workspaceId: string; objectId: string }>>(

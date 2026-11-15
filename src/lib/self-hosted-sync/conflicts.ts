@@ -1,5 +1,5 @@
 import * as Y from 'yjs'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { BaseDirectory, exists, mkdir, readTextFile, writeFile } from '@tauri-apps/plugin-fs'
 import { join } from '@tauri-apps/api/path'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
@@ -202,7 +202,7 @@ async function loadRemote(row: ConflictRow) {
 export async function loadSelfHostedNoteConflict(id: string): Promise<SelfHostedNoteConflictPreview> {
   const row = (await conflictRows(id))[0]
   if (!row || !workspaceRootsReferToSameLocation(await getCurrentEditorWorkspaceRoot(), row.localRoot)) throw new Error(UNAVAILABLE)
-  const portable = await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: row.relativePath })
+  const portable = await platform.invoke.invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: row.relativePath })
   if (portable.normalized !== row.relativePath) throw new Error(UNAVAILABLE)
   const absolutePath = await join(row.localRoot, row.relativePath)
   const localFileContent = await exists(absolutePath) ? await readTextFile(absolutePath) : null
@@ -392,7 +392,7 @@ export async function resolveSelfHostedNoteConflict(
         })
         // Do not call isCurrent after installing our own editor content.
         const revision = (BigInt(fresh.remoteRevision) + BigInt(1)).toString()
-        const hash = await invoke<string>('self_hosted_sha256', { value: content })
+        const hash = await platform.invoke.invoke<string>('self_hosted_sha256', { value: content })
         const statements: RecordStatement[] = [
           { sql: `insert or replace into self_hosted_revisions(workspace_id,object_id,revision,sequence,content_hash,snapshot,created_at)
               values($1,$2,$3,$4,$5,$6,$7)`, values: [preview.workspaceId, preview.objectId, revision, accepted.sequence, hash, content, now] },

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type FormEvent } from 'react'
 import Image from 'next/image'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { listen } from '@tauri-apps/api/event'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { ArrowLeft, ArrowRight, Bookmark, ChevronDown, ChevronRight, CircleAlert, Clock3, ExternalLink, Globe2, House, RotateCw, Search, Star, X } from 'lucide-react'
@@ -185,7 +185,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
   const requestNativeVisibility = useCallback((requested: boolean) => {
     visibilityPromiseRef.current = visibilityPromiseRef.current.catch(() => {}).then(async () => {
       if (!createdRef.current || disposedRef.current) return
-      await invoke('browser_set_visible', {
+      await platform.invoke.invoke('browser_set_visible', {
         tabId,
         visible: requested && visibleRef.current && geometryVisibleRef.current,
       })
@@ -196,7 +196,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
   const refreshHistoryState = useCallback(() => {
     if (!createdRef.current || disposedRef.current) return
     const version = ++historyRequestVersionRef.current
-    void invoke<BrowserHistoryState>('browser_history_state', { tabId }).then(state => {
+    void platform.invoke.invoke<BrowserHistoryState>('browser_history_state', { tabId }).then(state => {
       if (version === historyRequestVersionRef.current && !disposedRef.current && createdRef.current) {
         setHistoryState(state)
       }
@@ -225,7 +225,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
 
   useEffect(() => {
     if (!nativeTheme || !checkIsTauri()) return
-    void invoke('browser_set_theme', { theme: nativeTheme }).catch(reason => setError(String(reason)))
+    void platform.invoke.invoke('browser_set_theme', { theme: nativeTheme }).catch(reason => setError(String(reason)))
   }, [nativeTheme])
 
   useEffect(() => {
@@ -261,7 +261,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
       if (overlayActiveRef.current) return
       overlayActiveRef.current = true
       const version = ++overlayVersionRef.current
-      void invoke<string>('browser_snapshot', { tabId }).then(snapshot => {
+      void platform.invoke.invoke<string>('browser_snapshot', { tabId }).then(snapshot => {
         if (overlayVersionRef.current !== version || disposedRef.current) return
         setPageSnapshot(snapshot)
         setOverlayOpen(true)
@@ -329,23 +329,23 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
     if (!bounds) return
     creatingRef.current = true
     setError('')
-    void invoke('browser_create', { tabId, url, theme: nativeTheme, ...bounds }).then(async () => {
+    void platform.invoke.invoke('browser_create', { tabId, url, theme: nativeTheme, ...bounds }).then(async () => {
       createdRef.current = true
       if (!disposedRef.current) setNativeReady(true)
       if (latestThemeRef.current && latestThemeRef.current !== nativeTheme) {
-        await invoke('browser_set_theme', { theme: latestThemeRef.current }).catch(reason => {
+        await platform.invoke.invoke('browser_set_theme', { theme: latestThemeRef.current }).catch(reason => {
           if (!disposedRef.current) setError(String(reason))
         })
       }
       if (disposedRef.current) {
         if (!useArticleStore.getState().openTabs.some(tab => tab.id === tabId)) {
-          await invoke('browser_close', { tabId })
+          await platform.invoke.invoke('browser_close', { tabId })
         }
         return
       }
       if (!visibleRef.current) await requestNativeVisibility(false)
       const nextUrl = desiredUrlRef.current
-      if (nextUrl && nextUrl !== url) await invoke('browser_navigate', { tabId, url: nextUrl })
+      if (nextUrl && nextUrl !== url) await platform.invoke.invoke('browser_navigate', { tabId, url: nextUrl })
     }).catch(reason => {
       if (!disposedRef.current) setError(String(reason))
     }).finally(() => { creatingRef.current = false })
@@ -359,7 +359,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
         : measureBrowserBounds(slotRef.current)
       : null
     const update = shown && bounds
-      ? invoke('browser_set_bounds', { tabId, ...bounds }).then(() => {
+      ? platform.invoke.invoke('browser_set_bounds', { tabId, ...bounds }).then(() => {
         lastBoundsRef.current = bounds
         geometryVisibleRef.current = true
         return requestNativeVisibility(true)
@@ -388,7 +388,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
         const previous = lastBoundsRef.current
         if (!previous || Object.keys(next).some(key => Math.abs(next[key as keyof Bounds] - previous[key as keyof Bounds]) > 0.5)) {
           lastBoundsRef.current = next
-          void invoke('browser_set_bounds', { tabId, ...next }).then(() => {
+          void platform.invoke.invoke('browser_set_bounds', { tabId, ...next }).then(() => {
             if (!geometryVisibleRef.current) {
               geometryVisibleRef.current = true
               return requestNativeVisibility(true)
@@ -410,7 +410,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
     const syncUrl = () => {
       refreshHistoryState()
       const version = locationVersionRef.current
-      void invoke<string>('browser_get_url', { tabId }).then(currentUrl => {
+      void platform.invoke.invoke<string>('browser_get_url', { tabId }).then(currentUrl => {
         if (!normalizeAddress(currentUrl) || disposedRef.current || version !== locationVersionRef.current) return
         if (!homeVisibleRef.current && document.activeElement !== inputRef.current) setAddress(currentUrl)
         const title = browserTabTitle(tabId, currentUrl)
@@ -451,7 +451,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
     }
     if (!nativeReady || homeVisible) return
     try {
-      const moved = await invoke<boolean>('browser_history', { tabId, direction })
+      const moved = await platform.invoke.invoke<boolean>('browser_history', { tabId, direction })
       if (!moved && direction === 'back') showHome()
     } catch (reason) {
       setError(String(reason))
@@ -472,7 +472,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
       if (homeVisibleRef.current && createdRef.current) {
         resettingRef.current = true
         await requestNativeVisibility(false)
-        await invoke('browser_close', { tabId })
+        await platform.invoke.invoke('browser_close', { tabId })
         createdRef.current = false
         setNativeReady(false)
         setHistoryState({ canGoBack: false, canGoForward: false })
@@ -485,7 +485,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
         resettingRef.current = false
         await update
       } else if (createdRef.current) {
-        await invoke('browser_navigate', { tabId, url: nextUrl })
+        await platform.invoke.invoke('browser_navigate', { tabId, url: nextUrl })
       } else {
         const update = updateBrowserTab(tabId, nextUrl, browserTitle(nextUrl))
         if (homeVisibleRef.current) {
@@ -590,7 +590,7 @@ export function BrowserPanel({ tabId, url, visible }: { tabId: string; url?: str
 
   const runBrowserCommand = useCallback((command: string, values?: Record<string, string>) => {
     if (!nativeReady) return
-    void invoke(command, { tabId, ...values }).catch(reason => {
+    void platform.invoke.invoke(command, { tabId, ...values }).catch(reason => {
       setError(String(reason))
       toast.error(t('browserOpenFailed'))
     })

@@ -7,7 +7,8 @@ import { toast } from '@/hooks/use-toast';
 import { Store } from '@tauri-apps/plugin-store';
 import { v4 as uuid } from 'uuid';
 import { GithubError, GithubRepoInfo, OctokitResponse } from './github.types';
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { buildRepoContentPath, buildRepoContentsEndpoint, buildRemoteLogicalPath, debugSyncPath, readSyncResponseJson, syncDataError, encodeRemoteFileContent, decodeBase64ToBytes } from './remote-file'
 import { readGitTreeDirectory, readDirectoryResponse, remoteRecord } from './directory-listing'
 export { decodeBase64ToString } from './remote-file';
@@ -148,7 +149,7 @@ export async function uploadFile(
       const logicalPath = buildRemoteLogicalPath({ path, filename }).split('/').filter(Boolean).join('/')
       const body = JSON.stringify({ message: message || `Upload ${filename || id}`, content: base64Content, sha, branch: branch || undefined })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(url, { method: 'PUT', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(url, { method: 'PUT', headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGithubMutation(baseUrl, logicalPath, branch, headers, proxy, sha || null, desiredVersion),
       });
       if (guarded) assertConditionalResponse(response, { version: sha || null });
@@ -186,7 +187,7 @@ export async function getDirectoryFiles({ path, repo, cache }: { path: string; r
   const proxyUrl = await store.get<string>('proxy')
   const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
   const baseUrl = `https://api.github.com/repos/${encodeURIComponent(username)}/${encodeURIComponent(repo)}`
-  return readGitTreeDirectory(path, resource => fetch(`${baseUrl}${resource}`, {
+  return readGitTreeDirectory(path, resource => platform.http.fetch(`${baseUrl}${resource}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -235,7 +236,7 @@ export async function getFiles({ path, repo, ref }: { path: string, repo: string
     const url = `https://api.github.com/repos/${githubUsername}/${repo}/contents/${encodedPath}${refParam}`;
     
     try {
-      const response = await fetch(url, requestOptions);
+      const response = await platform.http.fetch(url, requestOptions);
       if (response.status >= 200 && response.status < 300) {
         const data = await readSyncResponseJson(response, `github / ${path}`);
         // Contents omits inline data for large files (encoding: "none").
@@ -249,7 +250,7 @@ export async function getFiles({ path, repo, ref }: { path: string, repo: string
           const rawHeaders = new Headers(headers)
           rawHeaders.set('Accept', 'application/vnd.github.raw+json')
           const rawUrl = `https://api.github.com/repos/${encodeURIComponent(String(githubUsername))}/${encodeURIComponent(repo)}/git/blobs/${data.sha}`
-          const rawResponse = await fetch(rawUrl, { ...requestOptions, headers: rawHeaders })
+          const rawResponse = await platform.http.fetch(rawUrl, { ...requestOptions, headers: rawHeaders })
           if (!rawResponse.ok) throw new Error(`github / ${path}: HTTP ${rawResponse.status}`)
           const bytes = new Uint8Array(await rawResponse.arrayBuffer())
           if (typeof data.size === 'number' && bytes.length !== data.size) {
@@ -301,7 +302,7 @@ export async function deleteFile(
       const logicalPath = buildRemoteLogicalPath({ path, preserveWhitespace: true }).split('/').filter(Boolean).join('/')
       const body = JSON.stringify({ sha, branch, message: `Delete ${path}` })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(url, { method: 'DELETE', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(url, { method: 'DELETE', headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGithubMutation(baseUrl, logicalPath, branch, headers, proxy, sha),
       });
 
@@ -354,7 +355,7 @@ export async function getFileCommits({ path, repo }: { path: string, repo: strin
       commitPath,
     })
     const url = `https://api.github.com/repos/${githubUsername}/${repo}/commits?path=${commitPath}&per_page=100`;
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
 
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json();
@@ -396,7 +397,7 @@ export async function getUserInfo(token?: string) {
     };
     
     const url = 'https://api.github.com/user';
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
     
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json();
@@ -438,7 +439,7 @@ export async function checkSyncRepoState(name: string) {
   };
   
   const url = `https://api.github.com/repos/${githubUsername}/${name}`;
-  const response = await fetch(url, requestOptions);
+  const response = await platform.http.fetch(url, requestOptions);
   
   if (response.status >= 200 && response.status < 300) {
     const data = await response.json();
@@ -462,7 +463,7 @@ export async function listUserRepositories(): Promise<string[]> {
   headers.append('Accept', 'application/vnd.github+json')
   headers.append('X-GitHub-Api-Version', '2022-11-28')
 
-  const response = await fetch(
+  const response = await platform.http.fetch(
     'https://api.github.com/user/repos?affiliation=owner&sort=updated&per_page=100',
     { method: 'GET', headers, proxy }
   )
@@ -506,7 +507,7 @@ export async function createSyncRepo(name: string, isPrivate?: boolean) {
     };
     
     const url = 'https://api.github.com/user/repos';
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
     
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json() as GithubRepoInfo;
@@ -546,7 +547,7 @@ export async function getRelease(): Promise<GithubRelease | false | undefined> {
     };
     
     const url = `https://api.github.com/repos/codexu/note-gen/releases/latest`;
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
     
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json() as GithubRelease;
@@ -597,7 +598,7 @@ export async function getReleases(options: GetReleasesOptions = {}): Promise<Git
     };
 
     const url = `https://api.github.com/repos/codexu/note-gen/releases?per_page=100`;
-    const response = await fetch(url, requestOptions);
+    const response = await platform.http.fetch(url, requestOptions);
 
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json() as GithubRelease[];

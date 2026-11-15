@@ -1,5 +1,6 @@
 import { exists, lstat } from '@tauri-apps/plugin-fs'
-import { invoke } from '@tauri-apps/api/core'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import emitter from '@/lib/emitter'
 import { getFilePathOptions } from '@/lib/workspace'
@@ -8,7 +9,6 @@ import { getPathMoveConfiguration, type PathMoveProvider } from './path-move-con
 import { moveGitPlatformPath, isGitPlatformPathSnapshot } from './git-platform-path-move'
 import { s3MovePath, type S3PathIdentity } from './s3'
 import { moveCloudFolderPath } from './cloud-folder-path-move'
-import type { Proxy } from '@tauri-apps/plugin-http'
 import { webdavMovePath, type WebDAVPathIdentity } from './webdav'
 import { syncStaleError } from './sync-stale-error'
 import { moveGithubPath, type GitPathEntry } from './github-path-migration-commit'
@@ -148,8 +148,8 @@ export async function withWorkspacePathMoves<T>(
       if (context.provider === 'selfHosted') {
         // Reject an invalid destination before persisting a rename intent or
         // changing local files. Legacy source names may be repaired in place.
-        await invoke<string>('self_hosted_move_source_path', { relativePath: source })
-        await invoke('self_hosted_portable_path', { relativePath: target })
+        await platform.invoke.invoke<string>('self_hosted_move_source_path', { relativePath: source })
+        await platform.invoke.invoke('self_hosted_portable_path', { relativePath: target })
       }
       const options = await getFilePathOptions(source)
       const info = await lstat(options.path, { baseDir: options.baseDir })

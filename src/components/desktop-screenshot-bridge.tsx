@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { BaseDirectory, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
@@ -51,7 +51,7 @@ async function getScreenshotSaveTarget(sessionId: string) {
 
 async function acknowledgeScreenshot(sessionId: string) {
   try {
-    await invoke('remove_desktop_screenshot_result', { sessionId })
+    await platform.invoke.invoke('remove_desktop_screenshot_result', { sessionId })
     const store = await Store.load('desktop-screenshot.json')
     await store.delete(sessionId)
     await store.save()
@@ -297,7 +297,7 @@ export function DesktopScreenshotBridge({ ready }: { ready: boolean }) {
 
     void saveScreenshot(result).catch(async error => {
       console.error('Failed to save desktop screenshot:', error)
-      await invoke('fail_pinned_screenshot_record', { sessionId: result.sessionId }).catch(notifyError => {
+      await platform.invoke.invoke('fail_pinned_screenshot_record', { sessionId: result.sessionId }).catch(notifyError => {
         console.error('Failed to notify pinned screenshot of record save failure:', notifyError)
       })
       void notifyScreenshotResult({
@@ -351,7 +351,7 @@ export function DesktopScreenshotBridge({ ready }: { ready: boolean }) {
       unlisteners.push(unlistenError)
 
       // Listening first closes the gap between fetching pending results and a live completion.
-      const pending = await invoke<DesktopScreenshotResult[]>('drain_desktop_screenshot_results')
+      const pending = await platform.invoke.invoke<DesktopScreenshotResult[]>('drain_desktop_screenshot_results')
       if (!cancelled) pending.forEach(result => acceptResultRef.current(result))
     }
 

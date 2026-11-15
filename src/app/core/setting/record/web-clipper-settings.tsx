@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Download, ExternalLink, Scissors } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -30,7 +30,7 @@ export function WebClipperSettings() {
 
   useEffect(() => {
     let disposed = false
-    void invoke<WebClipperStatus>('get_web_clipper_status')
+    void platform.invoke.invoke<WebClipperStatus>('get_web_clipper_status')
       .then(status => {
         if (!disposed) setEnabledState(status.enabled)
       })
@@ -54,7 +54,7 @@ export function WebClipperSettings() {
   async function setEnabled(enabled: boolean) {
     setUpdating(true)
     try {
-      await invoke('set_web_clipper_enabled', { enabled })
+      await platform.invoke.invoke('set_web_clipper_enabled', { enabled })
       setEnabledState(enabled)
     } catch (error) {
       toast({

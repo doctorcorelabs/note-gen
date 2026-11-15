@@ -1,4 +1,4 @@
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
+import { platform } from '@/lib/platform'
 
 import type {
   ConfigCenterConfigKey,
@@ -13,7 +13,7 @@ const CONFIG_CENTER_MODEL_POLICY_URL = 'https://download.notegen.top/config/v1/n
 const CONFIG_CENTER_MANIFEST_TIMEOUT_MS = 3000
 const CONFIG_CENTER_CONFIG_TIMEOUT_MS = 5000
 
-type HttpFetchOptions = NonNullable<Parameters<typeof httpFetch>[1]>
+type HttpFetchOptions = NonNullable<Parameters<typeof platform.http.fetch>[1]>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -74,7 +74,7 @@ export async function fetchWithTimeout(
   url: string,
   init: HttpFetchOptions,
   timeoutMs: number,
-): Promise<Awaited<ReturnType<typeof httpFetch>>> {
+): Promise<Awaited<ReturnType<typeof platform.http.fetch>>> {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
   let timeoutId: ReturnType<typeof setTimeout> | undefined
 
@@ -92,7 +92,7 @@ export async function fetchWithTimeout(
       timeout: timeoutMs,
     } as HttpFetchOptions
 
-    return await Promise.race([httpFetch(url, options), timeoutPromise])
+    return await Promise.race([platform.http.fetch(url, options), timeoutPromise])
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId)

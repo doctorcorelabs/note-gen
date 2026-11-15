@@ -1,5 +1,6 @@
 import { conditionalHeaders, assertConditionalResponse, type RemoteWriteCondition } from './write-condition'
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { S3Config } from '@/types/sync'
 import { buildRepoContentPath, debugSyncPath, debugSyncPerf } from './remote-file'
 import { withRemotePathWriteLock } from './remote-write-lock'
@@ -315,7 +316,7 @@ async function testS3ConnectionRaw(config: S3Config, proxy?: Proxy): Promise<boo
     requestHeaders.append('X-Amz-Date', amzDate)
     requestHeaders.append('X-Amz-Content-Sha256', payloadHashHex)
 
-    const response = await fetch(baseUrl, {
+    const response = await platform.http.fetch(baseUrl, {
       method: method,
       headers: requestHeaders,
       proxy
@@ -348,7 +349,7 @@ async function testS3ConnectionRaw(config: S3Config, proxy?: Proxy): Promise<boo
       requestPutHeaders.append('Content-Type', 'text/plain')
       requestPutHeaders.append('X-Amz-Content-Sha256', hashPut)
 
-      const putResponse = await fetch(testUrl, {
+      const putResponse = await platform.http.fetch(testUrl, {
         method: 'PUT',
         headers: requestPutHeaders,
         body: testContent,
@@ -369,7 +370,7 @@ async function testS3ConnectionRaw(config: S3Config, proxy?: Proxy): Promise<boo
           requestDelHeaders.append('X-Amz-Date', dateDel)
           requestDelHeaders.append('X-Amz-Content-Sha256', hashDel)
 
-          await fetch(testUrl, {
+          await platform.http.fetch(testUrl, {
             method: 'DELETE',
             headers: requestDelHeaders,
             proxy
@@ -488,7 +489,7 @@ async function s3UploadRaw(
           'Content-Type': contentType, 'X-Amz-Content-Sha256': payloadHashHex,
         })
       },
-      send: () => fetch(url, { method: 'PUT', headers: requestHeaders, body: contentBytes, proxy }),
+      send: () => platform.http.fetch(url, { method: 'PUT', headers: requestHeaders, body: contentBytes, proxy }),
       reconcile: async () => {
         // ETags are version validators, never hashes of the uploaded bytes.
         const remote = await recoverRemoteRead(() => s3DownloadBytesInternal(config, key, proxy))
@@ -578,7 +579,7 @@ async function s3DownloadBytesInternal(
     requestHeaders.append('X-Amz-Date', amzDate)
     requestHeaders.append('X-Amz-Content-Sha256', payloadHashHex)
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'GET',
       headers: requestHeaders,
       proxy
@@ -687,7 +688,7 @@ async function s3DeleteRaw(
           'X-Amz-Content-Sha256': payloadHashHex,
         })
       },
-      send: () => fetch(url, { method: 'DELETE', headers: requestHeaders, proxy }),
+      send: () => platform.http.fetch(url, { method: 'DELETE', headers: requestHeaders, proxy }),
       reconcile: async () => {
         const remote = await recoverRemoteRead(() => s3HeadObject(config, key, proxy))
         if (!remote) return { state: 'applied', value: new Response(null, { status: 204 }) }
@@ -740,7 +741,7 @@ export async function s3ListObjects(
       }
       // 每页的查询参数不同，必须重新签名。
       const { authorization, amzDate } = await generateSignature('GET', url, headers, emptyPayload, config)
-      const response = await fetch(url, {
+      const response = await platform.http.fetch(url, {
         method: 'GET',
         headers: {
           Authorization: authorization,
@@ -853,7 +854,7 @@ export async function s3HeadObject(
     requestHeaders.append('X-Amz-Date', amzDate)
     requestHeaders.append('X-Amz-Content-Sha256', payloadHashHex)
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'HEAD',
       headers: requestHeaders,
       proxy
@@ -986,7 +987,7 @@ async function s3MovePathRaw(
       controller = new AbortController()
       timeout = setTimeout(() => controller.abort(), 15_000)
     }
-    const send = () => fetch(url, {
+    const send = () => platform.http.fetch(url, {
       method, headers: requestHeaders,
       body: method === 'PUT' ? payload : undefined,
       proxy, signal: controller.signal, connectTimeout: 15_000, maxRedirections: 0,

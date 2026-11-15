@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 
@@ -18,12 +18,12 @@ export function LocalMcpBridge() {
         void (async () => {
           try {
             const result = await executeLocalMcpTool(request.toolName, request.arguments)
-            await invoke('resolve_local_mcp_request', {
+            await platform.invoke.invoke('resolve_local_mcp_request', {
               body: { requestId: request.requestId, result },
             })
           } catch (error) {
             try {
-              await invoke('resolve_local_mcp_request', {
+              await platform.invoke.invoke('resolve_local_mcp_request', {
                 body: {
                   requestId: request.requestId,
                   error: {
@@ -38,10 +38,10 @@ export function LocalMcpBridge() {
           }
         })()
       })
-      await invoke('set_local_mcp_ready', { ready: true })
+      await platform.invoke.invoke('set_local_mcp_ready', { ready: true })
       if (disposed) {
         unlisten?.()
-        await invoke('set_local_mcp_ready', { ready: false })
+        await platform.invoke.invoke('set_local_mcp_ready', { ready: false })
       }
     }
 
@@ -49,7 +49,7 @@ export function LocalMcpBridge() {
     return () => {
       disposed = true
       unlisten?.()
-      void invoke('set_local_mcp_ready', { ready: false })
+      void platform.invoke.invoke('set_local_mcp_ready', { ready: false })
     }
   }, [])
 

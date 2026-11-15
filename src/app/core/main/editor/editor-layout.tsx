@@ -18,6 +18,7 @@ import {
 import { Store } from '@tauri-apps/plugin-store'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Layout } from 'react-resizable-panels'
 import { useTranslations } from 'next-intl'
@@ -624,14 +625,14 @@ export function EditorLayout() {
   useEffect(() => {
     const current = new Set(openTabs.filter(isBrowserEditorTab).map(tab => tab.id))
     for (const tabId of previousBrowserTabsRef.current) {
-      if (!current.has(tabId)) void import('@tauri-apps/api/core').then(({ invoke }) => invoke('browser_close', { tabId })).catch(() => {})
+      if (!current.has(tabId)) void platform.invoke.invoke('browser_close', { tabId }).catch(() => {})
     }
     previousBrowserTabsRef.current = current
   }, [isBrowserEditorTab, openTabs])
 
   useEffect(() => () => {
     for (const tabId of previousBrowserTabsRef.current) {
-      void import('@tauri-apps/api/core').then(({ invoke }) => invoke('browser_close', { tabId })).catch(() => {})
+      void platform.invoke.invoke('browser_close', { tabId }).catch(() => {})
     }
   }, [])
   const getRecordIdForTab = useCallback((tab: TabInfo) => tab.markId ?? getRecordIdFromTabPath(tab.path), [])

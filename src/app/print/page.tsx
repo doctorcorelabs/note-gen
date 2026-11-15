@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { useEffect, useState } from 'react'
 
@@ -59,7 +59,7 @@ export default function PrintPage() {
       document.head.replaceWith(exportedDocument.head)
       document.body.replaceWith(exportedDocument.body)
       await waitForPrintResources()
-      await invoke('print_webview', {
+      await platform.invoke.invoke('print_webview', {
         path: printDocument.outputPath,
         eventName: printDocument.completionEvent,
       })

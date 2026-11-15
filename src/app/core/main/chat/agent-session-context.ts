@@ -6,7 +6,7 @@ import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { CanvasSelectionContext } from '@/types/canvas'
 import type { ImageAttachment } from './image-attachments'
 import type { ChatReasoningOverride } from '@/lib/ai/chat-reasoning'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 
 interface BrowserPageContent {
   title: string
@@ -18,7 +18,7 @@ interface BrowserPageContent {
 export async function buildBrowserPageContext(tabId: string | null, expectedUrl?: string) {
   if (!tabId) return ''
   try {
-    const page = await invoke<BrowserPageContent>('browser_get_content', { tabId })
+    const page = await platform.invoke.invoke<BrowserPageContent>('browser_get_content', { tabId })
     const url = new URL(page.url)
     if (!['http:', 'https:'].includes(url.protocol)) return ''
     if (expectedUrl && url.href !== expectedUrl) throw new Error('Browser page changed before it could be captured')

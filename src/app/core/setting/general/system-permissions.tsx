@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { invoke, isTauri } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
+import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -57,7 +58,7 @@ export function SystemPermissions() {
       setCurrentPlatform(currentPlatform)
       // Each query fails independently so one unavailable API does not hide
       // another permission's state.
-      const media = await invoke<MediaPermissions>('get_system_media_permissions').catch(() => null)
+      const media = await platform.invoke.invoke<MediaPermissions>('get_system_media_permissions').catch(() => null)
       setScreenStatus(media?.screenCapture === null || media?.screenCapture === undefined
         ? 'unavailable' : media.screenCapture ? 'granted' : 'notGranted')
       if (media?.microphone) {
@@ -115,7 +116,7 @@ export function SystemPermissions() {
       if (kind === 'notification') {
         await requestPermission()
       } else if (kind === 'screen') {
-        await invoke<boolean>('request_screen_capture_permission')
+        await platform.invoke.invoke<boolean>('request_screen_capture_permission')
       } else {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         stream.getTracks().forEach(track => track.stop())

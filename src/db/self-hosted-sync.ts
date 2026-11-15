@@ -1,6 +1,6 @@
 import { executeRecordTransaction, getDb, type RecordStatement } from './index'
 import { appDataDir, join } from '@tauri-apps/api/path'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { copyFile, exists, lstat, mkdir } from '@tauri-apps/plugin-fs'
 import { ensureWorkspaceDirectory, managedWorkspaceLocation, normalizeManagedWorkspacePath, resolveManagedWorkspacePath } from '@/lib/managed-workspace'
 
@@ -254,7 +254,7 @@ async function preservePendingWorkspaceFiles(workspaceId: string, sourceRoot: st
   await ensureWorkspaceDirectory(sourceRoot)
   await ensureWorkspaceDirectory(targetRoot)
   for (const change of pending) {
-    const portable = await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: change.path })
+    const portable = await platform.invoke.invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: change.path })
     let source = sourceRoot
     let missing = false
     for (const segment of portable.normalized.split('/')) {

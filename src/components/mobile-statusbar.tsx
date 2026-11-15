@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from "@tauri-apps/api/core"
+import { platform } from "@/lib/platform"
 import { hslToHex } from "@/lib/theme-utils"
 import { useTheme } from "next-themes"
 import { useEffect } from "react"
@@ -90,7 +90,7 @@ export function MobileStatusBar() {
       }
       metaStatusBar.setAttribute('content', isDark ? 'black-translucent' : 'default')
 
-      void invoke('set_mobile_system_bars', {
+      void platform.invoke.invoke('set_mobile_system_bars', {
         statusBarColor,
         navigationBarColor: statusBarColor,
         lightStatusBar: lightSystemBar,

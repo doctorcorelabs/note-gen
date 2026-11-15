@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { Store } from '@tauri-apps/plugin-store'
 import { v4 as uuid } from 'uuid'
 import { getWorkspacePath } from '@/lib/workspace'
@@ -94,7 +94,7 @@ export async function searchRemoteSkills(
     REMOTE_SKILL_SEARCH_CACHE_KEY,
   ) ?? {}
   try {
-    const results = await invoke<RemoteSkillSearchResult[]>('search_remote_skills', {
+    const results = await platform.invoke.invoke<RemoteSkillSearchResult[]>('search_remote_skills', {
       request: {
         query,
         limit,
@@ -138,7 +138,7 @@ export async function inspectRemoteSkill(
   }
   signal?.addEventListener('abort', cancel, { once: true })
   try {
-    return await invoke<RemoteSkillPreview>('inspect_remote_skill', {
+    return await platform.invoke.invoke<RemoteSkillPreview>('inspect_remote_skill', {
       request: {
         source,
         requestId,
@@ -156,7 +156,7 @@ export async function installRemoteSkill(input: {
   replaceExisting?: boolean
 }): Promise<RemoteSkillInstallResult> {
   const workspace = input.scope === 'project' ? await getWorkspacePath() : null
-  return await invoke<RemoteSkillInstallResult>('install_remote_skill', {
+  return await platform.invoke.invoke<RemoteSkillInstallResult>('install_remote_skill', {
     request: {
       previewId: input.previewId,
       scope: input.scope,
@@ -167,5 +167,5 @@ export async function installRemoteSkill(input: {
 }
 
 export async function cancelRemoteSkillDownload(requestId: string): Promise<void> {
-  await invoke('cancel_remote_skill_download', { requestId })
+  await platform.invoke.invoke('cancel_remote_skill_download', { requestId })
 }

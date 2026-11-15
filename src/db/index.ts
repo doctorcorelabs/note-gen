@@ -1,6 +1,6 @@
 
 import Database, { type QueryResult } from '@tauri-apps/plugin-sql'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 
 export interface RecordStatement {
   sql: string
@@ -10,7 +10,7 @@ export interface RecordStatement {
 
 export async function executeRecordTransaction(statements: RecordStatement[]) {
   await getDb()
-  await invoke('execute_record_transaction', { statements })
+  await platform.invoke.invoke('execute_record_transaction', { statements })
 }
 
 let database: Database | null = null

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { readDir, readFile } from '@tauri-apps/plugin-fs'
 import { join } from '@tauri-apps/api/path'
 import { getDb } from '@/db'
@@ -176,7 +176,7 @@ export async function inspectSelfHostedSwitch(
   const sequences: Array<[string, string]> = []
   const fingerprint = async (value: unknown) => hashBytes(new TextEncoder().encode(stableSyncValue(value)))
   const fileId = async (relativePath: string) => {
-    const portable = await invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath })
+    const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath })
     return portable.caseFolded
   }
   const localPaths = new Map<string, Map<string, 'file' | 'folder'>>()

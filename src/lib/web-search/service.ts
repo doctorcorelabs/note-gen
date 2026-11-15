@@ -1,4 +1,4 @@
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
+import { platform } from '@/lib/platform'
 import type { AiConfig, WebSearchProvider } from '@/app/core/setting/config'
 import { getAISettings } from '@/lib/ai/utils'
 import { invokeAiJson, resolveAiRequestConfig } from '@/lib/ai/tauri-client'
@@ -95,7 +95,7 @@ async function fetchJson(
 ): Promise<unknown> {
   const timeout = createTimeoutSignal(signal, timeoutMs)
   try {
-    const response = await httpFetch(url, {
+    const response = await platform.http.fetch(url, {
       ...init,
       signal: timeout.signal,
     })
@@ -426,7 +426,7 @@ async function searchHtmlEngine(
 ): Promise<WebSearchResponse> {
   const timeout = createTimeoutSignal(signal, SEARCH_TIMEOUT_MS)
   try {
-    const response = await httpFetch(engine.url(query), {
+    const response = await platform.http.fetch(engine.url(query), {
       method: 'GET',
       headers: {
         Accept: 'text/html,application/xhtml+xml',

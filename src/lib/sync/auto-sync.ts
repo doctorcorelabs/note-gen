@@ -1,7 +1,8 @@
 import { retryWorkspacePathMoves } from './workspace-path-moves'
 import { normalizeRemoteVersion } from './remote-content-cache'
 import { Store } from '@tauri-apps/plugin-store'
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { getFiles as getGithubFiles, getFileCommits as getGithubFileCommits } from '@/lib/sync/github'
 import { getFiles as getGiteeFiles, getFileCommits as getGiteeFileCommits } from '@/lib/sync/gitee'
 import { getFileContent as getGitlabFileContent, getFileCommits as getGitlabFileCommits, getGitlabApiBaseUrl } from '@/lib/sync/gitlab'
@@ -1085,7 +1086,7 @@ export async function hasNetworkConnection(): Promise<boolean> {
       fetchOptions.proxy = proxy
     }
 
-    const response = await fetch(url, fetchOptions)
+    const response = await platform.http.fetch(url, fetchOptions)
 
     clearTimeout(timeoutId)
     return response.ok
