@@ -35,12 +35,15 @@
 // 400, so hidden files cannot be enumerated by status code
 // (desain section 8.6).
 //
-// Cursors are opaque base64url JSON: { v: 1, kind, anchor... }.
+// Cursors are opaque base64url JSON: { v: 2, kind, scope, anchor... }.
 // A cursor that does not decode, does not parse, or has the wrong
 // shape or kind answers 400 invalid_cursor. List cursors anchor on
 // the last entry's sort position (folders first, then files, each
 // alphabetical by name); scan cursors anchor on the last path in
-// lexicographic order.
+// lexicographic order. The scope is the validated folder path of the
+// request that produced the cursor ("" for the root); a cursor used
+// on a different folder answers 400 invalid_cursor (AD-65). Only v:2
+// cursors are accepted; v:1 cursors are rejected the same way.
 
 import { constants as fsConstants, lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -136,16 +139,18 @@ export interface PaginationQuery {
 }
 
 interface ListCursor {
-  v: 1;
+  v: 2;
   kind: 'list';
+  scope: string;
   afterName: string;
   afterIsDirectory: boolean;
   afterPath: string;
 }
 
 interface ScanCursor {
-  v: 1;
+  v: 2;
   kind: 'scan';
+  scope: string;
   afterPath: string;
 }
 
@@ -257,13 +262,14 @@ function decodeCursor(raw: unknown, kind: 'list' | 'scan'): ListCursor | ScanCur
     throw invalidCursor();
   }
   const record = parsed as Record<string, unknown>;
-  if (record['v'] !== 1 || record['kind'] !== kind) {
+  if (record['v'] !== 2 || record['kind'] !== kind) {
     throw invalidCursor();
   }
   if (kind === 'list') {
     const keys = Object.keys(record).sort();
     if (
-      keys.join(',') !== 'afterIsDirectory,afterName,afterPath,kind,v' ||
+      keys.join(',') !== 'afterIsDirectory,afterName,afterPath,kind,scope,v' ||
+      typeof record['scope'] !== 'string' ||
       typeof record['afterName'] !== 'string' ||
       typeof record['afterIsDirectory'] !== 'boolean' ||
       typeof record['afterPath'] !== 'string'
@@ -273,7 +279,11 @@ function decodeCursor(raw: unknown, kind: 'list' | 'scan'): ListCursor | ScanCur
     return record as unknown as ListCursor;
   }
   const keys = Object.keys(record).sort();
-  if (keys.join(',') !== 'afterPath,kind,v' || typeof record['afterPath'] !== 'string') {
+  if (
+    keys.join(',') !== 'afterPath,kind,scope,v' ||
+    typeof record['scope'] !== 'string' ||
+    typeof record['afterPath'] !== 'string'
+  ) {
     throw invalidCursor();
   }
   return record as unknown as ScanCursor;
@@ -411,6 +421,14 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
     if (validated.hidden) {
       throw ApiError.notFound();
     }
+    // AD-65: the cursor is bound to the folder that produced it.
+    // Shape and kind were checked before path validation (decodeCursor
+    // above); the scope comparison runs after path validation and the
+    // hidden check so a hidden folder still answers 404, and before
+    // any disk read.
+    if (cursor !== null && cursor.scope !== validated.path) {
+      throw invalidCursor();
+    }
     const rootReal = await requireRoot();
     const workspaceKey = deps.workspaceKey ?? rootReal;
     const fsPath = await resolveChecked(validated, rootReal);
@@ -469,8 +487,9 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
       nextCursor:
         hasMore && last !== undefined
           ? encodeCursor({
-              v: 1,
+              v: 2,
               kind: 'list',
+              scope: validated.path,
               afterName: last.name,
               afterIsDirectory: last.isDirectory,
               afterPath: last.path,
@@ -495,6 +514,14 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
     }
     if (validated.hidden) {
       throw ApiError.notFound();
+    }
+    // AD-65: the cursor is bound to the folder that produced it.
+    // Shape and kind were checked before path validation (decodeCursor
+    // above); the scope comparison runs after path validation and the
+    // hidden check so a hidden folder still answers 404, and before
+    // any disk read.
+    if (cursor !== null && cursor.scope !== validated.path) {
+      throw invalidCursor();
     }
     const rootReal = await requireRoot();
     const workspaceKey = deps.workspaceKey ?? rootReal;
@@ -562,7 +589,7 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
       entries,
       nextCursor:
         hasMore && lastPath !== undefined
-          ? encodeCursor({ v: 1, kind: 'scan', afterPath: lastPath })
+          ? encodeCursor({ v: 2, kind: 'scan', scope: validated.path, afterPath: lastPath })
           : null,
       hasMore,
     };

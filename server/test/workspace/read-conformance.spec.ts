@@ -598,6 +598,51 @@ describe('scan: paginated, .md only, lexicographic', () => {
     expect(errorBody(wrongKind).code).toBe('invalid_cursor');
   });
 
+  it('rejects a scan cursor from another folder and a v:1 cursor with 400 invalid_cursor (AD-65)', async () => {
+    const { app, root } = await setup();
+    await writeDisk(root, 'folderA/m01.md', 'm01');
+    await writeDisk(root, 'folderA/m02.md', 'm02');
+    await writeDisk(root, 'folderB/a01.md', 'a01');
+    await writeDisk(root, 'folderB/b01.md', 'b01');
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'folderA', limit: '1' })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(first.statusCode).toBe(200);
+    const cursorA = String(dataOf(first)['nextCursor']);
+    expect(cursorA.length).toBeGreaterThan(0);
+    const crossFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'folderB', limit: '10', cursor: cursorA })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(crossFolder.statusCode).toBe(400);
+    expect(errorBody(crossFolder).code).toBe('invalid_cursor');
+    const crossToRoot = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ cursor: cursorA })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(crossToRoot.statusCode).toBe(400);
+    expect(errorBody(crossToRoot).code).toBe('invalid_cursor');
+    const v1Cursor = Buffer.from(JSON.stringify({ v: 1, kind: 'scan', afterPath: 'folderA/m01.md' })).toString('base64url');
+    const v1Res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'folderA', cursor: v1Cursor })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(v1Res.statusCode).toBe(400);
+    expect(errorBody(v1Res).code).toBe('invalid_cursor');
+    const sameFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'folderA', limit: '10', cursor: cursorA })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(sameFolder.statusCode).toBe(200);
+    expect(entriesOf(sameFolder).map((entry) => entry['path'])).toEqual(['folderA/m02.md']);
+  });
+
   it('answers 404 for a missing folder and for a file folder, 400 for traversal', async () => {
     const { app, root } = await setup();
     await writeDisk(root, 'file.md', 'file');
@@ -718,6 +763,54 @@ describe('list: one level, folders first, paginated', () => {
     expect(clamped.statusCode).toBe(200);
     expect(entriesOf(clamped)).toHaveLength(4);
     expect(dataOf(clamped)['hasMore']).toBe(false);
+  });
+
+  it('rejects a list cursor from another folder and a v:1 cursor with 400 invalid_cursor (AD-65)', async () => {
+    const { app, root } = await setup();
+    await writeDisk(root, 'folderA/m01.md', 'm01');
+    await writeDisk(root, 'folderA/m02.md', 'm02');
+    await writeDisk(root, 'folderA/m03.md', 'm03');
+    await writeDisk(root, 'folderB/a01.md', 'a01');
+    await writeDisk(root, 'folderB/b01.md', 'b01');
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'folderA', limit: '1' })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(first.statusCode).toBe(200);
+    const cursorA = String(dataOf(first)['nextCursor']);
+    expect(cursorA.length).toBeGreaterThan(0);
+    const crossFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'folderB', limit: '10', cursor: cursorA })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(crossFolder.statusCode).toBe(400);
+    expect(errorBody(crossFolder).code).toBe('invalid_cursor');
+    const crossToRoot = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ cursor: cursorA })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(crossToRoot.statusCode).toBe(400);
+    expect(errorBody(crossToRoot).code).toBe('invalid_cursor');
+    const v1Cursor = Buffer.from(
+      JSON.stringify({ v: 1, kind: 'list', afterName: 'm01.md', afterIsDirectory: false, afterPath: 'folderA/m01.md' }),
+    ).toString('base64url');
+    const v1Res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'folderA', cursor: v1Cursor })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(v1Res.statusCode).toBe(400);
+    expect(errorBody(v1Res).code).toBe('invalid_cursor');
+    const sameFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'folderA', limit: '10', cursor: cursorA })}`,
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(sameFolder.statusCode).toBe(200);
+    expect(entriesOf(sameFolder).map((entry) => entry['name'])).toEqual(['m02.md', 'm03.md']);
   });
 
   it('answers 400 not_a_directory for a file path and 404 for a missing folder', async () => {
