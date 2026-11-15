@@ -570,7 +570,7 @@ describe('workspace read routes', () => {
   });
 
   it('an overlong single segment answers 404 not_found on all read routes (ENAMETOOLONG)', async () => {
-    const longSegment = `${'a'.repeat(1020)}.md`;
+    const longSegment = `${'a'.repeat(1021)}.md`;
     expect(Buffer.byteLength(longSegment, 'utf8')).toBe(1024);
     const checks = [
       { method: 'GET', url: `/api/workspace/file${q({ path: longSegment })}` },
