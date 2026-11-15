@@ -315,8 +315,9 @@ describe('production app.ts settings block (smoke)', () => {
   });
 
   it('exposes the unavailable cipher seam: secret writes fail closed, nothing stored', async () => {
-    // The production deps use unavailableSecretCipher until V3-10b
-    // lands; the seam itself must throw 503, never store plaintext.
+    // The production deps fall back to unavailableSecretCipher when
+    // no valid encryption key is configured (V3-10b wiring landed);
+    // the seam itself must throw 503, never store plaintext.
     await expect(unavailableSecretCipher.seal(new Uint8Array([1, 2, 3]))).rejects.toMatchObject({
       code: 'service_unavailable',
     });

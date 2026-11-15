@@ -313,7 +313,7 @@ export function validateRestoreJsonBody(body: unknown): void {
   }
   for (const key of Object.keys(record)) {
     if (key !== 'backupId') {
-      issues.push({ field: key, issue: 'unknown_field' });
+      issues.push({ field: key, issue: 'unknown field' });
     }
   }
   if (issues.length > 0) {

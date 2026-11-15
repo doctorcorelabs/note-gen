@@ -85,7 +85,8 @@ export interface SecretCipher {
   open(sealed: SealedSecret): Promise<Uint8Array>;
 }
 
-// Fail-closed placeholder used until V3-10b lands. Any attempt to
+// Fail-closed placeholder kept as the fallback when the V3-10b
+// cipher factory throws (no key or invalid key). Any attempt to
 // seal or open answers 503; nothing is stored and nothing is faked.
 export const unavailableSecretCipher: SecretCipher = {
   keyVersion: 0,

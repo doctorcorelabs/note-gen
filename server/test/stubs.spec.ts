@@ -249,7 +249,7 @@ describe('restore JSON shape', () => {
       expect(err).toBeInstanceOf(ApiError);
       const apiError = err as ApiError;
       expect(apiError.code).toBe('validation_failed');
-      expect(apiError.details).toEqual({ fields: [{ field: 'path', issue: 'unknown_field' }] });
+      expect(apiError.details).toEqual({ fields: [{ field: 'path', issue: 'unknown field' }] });
     }
   });
 
@@ -480,7 +480,7 @@ describe('restore stub', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json();
     assertErrorBody(body, 'validation_failed');
-    expect(body.error.details).toEqual({ fields: [{ field: 'path', issue: 'unknown_field' }] });
+    expect(body.error.details).toEqual({ fields: [{ field: 'path', issue: 'unknown field' }] });
     await app.close();
   });
 

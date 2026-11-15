@@ -41,7 +41,9 @@ import { randomUUID } from 'node:crypto';
 
 // Full wire catalog from kontrak-api-kanonis.md section 6.2. The same
 // code appears once here even when it maps to two statuses
-// (revision_conflict: 412 for a header guard, 409 for a body guard).
+// (revision_conflict: 412 for PUT file/media and guarded move, 409
+// for append, patch, PATCH settings, transactions, and PATCH record;
+// status fixed per endpoint by amended K-03, not by guard location).
 export type ApiErrorCode =
   | 'validation_failed'
   | 'invalid_json'
@@ -267,10 +269,14 @@ export class ApiError extends Error {
     return new ApiError(409, 'already_exists', message);
   }
 
-  // One code for every optimistic guard (kontrak K-03): 412 when the
-  // guard arrived in a header (If-Match), 409 when it arrived in the
-  // body (expectedRevision, expectedVersion, baseRevision). The
-  // conflict payload keeps the same shape in details for both.
+  // One code for every optimistic guard (kontrak K-03, amended):
+  // the status is fixed PER ENDPOINT in kontrak section 3, not by
+  // where the guard arrived: 412 for PUT file/media and guarded
+  // move, 409 for append, patch, PATCH settings, transactions,
+  // and PATCH record. The headerGuard flag only selects the
+  // status the caller chose from that table; it must not be read
+  // as a rule about header versus body guards. The conflict
+  // payload keeps the same shape in details for both.
   static revisionConflict(
     details?: Record<string, unknown>,
     options: { headerGuard?: boolean } = {},

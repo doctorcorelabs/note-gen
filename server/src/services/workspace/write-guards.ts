@@ -15,9 +15,10 @@
 // record answers 409 for a header guard. Callers pass the endpoint
 // status explicitly to revisionConflictError; this module never
 // infers a status from the guard location. (The ApiError
-// revisionConflict helper in plugins/envelope.ts still carries the
-// old wording in its comment; write code constructs ApiError
-// directly so the amended rule is the one that runs.)
+// revisionConflict helper in plugins/envelope.ts keeps the
+// headerGuard flag only as a status selector; write code passes
+// the endpoint status explicitly so the amended rule is the one
+// that runs.)
 //
 // Guard parsing follows desain-workspace-api.md section 3.2: trim,
 // strip a W/ prefix, strip one pair of double quotes, compare the
