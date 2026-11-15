@@ -12,7 +12,7 @@
  * table names, no SQL strings in the adapter contract.
  *
  * The canonical SqlAdapter shape is typed operations from the V2-24
- * operations catalog (73 kinds, DbReadOperation/DbWriteOperation),
+ * operations catalog (74 kinds, DbReadOperation/DbWriteOperation),
  * owned by wave-3 worker V3-14. This stub intentionally exposes no
  * callable surface: it only keeps the SqlAdapter name so the registry
  * shape typechecks until V3-14 replaces this file with the real
