@@ -32,17 +32,23 @@
  *   then unknown.
  * - The section 2.7 aiModelList split: metadata fields S,
  *   credential-bearing fields R.
- * - Agreement spot-checks against the server table contents as
+ * - Full per-key agreement with the server table contents as
  *   documented in server/src/lib/settings-key-classification.ts
- *   (V3-10b) at base 13e4e3e5. The client bundle must never import
- *   server code, so the spot-checks below pin the documented
- *   per-key values as literals; the full two-table proof lives in
- *   the server conformance spec
+ *   (V3-10b) at base 13e4e3e5, pinned as a literal snapshot of all
+ *   236 server keys grouped by verdict. The client bundle must
+ *   never import server code, so the pinned snapshot below is the
+ *   conformance proof on this side; the live two-table proof
+ *   between the two server modules lives in the server
+ *   conformance spec
  *   (server/test/settings-classification-conformance.spec.ts).
- *   The replacement worker verified the full 236-key agreement
- *   out of band (0 differences) before writing this spec; if the
- *   server table ever changes, these literals must change with it
- *   and the out-of-band check must be re-run.
+ *   The R2 worker re-verified the full 236-key agreement out of
+ *   band (0 field differences, identical lists and patterns)
+ *   before adding the snapshot; the R3 worker re-verified it again
+ *   independently (0 field differences over all 236 table entries,
+ *   identical lists in order, patterns, and aiModelList field lists)
+ *   before committing it. If the server table ever changes,
+ *   regenerate the snapshot from the server file in the same
+ *   change.
  */
 
 import assert from "node:assert/strict";
@@ -461,6 +467,141 @@ describe("key schema: server-table agreement spot-checks (V3-10b contents)", () 
     ]);
     assert.deepEqual([...COMPUTED_PROVIDER_FIELDS], ["hasApiKey", "updatedAt"]);
     assert.equal(AI_MODEL_LIST_MAX_ENTRIES, 100);
+  });
+});
+
+/**
+ * Pinned snapshot of the server V3-10b catalogue
+ * (server/src/lib/settings-key-classification.ts at base 13e4e3e5:
+ * S_SETTING_KEYS, L_SETTING_KEYS, R_REJECT_SETTING_KEYS,
+ * SPLIT_SETTING_KEYS, REJECTED_SETTING_KEYS), generated verbatim
+ * from that file by the R2 worker and checked key for key against
+ * the V3-10a enforcement lists, which agree in full (same keys, same
+ * order). The client bundle must never import server code, so this
+ * snapshot is the conformance pin: any drift between the server
+ * catalogue and this module fails the tests below. When the server
+ * catalogue changes, regenerate this snapshot from the server file
+ * in the same change; never edit the snapshot to match a drifted
+ * client table. Vocabulary mapping (server to client SchemaVerdict):
+ * S to S, L to L, R with mvpRejected to R_REJECT, S with split to
+ * SPLIT, R with rejected to REJECTED.
+ */
+const PINNED_SERVER_S_KEYS: readonly string[] = [
+  "agentSystemPromptExtension", "audioModel", "autoUpdate", "canvasDefaultZoom", "canvasGridGap", "canvasGridStyle",
+  "canvasGridVisible", "canvasInsertBehavior", "canvasManagerSortMode", "canvasManagerViewMode", "canvasMinimapVisible", "canvasSnapToGrid",
+  "canvasWheelBehavior", "centeredContent", "codeTheme", "commitModel", "completionModel", "customThemeColors",
+  "darkMode", "editorContentWidth", "editorLineHeight", "editorModel", "editorShortcuts", "editorSourceWrap",
+  "editorViewMode", "embeddingModel", "enableImageRecognition", "enableOutline", "fileManagerTextSize", "fixedRecordTagId",
+  "giteaCustomUrl", "giteaInstanceType", "githubCustomImageRepo", "gitlabCustomUrl", "gitlabInstanceType", "imageMethodModel",
+  "isRagEnabled", "jsdelivr", "language", "mainImageHosting", "markDescModel", "outlinePlacement",
+  "outlinePosition", "placeholderModel", "previewTheme", "primaryModel", "promptList", "ragAgentStrategy",
+  "ragAutomaticSearchEnabled", "ragChunkOverlap", "ragChunkSize", "ragEnabledSourceTypes", "ragExcludedPaths", "ragGlobalSemanticSearchEnabled",
+  "ragRerankThreshold", "ragResultCount", "ragSimilarityThreshold", "recordCompletionBehavior", "recordSaveTargetMode", "recordSortMode",
+  "recordTextSize", "recordToolbarConfig", "recordViewMode", "rerankingModel", "shortcuts", "showEditorStats",
+  "showEditorUndoRedo", "showMobileEditorToolbar", "showSourceLineNumbers", "skills.autoMatch", "skills.enabled", "skills.enabledSkills",
+  "speechToTextMode", "sttModel", "systemPrompt", "templateList", "textToSpeechMode", "useImageRepo",
+  "wikiSemanticSearchEnabled",
+];
+
+const PINNED_SERVER_L_KEYS: readonly string[] = [
+  "activeFilePath", "activeOcrProviderId", "activeTabId", "agentCorePromptVersion", "agentPermissionMode", "analyticsInstallId",
+  "analyticsLastActiveDate", "analyticsSeenVersions", "appFontFamily", "assetsPath", "autoConversationSyncDiagnostic", "autoConversationSyncEnabled",
+  "autoDataSyncBaselineFingerprints", "autoDataSyncDirtyDomains", "autoDataSyncEnabled", "autoDataSyncLastAppliedRemoteMeta", "autoDataSyncLastAppliedRemoteMetaUpdatedAtMs", "autoDataSyncLastLocalUploadMeta",
+  "autoDataSyncLastLocalUploadMetaUpdatedAtMs", "autoDataSyncMemorySettingsMigrated", "autoDataSyncRecordSnapshots", "autoPullOnOpen", "autoReadClipboard", "autoRecordSyncEnabled",
+  "autoSettingsSyncEnabled", "autoSync", "autoVectorEnabled", "autostartMinimized", "canvasSyncVersions", "centerPanelVisible",
+  "clipboardMonitor", "clipboardMonitorEnabled", "closeBehavior", "cloudFolderSyncConfig", "collapsibleList", "contentTextScale",
+  "conversationSyncInitialized", "conversationSyncVersions", "currentAi", "currentPage", "currentPromptId", "currentTagId",
+  "customCss", "desktopOnboardingProgress", "developerMode", "developerPerformanceInfo", "deviceId", "editorWorkspaceLayout",
+  "excludeSensitiveConfig", "fileLocks", "fileSidebarVisible", "fileTreeScrollTop", "giteaAutoSync", "giteaCustomSyncRepo",
+  "giteaUsername", "giteeAutoSync", "giteeCustomSyncRepo", "giteeUsername", "githubCustomSyncRepo", "githubImageUsername",
+  "githubReleasesCache", "githubUsername", "gitlabAutoSync", "gitlabCustomSyncRepo", "gitlabUsername", "globalSearchFilter",
+  "ignoredVersion", "iosWorkspaceFolderAccess", "iosWorkspaceFolderAccessHistory", "lastAppliedRemoteRev", "lastDownloadedRagSnapshot", "lastOrganizeTemplateId",
+  "lastRecordPage", "lastRecordTagId", "lastRestoreTimes", "lastSettingPage", "lastSyncTimes", "lastVectorProcessTime",
+  "learnedContextWindows", "leftSidebarTab", "leftSidebarVisible", "managedBackupDirectory", "managedBackupLastError", "managedBackupLastSuccessAt",
+  "managedBackupRetention", "managedBackupSchedule", "mcp.selectedServerIds", "memorySyncInitialized", "noteGenDefaultModelsCache", "noteGenModelPolicyCache",
+  "noteSidebarVisible", "openTabs", "outlineOpenByFile", "outlineWidth", "pendingRecordAssetRemoteDeletions", "platformSwitchRecovery",
+  "primaryBackupMethod", "providerTemplatesCache", "proxy", "proxyCustomURL", "ragIndexNeedsRebuild", "ragKnowledgeIndexPaused",
+  "ragStructuredKnowledgeConsent", "recordFilterTags", "recordFilters", "remoteSkills.searchCache", "rightSidebarVisible", "selfHostedConnectionReviewProfileId",
+  "selfHostedDeferredWorkspacePaths", "selfHostedDeviceId", "selfHostedExperimentalAcknowledged", "selfHostedServerUrlDraft", "syncQueue", "syncStaticAssets",
+  "syncedFileShas", "systemProxy", "uiScale", "vectorAutoCalcDisabled", "vectorExcludedFiles", "version",
+  "wikiDefaultEnabled", "wikiDeviceId", "wikiGeneratedNotes", "wikiLastContextsByWorkspace", "wikiModel", "wikiPreferencesInitialized",
+  "wikiRemoteIdentities", "wikiSettingsByContext", "wikiWorkspaceModelsInitialized", "workspaceHistory", "workspacePath", "workspaceSyncRepos",
+];
+
+const PINNED_SERVER_R_REJECT_KEYS: readonly string[] = [
+  "accessToken", "apiKey", "cloudinaryImageConfig", "customHttpImageConfig", "giteaAccessToken", "giteeAccessToken",
+  "githubImageAccessToken", "gitlabAccessToken", "imageHostingConfig", "imageKitImageConfig", "lskyImageConfig", "mcp.servers",
+  "mcpServers", "oneDriveAuthTokens", "pendingOneDriveConfig", "picgo", "qiniuImageConfig", "s3Config",
+  "s3SyncConfig", "smms", "upyunImageConfig", "webdavImageConfig", "webdavSyncConfig",
+];
+
+const PINNED_SERVER_SPLIT_KEYS: readonly string[] = [
+  "aiModelList",
+];
+
+const PINNED_SERVER_REJECTED_KEYS: readonly string[] = [
+  "pin",
+];
+
+describe("key schema: full per-key agreement with the pinned server catalogue (V3-10b)", () => {
+  it("pins all 236 server keys, grouped by verdict, against the client lists", () => {
+    assert.deepEqual([...KNOWN_S_KEYS].sort(), [...PINNED_SERVER_S_KEYS].sort());
+    assert.deepEqual([...LOCAL_ONLY_KEYS].sort(), [...PINNED_SERVER_L_KEYS].sort());
+    assert.deepEqual([...SECRET_REJECT_KEYS].sort(), [...PINNED_SERVER_R_REJECT_KEYS].sort());
+    assert.deepEqual([...SPLIT_KEYS], [...PINNED_SERVER_SPLIT_KEYS]);
+    assert.deepEqual([...REJECTED_KEYS], [...PINNED_SERVER_REJECTED_KEYS]);
+    const pinned = [
+      ...PINNED_SERVER_S_KEYS,
+      ...PINNED_SERVER_L_KEYS,
+      ...PINNED_SERVER_R_REJECT_KEYS,
+      ...PINNED_SERVER_SPLIT_KEYS,
+      ...PINNED_SERVER_REJECTED_KEYS,
+    ];
+    assert.equal(pinned.length, 236);
+    assert.equal(new Set(pinned).size, 236);
+  });
+
+  it("agrees with the server verdict for every one of the 236 keys", () => {
+    const expectations: Array<{
+      keys: readonly string[];
+      keyClass: "S" | "L" | "R";
+      mvpRejected: boolean;
+      rejected: boolean;
+      schemaClass: "S" | "L" | "R_REJECT" | "SPLIT" | "REJECTED";
+      secret: boolean;
+      settingsRejectionReason: "local_only" | "secret_only" | null;
+      settingsRoute: "accept" | "local_only" | "secret_only" | "split";
+      split: boolean;
+    }> = [
+      { keys: PINNED_SERVER_S_KEYS, keyClass: "S", mvpRejected: false, rejected: false, schemaClass: "S", secret: false, settingsRejectionReason: null, settingsRoute: "accept", split: false },
+      { keys: PINNED_SERVER_L_KEYS, keyClass: "L", mvpRejected: false, rejected: false, schemaClass: "L", secret: false, settingsRejectionReason: "local_only", settingsRoute: "local_only", split: false },
+      { keys: PINNED_SERVER_R_REJECT_KEYS, keyClass: "R", mvpRejected: true, rejected: false, schemaClass: "R_REJECT", secret: true, settingsRejectionReason: "secret_only", settingsRoute: "secret_only", split: false },
+      { keys: PINNED_SERVER_SPLIT_KEYS, keyClass: "S", mvpRejected: false, rejected: false, schemaClass: "SPLIT", secret: true, settingsRejectionReason: null, settingsRoute: "split", split: true },
+      { keys: PINNED_SERVER_REJECTED_KEYS, keyClass: "R", mvpRejected: true, rejected: true, schemaClass: "REJECTED", secret: true, settingsRejectionReason: "secret_only", settingsRoute: "secret_only", split: false },
+    ];
+    let checked = 0;
+    for (const want of expectations) {
+      for (const key of want.keys) {
+        const detailed = classifyKeyDetailed(key);
+        assert.equal(detailed.schemaClass, want.schemaClass, key);
+        assert.equal(detailed.keyClass, want.keyClass, key);
+        assert.equal(detailed.secret, want.secret, key);
+        assert.equal(detailed.split, want.split, key);
+        assert.equal(detailed.rejected, want.rejected, key);
+        assert.equal(detailed.mvpRejected, want.mvpRejected, key);
+        assert.equal(detailed.settingsRejectionReason, want.settingsRejectionReason, key);
+        const info = getKeyInfo(key);
+        assert.ok(info !== null, key);
+        assert.equal(info.keyClass, want.keyClass, key);
+        assert.equal(info.secret, want.secret, key);
+        assert.equal(info.split, want.split, key);
+        assert.equal(info.mvpRejected, want.mvpRejected, key);
+        assert.equal(info.rejected, want.rejected, key);
+        assert.equal(info.settingsRoute, want.settingsRoute, key);
+        checked += 1;
+      }
+    }
+    assert.equal(checked, 236);
   });
 });
 
