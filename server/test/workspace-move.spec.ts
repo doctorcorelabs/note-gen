@@ -2,10 +2,12 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// HTTP tests for POST /api/workspace/move (V3-05 part 2): file and
+// HTTP tests for POST /api/workspace/move and POST
+// /api/workspace/move/repair-links (V3-05 part 2): file and
 // folder moves, move-validity rejections, the 412 file guard,
 // write-side path mapping, link rewriting, target parent creation,
-// and idempotency replay. The app comes from buildApp with injected
+// idempotency replay, and repair-links preconditions. The app comes
+// from buildApp with injected
 // session/CSRF/Origin verifiers, over a real scratch directory;
 // the move routes are registered on the built app (the AD-57
 // overlap rule forbids editing app.ts, and the integrator performs
@@ -139,6 +141,20 @@ async function move(
   const res = await app.inject({
     method: 'POST',
     url: '/api/workspace/move',
+    headers: { ...AUTH_HEADERS, 'content-type': 'application/json', ...headers },
+    payload: JSON.stringify(body),
+  });
+  return res;
+}
+
+async function repairLinks(
+  app: FastifyInstance,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+): Promise<{ statusCode: number; body: string; json: () => unknown; headers: Record<string, unknown> }> {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/workspace/move/repair-links',
     headers: { ...AUTH_HEADERS, 'content-type': 'application/json', ...headers },
     payload: JSON.stringify(body),
   });
@@ -383,6 +399,25 @@ describe('POST /api/workspace/move', () => {
     expect(await readFile(join(dir, 'links/index2.md'), 'utf8')).toBe(original);
   });
 
+  it('does not rewrite absolute, schemed, or out-of-root references', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'links/old4/doc.md', '# Doc\n');
+    const original =
+      'See [Doc](old4/doc.md), [Abs](/links/old4/doc.md), [Web](https://example.invalid/links/old4/doc.md), ' +
+      '[Mail](mailto:someone@example.invalid), [Frag](#old4/doc.md), [Out](../../links/old4/doc.md).\n';
+    await seed(dir, 'links/index4.md', original);
+    const res = await move(app, { source: 'links/old4/doc.md', target: 'links/new4/doc.md' });
+    expect(res.statusCode).toBe(200);
+    const data = dataOf(res);
+    const rewritten = data['rewrittenFiles'] as Array<Record<string, unknown>>;
+    expect(rewritten.length).toBe(1);
+    expect(rewritten[0]?.['replacements']).toBe(1);
+    expect(await readFile(join(dir, 'links/index4.md'), 'utf8')).toBe(
+      'See [Doc](new4/doc.md), [Abs](/links/old4/doc.md), [Web](https://example.invalid/links/old4/doc.md), ' +
+        '[Mail](mailto:someone@example.invalid), [Frag](#old4/doc.md), [Out](../../links/old4/doc.md).\n',
+    );
+  });
+
   it('does not rewrite links inside fenced code blocks', async () => {
     const { app, dir } = await setup();
     await seed(dir, 'links/old3/doc.md', '# Doc\n');
@@ -396,6 +431,41 @@ describe('POST /api/workspace/move', () => {
     expect(await readFile(join(dir, 'links/index3.md'), 'utf8')).toBe(
       'See [Doc](new3/doc.md).\n```md\n[Doc](old3/doc.md)\n```\n',
     );
+  });
+
+  it('reports an unreadable file as skipped with rewriteStatus skipped_only', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'links/plain.md', 'no links here');
+    await seed(dir, 'links/broken.md', Buffer.from([0xff, 0xfe, 0xfd, 0x00, 0x01]));
+    const res = await move(app, { source: 'links/plain.md', target: 'links/plain-new.md' });
+    expect(res.statusCode).toBe(200);
+    const data = dataOf(res);
+    expect(data['rewriteStatus']).toBe('skipped_only');
+    expect(data['rewrittenFiles']).toEqual([]);
+    const skipped = data['skipped'] as Array<Record<string, unknown>>;
+    expect(skipped.length).toBe(1);
+    expect(skipped[0]?.['path']).toBe('links/broken.md');
+    expect(skipped[0]?.['reason']).toBe('read_error');
+    expect(data['pending']).toEqual([]);
+  });
+
+  it('reports skipped files alongside rewritten files', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'links/old5/doc.md', '# Doc\n');
+    await seed(dir, 'links/index5.md', 'See [Doc](old5/doc.md).\n');
+    await seed(dir, 'links/broken5.md', Buffer.from([0xc3, 0x28, 0xff]));
+    const res = await move(app, { source: 'links/old5/doc.md', target: 'links/new5/doc.md' });
+    expect(res.statusCode).toBe(200);
+    const data = dataOf(res);
+    expect(data['rewriteStatus']).toBe('complete');
+    const rewritten = data['rewrittenFiles'] as Array<Record<string, unknown>>;
+    expect(rewritten.length).toBe(1);
+    expect(rewritten[0]?.['path']).toBe('links/index5.md');
+    const skipped = data['skipped'] as Array<Record<string, unknown>>;
+    expect(skipped.length).toBe(1);
+    expect(skipped[0]?.['path']).toBe('links/broken5.md');
+    expect(skipped[0]?.['reason']).toBe('read_error');
+    expect(await readFile(join(dir, 'links/index5.md'), 'utf8')).toBe('See [Doc](new5/doc.md).\n');
   });
 
   it('requires a session and a CSRF token', async () => {
@@ -413,6 +483,155 @@ describe('POST /api/workspace/move', () => {
       url: '/api/workspace/move',
       headers: { cookie: VALID_COOKIE, origin: TEST_ORIGIN, 'content-type': 'application/json' },
       payload: JSON.stringify({ source: 'move/auth.md', target: 'move/auth-new.md' }),
+    });
+    errorOf(noCsrf, 403, 'csrf_invalid');
+  });
+});
+
+describe('POST /api/workspace/move/repair-links', () => {
+  it('rewrites after a move with rewriteLinks false, and a second run is empty', async () => {
+    const { app, dir, rootReal } = await setup();
+    await seed(dir, 'repair/old/doc.md', '# Doc\n');
+    await seed(dir, 'repair/index.md', 'See [Doc](old/doc.md).\n');
+    const moved = await move(app, {
+      source: 'repair/old/doc.md',
+      target: 'repair/new/doc.md',
+      rewriteLinks: false,
+    });
+    expect(moved.statusCode).toBe(200);
+    expect(await readFile(join(dir, 'repair/index.md'), 'utf8')).toBe('See [Doc](old/doc.md).\n');
+    const res = await repairLinks(app, { source: 'repair/old/doc.md', target: 'repair/new/doc.md' });
+    expect(res.statusCode).toBe(200);
+    const data = dataOf(res);
+    expect(data['repaired']).toBe(true);
+    expect(data['source']).toBe('repair/old/doc.md');
+    expect(data['target']).toBe('repair/new/doc.md');
+    expect(data['kind']).toBe('file');
+    expect(data['rewriteLinks']).toBe(true);
+    expect(data['rewriteStatus']).toBe('complete');
+    expect(data['revision']).toBe(revisionOf(rootReal, 'repair/new/doc.md', '# Doc\n'));
+    expect(data['affectedCount']).toBe(0);
+    expect(data['indexHookWarning']).toBe(null);
+    const rewritten = data['rewrittenFiles'] as Array<Record<string, unknown>>;
+    expect(rewritten.length).toBe(1);
+    expect(rewritten[0]?.['path']).toBe('repair/index.md');
+    expect(rewritten[0]?.['replacements']).toBe(1);
+    expect(data['skipped']).toEqual([]);
+    expect(data['pending']).toEqual([]);
+    expect(await readFile(join(dir, 'repair/index.md'), 'utf8')).toBe('See [Doc](new/doc.md).\n');
+    // No rename happened: the source is still gone and the target
+    // bytes are untouched.
+    await expect(readFile(join(dir, 'repair/old/doc.md'))).rejects.toThrow();
+    expect(await readFile(join(dir, 'repair/new/doc.md'), 'utf8')).toBe('# Doc\n');
+    // The read side agrees with the repair response revision.
+    const get = await app.inject({
+      method: 'GET',
+      url: '/api/workspace/file?path=repair%2Fnew%2Fdoc.md',
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(get.statusCode).toBe(200);
+    expect(get.headers['x-revision']).toBe(data['revision']);
+    // Naturally idempotent: a second run rewrites nothing.
+    const again = await repairLinks(app, { source: 'repair/old/doc.md', target: 'repair/new/doc.md' });
+    expect(again.statusCode).toBe(200);
+    expect(dataOf(again)['rewrittenFiles']).toEqual([]);
+  });
+
+  it('rewrites folder-prefix links after a folder move', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'repair/oldfolder/a.md', 'a');
+    await seed(dir, 'repair/ref.md', 'See [A](oldfolder/a.md).\n');
+    const moved = await move(app, {
+      source: 'repair/oldfolder',
+      target: 'repair/newfolder',
+      rewriteLinks: false,
+    });
+    expect(moved.statusCode).toBe(200);
+    const res = await repairLinks(app, { source: 'repair/oldfolder', target: 'repair/newfolder' });
+    expect(res.statusCode).toBe(200);
+    const data = dataOf(res);
+    expect(data['repaired']).toBe(true);
+    expect(data['kind']).toBe('folder');
+    expect(data['revision']).toBe(null);
+    expect(data['affectedCount']).toBe(0);
+    expect(await readFile(join(dir, 'repair/ref.md'), 'utf8')).toBe('See [A](newfolder/a.md).\n');
+  });
+
+  it('fails the precondition when the target is missing', async () => {
+    const { app } = await setup();
+    const res = await repairLinks(app, {
+      source: 'repair/ghost-old.md',
+      target: 'repair/ghost-new.md',
+    });
+    errorOf(res, 409, 'repair_precondition_failed');
+  });
+
+  it('fails the precondition when the source still exists and rewrites nothing', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'repair/still.md', 's');
+    await seed(dir, 'repair/still-new.md', 't');
+    await seed(dir, 'repair/still-index.md', 'See [S](still.md).\n');
+    const res = await repairLinks(app, { source: 'repair/still.md', target: 'repair/still-new.md' });
+    errorOf(res, 409, 'repair_precondition_failed');
+    expect(await readFile(join(dir, 'repair/still-index.md'), 'utf8')).toBe('See [S](still.md).\n');
+    expect(await readFile(join(dir, 'repair/still.md'), 'utf8')).toBe('s');
+    expect(await readFile(join(dir, 'repair/still-new.md'), 'utf8')).toBe('t');
+  });
+
+  it('rejects unknown fields, including move-only fields', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'repair/fields-new.md', 'f');
+    errorOf(
+      await repairLinks(app, {
+        source: 'repair/fields-old.md',
+        target: 'repair/fields-new.md',
+        rewriteLinks: true,
+      }),
+      400,
+      'validation_failed',
+    );
+    errorOf(
+      await repairLinks(app, {
+        source: 'repair/fields-old.md',
+        target: 'repair/fields-new.md',
+        expectedRevision: 'sha256:bogus',
+      }),
+      400,
+      'validation_failed',
+    );
+  });
+
+  it('rejects traversal paths on both sides', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'repair/ok.md', 'ok');
+    errorOf(
+      await repairLinks(app, { source: '../escape.md', target: 'repair/ok.md' }),
+      400,
+      'invalid_path',
+    );
+    errorOf(
+      await repairLinks(app, { source: 'repair/ok.md', target: '../escape.md' }),
+      400,
+      'invalid_path',
+    );
+    expect(await readFile(join(dir, 'repair/ok.md'), 'utf8')).toBe('ok');
+  });
+
+  it('requires a session and a CSRF token', async () => {
+    const { app, dir } = await setup();
+    await seed(dir, 'repair/auth-new.md', 'a');
+    const noSession = await app.inject({
+      method: 'POST',
+      url: '/api/workspace/move/repair-links',
+      headers: { origin: TEST_ORIGIN, 'x-csrf-token': 'good-csrf', 'content-type': 'application/json' },
+      payload: JSON.stringify({ source: 'repair/auth-old.md', target: 'repair/auth-new.md' }),
+    });
+    errorOf(noSession, 401, 'unauthenticated');
+    const noCsrf = await app.inject({
+      method: 'POST',
+      url: '/api/workspace/move/repair-links',
+      headers: { cookie: VALID_COOKIE, origin: TEST_ORIGIN, 'content-type': 'application/json' },
+      payload: JSON.stringify({ source: 'repair/auth-old.md', target: 'repair/auth-new.md' }),
     });
     errorOf(noCsrf, 403, 'csrf_invalid');
   });

@@ -2,16 +2,18 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Workspace move route (V3-05 part 2, wave 3B overlap AD-57):
-// POST /api/workspace/move only. Repair-links is a separate
-// endpoint owned by a sibling worker; the pure link rewriter in
-// this file (rewriteMarkdownLinks) and the scan driver
-// (rewriteWorkspaceLinks) are exported so that worker reuses the
-// same behavior instead of writing a competing parser.
+// Workspace move routes (V3-05 part 2, wave 3B overlap AD-57):
+// POST /api/workspace/move and POST /api/workspace/move/repair-links.
+// Both share the pure link rewriter in this file
+// (rewriteMarkdownLinks) and the scan driver
+// (rewriteWorkspaceLinks), so a repair replays exactly the rewrite
+// behavior a move would have applied.
 //
-// Contract: kontrak-api-kanonis.md section 3.1 (body { source,
-// target, rewriteLinks, expectedRevision? }, 200 response shape
-// V1-09 section 6.5) and desain-workspace-api.md sections 2.7 and
+// Contract: kontrak-api-kanonis.md section 3.1 (move body
+// { source, target, rewriteLinks, expectedRevision? }, 200 response
+// shape V1-09 section 6.5; repair-links body { source, target },
+// 200 move shape + repaired: true, no filesystem rename, V1-09
+// section 6.6) and desain-workspace-api.md sections 2.7 and
 // 6.1-6.7. Check order, rewrite rules, and response fields mirror
 // the R1 client conformance suite
 // (tests/workspace-client/move.test.mjs + mock-server.mjs), which
@@ -112,6 +114,7 @@ export const MAX_REWRITE_FILES = 5000;
 export const REWRITE_SCAN_TIMEOUT_MS = 30 * 1000;
 
 const MOVE_ROUTE_PATH = '/api/workspace/move';
+const REPAIR_LINKS_ROUTE_PATH = '/api/workspace/move/repair-links';
 
 export interface MoveRewrittenFile {
   path: string;
@@ -138,6 +141,10 @@ export interface MoveResponseData {
   pending: MoveSkippedFile[];
   affectedCount: number;
   indexHookWarning: null;
+}
+
+export interface MoveRepairResponseData extends MoveResponseData {
+  repaired: true;
 }
 
 export interface RewriteWorkspaceLinksResult {
@@ -474,8 +481,9 @@ async function writeFileAtomic(absolute: string, content: Buffer): Promise<void>
 }
 
 // Scan the post-move tree and rewrite references to the moved path.
-// Shared by POST /api/workspace/move and (later) repair-links: both
-// run the same scan over the same tree shape. Per-file revision
+// Shared by POST /api/workspace/move and POST
+// /api/workspace/move/repair-links: both run the same scan over the
+// same tree shape. Per-file revision
 // guards follow desain section 6.4 step 5: a file whose bytes
 // change between scan and write is skipped with revision_changed
 // instead of overwriting a concurrent edit.
@@ -832,6 +840,141 @@ export async function registerWorkspaceMoveRoutes(
           // record only means a later retry re-runs the guards.
         }
       }
+
+      reply.code(200);
+      reply.send(successEnvelope(data));
+    },
+  );
+
+  // Repair-links (desain section 6.6): re-run the rewrite scan
+  // only, with NO filesystem rename. Precondition: the target
+  // exists and the source is gone; otherwise 409
+  // repair_precondition_failed. The body carries source and target
+  // only: rewriteLinks and expectedRevision are unknown fields
+  // here. The endpoint is naturally idempotent (kontrak section
+  // 3.1): a second run finds no remaining references to the source
+  // and answers rewrittenFiles: [], so no Idempotency-Key storage
+  // is consulted and the header is ignored. affectedCount is 0, as
+  // pinned by the mock: nothing is moved, so no entry is affected
+  // by a rename; rewritten files are reported in rewrittenFiles.
+  app.post(
+    REPAIR_LINKS_ROUTE_PATH,
+    { config: { requiresAuth: true }, bodyLimit: MOVE_BODY_LIMIT_BYTES },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = requireJsonObject(request.body);
+      rejectUnknownFields(body, ['source', 'target']);
+      const rawSource = body['source'];
+      const rawTarget = body['target'];
+      if (typeof rawSource !== 'string') {
+        throw fieldError('source', 'expected a string');
+      }
+      if (typeof rawTarget !== 'string') {
+        throw fieldError('target', 'expected a string');
+      }
+
+      if (deps.workspaceRoot === undefined || deps.workspaceRoot === '') {
+        throw ApiError.serviceUnavailable();
+      }
+      let rootReal: string;
+      try {
+        rootReal = await realpath(deps.workspaceRoot);
+      } catch {
+        throw ApiError.serviceUnavailable();
+      }
+      const workspaceKey = deps.workspaceKey ?? rootReal;
+
+      // Write-side path mapping for BOTH paths, source error first,
+      // exactly as on the move route.
+      const sourceResolved = await pathPort.resolveWritePath(rawSource);
+      const targetResolved = await pathPort.resolveWritePath(rawTarget);
+      const source = sourceResolved.normalized;
+      const target = targetResolved.normalized;
+
+      const preconditionFailed = (): ApiError =>
+        new ApiError(
+          409,
+          'repair_precondition_failed',
+          'Repair requires the target to exist and the source to be gone.',
+        );
+
+      let targetStats: Stats;
+      try {
+        targetStats = await lstat(targetResolved.absolute);
+      } catch (error) {
+        if (errnoOf(error) === 'ENOENT') {
+          throw preconditionFailed();
+        }
+        throw error;
+      }
+      if (targetStats.isSymbolicLink()) {
+        throw new ApiError(400, 'symlink_not_allowed', 'Symlinks are not allowed.');
+      }
+      const isFolderMove = targetStats.isDirectory();
+      if (!isFolderMove && !targetStats.isFile()) {
+        throw preconditionFailed();
+      }
+      // The source must be gone. Any entry at the source path,
+      // including a symlink, fails the precondition. When source
+      // equals target this check fails too, since the target was
+      // just shown to exist.
+      try {
+        await lstat(sourceResolved.absolute);
+        throw preconditionFailed();
+      } catch (error) {
+        if (error instanceof ApiError) {
+          throw error;
+        }
+        if (errnoOf(error) !== 'ENOENT') {
+          throw error;
+        }
+      }
+
+      const rewrite = await rewriteWorkspaceLinks({
+        rootReal,
+        workspaceKey,
+        source,
+        target,
+        isFolderMove,
+      });
+
+      // The destination revision is computed fresh from the target
+      // bytes AFTER the scan, so it agrees with a later read even
+      // when the target file itself was rewritten. A target that
+      // vanished mid-scan no longer satisfies the precondition.
+      let revision: string | null = null;
+      if (!isFolderMove) {
+        try {
+          const targetBytes = await readFile(targetResolved.absolute);
+          revision = buildRevision(workspaceKey, target, targetBytes);
+        } catch (error) {
+          if (errnoOf(error) === 'ENOENT') {
+            throw preconditionFailed();
+          }
+          throw error;
+        }
+      }
+
+      const rewriteStatus: MoveResponseData['rewriteStatus'] =
+        rewrite.pending.length > 0
+          ? 'partial'
+          : rewrite.skipped.length > 0 && rewrite.rewrittenFiles.length === 0
+            ? 'skipped_only'
+            : 'complete';
+
+      const data: MoveRepairResponseData = {
+        source,
+        target,
+        kind: isFolderMove ? 'folder' : 'file',
+        rewriteLinks: true,
+        rewriteStatus,
+        revision,
+        rewrittenFiles: rewrite.rewrittenFiles,
+        skipped: rewrite.skipped,
+        pending: rewrite.pending,
+        affectedCount: 0,
+        indexHookWarning: null,
+        repaired: true,
+      };
 
       reply.code(200);
       reply.send(successEnvelope(data));
