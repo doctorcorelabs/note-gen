@@ -57,7 +57,7 @@ import { registerStubRoutes } from './routes/stubs.js';
 import { registerCspReportRoutes } from './routes/csp-reports.js';
 import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 import { createProductionSettingsDeps } from './services/settings/index.js';
-import { createDefaultDbRouteDeps } from './services/db/deps.js';
+import { closeDbRouteDeps, createDefaultDbRouteDeps } from './services/db/deps.js';
 
 // Db kind handlers (V3-13b): one direct import per handler file,
 // no barrel (see services/db/deps.ts wiring pattern).
@@ -182,7 +182,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const auth = deps.auth;
     await registerAuthCoreRoutes(app, { auth });
     app.addHook('onClose', async () => {
+      // Auth first, then the db runner: each close ends its own
+      // postgres client, and dbDeps below is initialized before
+      // this hook can run (buildApp returns the app only after it).
       await auth.close();
+      await closeDbRouteDeps(dbDeps);
     });
   }
 
