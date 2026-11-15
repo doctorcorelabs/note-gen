@@ -7,7 +7,7 @@
 
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 
 let runtimeSessionId: string | null = null
 
@@ -73,7 +73,7 @@ async function getAppVersion(): Promise<string> {
 
 async function getPlatform(): Promise<string> {
   try {
-    return platform()
+    return osPlatform()
   } catch (error) {
     console.error('Failed to get platform:', error)
     return 'unknown'

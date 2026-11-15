@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { Store } from '@tauri-apps/plugin-store'
 import { Buffer } from 'buffer'
 import {
@@ -77,7 +77,7 @@ function fromOneDriveSyncObject(object: CloudFolderObject): CloudFolderObject {
 }
 
 export function supportsCloudFolderWorkspace(config: CloudFolderConfig): boolean {
-  return isOneDriveConfig(config) || (platform() === 'android' && config.path.startsWith('content://'))
+  return isOneDriveConfig(config) || (osPlatform() === 'android' && config.path.startsWith('content://'))
 }
 
 export async function getICloudSyncFolder(): Promise<string> {
@@ -187,7 +187,7 @@ export function getAndroidCloudFolderWorkspaceWriteIdentity(config: CloudFolderC
 }
 
 async function authorizedPath(config: CloudFolderConfig): Promise<string> {
-  if (!config.bookmarkBase64 || platform() !== 'ios') return requirePath(config)
+  if (!config.bookmarkBase64 || osPlatform() !== 'ios') return requirePath(config)
   return (await restoreIOSSyncFolder(config.bookmarkBase64)).path
 }
 
@@ -204,7 +204,7 @@ function decodeBytes(content: string): Uint8Array {
 export async function testCloudFolderConnection(config: CloudFolderConfig): Promise<boolean> {
   if (isOneDriveConfig(config)) return testOneDriveConnection(config)
   const root = await authorizedPath(config)
-  if (platform() === 'android') {
+  if (osPlatform() === 'android') {
     return invoke<boolean>('test_android_cloud_folder', { rootUri: root, scope: 'sync' })
   }
   return invoke<boolean>('test_cloud_folder_sync', { root })
@@ -222,7 +222,7 @@ export async function cloudFolderUpload(
   }
   if (condition) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
   const root = await authorizedPath(config)
-  if (platform() === 'android') {
+  if (osPlatform() === 'android') {
     return invoke<CloudFolderObject>('write_android_cloud_folder_file', {
       rootUri: root,
       key,
@@ -245,7 +245,7 @@ export async function cloudFolderDownloadBytes(
     return oneDriveDownloadBytes(config, oneDriveSyncKey(key))
   }
   const root = await authorizedPath(config)
-  const file = platform() === 'android'
+  const file = osPlatform() === 'android'
     ? await invoke<CloudFolderContent | null>('read_android_cloud_folder_file', {
         rootUri: root,
         key,
@@ -289,7 +289,7 @@ export async function cloudFolderDelete(config: CloudFolderConfig, key: string, 
   if (isOneDriveConfig(config)) return oneDriveDelete(config, oneDriveSyncKey(key), condition)
   if (condition) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
   const root = await authorizedPath(config)
-  if (platform() === 'android') {
+  if (osPlatform() === 'android') {
     return invoke<boolean>('delete_android_cloud_folder_file', {
       rootUri: root,
       key,
@@ -311,7 +311,7 @@ export async function cloudFolderListObjects(
     return (await oneDriveListObjects(config, remotePrefix)).map(fromOneDriveSyncObject)
   }
   const root = await authorizedPath(config)
-  if (platform() === 'android') {
+  if (osPlatform() === 'android') {
     return invoke<CloudFolderObject[]>('list_android_cloud_folder_files', {
       rootUri: root,
       prefix: prefix || null,

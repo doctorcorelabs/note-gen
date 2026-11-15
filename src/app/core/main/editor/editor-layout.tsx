@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/core'
 import { Store } from '@tauri-apps/plugin-store'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Layout } from 'react-resizable-panels'
 import { useTranslations } from 'next-intl'
@@ -1715,7 +1715,7 @@ export function EditorLayout() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return
       let currentPlatform = ''
-      try { currentPlatform = platform() } catch { currentPlatform = '' }
+      try { currentPlatform = osPlatform() } catch { currentPlatform = '' }
       const isMac = currentPlatform === 'macos'
       const navigationDirection = isMac
         ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey

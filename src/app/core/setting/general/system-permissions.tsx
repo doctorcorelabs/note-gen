@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification'
 import { Bell, Mic, Monitor } from 'lucide-react'
@@ -53,7 +53,7 @@ export function SystemPermissions() {
       return
     }
     try {
-      const currentPlatform = platform()
+      const currentPlatform = osPlatform()
       setCurrentPlatform(currentPlatform)
       // Each query fails independently so one unavailable API does not hide
       // another permission's state.
