@@ -164,11 +164,12 @@ export type BodyGuard = { kind: 'match'; revision: string } | { kind: 'force' };
 // expectedRevision is required unless force is exactly true. Wrong
 // types and missing guards answer 400 validation_failed with
 // details.fields, matching the workspace client conformance suite
-// (tests/workspace-client/mock-server.mjs); only an unparseable or
-// non-object JSON body answers invalid_json, via the global error
-// handler. The optional expectedModifiedAt field (desain section
-// 3.8) is accepted by the unknown-field check and ignored here: it
-// is never a guard on its own.
+// (tests/workspace-client/mock-server.mjs); only a body that cannot
+// be parsed answers invalid_json, via the envelope (AD-46). A
+// parsed non-object body answers validation_failed via
+// requireJsonObject (AD-64). The optional expectedModifiedAt
+// field (desain section 3.8) is accepted by the unknown-field
+// check and ignored here: it is never a guard on its own.
 export function parseBodyGuard(body: Record<string, unknown>): BodyGuard {
   const force = body['force'];
   if (force !== undefined && typeof force !== 'boolean') {
@@ -210,11 +211,15 @@ export function rejectUnknownFields(body: Record<string, unknown>, allowed: read
 }
 
 // Asserts that a parsed JSON body is a plain object. Arrays, null,
-// and scalars answer 400 invalid_json: the body parsed, but it is
-// not the object the endpoint consumes.
+// and scalars answer 400 validation_failed with details.fields:
+// the body parsed, but it is not the object the endpoint consumes.
+// Only a body that cannot be parsed answers invalid_json, via the
+// envelope (AD-46/AD-64).
 export function requireJsonObject(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw ApiError.invalidJson();
+    throw ApiError.validation('Request validation failed.', {
+      fields: [{ field: 'body', issue: 'must be a JSON object' }],
+    });
   }
   return body as Record<string, unknown>;
 }
