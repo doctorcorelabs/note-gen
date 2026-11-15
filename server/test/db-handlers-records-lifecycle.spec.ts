@@ -14,7 +14,7 @@
 // migrate via fase1/scripts/m8gate-runner.mjs); this spec creates no
 // database and runs no migration. Example:
 //
-//   MARKS_LIFECYCLE_DATABASE_URL=<redacted>
+//   MARKS_LIFECYCLE_DATABASE_URL=<scratch-db-url>
 
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -102,8 +102,8 @@ describe('marks lifecycle handler validation (no database)', () => {
   });
 });
 
-const DATABASE_URL=<redacted>'MARKS_LIFECYCLE_DATABASE_URL'];
-const dbDescribe = DATABASE_URL === undefined ? describe.skip: <redacted>
+const DATABASE_URL = process.env['MARKS_LIFECYCLE_DATABASE_URL'];
+const dbDescribe = DATABASE_URL === undefined ? describe.skip : describe;
 
 dbDescribe('marks lifecycle handlers against Postgres', () => {
   let db: Database;
