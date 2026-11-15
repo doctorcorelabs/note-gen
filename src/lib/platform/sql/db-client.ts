@@ -35,15 +35,19 @@ import {
  * envelope parsing. It deliberately duplicates none of the V3-30a
  * client: no timeout budget, no abort race, no 401 seam, no request
  * id generation, no path validation beyond the two fixed constants.
- * When V3-30 lands, the integrator replaces the single internal fetch
- * call with `ApiClient.requestJson` (same paths, same bodies, same
- * idempotency-key header, CSRF from the V3-30b provider) and keeps
- * validation, chunking, and error mapping unchanged. The error type
- * below mirrors the V3-30a `ApiError` fields (`code` flat alias of
- * `wireCode`, `status`, `retryable`, `requestId`, frozen `details`,
- * message built from codes and status only) so that replacement is
- * mechanical: catch `ApiError`, feed its fields to
- * `sqlDbErrorFromWire`, and throw the result.
+ * When V3-30 lands, the integrator replaces the fetch call inside
+ * `postAttempt` with `ApiClient.requestJson` (same paths, same bodies,
+ * same idempotency-key header, CSRF from the V3-30b provider) and
+ * keeps validation, chunking, the retry wrapper, and error mapping
+ * unchanged. The error type below mirrors the V3-30a `ApiError`
+ * fields (`code` flat alias of `wireCode`, `status`, `retryable`,
+ * `requestId`, frozen `details`, message built from codes and status
+ * only) so that replacement is mechanical: catch `ApiError`, feed its
+ * fields to `sqlDbErrorFromWire`, and throw the result. One seam
+ * limit: `ApiClient.requestJson` does not surface response headers,
+ * so `Retry-After` honoring in the retry wrapper falls back to the
+ * default delay after unification unless the seam surfaces that
+ * header; the retry budget and triggers stay the same either way.
  *
  * Server semantics this client matches (server/src/services/db/):
  * - Request limits: at most 50 operations per request, body at most
@@ -75,13 +79,32 @@ import {
  * rejected locally as `invalid_operation` until that amendment lands,
  * and admitted with no code change here once it does.
  *
- * Retry policy (kontrak 2.2, K-07): an HTTP response is never
- * retried automatically, including 409 conflicts and 429/503
- * responses whose envelope says `retryable: true`. Only a rejected
- * fetch (a network failure, no response received) is retried, exactly
- * once, with the same body and the same idempotency key. A caller
- * abort is never retried. The `retryable` flag on errors is advisory
- * for the caller, never a trigger for this client.
+ * Retry policy (kontrak 2.2 K-07, kontrak 6.2, kontrak 1.2 butir 6):
+ * each chunk request gets at most one retry (two attempts total).
+ * The retry fires only when (a) no response was received at all (a
+ * rejected fetch: a network failure), or (b) the response is 429 or
+ * 503 and its envelope does not say `retryable: false`. Rule (b) is
+ * the contract's `retryable` semantics: K-07 makes `retryable: true`
+ * mean the exact same request may be repeated, and the 6.2 catalog
+ * marks exactly `rate_limited`, `service_unavailable`, and
+ * `write_queue_timeout` (429/503) retryable. Every other HTTP
+ * response is never retried: 409 conflicts (including
+ * `revision_conflict`) need a new guard or a user decision, never a
+ * blind repeat, and 400/401/403/404/410/413/500/501 responses cannot
+ * succeed by repetition. The retry reuses the same body and the same
+ * idempotency key (desain-sql-adapter 4.3 rule 6: keys exist so
+ * network retries cannot double-write), waits out a backoff delay
+ * first (the `Retry-After` delta-seconds value on 429/503 when the
+ * server sends one, capped; else a 500 ms default taken from the
+ * 6.2 `write_queue_timeout` backoff ladder), and never fires on a
+ * caller abort. This is a deliberate, narrow difference from the
+ * V3-30a client, which never retries anything: the centralized
+ * client carries no idempotency keys, so a blind repeat could
+ * double-write, while every transaction call here carries a key and
+ * every batch call is side-effect-free, so the single keyed retry
+ * cannot duplicate an effect. The `retryable` flag on thrown errors
+ * still tells the caller whether ITS OWN repeat (with a fresh call
+ * and, for transactions, an explicit key) may succeed.
  */
 
 // ---------------------------------------------------------------------------
@@ -138,6 +161,7 @@ export type SqlDbLocalCode =
   | "VALIDATION_ERROR"
   | "CONFLICT"
   | "CAPABILITY_UNAVAILABLE"
+  | "FEATURE_NOT_YET_AVAILABLE"
   | "PAYLOAD_TOO_LARGE"
   | "RATE_LIMITED"
   | "SERVER_ERROR"
@@ -277,11 +301,15 @@ const VALIDATION_WIRE_CODES: ReadonlySet<string> = new Set([
   "tag_not_found",
   "asset_not_found",
   "invalid_action_token",
-  // Documented V3-30a extension: `not_found` maps to VALIDATION_ERROR,
-  // and the 415/422 families map here as well (kontrak 6.5 names no
-  // local code for them). Preserved so V3-30 unification keeps the
-  // same coarse behavior.
+  // Documented V3-30a extension: `not_found` and
+  // `method_not_allowed` map to VALIDATION_ERROR, the closest 4xx
+  // family (there is no local NOT_FOUND code), the 415/422 families
+  // map here as well, and `precondition_required` (428, a missing
+  // guard) maps here as opposed to a stale guard (which is
+  // `revision_conflict` / CONFLICT). Preserved so V3-30 unification
+  // keeps the same coarse behavior.
   "not_found",
+  "method_not_allowed",
   "not_text_file",
   "unsupported_media_type",
   "range_not_satisfiable",
@@ -290,6 +318,21 @@ const VALIDATION_WIRE_CODES: ReadonlySet<string> = new Set([
   "backup_corrupt",
   "backup_decrypt_failed",
   "schema_too_new",
+  "precondition_required",
+]);
+
+const NOT_YET_AVAILABLE_WIRE_CODES: ReadonlySet<string> = new Set([
+  "fuzzy_search_unavailable",
+  "document_parse_unavailable",
+  "restore_unavailable",
+]);
+
+const SERVER_WIRE_CODES: ReadonlySet<string> = new Set([
+  "internal_error",
+  "index_update_failed",
+  "trash_blob_missing",
+  "service_unavailable",
+  "write_queue_timeout",
 ]);
 
 const AUTH_WIRE_CODES: ReadonlySet<string> = new Set([
@@ -310,11 +353,31 @@ const PAYLOAD_WIRE_CODES: ReadonlySet<string> = new Set([
   "payload_too_large",
 ]);
 
+// Declared after every member set: spreading a `const` set before
+// its declaration throws a temporal-dead-zone ReferenceError at
+// module load, which would make this module unimportable.
+const KNOWN_WIRE_CODES: ReadonlySet<string> = new Set([
+  ...CONFLICT_WIRE_CODES,
+  ...VALIDATION_WIRE_CODES,
+  ...AUTH_WIRE_CODES,
+  ...PAYLOAD_WIRE_CODES,
+  ...NOT_YET_AVAILABLE_WIRE_CODES,
+  ...SERVER_WIRE_CODES,
+  "capability_unavailable",
+  "rate_limited",
+]);
+
 /**
  * Map a wire code to its coarse local family, code-first (kontrak
  * 6.1 rule 3: `revision_conflict` 409 vs 412 is decided by endpoint,
- * never by status). An unknown code falls back to the HTTP status,
- * and a missing status falls back to SERVER_ERROR.
+ * never by status). The sets above cover all 62 catalog codes
+ * (kontrak 6.2), matching the V3-30a `WIRE_TO_LOCAL_CODE` table
+ * exactly, including the three 501 codes, which the db endpoints
+ * never answer but which map to FEATURE_NOT_YET_AVAILABLE for
+ * completeness. An unknown code falls back to the HTTP status
+ * (V3-30a `mapStatusToLocalCode`: any other 4xx is
+ * VALIDATION_ERROR), and a missing status falls back to
+ * SERVER_ERROR.
  */
 export function mapWireCodeToLocalCode(
   wireCode: string | null,
@@ -339,8 +402,13 @@ export function mapWireCodeToLocalCode(
     if (PAYLOAD_WIRE_CODES.has(wireCode)) {
       return "PAYLOAD_TOO_LARGE";
     }
-    // 5xx codes, 501 capability codes, and anything unlisted land in
-    // SERVER_ERROR unless the status says otherwise below.
+    if (NOT_YET_AVAILABLE_WIRE_CODES.has(wireCode)) {
+      return "FEATURE_NOT_YET_AVAILABLE";
+    }
+    if (SERVER_WIRE_CODES.has(wireCode)) {
+      return "SERVER_ERROR";
+    }
+    // Unknown wire code: fall through to the status mapping below.
   }
   if (status !== null) {
     if (status === 401 || status === 403) {
@@ -358,7 +426,7 @@ export function mapWireCodeToLocalCode(
     if (status === 429) {
       return "RATE_LIMITED";
     }
-    if (status === 400 || status === 404 || status === 415 || status === 422) {
+    if (status >= 400 && status < 500) {
       return "VALIDATION_ERROR";
     }
   }
@@ -370,20 +438,30 @@ export function mapWireCodeToLocalCode(
  * `service_unavailable`, and `write_queue_timeout` (429/503). Every
  * 409 conflict is false: a conflict needs a new guard or a user
  * decision, not a blind retry. The envelope value, when present,
- * always wins over this derivation.
+ * always wins over this derivation. When there is no envelope value
+ * and the code is unknown or absent (a malformed body), the HTTP
+ * status decides: 429/503 is retryable, anything else is not. This
+ * matches the V3-30a `deriveRetryable` semantics exactly.
  */
 export function deriveSqlDbRetryable(
   wireCode: string | null,
   envelopeRetryable: boolean | null,
+  status: number | null,
 ): boolean {
   if (envelopeRetryable !== null) {
     return envelopeRetryable;
   }
-  return (
+  if (
     wireCode === "rate_limited" ||
     wireCode === "service_unavailable" ||
     wireCode === "write_queue_timeout"
-  );
+  ) {
+    return true;
+  }
+  if (wireCode === null || !KNOWN_WIRE_CODES.has(wireCode)) {
+    return status === 429 || status === 503;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +491,7 @@ export function sqlDbErrorFromWire(input: SqlDbWireErrorInput): SqlDbClientError
     code: input.code,
     localCode: mapWireCodeToLocalCode(input.code, input.status),
     status: input.status,
-    retryable: deriveSqlDbRetryable(input.code, input.retryable ?? null),
+    retryable: deriveSqlDbRetryable(input.code, input.retryable ?? null, input.status),
     requestId: input.requestId ?? null,
     details: input.details ?? {},
   });
@@ -603,6 +681,51 @@ export function deriveChunkIdempotencyKey(
   const truncated = baseKey.length > maxBaseLength ? baseKey.slice(0, maxBaseLength) : baseKey;
   return `${truncated}${suffix}`;
 }
+
+// ---------------------------------------------------------------------------
+// Retry backoff (kontrak 1.2 butir 6, kontrak 6.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Default delay before the single retry, in milliseconds. Taken from
+ * the start of the kontrak 6.2 `write_queue_timeout` backoff ladder
+ * (500 ms, 1 s, 2 s): this client retries at most once, so only the
+ * first rung applies.
+ */
+export const DB_CLIENT_DEFAULT_RETRY_DELAY_MS = 500;
+
+/**
+ * Cap for a server-sent `Retry-After` delay, in milliseconds. A
+ * `Retry-After` beyond this cap waits the cap, never longer: an
+ * unbounded wait would hang the caller on a transient failure.
+ */
+export const DB_CLIENT_RETRY_AFTER_MAX_MS = 30000;
+
+/**
+ * Delay before the single retry for one 429/503 response, from its
+ * `Retry-After` header value (kontrak 1.2 butir 6: 429 answers carry
+ * `Retry-After`). Only the delta-seconds form is honored; a missing,
+ * negative, non-numeric, or HTTP-date value falls back to the
+ * default delay. The result never exceeds
+ * `DB_CLIENT_RETRY_AFTER_MAX_MS`.
+ */
+export function retryDelayMsForResponse(retryAfter: string | null): number {
+  if (retryAfter === null) {
+    return DB_CLIENT_DEFAULT_RETRY_DELAY_MS;
+  }
+  const seconds = Number.parseInt(retryAfter.trim(), 10);
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return DB_CLIENT_DEFAULT_RETRY_DELAY_MS;
+  }
+  return Math.min(seconds * 1000, DB_CLIENT_RETRY_AFTER_MAX_MS);
+}
+
+/**
+ * Backoff wait used before the single retry. The signal, when given,
+ * aborts the wait: the implementation rejects (or the caller checks
+ * the signal afterwards) and no second attempt is sent.
+ */
+export type SqlDbDelayLike = (ms: number, signal?: AbortSignal) => Promise<void>;
 
 // ---------------------------------------------------------------------------
 // Operation validation against the catalog
@@ -875,6 +998,12 @@ export interface SqlDbClientDeps {
   getCsrfToken?: SqlDbCsrfTokenProvider;
   /** Idempotency-key generator. Defaults to `createIdempotencyKey`. Injectable for tests. */
   generateIdempotencyKey?: () => string;
+  /**
+   * Backoff wait before the single retry. Defaults to a
+   * timer-based wait that rejects on abort. Injectable for tests
+   * so specs can observe the delay without waiting in real time.
+   */
+  delayImpl?: SqlDbDelayLike;
 }
 
 export interface SqlTransactionCallOptions {
@@ -902,12 +1031,52 @@ export interface SqlBatchCallOptions {
  * Transport seam for the web SqlAdapter (sql.web.ts, v3b-14a). The
  * adapter calls these two methods and narrows batch rows per kind;
  * it never touches fetch, chunking, keys, or envelopes directly.
+ * This interface is the port the adapter depends on: construct it
+ * with `createSqlDbClient` (production) or a fake in adapter specs.
+ *
+ * Shared behavior of both methods: operations are validated against
+ * the catalog before any HTTP (first problem wins, in index order);
+ * calls over 50 operations are split into consecutive 50-operation
+ * chunk requests sent in order, and results are reassembled in
+ * request order; every failure is thrown as `SqlDbClientError`
+ * (never a partial result); a caller abort is never retried.
+ *
+ * Atomicity: all-or-nothing holds per server transaction, which is
+ * one chunk request. A call of at most 50 operations is exactly one
+ * server transaction: one failure rolls back the whole call. A call
+ * over 50 operations is several server transactions, sent in order:
+ * when a later chunk fails, earlier chunks stay committed, and the
+ * thrown error's details carry `failedChunkIndex` and
+ * `completedOperations` (plus a remapped global `operationIndex`)
+ * so the caller can report exactly what committed and what did
+ * not. Single-chunk failures pass through untouched.
+ *
+ * Retry: each chunk request is retried at most once, after a
+ * backoff delay, only on a network failure (no response) or a
+ * retryable 429/503 response; the retry reuses the same body and
+ * the same idempotency key. See the module header for the rule and
+ * its contract citations.
  */
 export interface SqlDbClient {
+  /**
+   * Run write operations in `POST /api/transactions` chunks. An
+   * idempotency key is generated per call unless the caller
+   * supplies one (see `SqlTransactionCallOptions`); a replayed
+   * response returns the stored `transactionId` and results
+   * without a second write. A `wiki.commitRevision` guard miss
+   * arrives as HTTP 200 with `committed: false` on its result
+   * entry, not as an error.
+   */
   executeTransaction(
     operations: readonly DbWriteOperation[],
     options?: SqlTransactionCallOptions,
   ): Promise<SqlTransactionResult>;
+  /**
+   * Run read operations in `POST /api/db/batch` chunks. Reads
+   * carry no idempotency key (kontrak 3.4: batch has no key
+   * semantics). Rows are untyped here; the adapter narrows them
+   * per kind.
+   */
   executeBatch(
     operations: readonly DbReadOperation[],
     options?: SqlBatchCallOptions,
@@ -922,8 +1091,32 @@ function errorNameOf(error: unknown): string | null {
   return null;
 }
 
+function createAbortError(): Error {
+  const error = new Error("The operation was aborted.");
+  error.name = "AbortError";
+  return error;
+}
+
+function defaultDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted === true) {
+    return Promise.reject(createAbortError());
+  }
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(createAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
   const generateKey = deps.generateIdempotencyKey ?? createIdempotencyKey;
+  const delayImpl = deps.delayImpl ?? defaultDelay;
 
   function resolveFetch(): SqlDbFetchLike {
     if (deps.fetchImpl !== undefined) {
@@ -954,18 +1147,23 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
 
   /**
    * One POST attempt: fetch, read the body as text, parse the
-   * envelope. Throws `SqlDbClientError` for error envelopes and
-   * malformed bodies (both are responses: never retried). Lets
-   * fetch rejections propagate untouched so the retry wrapper can
-   * tell a network failure from a response.
+   * envelope. A response always becomes a result value, never a
+   * throw, so the retry wrapper can read the error and the
+   * `Retry-After` header together. Only a rejected fetch or body
+   * read throws, which is exactly the no-response case the
+   * wrapper may retry.
    */
-  async function postOnce(
+  type PostAttemptResult =
+    | { outcome: "success"; status: number; data: unknown }
+    | { outcome: "error"; error: SqlDbClientError; retryAfter: string | null };
+
+  async function postAttempt(
     path: string,
     body: string,
     headers: Record<string, string>,
     signal: AbortSignal | undefined,
     fetchImpl: SqlDbFetchLike,
-  ): Promise<{ status: number; data: unknown }> {
+  ): Promise<PostAttemptResult> {
     const response = await fetchImpl(path, {
       method: "POST",
       headers,
@@ -975,88 +1173,130 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
     });
     const bodyText = await response.text();
     const headerRequestId = response.headers.get("x-request-id");
+    const retryAfter = response.headers.get("retry-after");
     const envelope = parseSqlDbEnvelope(bodyText);
     if (envelope.kind === "success") {
       if (response.status < 200 || response.status >= 300) {
-        throw sqlDbErrorFromWire({
-          status: response.status,
-          code: "internal_error",
-          requestId: headerRequestId,
-          details: { mismatch: "success envelope on an error status" },
-        });
+        return {
+          outcome: "error",
+          error: sqlDbErrorFromWire({
+            status: response.status,
+            code: "internal_error",
+            requestId: headerRequestId,
+            details: { mismatch: "success envelope on an error status" },
+          }),
+          retryAfter,
+        };
       }
-      return { status: response.status, data: envelope.data };
+      return { outcome: "success", status: response.status, data: envelope.data };
     }
     if (envelope.kind === "error") {
-      throw sqlDbErrorFromWire({
-        status: response.status,
-        code: envelope.code,
-        requestId: envelope.requestId ?? headerRequestId,
-        retryable: envelope.retryable,
-        details: envelope.details,
-      });
+      return {
+        outcome: "error",
+        error: sqlDbErrorFromWire({
+          status: response.status,
+          code: envelope.code,
+          requestId: envelope.requestId ?? headerRequestId,
+          retryable: envelope.retryable,
+          details: envelope.details,
+        }),
+        retryAfter,
+      };
     }
     // Malformed body: no usable envelope. The wire code is unknown,
-    // so the local family falls back to the HTTP status.
-    throw sqlDbErrorFromWire({
-      status: response.status,
-      code: null,
-      requestId: headerRequestId,
-      details: { mismatch: "response body is not a valid envelope" },
-    });
+    // so the local family and retryability fall back to the HTTP
+    // status (a malformed 429/503 is retryable, like V3-30a).
+    return {
+      outcome: "error",
+      error: sqlDbErrorFromWire({
+        status: response.status,
+        code: null,
+        requestId: headerRequestId,
+        details: { mismatch: "response body is not a valid envelope" },
+      }),
+      retryAfter,
+    };
   }
 
   /**
-   * POST with the retry policy: exactly one retry, only when the
-   * attempt failed without a response (a rejected fetch or body
-   * read), reusing the same headers (hence the same idempotency
-   * key) and the same body. `SqlDbClientError` from `postOnce`
-   * always means a response arrived and is never retried. A caller
-   * abort is never retried either.
+   * Wait out one backoff delay. An abort during the wait (or a
+   * signal found aborted right after it, for delay implementations
+   * that ignore the signal) throws the aborted error and no second
+   * attempt is ever sent.
    */
-  async function postWithSingleNetworkRetry(
+  async function waitForRetry(ms: number, signal: AbortSignal | undefined): Promise<void> {
+    try {
+      await delayImpl(ms, signal);
+    } catch (error) {
+      if (signal?.aborted === true || errorNameOf(error) === "AbortError") {
+        throwAborted();
+      }
+      throw error;
+    }
+    if (signal?.aborted === true) {
+      throwAborted();
+    }
+  }
+
+  /**
+   * POST with the retry policy from the module header: at most one
+   * retry, after a backoff delay, reusing the same headers (hence
+   * the same idempotency key) and the same body. The retry fires
+   * only when no response was received (a rejected fetch) or when
+   * the response is a retryable 429/503. Every other response
+   * (409, 400/401/403/404, and the rest) throws on the first
+   * attempt. A caller abort is never retried.
+   */
+  async function postWithRetry(
     path: string,
     body: string,
     headers: Record<string, string>,
     signal: AbortSignal | undefined,
     fetchImpl: SqlDbFetchLike,
   ): Promise<{ status: number; data: unknown }> {
-    try {
-      return await postOnce(path, body, headers, signal, fetchImpl);
-    } catch (error) {
-      if (error instanceof SqlDbClientError) {
-        throw error;
-      }
-      if (signal?.aborted === true || errorNameOf(error) === "AbortError") {
-        throwAborted();
-      }
+    let attemptedRetry = false;
+    for (;;) {
+      let result: PostAttemptResult;
       try {
-        return await postOnce(path, body, headers, signal, fetchImpl);
-      } catch (retryError) {
-        if (retryError instanceof SqlDbClientError) {
-          throw retryError;
-        }
-        if (signal?.aborted === true || errorNameOf(retryError) === "AbortError") {
+        result = await postAttempt(path, body, headers, signal, fetchImpl);
+      } catch (error) {
+        if (signal?.aborted === true || errorNameOf(error) === "AbortError") {
           throwAborted();
         }
-        const name = errorNameOf(retryError);
-        if (name === "TimeoutError") {
+        if (attemptedRetry) {
+          const name = errorNameOf(error);
+          if (name === "TimeoutError") {
+            throw new SqlDbClientError({
+              code: null,
+              localCode: "TIMEOUT",
+              status: null,
+              retryable: true,
+              details: {},
+            });
+          }
           throw new SqlDbClientError({
             code: null,
-            localCode: "TIMEOUT",
+            localCode: "NETWORK_ERROR",
             status: null,
             retryable: true,
             details: {},
           });
         }
-        throw new SqlDbClientError({
-          code: null,
-          localCode: "NETWORK_ERROR",
-          status: null,
-          retryable: true,
-          details: {},
-        });
+        attemptedRetry = true;
+        await waitForRetry(DB_CLIENT_DEFAULT_RETRY_DELAY_MS, signal);
+        continue;
       }
+      if (result.outcome === "success") {
+        return { status: result.status, data: result.data };
+      }
+      const error = result.error;
+      const retryableResponse =
+        (error.status === 429 || error.status === 503) && error.retryable;
+      if (attemptedRetry || !retryableResponse) {
+        throw error;
+      }
+      attemptedRetry = true;
+      await waitForRetry(retryDelayMsForResponse(result.retryAfter), signal);
     }
   }
 
@@ -1144,7 +1384,7 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
       const body = JSON.stringify({ operations: chunk });
       let data: unknown;
       try {
-        ({ data } = await postWithSingleNetworkRetry(
+        ({ data } = await postWithRetry(
           SQL_TRANSACTIONS_PATH,
           body,
           headers,
@@ -1192,7 +1432,7 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
       const body = JSON.stringify({ operations: chunk });
       let data: unknown;
       try {
-        ({ data } = await postWithSingleNetworkRetry(
+        ({ data } = await postWithRetry(
           SQL_DB_BATCH_PATH,
           body,
           headers,
