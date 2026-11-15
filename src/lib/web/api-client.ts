@@ -84,9 +84,9 @@
 //   behavior, not a fallback. GET and HEAD never carry the header
 //   (contract 1.2 rule 3). Pre-session mutations (login, setup)
 //   pass skipCsrf so the provider is not consulted before a
-//   session exists. This branch intentionally has no csrf.ts file:
-//   that file is owned by V3-30b, and the integrator merges it
-//   alongside this client.
+//   session exists. csrf.ts has landed (V3-30b): the shared store
+//   comes from createCsrfTokenStore there, and the wiring layer
+//   supplies this provider from that same store instance.
 //
 // Callers import from this file and errors.ts directly. There is no
 // barrel index.ts in src/lib/web/ (N-13); do not create one without
