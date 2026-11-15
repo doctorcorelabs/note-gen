@@ -13,22 +13,32 @@ export * from './settings-service.js';
 export * from './store.js';
 export * from './validation.js';
 
-import { unavailableSecretCipher } from './crypto-seam.js';
+import { createSecretCipherFromEnv } from '../../lib/crypto/index.js';
+import { unavailableSecretCipher, type SecretCipher } from './crypto-seam.js';
 import { createProductionSettingsStore } from './drizzle-store.js';
 import type { SettingsServiceDeps } from './settings-service.js';
 
 // Default production wiring for the settings/secrets routes. The
 // store resolves the Drizzle handle lazily (503 when no database is
-// configured). The cipher is the fail-closed placeholder until the
-// integrator wires the existing V3-10b adapter (branch
-// web-settings-crypto, CryptoServiceSecretCipher, see the adapter
-// note in crypto-seam.ts) by supplying its instance as the cipher
-// dep when registering the routes with explicit deps, and tests the
-// wiring at merge. This factory adds no AppDeps field (AD-40:
-// AppDeps changes need a recorded amendment).
+// configured). The cipher is the real V3-10b adapter built from the
+// environment (ENCRYPTION_KEY, canonical); when the key is missing
+// or invalid the factory throws and this wiring keeps the
+// fail-closed placeholder (secret writes 503, status reads still
+// work) instead of starting a server that pretends to seal secrets.
+// The config layer already warns at boot when ENCRYPTION_KEY is
+// unset (config/env.ts). Wired by the V3-10b integrator (W7/W8,
+// AD-53); see the adapter note in crypto-seam.ts. This factory adds
+// no AppDeps field (AD-40: AppDeps changes need a recorded
+// amendment).
 export function createProductionSettingsDeps(): SettingsServiceDeps {
+  let cipher: SecretCipher;
+  try {
+    cipher = createSecretCipherFromEnv(process.env);
+  } catch {
+    cipher = unavailableSecretCipher;
+  }
   return {
-    cipher: unavailableSecretCipher,
+    cipher,
     store: createProductionSettingsStore(),
   };
 }

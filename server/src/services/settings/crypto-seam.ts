@@ -36,15 +36,14 @@
 //   production wiring must then keep unavailableSecretCipher
 //   (writes fail closed with 503, status reads still work) instead
 //   of starting a server that pretends to seal secrets.
-// TODO (integrator, tested at merge): no adapter code remains to be
-// written. Supply the existing adapter instance in place of
-// unavailableSecretCipher in createProductionSettingsDeps, and run
-// the settings/secrets specs plus the Postgres spec against the
-// real cipher with a test ENCRYPTION_KEY, asserting that a secret
-// sealed by the adapter opens through a fresh service and that no
-// response carries the test value. Until that wiring lands, this
-// seam is written against the V3-10b interface as documented above,
-// and services never import a crypto module directly.
+// Wiring LANDED (V3-10b integrator, W7/W8): the adapter instance is
+// supplied in place of unavailableSecretCipher by
+// createProductionSettingsDeps (services/settings/index.ts), which
+// falls back to the placeholder when the factory throws (no key or
+// invalid key). Verified by server/test/settings-production-wiring.spec.ts:
+// a secret sealed by the adapter opens through a fresh service, and
+// no sealed form carries the plaintext. Services never import a
+// crypto module directly; only the factory does.
 //
 // Contract of the seam, matching the secrets table columns
 // (server/src/db/schema/m1-foundation.ts):
