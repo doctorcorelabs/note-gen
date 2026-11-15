@@ -612,16 +612,14 @@ describe('POST /api/workspace/file/append', () => {
     expect(errorBody(array).code).toBe('invalid_json');
   });
 
-  it('answers 400 for a malformed JSON body (frozen-mapper gap, see report)', async () => {
-    // NOTE: the contract wants invalid_json here, but Fastify 5.6
-    // emits FST_ERR_CTP_INVALID_JSON_BODY, which the frozen
-    // toErrorEnvelope does not recognize (it checks
-    // FST_ERR_CTP_INVALID_JSON_CONTENT), so the generic 4xx branch
-    // answers validation_failed. The mapper is frozen middleware
-    // (AD-40) and is not this worker's to fix; the gap is flagged
-    // in the V3-04b report for the foundation worker. This test
-    // pins the actual wire behavior so the fix, when it lands, is
-    // a visible test change.
+  it('answers 400 invalid_json for a malformed JSON body', async () => {
+    // AD-46 / FLAG U-1: the frozen toErrorEnvelope now recognizes
+    // Fastify 5's FST_ERR_CTP_INVALID_JSON_BODY (verified in
+    // fastify 5.12.8, lib/errors.js), so a malformed JSON body
+    // answers invalid_json as the contract requires. This test
+    // previously pinned the pre-fix validation_failed behavior;
+    // the expectation changed visibly when the fix landed at
+    // V3-13a.
     const { app } = await setup();
     const malformed = await app.inject({
       method: 'POST',
@@ -630,7 +628,7 @@ describe('POST /api/workspace/file/append', () => {
       payload: '{not json',
     });
     expect(malformed.statusCode).toBe(400);
-    expect(errorBody(malformed).code).toBe('validation_failed');
+    expect(errorBody(malformed).code).toBe('invalid_json');
   });
 
   it('accepts and ignores expectedModifiedAt', async () => {

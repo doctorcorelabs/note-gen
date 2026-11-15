@@ -177,7 +177,11 @@ describe('toErrorEnvelope', () => {
   });
 
   it('maps malformed JSON bodies to invalid_json', () => {
-    for (const code of ['FST_ERR_CTP_INVALID_JSON_CONTENT', 'FST_ERR_CTP_EMPTY_JSON_BODY']) {
+    for (const code of [
+      'FST_ERR_CTP_INVALID_JSON_BODY',
+      'FST_ERR_CTP_INVALID_JSON_CONTENT',
+      'FST_ERR_CTP_EMPTY_JSON_BODY',
+    ]) {
       const { statusCode, envelope } = toErrorEnvelope({ statusCode: 400, code }, 'req-11');
       expect(statusCode).toBe(400);
       expect(envelope.error.code).toBe('invalid_json');

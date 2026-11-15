@@ -52,8 +52,10 @@ import { registerWorkspaceReadRoutes } from './routes/workspace-read.js';
 import { registerWorkspaceWriteRoutes } from './routes/workspace-write.js';
 import { registerSecretsRoutes } from './routes/secrets.js';
 import { registerSettingsRoutes } from './routes/settings.js';
+import { registerDbRoutes } from './routes/db.js';
 import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 import { createProductionSettingsDeps } from './services/settings/index.js';
+import { createDefaultDbRouteDeps } from './services/db/deps.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -147,13 +149,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Settings and secrets routes (V3-10a; kontrak-api-kanonis.md 3.2-3.3).
   // One commented block per group (AD-40 pattern), in merge order.
-  // The secret cipher is injected by the V3-10b wiring when it lands;
-  // until then secret writes fail closed with 503 (see
-  // services/settings/crypto-seam.ts). This block only adds routes;
-  // it does not change the frozen middleware shape (AD-40) or AppDeps.
+  // The secret cipher is wired by V3-10b: with ENCRYPTION_KEY set
+  // the real adapter seals secrets; without it, secret writes fail
+  // closed with 503 (see services/settings/crypto-seam.ts). This
+  // block only adds routes; it does not change the frozen
+  // middleware shape (AD-40) or AppDeps.
   const settingsDeps = createProductionSettingsDeps();
   await registerSettingsRoutes(app, settingsDeps);
   await registerSecretsRoutes(app, settingsDeps);
+
+  // Db/transactions routes (V3-13a; kontrak-api-kanonis.md section
+  // 3.4): POST /api/transactions and POST /api/db/batch. One
+  // commented block per group (AD-40 pattern), in merge order.
+  // Kind handlers are registered into dbDeps.registry by the
+  // handler workers (see services/db/registry.ts); until they land,
+  // unregistered W1 kinds answer 500 and W2 kinds answer 410,
+  // never fake success.
+  const dbDeps = createDefaultDbRouteDeps(deps.config);
+  await registerDbRoutes(app, dbDeps);
 
   return app;
 }
