@@ -600,7 +600,9 @@ describe('POST /api/workspace/file/append', () => {
     expect(errorBody(wrongType).details?.['fields']).toEqual([{ field: 'content', issue: 'expected a string' }]);
   });
 
-  it('answers 400 invalid_json for a non-object JSON body', async () => {
+  // AD-64: a parsed non-object body answers validation_failed with
+  // details.fields; only an unparseable body answers invalid_json.
+  it('answers 400 validation_failed for a non-object JSON body', async () => {
     const { app } = await setup();
     const array = await app.inject({
       method: 'POST',
@@ -609,7 +611,8 @@ describe('POST /api/workspace/file/append', () => {
       payload: '[1, 2]',
     });
     expect(array.statusCode).toBe(400);
-    expect(errorBody(array).code).toBe('invalid_json');
+    expect(errorBody(array).code).toBe('validation_failed');
+    expect(errorBody(array).details?.['fields']).toEqual([{ field: 'body', issue: 'must be a JSON object' }]);
   });
 
   it('answers 400 invalid_json for a malformed JSON body', async () => {
