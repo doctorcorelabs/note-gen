@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { platform } from '@/lib/platform'
+import { capabilities, platform } from '@/lib/platform'
 import { AppWindow, PanelTopClose, Rocket } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import { SettingSection } from '../components/setting-base'
 
 export function SystemBehaviorSettings() {
@@ -37,13 +38,14 @@ export function SystemBehaviorSettings() {
   } = useSettingStore()
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
+  const autostartAvailable = capabilities.autostart
 
   useEffect(() => {
     let cancelled = false
 
     async function loadAutostartState() {
       try {
-        const enabled = await platform.autostart.isEnabled()
+        const enabled = autostartAvailable ? await platform.autostart.isEnabled() : false
         if (!cancelled) setAutostart(enabled)
       } catch (error) {
         console.error('Failed to read autostart state:', error)
@@ -134,13 +136,13 @@ export function SystemBehaviorSettings() {
         <Item variant="outline">
           <ItemMedia variant="icon"><Rocket /></ItemMedia>
           <ItemContent>
-            <ItemTitle>{t('autostart.title')}</ItemTitle>
+            <ItemTitle>{t('autostart.title')} {!autostartAvailable && <Badge variant="secondary">Desktop only</Badge>}</ItemTitle>
             <ItemDescription>{t('autostart.desc')}</ItemDescription>
           </ItemContent>
           <ItemActions className="ml-auto mobile-setting-inline-action">
             <Switch
               checked={autostart}
-              disabled={autostartLoading}
+              disabled={!autostartAvailable || autostartLoading}
               aria-label={t('autostart.title')}
               onCheckedChange={(enabled) => void handleAutostartChange(enabled)}
             />
@@ -156,7 +158,7 @@ export function SystemBehaviorSettings() {
           <ItemActions className="ml-auto mobile-setting-inline-action">
             <Switch
               checked={autostartMinimized}
-              disabled={!autostart || autostartLoading}
+              disabled={!autostartAvailable || !autostart || autostartLoading}
               aria-label={t('autostartMinimized.title')}
               onCheckedChange={(enabled) => void handleAutostartMinimizedChange(enabled)}
             />

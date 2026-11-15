@@ -354,6 +354,13 @@ export default function Updater() {
         </CardHeader>
       </Card>
 
+      {!isTauri ? (
+        <Alert>
+          <Info />
+          <AlertDescription>In the web version, updates are installed on the server. There is nothing to download here.</AlertDescription>
+        </Alert>
+      ) : null}
+
       {ignoredUpdateVersion ? (
         <Alert>
           <Info />
