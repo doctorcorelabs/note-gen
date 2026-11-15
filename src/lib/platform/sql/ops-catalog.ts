@@ -717,6 +717,7 @@ export const SQL_READ_OP_KINDS = [
   "conversations.get",
   "messages.listByConversation",
   "messages.listByTag",
+  "messages.get",
   "compactions.listByConversation",
   "canvases.list",
   "canvases.get",
@@ -830,8 +831,11 @@ export type DbReadOperation =
   // Messages. `listByConversation` orders by id ascending with a
   // cursor over id; `listByTag` is the legacy path (upstream
   // `getChats`, ordered by createdAt) kept while callers remain.
+  // `messages.get` reads one message by id (upstream `getChatById`,
+  // kind 74 ratified by AD-44); `queryOne` returns the row or null.
   | { kind: "messages.listByConversation"; conversationId: number; cursor?: string; limit?: number }
   | { kind: "messages.listByTag"; tagId: number; cursor?: string; limit?: number }
+  | { kind: "messages.get"; id: number }
   // Compactions. Order: revision descending.
   | { kind: "compactions.listByConversation"; conversationId: number; cursor?: string; limit?: number }
   // Canvases. Order: updatedAt descending. History stacks are never
@@ -1049,6 +1053,7 @@ export interface SqlReadRowByKind {
   "conversations.get": SqlConversationRow;
   "messages.listByConversation": SqlChatMessageRow;
   "messages.listByTag": SqlChatMessageRow;
+  "messages.get": SqlChatMessageRow;
   "compactions.listByConversation": SqlConversationCompactionRow;
   "canvases.list": SqlCanvasRow;
   "canvases.get": SqlCanvasRow;
@@ -1290,6 +1295,15 @@ export const SQL_OP_METADATA: Record<SqlOpKind, SqlOpMetadata> = {
     idempotency: "idempotent",
     idempotencyNote: "Read-only; no state change.",
     upstream: "getChats (legacy path)",
+  },
+  "messages.get": {
+    wave: "W1",
+    exposure: "client",
+    touchedTables: ["chat_messages"],
+    idempotency: "idempotent",
+    idempotencyNote: "Read-only; no state change.",
+    upstream: "getChatById",
+    note: "Kind 74, ratified by AD-44 (AMD-O10-01); single-message read for callers that hold only a chat id.",
   },
   "compactions.listByConversation": {
     wave: "W1",

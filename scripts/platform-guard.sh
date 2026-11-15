@@ -28,8 +28,12 @@
 #      must match the allowlist in
 #      scripts/ci/tauri-internals-allowlist.txt exactly.
 #   3. Direct imports of adapter implementations (*.tauri, *.web) are
-#      forbidden everywhere except src/lib/platform/registry.ts and
-#      src/lib/platform/__tests__/.
+#      forbidden everywhere except src/lib/platform/registry.ts,
+#      src/lib/platform/__tests__/, and the AD-33 wiring modules
+#      src/lib/platform/wiring.ts and
+#      src/lib/platform/dialog/dialog-wiring.ts (G-3B4 fix-up:
+#      the guard predates AD-33; wiring modules must import the
+#      implementations they register).
 #   4. Raw Store load calls and raw invoke calls outside
 #      src/lib/platform/ are counted and reported. Informational until
 #      the closing wave of each surface; enforced only in strict mode.
@@ -130,6 +134,8 @@ echo "check 3: direct adapter implementation imports"
 direct=$(grep -rn --include='*.ts' --include='*.tsx' -E \
   "from ['\"][^'\"]*\.(tauri|web)['\"]|import\(['\"][^'\"]*\.(tauri|web)['\"]\)" \
   src 2>/dev/null | grep -v 'src/lib/platform/registry.ts' |
+  grep -v 'src/lib/platform/wiring.ts' |
+  grep -v 'src/lib/platform/dialog/dialog-wiring.ts' |
   grep -v 'src/lib/platform/__tests__/' |
   grep -v -E '^[^:]*\.(test|spec)\.tsx?:' || true)
 if [ -n "$direct" ]; then
