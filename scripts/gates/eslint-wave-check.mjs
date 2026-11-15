@@ -12,6 +12,13 @@
 //     not fail on them (the full `pnpm lint` exit code is the check
 //     for the rest of the rules).
 //   - Diagnostics in files outside src/ are ignored.
+//   - AD-86 exception, G3 mode only: a diagnostic on an api/core
+//     import statement that imports only isTauri does not fail as a
+//     closed-wave failure; it is reported as DEFERRED-G4. isTauri
+//     closes at G4, so the exception expires at G4 and above, where
+//     any api/core diagnostic fails again. Any other binding in the
+//     same statement (including convertFileSrc), a namespace import,
+//     or an unclassifiable statement still fails at G3.
 //
 // Usage: node scripts/gates/eslint-wave-check.mjs <eslint-json-file>
 //   [--wave G1|G2|G3|G4|G5|all]
@@ -59,7 +66,30 @@ const results = JSON.parse(fs.readFileSync(jsonFile, "utf8"));
 let errors = 0;
 let warnings = 0;
 let waveFailures = 0;
+let deferredG4 = 0;
 const fileCache = new Map();
+
+// True only when the statement text positively proves an isTauri-only
+// api/core import: its brace blocks name isTauri and nothing else.
+// Namespace imports, missing braces, and any other binding return
+// false, so the diagnostic still fails. Conservative by design: an
+// unclassifiable statement never earns the AD-86 leniency.
+function isIsTauriOnlyStatement(text) {
+  if (/import\s*\*\s*as\s/.test(text)) return false;
+  const braceBlocks = text.match(/\{[^}]*\}/g) || [];
+  if (braceBlocks.length === 0) return false;
+  const names = new Set();
+  for (const block of braceBlocks) {
+    const inner = block.slice(1, -1);
+    for (const part of inner.split(",")) {
+      const trimmed = part.trim().replace(/^type\s+/, "");
+      if (!trimmed) continue;
+      const name = trimmed.split(/\s+as\s+/)[0].trim();
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) names.add(name);
+    }
+  }
+  return names.size === 1 && names.has("isTauri");
+}
 
 function statementText(filePath, lineNo, endLineNo) {
   if (!fileCache.has(filePath)) {
@@ -89,14 +119,19 @@ for (const result of results) {
       const srcText = statementText(result.filePath, msg.line, msg.endLine);
       const hit = closedSpecs.find((s) => srcText.includes(s));
       if (hit) {
-        waveFailures += 1;
-        console.log(`eslint-wave-check: FAIL ${rel}:${msg.line} still mentions closed-wave specifier ${hit} (severity ${msg.severity})`);
+        if (wave === "G3" && hit === "@tauri-apps/api/core" && isIsTauriOnlyStatement(srcText)) {
+          deferredG4 += 1;
+          console.log(`eslint-wave-check: DEFERRED-G4 ${rel}:${msg.line} isTauri-only api/core remainder (closes at G4)`);
+        } else {
+          waveFailures += 1;
+          console.log(`eslint-wave-check: FAIL ${rel}:${msg.line} still mentions closed-wave specifier ${hit} (severity ${msg.severity})`);
+        }
       }
     }
   }
 }
 
-console.log(`eslint-wave-check: no-restricted-imports errors: ${errors}, warnings: ${warnings}, closed-wave failures: ${waveFailures}`);
+console.log(`eslint-wave-check: no-restricted-imports errors: ${errors}, warnings: ${warnings}, closed-wave failures: ${waveFailures}, deferred-G4: ${deferredG4}`);
 if (errors > 0 || waveFailures > 0) {
   console.log("eslint-wave-check: FAIL");
   process.exit(1);
