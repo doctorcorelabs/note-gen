@@ -460,10 +460,211 @@ describe('workspace read routes', () => {
     expectError(badCursor, 400, 'invalid_cursor');
     const wrongKind = await app.inject({
       method: 'GET',
-      url: `/api/workspace/list${q({ path: 'pages', cursor: Buffer.from(JSON.stringify({ v: 1, kind: 'scan', afterPath: 'x' })).toString('base64url') })}`,
+      url: `/api/workspace/list${q({ path: 'pages', cursor: Buffer.from(JSON.stringify({ v: 2, kind: 'scan', scope: 'pages', afterPath: 'x' })).toString('base64url') })}`,
       headers: { cookie: VALID_COOKIE },
     });
     expectError(wrongKind, 400, 'invalid_cursor');
+  });
+
+  it('list rejects a cursor from another folder with 400 invalid_cursor (AD-65)', async () => {
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '2' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    const firstData = JSON.parse(first.body) as {
+      data: { nextCursor: string; hasMore: boolean };
+    };
+    expect(firstData.data.hasMore).toBe(true);
+    const pagesCursor = firstData.data.nextCursor;
+    const crossFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'sort', cursor: pagesCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(crossFolder, 400, 'invalid_cursor');
+    const crossToRoot = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ cursor: pagesCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(crossToRoot, 400, 'invalid_cursor');
+    const sameFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '2', cursor: pagesCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(sameFolder.statusCode).toBe(200);
+    const sameData = JSON.parse(sameFolder.body) as {
+      data: { entries: Array<{ name: string }> };
+    };
+    expect(sameData.data.entries.map((e) => e.name)).toEqual(['p2.md', 'p3.md']);
+  });
+
+  it('scan rejects a cursor from another folder with 400 invalid_cursor (AD-65)', async () => {
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'vault', limit: '1' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    const firstData = JSON.parse(first.body) as {
+      data: { nextCursor: string; hasMore: boolean };
+    };
+    expect(firstData.data.hasMore).toBe(true);
+    const vaultCursor = firstData.data.nextCursor;
+    const crossToSubfolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'vault/sub', cursor: vaultCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(crossToSubfolder, 400, 'invalid_cursor');
+    const crossToRoot = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ cursor: vaultCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(crossToRoot, 400, 'invalid_cursor');
+    const rootFirst = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ limit: '1' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    const rootData = JSON.parse(rootFirst.body) as { data: { nextCursor: string } };
+    const crossFromRoot = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'vault', cursor: rootData.data.nextCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(crossFromRoot, 400, 'invalid_cursor');
+    const sameFolder = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'vault', limit: '1', cursor: vaultCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(sameFolder.statusCode).toBe(200);
+    const sameData = JSON.parse(sameFolder.body) as {
+      data: { entries: Array<{ path: string }> };
+    };
+    expect(sameData.data.entries.map((e) => e.path)).toEqual(['vault/sub/a.md']);
+  });
+
+  it('v:1 cursors without scope are rejected with 400 invalid_cursor (AD-65)', async () => {
+    const v1List = Buffer.from(
+      JSON.stringify({ v: 1, kind: 'list', afterName: 'p0.md', afterIsDirectory: false, afterPath: 'pages/p0.md' }),
+    ).toString('base64url');
+    const listRes = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', cursor: v1List })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(listRes, 400, 'invalid_cursor');
+    const v1Scan = Buffer.from(
+      JSON.stringify({ v: 1, kind: 'scan', afterPath: 'vault/b.md' }),
+    ).toString('base64url');
+    const scanRes = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'vault', cursor: v1Scan })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(scanRes, 400, 'invalid_cursor');
+    const v2NoScope = Buffer.from(
+      JSON.stringify({ v: 2, kind: 'list', afterName: 'p0.md', afterIsDirectory: false, afterPath: 'pages/p0.md' }),
+    ).toString('base64url');
+    const noScopeRes = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', cursor: v2NoScope })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(noScopeRes, 400, 'invalid_cursor');
+  });
+
+  it('root cursor works with an absent or explicitly empty path (AD-65)', async () => {
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ limit: '2' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstData = JSON.parse(first.body) as {
+      data: { entries: Array<{ name: string }>; nextCursor: string; hasMore: boolean };
+    };
+    expect(firstData.data.entries.map((e) => e.name)).toEqual(['pages', 'sort']);
+    expect(firstData.data.hasMore).toBe(true);
+    const second = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: '', limit: '2', cursor: firstData.data.nextCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(second.statusCode).toBe(200);
+    const secondData = JSON.parse(second.body) as {
+      data: { entries: Array<{ name: string }> };
+    };
+    expect(secondData.data.entries.map((e) => e.name)).toEqual(['vault', 'bad-utf8.md']);
+  });
+
+  it('cursor accepts a different limit and includeMetadata flag (AD-65)', async () => {
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '2' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    const firstData = JSON.parse(first.body) as { data: { nextCursor: string } };
+    const otherLimit = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '10', cursor: firstData.data.nextCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(otherLimit.statusCode).toBe(200);
+    const otherLimitData = JSON.parse(otherLimit.body) as {
+      data: { entries: Array<{ name: string }>; hasMore: boolean; nextCursor: string | null };
+    };
+    expect(otherLimitData.data.entries.map((e) => e.name)).toEqual(['p2.md', 'p3.md', 'p4.md']);
+    expect(otherLimitData.data.hasMore).toBe(false);
+    expect(otherLimitData.data.nextCursor).toBeNull();
+    const otherMetadata = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '2', includeMetadata: 'false', cursor: firstData.data.nextCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(otherMetadata.statusCode).toBe(200);
+    const otherMetadataData = JSON.parse(otherMetadata.body) as {
+      data: { entries: Array<{ name: string; size: number | null }> };
+    };
+    expect(otherMetadataData.data.entries.map((e) => e.name)).toEqual(['p2.md', 'p3.md']);
+    expect(otherMetadataData.data.entries[0]?.size).toBeNull();
+  });
+
+  it('malformed cursor beats invalid path and hidden folder still answers 404 (AD-65)', async () => {
+    const malformedBeatsPath = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: '..', cursor: 'not-a-cursor!!' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(malformedBeatsPath, 400, 'invalid_cursor');
+    const first = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: 'pages', limit: '2' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    const firstData = JSON.parse(first.body) as { data: { nextCursor: string } };
+    const hiddenBeatsScope = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/list${q({ path: '.secret', cursor: firstData.data.nextCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(hiddenBeatsScope, 404, 'not_found');
+    const scanFirst = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: 'vault', limit: '1' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    const scanData = JSON.parse(scanFirst.body) as { data: { nextCursor: string } };
+    const scanHidden = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/scan${q({ folder: '.secret', cursor: scanData.data.nextCursor })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(scanHidden, 404, 'not_found');
   });
 
   it('scan returns only .md recursively with relativePath sorted by path', async () => {
