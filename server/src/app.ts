@@ -50,7 +50,10 @@ import { registerAuthCoreRoutes } from './routes/auth-core.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkspaceReadRoutes } from './routes/workspace-read.js';
 import { registerWorkspaceWriteRoutes } from './routes/workspace-write.js';
+import { registerSecretsRoutes } from './routes/secrets.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { createV304aWritePorts } from './services/workspace/write-adapter.js';
+import { createProductionSettingsDeps } from './services/settings/index.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -141,6 +144,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await registerWorkspaceWriteRoutes(app, {
     ports: createV304aWritePorts(deps.config.workspaceRoot),
   });
+
+  // Settings and secrets routes (V3-10a; kontrak-api-kanonis.md 3.2-3.3).
+  // One commented block per group (AD-40 pattern), in merge order.
+  // The secret cipher is injected by the V3-10b wiring when it lands;
+  // until then secret writes fail closed with 503 (see
+  // services/settings/crypto-seam.ts). This block only adds routes;
+  // it does not change the frozen middleware shape (AD-40) or AppDeps.
+  const settingsDeps = createProductionSettingsDeps();
+  await registerSettingsRoutes(app, settingsDeps);
+  await registerSecretsRoutes(app, settingsDeps);
 
   return app;
 }
