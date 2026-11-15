@@ -1119,6 +1119,73 @@ describe('PUT /api/workspace/media', () => {
   });
 });
 
+describe('missing and unknown Content-Type (G8-D1)', () => {
+  it('answers 422 invalid_text_encoding for invalid UTF-8 bytes without a Content-Type', async () => {
+    const { app } = await setup();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/workspace/file?path=bad.md',
+      headers: { ...AUTH_HEADERS, 'if-none-match': '*' },
+      payload: Buffer.from([0xff, 0xfe, 0x41]),
+    });
+    expect(res.statusCode).toBe(422);
+    expect(errorBody(res).code).toBe('invalid_text_encoding');
+  });
+
+  it('uploads raw PNG bytes without a Content-Type and answers 201', async () => {
+    const { app, root } = await setup();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/workspace/media?path=media/raw.png',
+      headers: { ...AUTH_HEADERS, 'if-none-match': '*' },
+      payload: PNG_BYTES,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(dataOf(res)['detectedType']).toBe('png');
+    expect(await readFile(join(root, 'media', 'raw.png'))).toEqual(PNG_BYTES);
+  });
+
+  it('still answers 415 when a Content-Type is present but unknown', async () => {
+    const { app } = await setup();
+    const file = await app.inject({
+      method: 'PUT',
+      url: '/api/workspace/file?path=notes%2Fone.md',
+      headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'text/html' },
+      payload: Buffer.from('hello', 'utf8'),
+    });
+    expect(file.statusCode).toBe(415);
+    expect(errorBody(file).code).toBe('unsupported_media_type');
+    const media = await app.inject({
+      method: 'PUT',
+      url: '/api/workspace/media?path=media/raw.png',
+      headers: { ...AUTH_HEADERS, 'if-none-match': '*', 'content-type': 'text/html' },
+      payload: PNG_BYTES,
+    });
+    expect(media.statusCode).toBe(415);
+    expect(errorBody(media).code).toBe('unsupported_media_type');
+  });
+
+  it('still answers 404 for an unknown path with a body', async () => {
+    const { app } = await setup();
+    const unknownType = await app.inject({
+      method: 'POST',
+      url: '/api/workspace/nope',
+      headers: { ...AUTH_HEADERS, 'content-type': 'text/html' },
+      payload: Buffer.from('hello', 'utf8'),
+    });
+    expect(unknownType.statusCode).toBe(404);
+    expect(errorBody(unknownType).code).toBe('not_found');
+    const noType = await app.inject({
+      method: 'POST',
+      url: '/api/workspace/nope',
+      headers: { ...AUTH_HEADERS },
+      payload: Buffer.from('hello', 'utf8'),
+    });
+    expect(noType.statusCode).toBe(404);
+    expect(errorBody(noType).code).toBe('not_found');
+  });
+});
+
 describe('index failure after the disk write', () => {
   it('answers 500 index_update_failed with diskWritten true and keeps the file', async () => {
     const { app, root, bundle } = await setup();
