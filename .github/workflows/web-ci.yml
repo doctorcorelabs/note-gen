@@ -5,7 +5,8 @@
 # Web CI for the NoteGen web fork (Fase 1 framework; F1-55, AD-01, AD-18;
 # design F10 section 6 and F12 section 6).
 #
-# Gates: typecheck, lint, unit, contract, build, e2e-smoke, secret-scan.
+# Gates: typecheck, lint, registration-drift, unit, contract, build,
+# e2e-smoke, secret-scan.
 # Every job must be green before merge (F12 section 6.2). There is no
 # emergency merge without a written reason in the PR.
 #
@@ -99,6 +100,21 @@ jobs:
       # Server has no lint setup yet; this job covers the root tree only.
       - name: Lint web app
         run: pnpm lint
+
+  registration-drift:
+    name: Registration drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # No dependency install: the gate and the generator use only the
+      # Node standard library (design section 8.3). The gate fails hard
+      # when the generator interface is absent (TODO-ANTARMUKA) and never
+      # passes vacuously; see scripts/check-registration-drift.mjs.
+      - name: Check generated registration files are fresh
+        run: node scripts/check-registration-drift.mjs
 
   unit:
     name: Unit tests
