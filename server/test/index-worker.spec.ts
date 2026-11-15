@@ -371,6 +371,10 @@ describe('index worker periodic scans', () => {
     clock.advance(1000);
     await flush();
     expect(scanner.calls).toHaveLength(3);
+    // The third scan is still in flight: resolve it before stop,
+    // because graceful shutdown waits for the running scan.
+    scanner.pending[2]?.resolve(SUMMARY);
+    await flush();
     await worker.stop();
   });
 });
