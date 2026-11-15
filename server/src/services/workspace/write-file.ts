@@ -142,12 +142,16 @@ function headersFor(revision: string, version: number | null, modifiedAt: Date):
   };
 }
 
-function isNotDirError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === 'ENOTDIR'
-  );
+function isInvalidPathFsError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  // ENOTDIR: the path crosses a regular file. ENAMETOOLONG: a name
+  // exceeds the filesystem limit. Both name an unusable write
+  // target, answered 400 invalid_path (katalog 6.2 lists "terlalu
+  // panjang" under invalid_path), never 500.
+  return code === 'ENOTDIR' || code === 'ENAMETOOLONG';
 }
 
 function textMimeType(normalizedPath: string): string | null {
@@ -776,7 +780,7 @@ export class WorkspaceWriteService {
       if ((error as { code?: unknown }).code === 'ENOENT') {
         return { exists: false, isDirectory: false, isSymlink: false, content: null, size: 0, modifiedAt: null };
       }
-      if (isNotDirError(error)) {
+      if (isInvalidPathFsError(error)) {
         throw ApiError.invalidPath();
       }
       throw error;
@@ -829,7 +833,7 @@ export class WorkspaceWriteService {
     try {
       await mkdir(dir, { recursive: true });
     } catch (error) {
-      if (isNotDirError(error)) {
+      if (isInvalidPathFsError(error)) {
         throw ApiError.invalidPath();
       }
       throw error;
@@ -846,7 +850,7 @@ export class WorkspaceWriteService {
       await rename(tmpPath, resolved.absolute);
     } catch (error) {
       await rm(tmpPath, { force: true }).catch(() => undefined);
-      if (isNotDirError(error)) {
+      if (isInvalidPathFsError(error)) {
         throw ApiError.invalidPath();
       }
       throw error;

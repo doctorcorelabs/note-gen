@@ -175,7 +175,11 @@ function isWithinRoot(rootReal: string, candidate: string): boolean {
 // use for the operation (under the resolved root, so a symlinked
 // root itself is still fine). A missing tail is allowed: the walk
 // stops at the first missing component and returns the joined path,
-// leaving existence checks to the caller.
+// leaving existence checks to the caller. A component through a
+// regular file (ENOTDIR) or an overlong name (ENAMETOOLONG) ends the
+// walk the same way: nothing past that component can exist, so
+// callers see an absent path (404 on reads, 400 invalid_path on
+// writes) instead of a raw filesystem error surfacing as 500.
 export async function assertNoSymlinkComponents(
   workspaceRoot: string,
   validated: ValidatedWorkspacePath,
@@ -194,8 +198,11 @@ export async function assertNoSymlinkComponents(
     try {
       stats = await lstat(next);
     } catch (error) {
-      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
-        break;
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        const code = (error as { code?: unknown }).code;
+        if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'ENAMETOOLONG') {
+          break;
+        }
       }
       throw error;
     }
