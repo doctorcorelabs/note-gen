@@ -11,7 +11,12 @@
 // development, and COOKIE_SECURE=false outside development on
 // localhost), read the version once from server/package.json and keep
 // it in memory, create the Postgres pool without an eager connection,
-// build the Fastify app, then listen. The server starts even when
+// build the auth context, check the SETUP_TOKEN boot prerequisite
+// against the auth store (refuse when the database holds no accounts
+// and no token of sufficient length is configured; warn and continue
+// when the check cannot run, so health keeps reporting and an
+// unmigrated database does not refuse boot), build the Fastify app,
+// then listen. The server starts even when
 // DATABASE_URL or WORKSPACE_ROOT is missing, so the misconfiguration
 // shows up as a failed readiness check instead of a dead backend.
 //
@@ -23,8 +28,13 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
-import { createAuthContextFromConfig } from './auth/context.js';
-import { loadConfig, type ServerConfig } from './config.js';
+import {
+  checkSetupBootPrerequisite,
+  createAuthContextFromConfig,
+  type SetupPrerequisiteFlags,
+} from './auth/context.js';
+import type { AuthStore } from './auth/store.js';
+import { loadConfig, MIN_SECRET_LENGTH, type ServerConfig } from './config.js';
 import { closePool, createPool, type HealthDbPool } from './db/pool.js';
 
 export function readServerVersion(): string {
@@ -38,6 +48,38 @@ export function readServerVersion(): string {
   } catch {
     return 'unknown';
   }
+}
+
+export type SetupBootPrerequisiteOutcome = 'proceed' | 'refused';
+
+// Enforces the SETUP_TOKEN boot prerequisite (desain-auth.md section
+// 2.2) through checkSetupBootPrerequisite: when the database holds no
+// accounts, boot must refuse unless a setup token of sufficient length
+// is configured. Returns 'refused' only when the store answers and the
+// prerequisite fails. A null store (no usable database) or a database
+// error (for example an unmigrated database) means the prerequisite
+// cannot be checked: warn through the callback and return 'proceed',
+// so health checks keep reporting readiness honestly instead of the
+// server dying on a database they are meant to report on. Warning
+// text names the variable only, never a secret value, and never
+// includes database error detail.
+export async function enforceSetupBootPrerequisite(
+  store: AuthStore | null,
+  flags: SetupPrerequisiteFlags,
+  warn: (message: string) => void,
+): Promise<SetupBootPrerequisiteOutcome> {
+  if (store === null) {
+    warn('SETUP_TOKEN boot prerequisite could not be checked: the database is not available.');
+    return 'proceed';
+  }
+  let result: 'ok' | 'refused';
+  try {
+    result = await checkSetupBootPrerequisite(store, flags);
+  } catch {
+    warn('SETUP_TOKEN boot prerequisite could not be checked: the database query failed.');
+    return 'proceed';
+  }
+  return result === 'refused' ? 'refused' : 'proceed';
 }
 
 function safeLoadConfig(): ServerConfig {
@@ -63,6 +105,34 @@ async function main(): Promise<void> {
   // auth path fails closed; the server still boots so health keeps
   // reporting readiness honestly.
   const auth = createAuthContextFromConfig(config);
+  const prerequisite = await enforceSetupBootPrerequisite(
+    auth.store,
+    {
+      setupTokenConfigured: config.setupTokenConfigured,
+      setupTokenLengthOk: config.setupTokenLengthOk,
+    },
+    (message) => {
+      console.warn(message);
+    },
+  );
+  if (prerequisite === 'refused') {
+    // Refusal message names the variable only, never its value,
+    // matching the safeLoadConfig refusal style above.
+    console.error(
+      `Failed to start: SETUP_TOKEN must be set with at least ${MIN_SECRET_LENGTH} characters when the database holds no accounts.`,
+    );
+    try {
+      await auth.close();
+    } catch {
+      // Ignore close errors during refused startup.
+    }
+    try {
+      await closePool(pool);
+    } catch {
+      // Ignore pool close errors during refused startup.
+    }
+    process.exit(1);
+  }
   const app = await buildApp({ config, pool, version, auth });
 
   for (const warning of config.warnings) {
