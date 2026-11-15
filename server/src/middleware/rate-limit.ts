@@ -308,6 +308,12 @@ export function lockoutDurationMs(level: number): number {
 export interface LockoutState {
   locked: boolean;
   retryAfterSeconds: number;
+  // Lockout ladder rung and full ladder duration for the audit
+  // event (desain-auth.md section 12.1): 0 when not locked. The
+  // duration is the rung duration, not the remaining time; the
+  // remaining time stays coarse in retryAfterSeconds.
+  lockoutLevel: number;
+  lockoutDurationMs: number;
 }
 
 // Reads the lockout row. Retry-After is rounded UP to whole minutes
@@ -317,10 +323,15 @@ export interface LockoutState {
 export async function checkLockout(store: AuthStore, userId: string, nowMs: number): Promise<LockoutState> {
   const row = await unavailableOnDbError(() => store.getLockout(userId));
   if (row === null || row.lockedUntil === null || row.lockedUntil.getTime() <= nowMs) {
-    return { locked: false, retryAfterSeconds: 0 };
+    return { locked: false, retryAfterSeconds: 0, lockoutLevel: 0, lockoutDurationMs: 0 };
   }
   const remainingMs = row.lockedUntil.getTime() - nowMs;
-  return { locked: true, retryAfterSeconds: Math.max(60, Math.ceil(remainingMs / 60000) * 60) };
+  return {
+    locked: true,
+    retryAfterSeconds: Math.max(60, Math.ceil(remainingMs / 60000) * 60),
+    lockoutLevel: row.lockoutLevel,
+    lockoutDurationMs: lockoutDurationMs(row.lockoutLevel),
+  };
 }
 
 // Records one login failure against the progressive lockout. Attempts

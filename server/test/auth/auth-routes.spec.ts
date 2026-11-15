@@ -260,6 +260,42 @@ describe('auth core routes', () => {
       expect(limited.headers['retry-after']).toBeDefined();
     });
 
+    it('writes exactly one login_locked event per locked login attempt', async () => {
+      const hash = await fixture.hasher.hash(PASSWORD);
+      const user = fixture.store.seedUser({ email: 'a@example.invalid', passwordHash: hash });
+      // Seed the lockout row directly so the request passes the
+      // failure buckets and reaches the lockout check: five real
+      // failures would trip the account bucket first and the
+      // lockout site would never run.
+      await fixture.store.recordLockoutFailure(user.id, {
+        consecutiveFailures: 5,
+        lockoutLevel: 1,
+        lockedUntil: new Date(TEST_NOW_MS + 15 * 60 * 1000),
+        lastFailureAt: new Date(TEST_NOW_MS),
+      });
+      const attempt = async (): Promise<void> => {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+          payload: JSON.stringify({ email: 'a@example.invalid', password: PASSWORD }),
+        });
+        expect(res.statusCode).toBe(429);
+      };
+      const lockedEvents = () => fixture.store.auditEvents.filter((event) => event.eventType === 'login_locked');
+      await attempt();
+      expect(lockedEvents()).toHaveLength(1);
+      expect(lockedEvents()[0]).toMatchObject({
+        userId: user.id,
+        actorUserId: null,
+        metadata: { lockoutLevel: 1, lockoutDurationMs: 15 * 60 * 1000 },
+      });
+      // A repeated attempt inside the same window writes a second
+      // event: one event per enforcement, not one per lockout.
+      await attempt();
+      expect(lockedEvents()).toHaveLength(2);
+    });
+
     it('re-hashes opportunistically when the hasher demands it', async () => {
       const hash = await fixture.hasher.hash(PASSWORD);
       fixture.store.seedUser({ email: 'a@example.invalid', passwordHash: hash });
