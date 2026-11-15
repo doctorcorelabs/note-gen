@@ -428,4 +428,21 @@ describe('POST /api/workspace/mkdir', () => {
       await noRootApp.close();
     }
   });
+
+  it('answers 503 service_unavailable when the workspace root directory does not exist', async () => {
+    const missingRoot = join(dir, 'missing-root-v3b05a');
+    const missingRootApp = await buildMkdirTestApp(missingRoot);
+    try {
+      const res = await missingRootApp.inject({
+        method: 'POST',
+        url: '/api/workspace/mkdir',
+        headers: JSON_HEADERS,
+        payload: JSON.stringify({ path: 'notes' }),
+      });
+      expectError(res, 503, 'service_unavailable');
+    } finally {
+      await missingRootApp.close();
+    }
+    await expect(stat(missingRoot)).rejects.toThrow();
+  });
 });
