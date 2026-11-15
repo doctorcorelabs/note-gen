@@ -49,6 +49,8 @@ import { registerRequestId, requestIdFromHeaders } from './plugins/request-id.js
 import { registerAuthCoreRoutes } from './routes/auth-core.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkspaceReadRoutes } from './routes/workspace-read.js';
+import { registerWorkspaceWriteRoutes } from './routes/workspace-write.js';
+import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 
 export interface AppDeps {
   config: ServerConfig;
@@ -126,6 +128,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // index worker injects the workspace UUID (desain assumption A1).
   await registerWorkspaceReadRoutes(app, {
     workspaceRoot: deps.config.workspaceRoot,
+  });
+
+  // Workspace files, write side (V3-04b, kontrak 3.1): PUT file,
+  // append, patch, media. The V3-04a path/revision modules are
+  // wired through the write-adapter ports (same workspace key
+  // default as the read side); the index, event, and idempotency
+  // ports stay unwired until their workers land, so writes succeed
+  // with null versions and no key replay, exactly as the port
+  // contract documents. No resolveIdentity yet: the
+  // session-to-workspace mapping is future work.
+  await registerWorkspaceWriteRoutes(app, {
+    ports: createV304aWritePorts(deps.config.workspaceRoot),
   });
 
   return app;
