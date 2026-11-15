@@ -55,9 +55,13 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerDbRoutes } from './routes/db.js';
 import { registerStubRoutes } from './routes/stubs.js';
 import { registerCspReportRoutes } from './routes/csp-reports.js';
+import { registerAuthCloseStep } from './registration/auth-close.js';
+import { registerCloseHook } from './registration/close-hook.js';
+import { createCloseRegistry } from './registration/close-registry.js';
+import { registerDbCloseStep } from './registration/db-close.js';
 import { createV304aWritePorts } from './services/workspace/write-adapter.js';
 import { createProductionSettingsDeps } from './services/settings/index.js';
-import { closeDbRouteDeps, createDefaultDbRouteDeps } from './services/db/deps.js';
+import { createDefaultDbRouteDeps } from './services/db/deps.js';
 
 // Db kind handlers (V3-13b): one direct import per handler file,
 // no barrel (see services/db/deps.ts wiring pattern).
@@ -177,17 +181,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     overallTimeoutMs: deps.config.overallTimeoutMs,
   });
 
+  // Shared shutdown registry (FIX-05 wiring, registration form):
+  // the auth block appends the auth close step and registers the
+  // single onClose hook, the db block below appends the db close
+  // step. The hook reads the registry at close time, so the db step
+  // appended later still runs, after the auth step. Each close ends
+  // its own postgres client.
+  const closeRegistry = createCloseRegistry();
+
   // --- Auth core (kontrak 3.12; V3-01) ---
   if (deps.auth !== undefined) {
     const auth = deps.auth;
     await registerAuthCoreRoutes(app, { auth });
-    app.addHook('onClose', async () => {
-      // Auth first, then the db runner: each close ends its own
-      // postgres client, and dbDeps below is initialized before
-      // this hook can run (buildApp returns the app only after it).
-      await auth.close();
-      await closeDbRouteDeps(dbDeps);
-    });
+    registerAuthCloseStep(closeRegistry, auth);
+    registerCloseHook(app, closeRegistry);
   }
 
   // Workspace files, read side (V3-04a, kontrak 3.1): GET list, GET
@@ -232,6 +239,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // unregistered W1 kinds answer 500 and W2 kinds answer 410,
   // never fake success.
   const dbDeps = createDefaultDbRouteDeps(deps.config);
+  registerDbCloseStep(closeRegistry, dbDeps);
   // Register V3-13b handlers (kinds owned by V3-13b per
   // fase1/pembagian-handler-kind.md). Unregistered kinds keep
   // answering 500 (W1) / 410 (W2) until their merge lands.
