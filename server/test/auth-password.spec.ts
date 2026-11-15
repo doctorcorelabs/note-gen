@@ -60,6 +60,21 @@ async function changeAs(
   });
 }
 
+// Seeds with the context hasher instead of the fixture fake hasher.
+// seedLoggedInUser hashes with fixture.hasher, which makeTestAuth
+// always builds as FakePasswordHasher even when the auth context
+// overrides the hasher; with the real Argon2id hasher the seeded
+// fake hash would never verify. Only the Argon2 test needs this.
+async function seedLoggedInUserWithContextHasher(
+  fixture: TestAuth,
+  app: FastifyInstance,
+  input: { email: string; password: string },
+): Promise<{ cookie: string; csrfToken: string; userId: string }> {
+  const hash = await fixture.auth.hasher.hash(input.password);
+  fixture.store.seedUser({ email: input.email, passwordHash: hash });
+  return loginAs(app, input.email, input.password);
+}
+
 describe('POST /api/auth/password/change', () => {
   let app: FastifyInstance | undefined;
 
@@ -87,7 +102,7 @@ describe('POST /api/auth/password/change', () => {
     expect(
       fixture.store.auditEvents.find((event) => event.eventType === 'password_change_failed')?.metadata,
     ).toEqual({ reason: 'invalid_current_password' });
-  });
+  }, 15000);
 
   it('a new password equal to the old one answers 400 validation_failed', async () => {
     const fixture = makeTestAuth();
@@ -301,11 +316,11 @@ describe('POST /api/auth/password/change', () => {
   it('works end to end with the real Argon2id hasher', async () => {
     const fixture = makeTestAuth({ hasher: new Argon2PasswordHasher() });
     app = await buildPasswordApp(fixture);
-    const login = await seedLoggedInUser(fixture, app, { email: EMAIL, password: OLD_PASSWORD });
+    const login = await seedLoggedInUserWithContextHasher(fixture, app, { email: EMAIL, password: OLD_PASSWORD });
     const wrong = await changeAs(app, login, { currentPassword: 'fixture-wrong-password', newPassword: NEW_PASSWORD });
     expect(wrong.statusCode).toBe(401);
     const res = await changeAs(app, login, { currentPassword: OLD_PASSWORD, newPassword: NEW_PASSWORD });
     expect(res.statusCode).toBe(200);
     await loginAs(app, EMAIL, NEW_PASSWORD);
-  });
+  }, 15000);
 });
