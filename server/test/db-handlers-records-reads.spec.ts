@@ -88,34 +88,47 @@ describe('marks read handler validation (no database)', () => {
   });
 
   it('rejects a malformed pagination cursor and an invalid limit', () => {
-    for (const validate of [marksList.validate, marksListByTag.validate]) {
-      const base =
-        validate === marksList.validate ? { kind: 'marks.list' } : { kind: 'marks.listByTag', tagId: 1 };
+    // Each validator is called directly (never through an unannotated
+    // loop variable): assertion functions require an explicitly typed
+    // call target (TS2775).
+    const cases = [
+      { base: { kind: 'marks.list' }, which: 'list' },
+      { base: { kind: 'marks.listByTag', tagId: 1 }, which: 'listByTag' },
+    ] as const;
+    for (const entry of cases) {
+      const check = (op: unknown): void => {
+        if (entry.which === 'list') {
+          marksList.validate(op);
+        } else {
+          marksListByTag.validate(op);
+        }
+      };
+      const base = entry.base;
       let caught: unknown;
       try {
-        validate({ ...base, cursor: 'bogus' });
+        check({ ...base, cursor: 'bogus' });
       } catch (error) {
         caught = error;
       }
       expectApiError(caught, 400, 'invalid_cursor');
       caught = undefined;
       try {
-        validate({ ...base, cursor: '12:34:56' });
+        check({ ...base, cursor: '12:34:56' });
       } catch (error) {
         caught = error;
       }
       expectApiError(caught, 400, 'invalid_cursor');
       caught = undefined;
       try {
-        validate({ ...base, limit: 0 });
+        check({ ...base, limit: 0 });
       } catch (error) {
         caught = error;
       }
       expectApiError(caught, 400, 'invalid_limit');
-      expect(() => validate({ ...base, limit: 1.5 })).toThrow(ApiError);
-      expect(() => validate({ ...base, limit: '50' })).toThrow(ApiError);
-      expect(() => validate({ ...base, limit: 500 })).not.toThrow();
-      expect(() => validate({ ...base, cursor: '1700000000000:42' })).not.toThrow();
+      expect(() => check({ ...base, limit: 1.5 })).toThrow(ApiError);
+      expect(() => check({ ...base, limit: '50' })).toThrow(ApiError);
+      expect(() => check({ ...base, limit: 500 })).not.toThrow();
+      expect(() => check({ ...base, cursor: '1700000000000:42' })).not.toThrow();
     }
   });
 
@@ -219,9 +232,9 @@ dbDescribe('marks read handlers against Postgres', () => {
           workspaceId: values.ws,
           tagId: values.tagId,
           type: 'text',
-          content: values.content ?? 'body',
-          desc: values.desc ?? 'summary',
-          url: values.url ?? 'https://example.test/x',
+          content: values.content === undefined ? 'body' : values.content,
+          desc: values.desc === undefined ? 'summary' : values.desc,
+          url: values.url === undefined ? 'https://example.test/x' : values.url,
           deletedAt: values.deletedAt ?? null,
           tagUpdatedAt: values.tagUpdatedAt ?? null,
           sourceId: values.sourceId ?? null,
