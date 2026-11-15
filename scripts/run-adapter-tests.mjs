@@ -94,7 +94,11 @@ const WEB_NODE_SPECS = [
 // node:test lists below (see vitest.config.ts); keep the two in
 // sync. A Vitest-style suite must never be added to the node:test
 // lists: it would fail loudly here instead of passing.
-const VITEST_SPECS = ["src/lib/web/csrf.spec.ts"];
+const VITEST_SPECS = [
+  "src/lib/platform/sql/db-client.spec.ts",
+  "src/lib/platform/sql/sql.web.spec.ts",
+  "src/lib/web/csrf.spec.ts",
+];
 
 const NODE_TEST_SPECS = [...ADAPTER_SPECS, ...WEB_NODE_SPECS];
 

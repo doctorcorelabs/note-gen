@@ -5,25 +5,25 @@
 // Server-side mirror of the typed SQL operation catalog.
 //
 // The canonical catalog lives at src/lib/platform/sql/ops-catalog.ts
-// (73 kinds, V2-24, merged at K1 under AD-35). The server cannot import
-// it directly: the catalog imports types through the "@/types/..." path
-// alias, which the server tsconfig (NodeNext, rootDir src) does not
-// resolve, and importing a file outside server/src would break the
-// server build layout. So this module restates the kind membership
-// verbatim, and server/test/db-kinds.spec.ts pins the restatement to
-// the catalog text: any drift in membership, wave, or exposure fails
-// that test. Do not edit the lists here without the matching catalog
-// change and the conformance test passing.
+// (74 kinds: 34 reads + 40 writes; V2-24, merged at K1 under AD-35,
+// plus the V3-14 catalog amendment adding messages.get). The server
+// cannot import it directly: the catalog imports types through the
+// "@/types/..." path alias, which the server tsconfig (NodeNext,
+// rootDir src) does not resolve, and importing a file outside
+// server/src would break the server build layout. So this module
+// restates the kind membership verbatim, and
+// server/test/db-kinds.spec.ts pins the restatement to the catalog
+// text: any drift in membership, wave, or exposure fails that test.
+// Do not edit the lists here without the matching catalog change
+// and the conformance test passing.
 //
-// One ratified exception (AD-44, AMD-O10-01): the read list below
-// carries `messages.get`, the 74th kind, which the D/G lock-in
-// ratified as a W1 client read kind but which has not yet entered
-// the catalog code; the catalog amendment is V3-14 work (wave 3B).
-// Until that amendment lands, the mirror is catalog + messages.get,
-// exactly as the kind split note (fase1/pembagian-handler-kind.md,
-// V-1) allows, and the conformance test pins the delta to that one
-// kind. Once the catalog carries messages.get, mirror and catalog
-// are equal again and the same test still passes.
+// History (AD-44, AMD-O10-01): messages.get, the 74th kind, was
+// ratified by the D/G lock-in as a W1 client read kind and entered
+// this mirror before the catalog code, so the mirror temporarily
+// carried catalog + messages.get and the conformance test pinned
+// that one-kind delta. The V3-14 catalog amendment (wave 3B) added
+// messages.get to the catalog; mirror and catalog are equal again
+// and the conformance test now pins equality.
 //
 // Rules carried from the catalog and the design (V1-03 sections 3.3
 // and 3.4, AD-26):

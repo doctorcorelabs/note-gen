@@ -5,17 +5,16 @@
 // Conformance: the server-side kind mirror in
 // server/src/services/db/kinds.ts must match the canonical catalog
 // at src/lib/platform/sql/ops-catalog.ts exactly (membership, wave,
-// exposure), except for one ratified delta: `messages.get`, the 74th
-// kind (AD-44, AMD-O10-01), which the D/G lock-in ratified as a W1
-// client read kind but which has not yet entered the catalog code
-// (the catalog amendment is V3-14 work). Until that amendment lands,
-// the mirror is catalog + messages.get; once it lands, mirror and
-// catalog are equal. Both states pass this test, and any other drift
-// fails it. The catalog is read as TEXT, not imported: the server
-// build cannot resolve the catalog's "@/types/..." imports, so a
-// text-level pin is the binding check. Any catalog change that adds,
-// removes, renames, or re-waves a kind fails this test until the
-// mirror is updated in the same change.
+// exposure). History (AD-44, AMD-O10-01): `messages.get`, the 74th
+// kind, entered the mirror before the catalog code, and this test
+// used to pin that one-kind delta; the V3-14 catalog amendment
+// (wave 3B) added it to the catalog, so this test now pins
+// equality and any drift fails it. The catalog is read as TEXT,
+// not imported: the server build cannot resolve the catalog's
+// "@/types/..." imports, so a text-level pin is the binding check.
+// Any catalog change that adds, removes, renames, or re-waves a
+// kind fails this test until the mirror is updated in the same
+// change.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -53,16 +52,9 @@ function parseMetadata(text: string): Map<string, { wave: string; exposure: stri
 }
 
 describe('kind mirror conformance with ops-catalog.ts', () => {
-  it('matches the catalog kind arrays plus the ratified messages.get delta', () => {
+  it('matches the catalog kind arrays exactly', () => {
     const text = catalogText();
-    const catalogReads = parseKindArray(text, 'SQL_READ_OP_KINDS');
-    const expectedReads = [...catalogReads];
-    if (!expectedReads.includes('messages.get')) {
-      const anchor = expectedReads.indexOf('messages.listByTag');
-      expect(anchor).toBeGreaterThanOrEqual(0);
-      expectedReads.splice(anchor + 1, 0, 'messages.get');
-    }
-    expect([...DB_READ_OP_KINDS]).toEqual(expectedReads);
+    expect([...DB_READ_OP_KINDS]).toEqual(parseKindArray(text, 'SQL_READ_OP_KINDS'));
     expect([...DB_WRITE_OP_KINDS]).toEqual(parseKindArray(text, 'SQL_WRITE_OP_KINDS'));
     expect(DB_READ_OP_KINDS).toHaveLength(34);
     expect(DB_WRITE_OP_KINDS).toHaveLength(40);
@@ -81,17 +73,11 @@ describe('kind mirror conformance with ops-catalog.ts', () => {
 
   it('matches the catalog wave and exposure metadata', () => {
     const metadata = parseMetadata(catalogText());
-    expect([73, 74]).toContain(metadata.size);
+    expect(metadata.size).toBe(74);
     for (const kind of DB_OP_KINDS) {
-      if (kind === 'messages.get' && !metadata.has(kind)) {
-        continue;
-      }
       expect(metadata.has(kind)).toBe(true);
     }
-    const messagesGet = metadata.get('messages.get');
-    if (messagesGet !== undefined) {
-      expect(messagesGet).toEqual({ wave: 'W1', exposure: 'client' });
-    }
+    expect(metadata.get('messages.get')).toEqual({ wave: 'W1', exposure: 'client' });
     const wave2 = [...metadata.entries()]
       .filter(([, meta]) => meta.wave === 'W2')
       .map(([kind]) => kind)
