@@ -22,6 +22,9 @@
 // - Bodies are validated strictly: unknown fields are rejected with
 //   details.fields (kontrak section 1.5). Logout, logout-all, and
 //   session revoke carry no body schema and ignore any body sent.
+// - Setup, login, and login/totp answers carry Cache-Control
+//   no-store, set at handler entry so error answers keep it too
+//   (T-28-1).
 // - Anti-enumeration: login failures for unknown emails, wrong
 //   passwords, and disabled accounts share one 401 code, one
 //   message, and the same Argon2 cost (dummy verification for
@@ -188,6 +191,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // open. 201 with account id, email, and workspace id. No session
   // is created: the operator logs in through the normal flow.
   app.post('/api/auth/setup', publicRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
+    noStore(reply);
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['setupToken', 'email', 'password', 'workspaceName'])];
     const setupToken = requiredString(body, 'setupToken', issues, { maxCodePoints: 1024 });
@@ -266,6 +270,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // is on. Failures are generic and costed identically (see the
   // module header).
   app.post('/api/auth/login', publicRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
+    noStore(reply);
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['email', 'password'])];
     const emailRaw = requiredString(body, 'email', issues, { maxCodePoints: 254 });
@@ -367,6 +372,7 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
   // 200 with the same login success shape. Every failure mode shares
   // one 401 invalid_verification_code.
   app.post('/api/auth/login/totp', publicRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
+    noStore(reply);
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['challengeToken', 'code', 'recoveryCode'])];
     const challengeToken = requiredString(body, 'challengeToken', issues, { maxCodePoints: 1024 });

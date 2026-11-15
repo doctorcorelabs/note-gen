@@ -6,7 +6,8 @@
 // with inject() and a fake store. They pin the contract shapes
 // (kontrak-api-kanonis.md section 3.12), the hook ordering (session
 // before Origin before CSRF), anti-enumeration, the TOTP second
-// step, and the boot-guard compatibility of GET /api/auth/me
+// step, Cache-Control no-store on the setup, login, and login/totp
+// answers (T-28-1), and the boot-guard compatibility of GET /api/auth/me
 // (200 with ok true means authenticated; 401 means unauthenticated).
 
 import type { FastifyInstance } from 'fastify';
@@ -98,6 +99,7 @@ describe('auth core routes', () => {
       expect(typeof body.data?.id).toBe('string');
       expect(typeof body.data?.workspaceId).toBe('string');
       expect(res.headers['set-cookie']).toBeUndefined();
+      expect(res.headers['cache-control']).toBe('no-store');
       const user = await fixture.store.findUserByEmail('admin@example.invalid');
       expect(user?.role).toBe('admin');
     });
@@ -117,6 +119,7 @@ describe('auth core routes', () => {
       });
       expect(again.statusCode).toBe(404);
       expect(bodyOf(again).error?.code).toBe('not_found');
+      expect(again.headers['cache-control']).toBe('no-store');
       expect(await fixture.store.getUserCount()).toBe(1);
     });
 
@@ -129,6 +132,7 @@ describe('auth core routes', () => {
       });
       expect(res.statusCode).toBe(401);
       expect(bodyOf(res).error?.code).toBe('invalid_setup_token');
+      expect(res.headers['cache-control']).toBe('no-store');
       expect(await fixture.store.getUserCount()).toBe(0);
       expect(fixture.store.auditEvents.map((event) => event.eventType)).toContain('installation_failed');
     });
@@ -153,6 +157,7 @@ describe('auth core routes', () => {
       expect(bodyOf(limited).error?.code).toBe('rate_limited');
       expect(bodyOf(limited).error?.retryable).toBe(true);
       expect(limited.headers['retry-after']).toBeDefined();
+      expect(limited.headers['cache-control']).toBe('no-store');
     });
 
     it('rejects unknown fields and bad shapes with details.fields', async () => {
@@ -170,6 +175,7 @@ describe('auth core routes', () => {
       expect(res.statusCode).toBe(400);
       const body = bodyOf(res);
       expect(body.error?.code).toBe('validation_failed');
+      expect(res.headers['cache-control']).toBe('no-store');
       const fields = (body.error?.details as { fields: Array<{ field: string }> }).fields;
       expect(fields.map((entry) => entry.field)).toContain('nickname');
       expect(fields.map((entry) => entry.field)).toContain('password');
@@ -211,6 +217,7 @@ describe('auth core routes', () => {
       expect(cookie).toContain('Max-Age=2592000');
       expect(res.body).not.toContain('passwordHash');
       expect(res.body).not.toContain('sessionHash');
+      expect(res.headers['cache-control']).toBe('no-store');
       const user = await fixture.store.findUserByEmail('a@example.invalid');
       expect(user?.lastLoginAt?.getTime()).toBe(TEST_NOW_MS);
     });
@@ -228,6 +235,7 @@ describe('auth core routes', () => {
         });
         expect(res.statusCode).toBe(401);
         const body = bodyOf(res);
+        expect(res.headers['cache-control']).toBe('no-store');
         return { code: body.error?.code, message: body.error?.message, details: body.error?.details };
       };
       const unknown = await attempt('nobody@example.invalid', PASSWORD);
@@ -258,6 +266,7 @@ describe('auth core routes', () => {
       });
       expect(limited.statusCode).toBe(429);
       expect(limited.headers['retry-after']).toBeDefined();
+      expect(limited.headers['cache-control']).toBe('no-store');
     });
 
     it('writes exactly one login_locked event per locked login attempt', async () => {
@@ -326,6 +335,7 @@ describe('auth core routes', () => {
       expect(res.statusCode).toBe(400);
       const fields = (bodyOf(res).error?.details as { fields: Array<{ field: string }> }).fields;
       expect(fields.map((entry) => entry.field)).toContain('workspaceId');
+      expect(res.headers['cache-control']).toBe('no-store');
     });
   });
 
@@ -339,6 +349,7 @@ describe('auth core routes', () => {
         payload: JSON.stringify({ email: 'a@example.invalid', password: PASSWORD }),
       });
       expect(first.statusCode).toBe(202);
+      expect(first.headers['cache-control']).toBe('no-store');
       expect(bodyOf(first).data).toEqual({ challengeToken: expect.any(String), step: 'totp' });
       expect(first.headers['set-cookie']).toBeUndefined();
       const challengeToken = (bodyOf(first).data as { challengeToken: string }).challengeToken;
@@ -349,6 +360,7 @@ describe('auth core routes', () => {
         payload: JSON.stringify({ challengeToken, code: totpCodeAtNow(TEST_NOW_MS) }),
       });
       expect(second.statusCode).toBe(200);
+      expect(second.headers['cache-control']).toBe('no-store');
       expect(bodyOf(second).data?.totpEnabled).toBe(true);
       expect(cookieFromResponse(second)).toBeDefined();
       expect(await fixture.store.findChallengeByHash(hashToken(challengeToken))).toBeNull();
@@ -366,6 +378,7 @@ describe('auth core routes', () => {
         });
         expect(res.statusCode).toBe(401);
         expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+        expect(res.headers['cache-control']).toBe('no-store');
       }
       expect(await fixture.store.findChallengeByHash(hashToken(challengeToken))).toBeNull();
     });
@@ -453,6 +466,7 @@ describe('auth core routes', () => {
         payload: JSON.stringify({ challengeToken: 'x', code: '123456', recoveryCode: 'abcd' }),
       });
       expect(both.statusCode).toBe(400);
+      expect(both.headers['cache-control']).toBe('no-store');
       const neither = await app.inject({
         method: 'POST',
         url: '/api/auth/login/totp',
@@ -460,6 +474,7 @@ describe('auth core routes', () => {
         payload: JSON.stringify({ challengeToken: 'x' }),
       });
       expect(neither.statusCode).toBe(400);
+      expect(neither.headers['cache-control']).toBe('no-store');
     });
   });
 
