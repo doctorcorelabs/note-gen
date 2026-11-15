@@ -25,10 +25,10 @@
 # runners, so there is no shared install job; the pnpm cache keeps
 # per-job installs fast.
 #
-# Root package.json has no typecheck/test scripts yet (upstream state),
-# so this workflow calls tsc, node --test, and the server scripts
-# directly instead of depending on scripts that do not exist. Adding
-# root scripts is a follow-up for the owning PR, not this framework.
+# Root package.json now carries typecheck/test scripts (landed in M7/M16);
+# this workflow still calls tsc directly for the typecheck job and the
+# server scripts directly, and calls the root test scripts for the
+# contract and adapter suites. Toolchain pins stay here (see above).
 #
 # The secret-scan job uses gitleaks when the runner provides it and
 # the grep backstop in scripts/secret-scan.sh otherwise. The backstop
@@ -118,10 +118,19 @@ jobs:
         run: pnpm --dir server install --frozen-lockfile
       # Legacy node:test specs (F12 section 1). Listed explicitly: a
       # missing file fails here instead of silently shrinking the suite.
-      # When the root Vitest suite lands (F12 section 7), extend this
-      # job to run it alongside these specs; do not drop either side.
       - name: Run legacy node:test specs
         run: node --test src/lib/vector-document-key.spec.mjs src/app/core/main/file/folder-item/paste-target.spec.mjs src/app/core/main/mark/mark-view-mode.spec.mjs
+      # Unit suites (AD-36, finding T1). The node:test suites under
+      # src/lib/platform and src/lib/web run through
+      # scripts/run-adapter-tests.mjs, which bundles each file with
+      # esbuild, runs it under node --test, and asserts a real
+      # counted result per file; the Vitest-style suites run through
+      # `vitest run --project unit`. `pnpm test:unit` runs both, so
+      # a vacuous run on either side fails this step. The file lists
+      # are explicit in the script: a missing file, an unlisted new
+      # spec/test file, or a file with 0 counted tests fails it.
+      - name: Run unit suites
+        run: pnpm test:unit
       - name: Run server tests
         run: pnpm --dir server test
 

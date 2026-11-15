@@ -4,10 +4,18 @@
 // Vitest configuration (fase1/desain-pengujian.md section 1.4).
 //
 // Two projects: `unit` for colocated TypeScript unit specs and
-// `contract` for parameterized adapter contract suites. The `unit`
-// project is empty until unit specs land; run it with
-// --passWithNoTests (see the test:unit script) so the empty project
-// does not fail the suite. There is deliberately no coverage
+// `contract` for parameterized adapter contract suites. The
+// node:test suites under src/lib/platform and src/lib/web are NOT
+// run through this config: scripts/run-adapter-tests.mjs
+// (pnpm test:adapter) runs them with asserted per-file counts
+// (AD-36). The `unit` project below runs the Vitest-style suites
+// (today: src/lib/web/csrf.spec.ts); the node:test specs are
+// excluded below, mirroring the runner's lists (only the .spec.ts
+// entries: this include never matches .test.ts). Keep the two in
+// sync: every spec runs under exactly one runner, and a spec in
+// neither scope fails loudly in one of them. `pnpm test:unit`
+// runs both runners, so a vacuous run on either side fails.
+// There is deliberately no coverage
 // threshold (desain-pengujian.md section 5.4) and no DOM environment.
 
 import { defineConfig } from "vitest/config";
@@ -27,7 +35,21 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["src/**/*.spec.ts"],
-          exclude: ["**/node_modules/**"],
+          // Node:test specs, excluded here and run by
+          // scripts/run-adapter-tests.mjs with asserted counts.
+          // Mirrors the runner's .spec.ts lists; keep in sync.
+          exclude: [
+            "**/node_modules/**",
+            "src/lib/platform/__tests__/v2-12-web-dialog-opener-clipboard.spec.ts",
+            "src/lib/platform/autostart/autostart.web.spec.ts",
+            "src/lib/platform/invoke/router.spec.ts",
+            "src/lib/platform/process/process.web.spec.ts",
+            "src/lib/platform/shell/shell.web.spec.ts",
+            "src/lib/platform/store/store.fake.spec.ts",
+            "src/lib/platform/updater/updater.web.spec.ts",
+            "src/lib/web/api-client.spec.ts",
+            "src/lib/web/errors.spec.ts",
+          ],
         },
       },
       {
