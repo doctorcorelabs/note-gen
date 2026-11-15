@@ -264,7 +264,7 @@ describe('POST /api/transactions with stub handlers', () => {
     expect(harness.runner.writeCalls).toBe(1);
   });
 
-  it('accepts an empty operations array as a no-op', async () => {
+  it('rejects an empty operations array with validation_failed and opens no transaction', async () => {
     harness = await buildHarness();
     const res = await harness.app.inject({
       method: 'POST',
@@ -272,10 +272,16 @@ describe('POST /api/transactions with stub handlers', () => {
       headers: AUTHED_HEADERS,
       payload: { operations: [] },
     });
-    expect(res.statusCode).toBe(200);
-    const body = res.json() as { ok: boolean; data: Record<string, unknown> };
-    expect(body.data['results']).toEqual([]);
-    expect(typeof body.data['transactionId']).toBe('string');
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+    expect(body.ok).toBe(false);
+    expect(body.error['code']).toBe('validation_failed');
+    expect(body.error['retryable']).toBe(false);
+    expect(body.error['details']).toEqual({
+      fields: [{ field: 'operations', issue: 'must contain at least 1 operation' }],
+    });
+    expect(harness.runner.writeCalls).toBe(0);
+    expect(harness.calls).toEqual([]);
   });
 
   it('rejects a read kind with invalid_operation and opens no transaction', async () => {
@@ -817,7 +823,7 @@ describe('POST /api/db/batch with stub handlers', () => {
     expect((res.json() as { error: Record<string, unknown> }).error['code']).toBe('internal_error');
   });
 
-  it('accepts an empty batch and ignores an idempotency header', async () => {
+  it('rejects an empty batch with validation_failed and opens no transaction', async () => {
     harness = await buildHarness();
     const res = await harness.app.inject({
       method: 'POST',
@@ -825,8 +831,74 @@ describe('POST /api/db/batch with stub handlers', () => {
       headers: { ...AUTHED_HEADERS, 'idempotency-key': 'ignored-key' },
       payload: { operations: [] },
     });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+    expect(body.ok).toBe(false);
+    expect(body.error['code']).toBe('validation_failed');
+    expect(body.error['retryable']).toBe(false);
+    expect(body.error['details']).toEqual({
+      fields: [{ field: 'operations', issue: 'must contain at least 1 operation' }],
+    });
+    expect(harness.runner.readCalls).toBe(0);
+    expect(harness.calls).toEqual([]);
+  });
+
+  it('rejects non-array operations on the batch with validation_failed', async () => {
+    harness = await buildHarness();
+    for (const payload of [
+      {},
+      { operations: null },
+      { operations: 'nope' },
+      { operations: 42 },
+      { operations: { kind: 'tags.list' } },
+    ]) {
+      const res = await harness.app.inject({
+        method: 'POST',
+        url: '/api/db/batch',
+        headers: AUTHED_HEADERS,
+        payload,
+      });
+      expect(res.statusCode).toBe(400);
+      expect((res.json() as { error: Record<string, unknown> }).error['code']).toBe('validation_failed');
+    }
+    expect(harness.runner.readCalls).toBe(0);
+  });
+
+  it('accepts a batch with exactly one operation', async () => {
+    harness = await buildHarness();
+    harness.registry.registerRead('tags.list', recordReadStub(harness.calls, [{ id: 1, name: 'Idea' }]));
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: '/api/db/batch',
+      headers: AUTHED_HEADERS,
+      payload: { operations: [{ kind: 'tags.list' }] },
+    });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: Record<string, unknown> }).data['results']).toEqual([]);
+    const body = res.json() as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data['results']).toEqual([{ kind: 'tags.list', rows: [{ id: 1, name: 'Idea' }] }]);
+    expect(harness.runner.readCalls).toBe(1);
+  });
+
+  it('rejects 51 operations and accepts exactly 50 on the batch', async () => {
+    harness = await buildHarness();
+    harness.registry.registerRead('tags.list', recordReadStub(harness.calls, []));
+    const tooMany = await harness.app.inject({
+      method: 'POST',
+      url: '/api/db/batch',
+      headers: AUTHED_HEADERS,
+      payload: { operations: Array.from({ length: 51 }, () => ({ kind: 'tags.list' })) },
+    });
+    expect(tooMany.statusCode).toBe(400);
+    expect((tooMany.json() as { error: Record<string, unknown> }).error['code']).toBe('validation_failed');
+    expect(harness.runner.readCalls).toBe(0);
+    const exactlyFifty = await harness.app.inject({
+      method: 'POST',
+      url: '/api/db/batch',
+      headers: AUTHED_HEADERS,
+      payload: { operations: Array.from({ length: 50 }, () => ({ kind: 'tags.list' })) },
+    });
+    expect(exactlyFifty.statusCode).toBe(200);
+    expect((exactlyFifty.json() as { data: { results: unknown[] } }).data.results).toHaveLength(50);
   });
 });
 
