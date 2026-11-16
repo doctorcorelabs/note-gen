@@ -19,6 +19,8 @@ import {
   isSafeSessionRowId,
   parseAuthMeData,
   parseAuthSessionList,
+  SESSION_EXPIRED_LOGIN_PATH,
+  SESSION_LOGIN_PATH,
   type AuthSessionClient,
 } from "./auth-client";
 import { CsrfTokenError } from "./csrf";
@@ -567,5 +569,12 @@ describe("seedCsrfToken", () => {
     const client = createAuthSessionClient({ fetchFn });
     expect(() => client.seedCsrfToken("")).toThrow(TypeError);
     expect(() => client.seedCsrfToken("has space")).toThrow(TypeError);
+  });
+});
+
+describe("login paths", () => {
+  it("keeps the plain login path for logout and the expiry path for expired sessions", () => {
+    expect(SESSION_LOGIN_PATH).toBe("/login");
+    expect(SESSION_EXPIRED_LOGIN_PATH).toBe("/login?expired=1");
   });
 });

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { LogOut, RefreshCw, User } from 'lucide-react'
 import { isTauri } from '@/lib/platform/detect'
 import {
+  SESSION_EXPIRED_LOGIN_PATH,
   SESSION_LOGIN_PATH,
   getSharedAuthSessionClient,
   type AuthMeData,
@@ -218,7 +219,7 @@ export function SessionMenu() {
             </p>
             <Button
               className="mt-3 w-full"
-              onClick={() => router.push(SESSION_LOGIN_PATH)}
+              onClick={() => router.push(SESSION_EXPIRED_LOGIN_PATH)}
             >
               Sign in
             </Button>

@@ -67,6 +67,15 @@ export const AUTH_LOGOUT_ALL_ENDPOINT = "/api/auth/logout-all";
 /** Login page path. Guards navigate here; this module never navigates. */
 export const SESSION_LOGIN_PATH = "/login";
 
+/**
+ * Login page path for session expiry. Expiry redirects (a rejected
+ * guard probe, a mid-session 401) navigate here so the login page
+ * (slot 03a) shows its expiry notice for ?expired=1. Deliberate
+ * logout navigates to SESSION_LOGIN_PATH instead: signing out is
+ * not an expiry and must not show the notice.
+ */
+export const SESSION_EXPIRED_LOGIN_PATH = "/login?expired=1";
+
 /** Account role, as returned by GET /api/auth/me. */
 export type AuthUserRole = "user" | "admin";
 

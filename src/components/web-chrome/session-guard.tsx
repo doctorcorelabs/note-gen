@@ -14,7 +14,7 @@ import {
   type SessionCheckCode,
 } from '@/lib/web/session-check'
 import {
-  SESSION_LOGIN_PATH,
+  SESSION_EXPIRED_LOGIN_PATH,
   getSharedAuthSessionClient,
 } from '@/lib/web/auth-client'
 
@@ -59,7 +59,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       return
     }
     redirectSentRef.current = true
-    router.replace(SESSION_LOGIN_PATH)
+    // Expiry, not logout: the login page shows its expiry notice.
+    router.replace(SESSION_EXPIRED_LOGIN_PATH)
   }, [router])
 
   useEffect(() => {
@@ -151,7 +152,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
           {state.kind === 'unauthenticated' ? (
             <button
               type="button"
-              onClick={() => router.replace(SESSION_LOGIN_PATH)}
+              onClick={() => router.replace(SESSION_EXPIRED_LOGIN_PATH)}
               className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               Sign in
