@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import useSettingStore from "@/stores/setting"
-import { platform, BaseDirectory } from '@/lib/platform'
+import { platform, BaseDirectory, isTauri } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import useArticleStore from "@/stores/article"
 import { useSkillsStore } from "@/stores/skills"
@@ -15,6 +15,7 @@ import {
 } from "@/components/responsive-popover"
 import { useState } from "react"
 import { useWorkspaceDisplayName } from "@/hooks/use-workspace-display-name"
+import { DisabledFeatureNote } from "../components/setting-disabled-notice"
 import { Field, FieldDescription, FieldTitle } from "@/components/ui/field"
 import { toast } from "@/hooks/use-toast"
 import { prepareActiveEditorDeactivationDurably } from "@/lib/editor-deactivation"
@@ -317,6 +318,25 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
 
 export function SettingWorkspace({ showTitle = true }: { showTitle?: boolean }) {
   const t = useTranslations('settings.file')
+  const disabledT = useTranslations('settings.disabled')
+  const workspacePath = useSettingStore(state => state.workspacePath)
+  const getWorkspaceDisplayName = useWorkspaceDisplayName()
+  const desktopApp = isTauri()
+
+  // Info only in the web version: the workspace comes from the sign-in
+  // session, and no local path picker is offered.
+  if (!desktopApp) {
+    return (
+      <Field>
+        {showTitle ? <FieldTitle>{t('workspace.current')}</FieldTitle> : null}
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">{getWorkspaceDisplayName(workspacePath, t('workspace.default'))}</p>
+          <DisabledFeatureNote>{disabledT('workspaceSwitch')}</DisabledFeatureNote>
+        </div>
+        <FieldDescription>{t('workspace.desc')}</FieldDescription>
+      </Field>
+    )
+  }
 
   return (
     <Field>

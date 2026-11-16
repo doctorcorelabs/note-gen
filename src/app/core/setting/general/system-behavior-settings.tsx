@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { capabilities, platform } from '@/lib/platform'
+import { capabilities, isTauri, platform } from '@/lib/platform'
 import { AppWindow, PanelTopClose, Rocket } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -39,6 +39,7 @@ export function SystemBehaviorSettings() {
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
   const autostartAvailable = capabilities.autostart
+  const desktopApp = isTauri()
 
   useEffect(() => {
     let cancelled = false
@@ -108,15 +109,21 @@ export function SystemBehaviorSettings() {
   return (
     <SettingSection title={t('title')} desc={t('desc')}>
       <ItemGroup className="gap-3">
-        <Item variant="outline">
+        <Item variant="outline" aria-disabled={!desktopApp}>
           <ItemMedia variant="icon"><AppWindow /></ItemMedia>
           <ItemContent>
-            <ItemTitle>{t('close.title')}</ItemTitle>
+            {/* The badge text intentionally matches the autostart item in
+                this file. The string is claimed for the catalogue by
+                slot i18n-g5 under
+                settings.general.behavior.autostart.desktopOnly; no new
+                key is claimed for it here. */}
+            <ItemTitle>{t('close.title')} {!desktopApp && <Badge variant="secondary">Desktop only</Badge>}</ItemTitle>
             <ItemDescription>{t('close.desc')}</ItemDescription>
           </ItemContent>
           <ItemActions className="basis-full sm:ml-auto sm:basis-auto">
             <Select
               value={closeBehavior}
+              disabled={!desktopApp}
               onValueChange={(value) => void setCloseBehavior(value as CloseBehavior)}
             >
               <SelectTrigger className="w-full sm:w-[200px]" aria-label={t('close.title')}>

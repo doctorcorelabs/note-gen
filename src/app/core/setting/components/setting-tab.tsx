@@ -19,6 +19,7 @@ import { usePluginStore } from '@/stores/plugins'
 import { usePluginLocalization } from '@/lib/plugins/localization'
 import { getInstalledPluginText, resolvePluginText } from '../plugins/plugin-display'
 import type { PluginSettingSection } from '@/stores/settings-dialog'
+import { SettingsPersistenceStatus } from './setting-disabled-notice'
 
 function collectSearchTerms(value: unknown): string[] {
   if (typeof value === 'string') return [value]
@@ -190,6 +191,7 @@ export function SettingTab() {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10 bg-gradient-to-t from-sidebar via-sidebar/70 to-transparent"
         aria-hidden="true"
       />
+      <SettingsPersistenceStatus />
     </div>
   )
 }
