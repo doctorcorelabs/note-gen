@@ -14,6 +14,7 @@ import {
 import { PluginIcon } from '@/components/plugins/plugin-icon'
 import { usePluginEditorCommands } from '@/components/plugins/use-plugin-editor-commands'
 import { toast } from '@/hooks/use-toast'
+import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 
 interface SlashMenuProps {
   editor: Editor
@@ -44,6 +45,11 @@ function ShortcutHint({ keys }: { keys: string[] }) {
 
 export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, range, query, onSelectItem }, ref) => {
   const t = useTranslations('editor.slashCommand')
+  const tDisabled = useTranslations('editor.disabled')
+  // Web fork (Fase 1, V3-24): AI slash items stay visible in web
+  // mode, but selecting one shows the disabled marker instead of
+  // dispatching an AI event that no listener would answer.
+  const aiDisabled = isEditorFeatureDisabled('ai')
   const hasQuery = query.trim().length > 0
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -240,6 +246,12 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
   const selectItem = useCallback(
     (item: SlashCommandItem | undefined) => {
       if (item && !editor.isDestroyed) {
+        if (aiDisabled && item.group === translations.groups.ai) {
+          const { titleKey, messageKey } = editorDisabledMessageKeys('ai')
+          toast({ title: tDisabled(titleKey), description: tDisabled(messageKey) })
+          document.dispatchEvent(new CustomEvent('slash-command-hide'))
+          return
+        }
         if (onSelectItem) {
           onSelectItem(item)
         } else {
@@ -247,7 +259,7 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
         }
       }
     },
-    [editor, onSelectItem, range]
+    [aiDisabled, editor, onSelectItem, range, tDisabled, translations.groups.ai]
   )
 
   const selectVisibleItem = useCallback(
