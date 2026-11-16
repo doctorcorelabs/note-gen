@@ -8,11 +8,14 @@
 // Subcheck A, derivative patterns, over src/:
 //   - raw Store.load calls outside src/lib/platform/ (0 from G1 on)
 //   - raw invoke calls outside src/lib/platform/ (0 from G2 on)
-//   - __TAURI_INTERNALS__ outside src/lib/platform/detect.ts (baseline
-//     set of 3 files; only developer-tools.ts may remain at G2/G3;
-//     0 from G4 on)
+//   - __TAURI_INTERNALS__ outside src/lib/platform/detect.ts (AD-89
+//     delta baseline: debug-log.ts + the relocated
+//     event-listener.tauri.ts; both close at the 3D detect.ts
+//     consolidation; 0 from G4 on once 3D lands)
 //   - direct adapter implementation imports (*.tauri / *.web) outside
-//     registry.ts and __tests__/ (always 0; mirrors guard check 3)
+//     registry.ts, __tests__/, and the AD-33 wiring modules
+//     (mirrors guard check 3; the AD-91 re-export is allowed
+//     until 3D deletes it)
 // Without --wave, Store/invoke counts are informational, but a new
 // internals file or any direct implementation import still fails.
 //
@@ -34,8 +37,8 @@
 //       Anything else fails closed for manual review.
 // Files outside src/
 // may change only if they are the two allowlists or .eslintrc.json.
-// Added or deleted source files fail, except the G4 deletion of
-// src/lib/tauri-event-listener.ts (the transitional re-export).
+// Added or deleted source files fail, except the 3D deletion of
+// src/lib/tauri-event-listener.ts (the transitional re-export, AD-91).
 //
 // The import scanner is a line-based heuristic, not a full parser:
 // it tracks bracket depth across lines and strips line comments and
@@ -73,14 +76,30 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WAVE_ORDER = { G1: 1, G2: 2, G3: 3, G4: 4, G5: 5, all: 5 };
+// AD-89 delta baseline (verified at trunk d8f55765): developer-tools.ts
+// lost its marker at G4 (now isTauri() via the registry) and the
+// tauri-event-listener.ts marker moved to event-listener.tauri.ts at
+// G2. Both remaining files close at the 3D detect.ts consolidation.
 const INTERNALS_BASELINE = new Set([
   "src/lib/agent/debug-log.ts",
-  "src/lib/developer-tools.ts",
+  "src/lib/platform/event/event-listener.tauri.ts",
+]);
+const INTERNALS_G2_G3 = new Set([
+  "src/lib/agent/debug-log.ts",
+  "src/lib/platform/event/event-listener.tauri.ts",
+]);
+// Direct implementation imports allowed only in the registry mechanism
+// and the AD-33 wiring modules (mirrors guard check 3), plus the AD-91
+// transitional re-export until 3D deletes it with this entry.
+const DIRECT_ALLOWED_FILES = new Set([
+  "src/lib/platform/registry.ts",
+  "src/lib/platform/wiring.ts",
+  "src/lib/platform/dialog/dialog-wiring.ts",
   "src/lib/tauri-event-listener.ts",
 ]);
-const INTERNALS_G2_G3 = new Set(["src/lib/developer-tools.ts"]);
+// scripts/ci/tauri-import-allowlist.txt was deleted at G5 (V3-21); it
+// is intentionally absent here and must not be restored (rev5b).
 const ALLOWED_OUTSIDE_SRC = new Set([
-  "scripts/ci/tauri-import-allowlist.txt",
   "scripts/ci/tauri-internals-allowlist.txt",
   ".eslintrc.json",
 ]);
@@ -161,7 +180,7 @@ function checkPatterns(root, wave) {
         internalsFiles.add(rel);
       }
       if (directRe.test(line)
-        && rel !== "src/lib/platform/registry.ts"
+        && !DIRECT_ALLOWED_FILES.has(rel)
         && !rel.includes("src/lib/platform/__tests__/")
         && !/\.(test|spec)\.tsx?$/.test(rel)) {
         directHits.push(`${rel}:${idx + 1}`);
@@ -263,6 +282,13 @@ function importLineSet(lines) {
     }
     if (isExportFrom && !/\bfrom\s+['"]/.test(text)) continue; // plain export, not a module specifier
     if (isStatic && !text.includes("from") && !/import\s*['"]/.test(text) && !text.includes("import(")) continue;
+    // Forward-progress guarantee: the upward expansion for a dynamic
+    // import can leave end before the trigger line i (the forward scan
+    // may stop at a ";" inside a type literal or a comment), and
+    // i = end would then loop forever (conversation-sync.ts:782,
+    // platform-switch-plan.ts:1424 at trunk d8f55765). Clamping is a
+    // no-op whenever end >= i, which holds for every other statement.
+    end = Math.max(end, i);
     for (let k = start; k <= end; k += 1) inImport.add(k);
     i = end;
   }

@@ -162,7 +162,8 @@ fi
 # re-export src/lib/tauri-event-listener.ts (deleted at 3D when the
 # registry-surface decision for listenTauriEvent lands) necessarily
 # imports the relocated *.tauri implementation.
-# The G4 merge MUST remove this exclusion together with the file.
+# 3D MUST remove this exclusion together with the file (AD-91 replaces
+# the earlier G4 obligation recorded at the G2 merge).
 echo "check 3: direct adapter implementation imports"
 direct=$(grep -rn --include='*.ts' --include='*.tsx' -E \
   "from ['\"][^'\"]*\.(tauri|web)['\"]|import\(['\"][^'\"]*\.(tauri|web)['\"]\)" \
