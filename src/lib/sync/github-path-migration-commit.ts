@@ -1,5 +1,5 @@
-import { fetch, type Proxy } from '@tauri-apps/plugin-http'
 import { platform } from '@/lib/platform'
+import type { Proxy } from '@/lib/platform'
 import { remoteRecord } from './directory-listing'
 import { readSyncResponseJson } from './remote-file'
 import { getSyncRepoName } from './repo-utils'
@@ -129,7 +129,7 @@ export async function moveGithubPath({
     try {
       let response: Response
       try {
-        const send = () => fetch(`${baseUrl}${resource}`, {
+        const send = () => platform.http.fetch(`${baseUrl}${resource}`, {
           method, headers: new Headers(headers), proxy, signal: controller.signal,
           maxRedirections: 0, body: body === undefined ? undefined : JSON.stringify(body),
         })

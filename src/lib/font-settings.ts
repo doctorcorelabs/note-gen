@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 
 export const APP_FONT_SYSTEM_VALUE = '__notegen_system_font__'
@@ -75,7 +75,7 @@ export async function loadSystemFontFamilies() {
   }
 
   try {
-    const fonts = await invoke<SystemFontPayload[]>('list_system_fonts')
+    const fonts = await platform.invoke.invoke<SystemFontPayload[]>('list_system_fonts')
     return normalizeFontFamilies(fonts.map((font) => font.family))
   } catch (error) {
     console.debug('Failed to load system fonts:', error)

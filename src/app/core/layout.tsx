@@ -27,7 +27,6 @@ import { reportAppStart } from "@/lib/event-report"
 import { TopAppBar, WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
 import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { invoke } from '@tauri-apps/api/core'
 import { TextSizeProvider } from "@/contexts/text-size-context"
 import { SyncConfirmDialog } from "@/components/sync-confirm-dialog"
 import { applyThemeColors } from "@/lib/theme-utils"
@@ -83,7 +82,7 @@ export default function RootLayout({
     const registerPluginInstallListener = async () => {
       const window = getCurrentWindow()
       unlistenPluginInstall = await window.listen<{ pluginId: string }>('plugin-install-request', (event) => handlePluginInstall(event.payload))
-      const pending = await invoke<Array<{ pluginId: string }>>('drain_pending_plugin_install_requests')
+      const pending = await platform.invoke.invoke<Array<{ pluginId: string }>>('drain_pending_plugin_install_requests')
       if (!cancelled) pending.forEach(handlePluginInstall)
     }
     void registerPluginInstallListener()
@@ -140,7 +139,7 @@ export default function RootLayout({
       }
       unlistenOpenFiles = unlisten
 
-      const pendingPaths = await invoke<string[]>('drain_pending_open_files')
+      const pendingPaths = await platform.invoke.invoke<string[]>('drain_pending_open_files')
       await openMarkdownFiles(pendingPaths)
     }
 
@@ -163,7 +162,7 @@ export default function RootLayout({
       todo: t('record.mark.type.todo'),
     }
 
-    void invoke('update_tray_record_toolbar_config', {
+    void platform.invoke.invoke('update_tray_record_toolbar_config', {
       screenshotShortcut: shortcutsInitialized ? screenshotShortcut : undefined,
       shortcutRecording: Boolean(recordingShortcut),
       config: recordToolbarConfig.map((item) => ({

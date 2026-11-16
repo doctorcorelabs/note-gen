@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { platform } from '@/lib/platform';
 
 // 匹配 Rust 类型的接口定义
 export interface SearchItem {
@@ -63,7 +63,7 @@ export class RustFuzzySearch {
     if (!query) return [];
     
     try {
-      const rawResults = await invoke<Array<{item: SearchItem; refindex: number; score: number; matches: MatchInfo[]}>>('fuzzy_search', {
+      const rawResults = await platform.invoke.invoke<Array<{item: SearchItem; refindex: number; score: number; matches: MatchInfo[]}>>('fuzzy_search', {
         items: this.items,
         query,
         keys: this.options.keys,
@@ -97,7 +97,7 @@ export class RustFuzzySearch {
     if (!query) return [];
     
     try {
-      const rawResults = await invoke<Array<{item: SearchItem; refindex: number; score: number; matches: MatchInfo[]}>>('fuzzy_search_parallel', {
+      const rawResults = await platform.invoke.invoke<Array<{item: SearchItem; refindex: number; score: number; matches: MatchInfo[]}>>('fuzzy_search_parallel', {
         items: this.items,
         query,
         keys: this.options.keys,

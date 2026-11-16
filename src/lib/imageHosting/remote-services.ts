@@ -1,5 +1,5 @@
-import { fetch, type Proxy } from '@tauri-apps/plugin-http'
 import { platform } from '@/lib/platform'
+import type { Proxy } from '@/lib/platform'
 import { v4 as uuid } from 'uuid'
 
 import type {
@@ -91,7 +91,7 @@ export function isLskyConfigComplete(config: LskyConfig) {
 
 export async function testLskyConnection(config: LskyConfig) {
   if (!isLskyConfigComplete(config)) return false
-  const response = await fetch(joinUrl(config.apiUrl, 'profile'), {
+  const response = await platform.http.fetch(joinUrl(config.apiUrl, 'profile'), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${config.token.trim()}`,
@@ -113,7 +113,7 @@ export async function uploadImageByLsky(file: File) {
     formData.append('strategy_id', config.strategyId.trim())
   }
 
-  const response = await fetch(joinUrl(config.apiUrl, 'upload'), {
+  const response = await platform.http.fetch(joinUrl(config.apiUrl, 'upload'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.token.trim()}`,
@@ -143,7 +143,7 @@ export function isWebDavImageConfigComplete(config: WebDavImageConfig) {
 
 export async function testWebDavImageConnection(config: WebDavImageConfig) {
   if (!isWebDavImageConfigComplete(config)) return false
-  const response = await fetch(config.baseUrl.trim(), {
+  const response = await platform.http.fetch(config.baseUrl.trim(), {
     method: 'PROPFIND',
     headers: {
       Authorization: basicAuth(config.username.trim(), config.password),
@@ -169,7 +169,7 @@ export async function uploadImageByWebDav(file: File) {
   let currentCollection = config.baseUrl
   for (const part of prefixParts) {
     currentCollection = joinUrl(currentCollection, part)
-    const createResponse = await fetch(currentCollection, {
+    const createResponse = await platform.http.fetch(currentCollection, {
       method: 'MKCOL',
       headers: { Authorization: auth },
       proxy,
@@ -186,7 +186,7 @@ export async function uploadImageByWebDav(file: File) {
       )
     }
   }
-  const response = await fetch(joinUrl(config.baseUrl, relativePath), {
+  const response = await platform.http.fetch(joinUrl(config.baseUrl, relativePath), {
     method: 'PUT',
     headers: {
       Authorization: auth,
@@ -238,7 +238,7 @@ export async function uploadImageByCustomHttp(file: File) {
     body = formData
   }
 
-  const response = await fetch(url, {
+  const response = await platform.http.fetch(url, {
     method: config.method,
     headers,
     body,
@@ -277,7 +277,7 @@ export async function uploadImageByCloudinary(file: File) {
   formData.append('upload_preset', config.uploadPreset.trim())
   if (config.folder?.trim()) formData.append('folder', config.folder.trim())
 
-  const response = await fetch(
+  const response = await platform.http.fetch(
     `https://api.cloudinary.com/v1_1/${encodeURIComponent(config.cloudName.trim())}/image/upload`,
     {
       method: 'POST',
@@ -299,7 +299,7 @@ export function isImageKitConfigComplete(config: ImageKitConfig) {
 
 export async function testImageKitConnection(config: ImageKitConfig) {
   if (!isImageKitConfigComplete(config)) return false
-  const response = await fetch('https://api.imagekit.io/v1/files?limit=1', {
+  const response = await platform.http.fetch('https://api.imagekit.io/v1/files?limit=1', {
     method: 'GET',
     headers: {
       Authorization: basicAuth(config.privateKey.trim(), ''),
@@ -319,7 +319,7 @@ export async function uploadImageByImageKit(file: File) {
   formData.append('fileName', createFileName(file))
   if (config.folder?.trim()) formData.append('folder', config.folder.trim())
 
-  const response = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
+  const response = await platform.http.fetch('https://upload.imagekit.io/api/v1/files/upload', {
     method: 'POST',
     headers: {
       Authorization: basicAuth(config.privateKey.trim(), ''),

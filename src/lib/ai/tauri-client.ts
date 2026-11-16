@@ -1,7 +1,6 @@
-import { Channel, invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import type OpenAI from 'openai'
 import type { ModelsPage } from 'openai/resources/models'
-import { platform } from '@/lib/platform'
 import type { AiConfig, ReasoningEffort } from '@/app/core/setting/config'
 import { createSponsoredUsageRecorder, reserveSponsoredRequest } from './sponsored-model-limits'
 
@@ -336,7 +335,7 @@ function toAbortError(error: unknown) {
 
 async function cancelRequest(requestId: string) {
   try {
-    await invoke('cancel_ai_request', { requestId })
+    await platform.invoke.invoke('cancel_ai_request', { requestId })
   } catch {
     // ignore cancellation race
   }
@@ -367,7 +366,7 @@ export async function invokeAiJson<T = JsonValue>(
   const requestId = signal ? createRequestId() : undefined
   const detachAbort = requestId ? attachAbort(signal, requestId) : () => {}
   try {
-    const response = await invoke<T>('ai_json_request', {
+    const response = await platform.invoke.invoke<T>('ai_json_request', {
       request: {
         ...payload,
         requestId,
@@ -389,7 +388,7 @@ export async function invokeAiBinary(
   const requestId = signal ? createRequestId() : undefined
   const detachAbort = requestId ? attachAbort(signal, requestId) : () => {}
   try {
-    const response = await invoke<number[]>('ai_binary_request', {
+    const response = await platform.invoke.invoke<number[]>('ai_binary_request', {
       request: {
         ...payload,
         requestId,
@@ -410,7 +409,7 @@ export async function invokeAiMultipart<T = JsonValue>(
   const requestId = signal ? createRequestId() : undefined
   const detachAbort = requestId ? attachAbort(signal, requestId) : () => {}
   try {
-    return await invoke<T>('ai_multipart_request', {
+    return await platform.invoke.invoke<T>('ai_multipart_request', {
       request: {
         ...payload,
         requestId,
@@ -435,7 +434,7 @@ async function createStreamingIterable<T>(
   const recordUsage = createSponsoredUsageRecorder(request.config, request.body)
   const queue = new AsyncQueue<T>()
   const detachAbort = attachAbort(signal, request.requestId)
-  const channel = new Channel<StreamEvent<T>>((event) => {
+  const channel = platform.channel.createChannel<StreamEvent<T>>((event) => {
     if (event.type === 'chunk') {
       void recordUsage(event.data)
       queue.push(event.data)
@@ -448,7 +447,7 @@ async function createStreamingIterable<T>(
     queue.close()
   })
 
-  void invoke('ai_chat_completion_stream', {
+  void platform.invoke.invoke('ai_chat_completion_stream', {
     request,
     onEvent: channel,
   }).then(() => {

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@/lib/platform'
 import { Buffer } from 'buffer'
 import {
@@ -80,27 +79,27 @@ export function supportsCloudFolderWorkspace(config: CloudFolderConfig): boolean
 }
 
 export async function getICloudSyncFolder(): Promise<string> {
-  return invoke<string>('get_icloud_sync_folder')
+  return platform.invoke.invoke<string>('get_icloud_sync_folder')
 }
 
 export async function pickIOSSyncFolder(): Promise<IOSFolderAccess | null> {
-  return invoke<IOSFolderAccess | null>('pick_ios_sync_folder')
+  return platform.invoke.invoke<IOSFolderAccess | null>('pick_ios_sync_folder')
 }
 
 export async function restoreIOSSyncFolder(bookmarkBase64: string): Promise<IOSFolderAccess> {
-  return invoke<IOSFolderAccess>('restore_ios_sync_folder', { bookmarkBase64 })
+  return platform.invoke.invoke<IOSFolderAccess>('restore_ios_sync_folder', { bookmarkBase64 })
 }
 
 export async function releaseIOSSyncFolder(bookmarkBase64: string): Promise<void> {
-  await invoke('release_ios_sync_folder', { bookmarkBase64 })
+  await platform.invoke.invoke('release_ios_sync_folder', { bookmarkBase64 })
 }
 
 export async function pickAndroidSyncFolder(): Promise<AndroidFolderAccess | null> {
-  return invoke<AndroidFolderAccess | null>('pick_android_sync_folder')
+  return platform.invoke.invoke<AndroidFolderAccess | null>('pick_android_sync_folder')
 }
 
 export async function releaseAndroidSyncFolder(rootUri: string): Promise<void> {
-  await invoke('release_android_sync_folder', { rootUri })
+  await platform.invoke.invoke('release_android_sync_folder', { rootUri })
 }
 
 export async function getIOSWorkspaceFolderAccess(): Promise<IOSFolderAccess | null> {
@@ -204,9 +203,9 @@ export async function testCloudFolderConnection(config: CloudFolderConfig): Prom
   if (isOneDriveConfig(config)) return testOneDriveConnection(config)
   const root = await authorizedPath(config)
   if (platform.os.platform() === 'android') {
-    return invoke<boolean>('test_android_cloud_folder', { rootUri: root, scope: 'sync' })
+    return platform.invoke.invoke<boolean>('test_android_cloud_folder', { rootUri: root, scope: 'sync' })
   }
-  return invoke<boolean>('test_cloud_folder_sync', { root })
+  return platform.invoke.invoke<boolean>('test_cloud_folder_sync', { root })
 }
 
 export async function cloudFolderUpload(
@@ -222,14 +221,14 @@ export async function cloudFolderUpload(
   if (condition) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
   const root = await authorizedPath(config)
   if (platform.os.platform() === 'android') {
-    return invoke<CloudFolderObject>('write_android_cloud_folder_file', {
+    return platform.invoke.invoke<CloudFolderObject>('write_android_cloud_folder_file', {
       rootUri: root,
       key,
       contentBase64: encodeContent(content),
       scope: 'sync',
     })
   }
-  return invoke<CloudFolderObject>('write_cloud_folder_sync_file', {
+  return platform.invoke.invoke<CloudFolderObject>('write_cloud_folder_sync_file', {
     root,
     key,
     contentBase64: encodeContent(content),
@@ -245,12 +244,12 @@ export async function cloudFolderDownloadBytes(
   }
   const root = await authorizedPath(config)
   const file = platform.os.platform() === 'android'
-    ? await invoke<CloudFolderContent | null>('read_android_cloud_folder_file', {
+    ? await platform.invoke.invoke<CloudFolderContent | null>('read_android_cloud_folder_file', {
         rootUri: root,
         key,
         scope: 'sync',
       })
-    : await invoke<CloudFolderContent | null>('read_cloud_folder_sync_file', { root, key })
+    : await platform.invoke.invoke<CloudFolderContent | null>('read_cloud_folder_sync_file', { root, key })
   if (!file) return null
   return {
     content: decodeBytes(file.contentBase64),
@@ -289,13 +288,13 @@ export async function cloudFolderDelete(config: CloudFolderConfig, key: string, 
   if (condition) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
   const root = await authorizedPath(config)
   if (platform.os.platform() === 'android') {
-    return invoke<boolean>('delete_android_cloud_folder_file', {
+    return platform.invoke.invoke<boolean>('delete_android_cloud_folder_file', {
       rootUri: root,
       key,
       scope: 'sync',
     })
   }
-  return invoke<boolean>('delete_cloud_folder_sync_file', {
+  return platform.invoke.invoke<boolean>('delete_cloud_folder_sync_file', {
     root,
     key,
   })
@@ -311,13 +310,13 @@ export async function cloudFolderListObjects(
   }
   const root = await authorizedPath(config)
   if (platform.os.platform() === 'android') {
-    return invoke<CloudFolderObject[]>('list_android_cloud_folder_files', {
+    return platform.invoke.invoke<CloudFolderObject[]>('list_android_cloud_folder_files', {
       rootUri: root,
       prefix: prefix || null,
       scope: 'sync',
     })
   }
-  return invoke<CloudFolderObject[]>('list_cloud_folder_sync_files', {
+  return platform.invoke.invoke<CloudFolderObject[]>('list_cloud_folder_sync_files', {
     root,
     prefix,
   })
@@ -334,7 +333,7 @@ export async function androidCloudFolderWorkspaceUpload(
   if (condition) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
   return withRemotePathWriteLock(getAndroidCloudFolderWorkspaceWriteIdentity(config), [key], async () => {
     await beforeWrite?.()
-    return invoke<CloudFolderObject>('write_android_cloud_folder_file', {
+    return platform.invoke.invoke<CloudFolderObject>('write_android_cloud_folder_file', {
       rootUri: requirePath(config), key, contentBase64: encodeContent(content), scope: 'workspace',
     })
   })
@@ -345,7 +344,7 @@ export async function androidCloudFolderWorkspaceDownloadBytes(
   key: string,
 ): Promise<CloudFolderDownloadBytes | null> {
   if (isOneDriveConfig(config)) return oneDriveDownloadBytes(config, key)
-  const file = await invoke<CloudFolderContent | null>('read_android_cloud_folder_file', {
+  const file = await platform.invoke.invoke<CloudFolderContent | null>('read_android_cloud_folder_file', {
     rootUri: requirePath(config),
     key,
     scope: 'workspace',
@@ -368,7 +367,7 @@ export async function androidCloudFolderWorkspaceList(
       !object.key.split('/').some(segment => segment.startsWith('.'))
     ))
   }
-  return invoke<CloudFolderObject[]>('list_android_cloud_folder_files', {
+  return platform.invoke.invoke<CloudFolderObject[]>('list_android_cloud_folder_files', {
     rootUri: requirePath(config),
     prefix: prefix || null,
     scope: 'workspace',
@@ -394,7 +393,7 @@ export async function androidCloudFolderWorkspaceDelete(
   if (condition) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
   return withRemotePathWriteLock(getAndroidCloudFolderWorkspaceWriteIdentity(config), [key], async () => {
     await beforeWrite?.()
-    return invoke<boolean>('delete_android_cloud_folder_file', {
+    return platform.invoke.invoke<boolean>('delete_android_cloud_folder_file', {
       rootUri: requirePath(config), key, scope: 'workspace',
     })
   })
@@ -404,7 +403,7 @@ export async function migrateWorkspaceToCloudFolder(
   config: CloudFolderConfig,
   sourcePath?: string,
 ): Promise<WorkspaceMigrationResult> {
-  return invoke<WorkspaceMigrationResult>('migrate_workspace_to_cloud_folder', {
+  return platform.invoke.invoke<WorkspaceMigrationResult>('migrate_workspace_to_cloud_folder', {
     root: await authorizedPath(config),
     sourcePath: sourcePath?.trim() || null,
   })

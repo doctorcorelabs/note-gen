@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
+import { platform } from '@/lib/platform'
 import type {
   MCPServerConfig,
   JSONRPCRequest,
@@ -45,7 +44,7 @@ export class MCPClient {
    */
   private async connectStdio(): Promise<void> {
     try {
-      await invoke('start_mcp_stdio_server', {
+      await platform.invoke.invoke('start_mcp_stdio_server', {
         serverId: this.config.id,
         command: this.config.command,
         args: this.config.args || [],
@@ -146,7 +145,7 @@ export class MCPClient {
   async disconnect(): Promise<void> {
     if (this.config.type === 'stdio') {
       try {
-        await invoke('stop_mcp_server', { serverId: this.config.id })
+        await platform.invoke.invoke('stop_mcp_server', { serverId: this.config.id })
       } catch {
         // 静默处理错误
       }
@@ -196,14 +195,14 @@ export class MCPClient {
   private async sendNotification(method: string, params: Record<string, unknown> = {}): Promise<void> {
     const notification = { jsonrpc: '2.0' as const, method, params }
     if (this.config.type === 'stdio') {
-      await invoke('send_mcp_notification', {
+      await platform.invoke.invoke('send_mcp_notification', {
         serverId: this.config.id,
         message: JSON.stringify(notification),
       })
       return
     }
     if (!this.config.url) throw new Error('HTTP server URL is required')
-    const response = await tauriFetch(this.config.url, {
+    const response = await platform.http.fetch(this.config.url, {
       method: 'POST',
       headers: this.getHttpHeaders(),
       body: JSON.stringify(notification),
@@ -229,7 +228,7 @@ export class MCPClient {
    */
   private async sendStdioRequest<T>(request: JSONRPCRequest): Promise<T> {
     try {
-      const responseStr = await invoke<string>('send_mcp_message', {
+      const responseStr = await platform.invoke.invoke<string>('send_mcp_message', {
         serverId: this.config.id,
         message: JSON.stringify(request),
         timeoutMs: this.defaultTimeout,
@@ -268,7 +267,7 @@ export class MCPClient {
     }
     
     try {
-      const response = await tauriFetch(this.config.url, {
+      const response = await platform.http.fetch(this.config.url, {
         method: 'POST',
         headers: this.getHttpHeaders(),
         body: JSON.stringify(request),

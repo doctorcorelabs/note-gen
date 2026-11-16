@@ -1,8 +1,8 @@
 'use client'
 
 import { create } from 'zustand'
-import type { StoreHandle } from '@/lib/platform'
 import { platform, BaseDirectory } from '@/lib/platform'
+import type { StoreHandle } from '@/lib/platform'
 import useSettingStore from './setting'
 import useSyncStore from './sync'
 import emitter from '@/lib/emitter'
@@ -892,9 +892,8 @@ export async function recoverSelfHostedSwitchBackup() {
     usePlatformSwitchStore.setState({ mutated: true, selfHostedSafetyBackupPath: safetyPath })
     // Settle native writes before restoring older resource bytes. Otherwise a
     // later runtime startup could replay an old temporary file over recovery.
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('self_hosted_recover_file_journal').catch(error => console.warn('Native writes require quarantine before local recovery', error))
-    const pendingFileWrites = await invoke<number[]>('self_hosted_pending_file_journal')
+    await platform.invoke.invoke('self_hosted_recover_file_journal').catch(error => console.warn('Native writes require quarantine before local recovery', error))
+    const pendingFileWrites = await platform.invoke.invoke<number[]>('self_hosted_pending_file_journal')
     if (pendingFileWrites.length) {
       const { executeRecordTransaction, getDb } = await import('@/db')
       const database = await getDb()
@@ -903,14 +902,14 @@ export async function recoverSelfHostedSwitchBackup() {
       )
             await platform.fs.writeFile(`${safetyPath}/quarantined-file-journal-${Date.now()}-${crypto.randomUUID()}.json`,
         new TextEncoder().encode(JSON.stringify(journal)), { baseDir: BaseDirectory.AppData })
-      await invoke('self_hosted_flush_switch_data', { relativePath: safetyPath })
+      await platform.invoke.invoke('self_hosted_flush_switch_data', { relativePath: safetyPath })
       // Preserve both the journal evidence and its temporary files. This
       // explicit recovery supersedes failed writes; they must never replay.
       await executeRecordTransaction([{ sql: `update self_hosted_file_journal
         set state = 'rolled-back', error_code = 'superseded-by-local-recovery', updated_at = $1
         where id in (select value from json_each($2)) and state not in ('committed','rolled-back')`,
         values: [Date.now(), JSON.stringify(pendingFileWrites)] }])
-      if ((await invoke<number[]>('self_hosted_pending_file_journal')).length) throw new Error('SELF_HOSTED_BACKUP_FILE_JOURNAL_PENDING')
+      if ((await platform.invoke.invoke<number[]>('self_hosted_pending_file_journal')).length) throw new Error('SELF_HOSTED_BACKUP_FILE_JOURNAL_PENDING')
     }
     const restored = await restoreSelfHostedSwitchBackup(backupPath, safetyPath, assertSwitchActive, progress)
     await useSettingStore.getState().setWorkspacePath(restored.root)

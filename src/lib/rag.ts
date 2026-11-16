@@ -12,7 +12,6 @@ import {
 } from "@/db/vector";
 import { deleteKnowledgeSource, upsertKnowledgeSource, updateKnowledgeSourceIndexState } from '@/db/knowledge';
 import { createKnowledgeSourceKey, parseKnowledgeSourceKey } from '@/types/knowledge';
-import { invoke } from "@tauri-apps/api/core";
 import {
   BM25Document,
   createBM25ChunkKey,
@@ -1049,7 +1048,7 @@ export async function getContextForQuery(
         // 限制补充查询数量，避免对长问题逐词扫描全文
         for (const keyword of fuzzyQueries) {
           // 短查询或标识符单独补充召回。
-          const fuzzyResults: FuzzySearchResult[] = await invoke('fuzzy_search', {
+          const fuzzyResults: FuzzySearchResult[] = await platform.invoke.invoke('fuzzy_search', {
             items,
             query: keyword.text,
             keys: ['title', 'article'],
@@ -1624,7 +1623,7 @@ export async function getContextForQueryInFolder(
     try {
       if (items.length > 0) {
         for (const keyword of fuzzyQueries) {
-          const fuzzyResults: FuzzySearchResult[] = await invoke('fuzzy_search', {
+          const fuzzyResults: FuzzySearchResult[] = await platform.invoke.invoke('fuzzy_search', {
             items,
             query: keyword.text,
             keys: ['title', 'article'],

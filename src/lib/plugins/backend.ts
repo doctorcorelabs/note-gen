@@ -1,6 +1,6 @@
 import { getVersion } from '@tauri-apps/api/app'
-import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import {
   PLUGIN_ERROR_CODES,
   PluginError,
@@ -50,7 +50,7 @@ export async function invokePluginBackend<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   try {
-    return await invoke<T>(command, args)
+    return await platform.invoke.invoke<T>(command, args)
   } catch (error) {
     if (isRecord(error) && typeof error.code === 'string' && typeof error.message === 'string') {
       throw new PluginError(mapNativeErrorCode(error.code), error.message, { nativeCode: error.code })
@@ -61,7 +61,7 @@ export async function invokePluginBackend<T>(
 
 export async function getPluginPlatform(): Promise<PluginPlatform> {
   if (!checkIsTauri()) return 'desktop'
-  const current = platform()
+  const current = osPlatform()
   if (current === 'ios') return 'ios'
   if (current === 'android') return 'android'
   return 'desktop'
@@ -74,7 +74,7 @@ export async function getAppVersion(): Promise<string> {
 
 export async function listInstalledPluginPackages(): Promise<InstalledPlugin[]> {
   if (!checkIsTauri()) return []
-  const current = platform()
+  const current = osPlatform()
   if (current === 'ios' || current === 'android') return []
   return invokePluginBackend<InstalledPlugin[]>('plugin_list_installed')
 }

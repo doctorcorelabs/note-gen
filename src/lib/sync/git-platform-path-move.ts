@@ -1,5 +1,5 @@
-import { fetch, type Proxy } from '@tauri-apps/plugin-http'
 import { platform } from '@/lib/platform'
+import type { Proxy } from '@/lib/platform'
 import { GITLAB_INSTANCES, GitlabInstanceType } from './gitlab.types'
 import { GITEA_INSTANCES, GiteaInstanceType } from './gitea.types'
 import { remoteRecord } from './directory-listing'
@@ -165,7 +165,7 @@ export async function moveGitPlatformPath(
         try {
           response = method === 'GET'
             ? await fetchRemoteRead(`${base}${resource}`, { headers, proxy, signal: controller.signal })
-            : await fetch(`${base}${resource}`, {
+            : await platform.http.fetch(`${base}${resource}`, {
               method, headers: new Headers(headers), proxy, signal: controller.signal, maxRedirections: 0,
               body: body === undefined ? undefined : JSON.stringify(body),
             })

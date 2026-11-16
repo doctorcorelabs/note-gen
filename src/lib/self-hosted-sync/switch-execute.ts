@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { syncStaleError } from '@/lib/sync/sync-stale-error'
@@ -165,7 +164,7 @@ async function assertLocalPersonalSnapshot(snapshot: SelfHostedSwitchSnapshot, a
 }
 
 async function portable(path: string) {
-  return invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath: path })
+  return platform.invoke.invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath: path })
 }
 
 async function replaceRemoteSnapshot(
@@ -308,7 +307,7 @@ async function replaceRemoteSnapshot(
       const path = local.localRoot ? await portable(local.localKey) : null
       const content = local.domain === 'file' ? String(local.payload.content ?? '') : null
       const contentHash = local.domain === 'folder' ? null
-        : content !== null ? await invoke<string>('self_hosted_sha256', { value: content }) : local.hash
+        : content !== null ? await platform.invoke.invoke<string>('self_hosted_sha256', { value: content }) : local.hash
       await database.execute(`insert into self_hosted_object_mappings(workspace_id, object_id, kind, local_identity, relative_path, path_casefold, content_hash, blob_refs, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [id, object.objectId, object.kind, `${local.domain}:${local.localKey}`, path?.normalized ?? null, path?.caseFolded ?? null, contentHash, JSON.stringify(object.blobRefs), Date.now()])
       await database.execute(`insert or replace into self_hosted_revisions(workspace_id, object_id, revision, sequence, content_hash, snapshot, created_at) values ($1,$2,$3,$4,$5,$6,$7)`,

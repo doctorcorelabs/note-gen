@@ -1,6 +1,6 @@
 import CryptoJS from 'crypto-js'
-import { fetch, type Proxy } from '@tauri-apps/plugin-http'
 import { platform } from '@/lib/platform'
+import type { Proxy } from '@/lib/platform'
 import { v4 as uuid } from 'uuid'
 
 import type { QiniuConfig, UpyunConfig } from './types'
@@ -85,7 +85,7 @@ export async function uploadImageByQiniu(file: File) {
   formData.append('key', key)
   formData.append('file', file, file.name)
 
-  const response = await fetch(config.uploadUrl.trim(), {
+  const response = await platform.http.fetch(config.uploadUrl.trim(), {
     method: 'POST',
     body: formData,
     proxy: await getProxy(),
@@ -128,7 +128,7 @@ export async function testUpyunConnection(config: UpyunConfig) {
   const method = 'GET'
   const uri = `/${encodeURIComponent(config.bucket.trim())}/`
   const date = new Date().toUTCString()
-  const response = await fetch(`https://v0.api.upyun.com${uri}`, {
+  const response = await platform.http.fetch(`https://v0.api.upyun.com${uri}`, {
     method,
     headers: {
       Authorization: await createUpyunAuthorization({
@@ -158,7 +158,7 @@ export async function uploadImageByUpyun(file: File) {
   const date = new Date().toUTCString()
   const method = 'PUT'
   const body = new Uint8Array(await file.arrayBuffer())
-  const response = await fetch(`https://v0.api.upyun.com${uri}`, {
+  const response = await platform.http.fetch(`https://v0.api.upyun.com${uri}`, {
     method,
     headers: {
       Authorization: await createUpyunAuthorization({

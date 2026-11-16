@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { platform } from '@/lib/platform'
-import { invoke } from '@tauri-apps/api/core'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { Check, FolderOpen, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -346,7 +345,7 @@ export function SelfHostedWorkspaces({ profileId }: { profileId: string }) {
   async function openConflictCopy(conflict: ConflictRow) {
     if (!conflict.localCopyPath || conflict.conflictType === 'symlink-ignored') return
     try {
-      const portable = await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: conflict.localCopyPath })
+      const portable = await platform.invoke.invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: conflict.localCopyPath })
       const backup = /^self-hosted-conflict-backups\/[a-f0-9-]+\.json$/.test(portable.normalized)
       const root = backup ? await platform.path.appDataDir() : conflict.localRoot
       if (!root) throw new Error(t('conflictCopyUnavailable'))
@@ -377,7 +376,7 @@ export function SelfHostedWorkspaces({ profileId }: { profileId: string }) {
           : `${targetPath}${suffix}`
       }
       const expectedHash = await hashBytes(bytes)
-      await invoke('self_hosted_atomic_write', {
+      await platform.invoke.invoke('self_hosted_atomic_write', {
         workspaceId: target.id,
         objectId: null,
         workspaceRoot: target.localRoot,

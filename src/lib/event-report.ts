@@ -6,8 +6,8 @@
  */
 
 import { getVersion } from '@tauri-apps/api/app'
-import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 
 let runtimeSessionId: string | null = null
 
@@ -73,7 +73,7 @@ async function getAppVersion(): Promise<string> {
 
 async function getPlatform(): Promise<string> {
   try {
-    return platform()
+    return osPlatform()
   } catch (error) {
     console.error('Failed to get platform:', error)
     return 'unknown'
@@ -108,7 +108,7 @@ async function trackAnalyticsEvent(name: EventType): Promise<boolean> {
       props: {},
     }
 
-    const responseText = await invoke<string>('track_analytics_event', { event })
+    const responseText = await platform.invoke.invoke<string>('track_analytics_event', { event })
     if (process.env.NODE_ENV === 'development') {
       console.info(`[analytics] reported ${name}`, {
         response: responseText,

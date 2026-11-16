@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { isPermissionGranted } from '@tauri-apps/plugin-notification'
 
 interface ScreenshotNotification {
@@ -13,7 +13,7 @@ export async function notifyScreenshotResult(notification: ScreenshotNotificatio
     if (!(await isPermissionGranted())) return
     // The JS sendNotification API drops the native promise. Await its request
     // here so an IPC error cannot become an unhandled rejection.
-    await invoke('plugin:notification|notify', { options: notification })
+    await platform.invoke.invoke('plugin:notification|notify', { options: notification })
   } catch (error) {
     console.warn('Unable to send screenshot notification:', error)
   }

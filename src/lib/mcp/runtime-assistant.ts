@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 
 export type MCPRuntimeKind =
   | 'npx'
@@ -61,13 +61,13 @@ export interface MCPInstallProgressEvent {
 }
 
 export async function inspectMcpRuntime(command: string, args: string[] = []): Promise<MCPRuntimeInspection> {
-  return invoke<MCPRuntimeInspection>('inspect_mcp_runtime', { command, args })
+  return platform.invoke.invoke<MCPRuntimeInspection>('inspect_mcp_runtime', { command, args })
 }
 
 export async function installMcpRuntime(recipeId: string): Promise<MCPRuntimeInstallResult> {
-  return invoke<MCPRuntimeInstallResult>('install_mcp_runtime', { recipeId })
+  return platform.invoke.invoke<MCPRuntimeInstallResult>('install_mcp_runtime', { recipeId })
 }
 
 export async function cancelMcpRuntimeInstall(recipeId: string): Promise<MCPCancelInstallResult> {
-  return invoke<MCPCancelInstallResult>('cancel_mcp_runtime_install', { recipeId })
+  return platform.invoke.invoke<MCPCancelInstallResult>('cancel_mcp_runtime_install', { recipeId })
 }

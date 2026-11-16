@@ -1,5 +1,5 @@
 import { platform } from "@/lib/platform";
-import { fetch, Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
 import { toast } from '@/hooks/use-toast';
 import { v4 as uuid } from 'uuid';
 import type { S3Config } from './types';
@@ -180,7 +180,7 @@ export async function testS3Connection(config: S3Config): Promise<boolean> {
     requestHeaders.append('X-Amz-Date', amzDate);
     requestHeaders.append('X-Amz-Content-Sha256', payloadHashHex);
     
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: method,
       headers: requestHeaders,
       proxy
@@ -213,7 +213,7 @@ export async function testS3Connection(config: S3Config): Promise<boolean> {
         requestPutHeaders.append('Content-Type', 'text/plain');
         requestPutHeaders.append('X-Amz-Content-Sha256', hashPut);
         
-        const putResponse = await fetch(testUrl, {
+        const putResponse = await platform.http.fetch(testUrl, {
             method: 'PUT',
             headers: requestPutHeaders,
             body: testContent,
@@ -298,7 +298,7 @@ export async function uploadImageByS3(file: File): Promise<string | undefined> {
     requestHeaders.append('Content-Type', file.type || 'application/octet-stream');
     requestHeaders.append('X-Amz-Content-Sha256', payloadHashHex);
     
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'PUT',
       headers: requestHeaders,
       body: uint8Array,

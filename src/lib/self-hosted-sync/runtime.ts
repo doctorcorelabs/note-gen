@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { executeRecordTransaction, getDb } from '@/db'
 import { SelfHostedApiError } from './client'
@@ -1635,7 +1634,7 @@ async function resolveRemoteDeleteTarget(binding: Binding, event: SyncEvent) {
   const localKey = String(payload.relativePath ?? payload.localKey ?? '')
   if (!domain || !localKey) return event.objectId!
   const portable = ['file', 'asset', 'folder'].includes(domain)
-    ? await invoke<PortableMappingPath>('self_hosted_portable_path', { relativePath: localKey })
+    ? await platform.invoke.invoke<PortableMappingPath>('self_hosted_portable_path', { relativePath: localKey })
     : null
   const normalizedLocalKey = portable?.normalized ?? localKey
   const localIdentity = `${domain}:${normalizedLocalKey}`
@@ -1807,7 +1806,7 @@ async function applyRemoteAsset(binding: Binding, event: SyncEvent, payload: Rec
   const relativePath = String(payload.relativePath ?? '')
   const blobId = String(payload.blobId ?? '')
   if (!relativePath || !blobId) throw new Error('remote_asset_invalid')
-  const portable = await invoke<PortableMappingPath>('self_hosted_portable_path', { relativePath })
+  const portable = await platform.invoke.invoke<PortableMappingPath>('self_hosted_portable_path', { relativePath })
   const downloaded = await downloadAsset({
     profileId: binding.profileId,
     workspaceId: binding.workspaceId,
@@ -1859,10 +1858,10 @@ async function applyRemoteAsset(binding: Binding, event: SyncEvent, payload: Rec
 async function applyRemoteFolder(binding: Binding, event: SyncEvent, payload: Record<string, unknown>) {
   const relativePath = String(payload.relativePath ?? '')
   if (!relativePath) throw new Error('remote_folder_invalid')
-  const portable = await invoke<{ normalized: string; caseFolded: string }>(
+  const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>(
     'self_hosted_portable_path', { relativePath },
   )
-  await invoke('self_hosted_create_directory', {
+  await platform.invoke.invoke('self_hosted_create_directory', {
     workspaceId: binding.workspaceId,
     objectId: event.objectId,
     workspaceRoot: binding.localRoot,
@@ -1942,7 +1941,7 @@ async function applyRemoteDelete(binding: Binding, objectId: string) {
       const current = mapping.kind === 'asset' ? null : await platform.fs.readTextFile(absolutePath)
       const currentHash = mapping.kind === 'asset'
         ? await hashBytes(await platform.fs.readFile(absolutePath))
-        : await invoke<string>('self_hosted_sha256', { value: current! })
+        : await platform.invoke.invoke<string>('self_hosted_sha256', { value: current! })
       if (currentHash !== mapping.contentHash) {
         await database.execute(
           `insert into self_hosted_conflicts(
@@ -1963,7 +1962,7 @@ async function applyRemoteDelete(binding: Binding, objectId: string) {
         mapping.contentHash,
       )
     } else if (mapping.kind === 'asset' && fileExists && mapping.contentHash) {
-      await invoke<boolean>('self_hosted_delete_file', {
+      await platform.invoke.invoke<boolean>('self_hosted_delete_file', {
         workspaceId: binding.workspaceId,
         objectId,
         workspaceRoot: binding.localRoot,
@@ -2022,7 +2021,7 @@ async function cleanupDeletedFolders(binding: Binding) {
         throw new Error('remote_folder_editor_busy')
       }
       await articleState.cleanTabsByDeletedFolder(folder.relativePath, binding.localRoot)
-      await invoke<boolean>('self_hosted_delete_directory', {
+      await platform.invoke.invoke<boolean>('self_hosted_delete_directory', {
         workspaceId: binding.workspaceId,
         objectId: folder.objectId,
         workspaceRoot: binding.localRoot,
@@ -2059,7 +2058,7 @@ async function applyRemoteFile(binding: Binding, event: SyncEvent, payload: Reco
     associatedData: typeof payload.associatedData === 'string' ? payload.associatedData : undefined,
   }) : null
   const content = downloaded ? new TextDecoder().decode(downloaded.bytes) : String(payload.content ?? '')
-  const portable = await invoke<PortableMappingPath>('self_hosted_portable_path', { relativePath })
+  const portable = await platform.invoke.invoke<PortableMappingPath>('self_hosted_portable_path', { relativePath })
   const database = await getDb()
   const previousMappings = await database.select<Array<{ deletedAt: number | null }>>(
     `select deleted_at as deletedAt from self_hosted_object_mappings
@@ -2074,7 +2073,7 @@ async function applyRemoteFile(binding: Binding, event: SyncEvent, payload: Reco
   const distrustStoredBase = typeof previousMappings[0]?.deletedAt === 'number'
     || hadUnsentLocalUpsert
   await convergeRemotePortableMapping(binding, event, 'note', 'file', portable)
-  const expectedHash = downloaded?.hash ?? await invoke<string>('self_hosted_sha256', { value: content })
+  const expectedHash = downloaded?.hash ?? await platform.invoke.invoke<string>('self_hosted_sha256', { value: content })
   const appliedSnapshot = await writeRemoteEditorSnapshot(
     binding,
     event.objectId!,
@@ -2089,7 +2088,7 @@ async function applyRemoteFile(binding: Binding, event: SyncEvent, payload: Reco
          where workspace_id = $1 and object_id = $2 limit 1`,
         [binding.workspaceId, event.objectId],
       )
-      const currentHash = await invoke<string>('self_hosted_sha256', { value: currentContent })
+      const currentHash = await platform.invoke.invoke<string>('self_hosted_sha256', { value: currentContent })
       const diverged = distrustStoredBase
         ? currentHash !== expectedHash
         : mappings[0]?.contentHash
@@ -2432,13 +2431,13 @@ async function recordBootstrapApplyFailure(
 }
 
 async function writeJournaled(binding: Binding, objectId: string, relativePath: string, content: string) {
-  await invoke('self_hosted_atomic_write', {
+  await platform.invoke.invoke('self_hosted_atomic_write', {
     workspaceId: binding.workspaceId,
     objectId,
     workspaceRoot: binding.localRoot,
     relativePath,
     contents: encodeUtf8Base64Url(content),
-    expectedHash: await invoke<string>('self_hosted_sha256', { value: content }),
+    expectedHash: await platform.invoke.invoke<string>('self_hosted_sha256', { value: content }),
   })
 }
 
@@ -2474,12 +2473,12 @@ async function rollbackRemoteEditorSnapshot(
   if (currentContent !== writtenContent) {
     throw new Error('remote_file_rollback_diverged')
   }
-  await invoke<boolean>('self_hosted_delete_file', {
+  await platform.invoke.invoke<boolean>('self_hosted_delete_file', {
     workspaceId: binding.workspaceId,
     objectId,
     workspaceRoot: binding.localRoot,
     relativePath,
-    expectedHash: await invoke<string>('self_hosted_sha256', { value: writtenContent }),
+    expectedHash: await platform.invoke.invoke<string>('self_hosted_sha256', { value: writtenContent }),
   })
 }
 
@@ -2617,7 +2616,7 @@ async function deleteRemoteEditorFile(
       if (hasQueuedSave()) return false
 
       if (fileExists && expectedHash) {
-        const deleted = await invoke<boolean>('self_hosted_delete_file', {
+        const deleted = await platform.invoke.invoke<boolean>('self_hosted_delete_file', {
           workspaceId: binding.workspaceId,
           objectId,
           workspaceRoot: binding.localRoot,
@@ -2679,7 +2678,7 @@ async function deleteRemoteEditorFile(
 
 async function writeBytesJournaled(binding: Binding, objectId: string, relativePath: string, content: Uint8Array) {
   await assertNoPendingPathMove(binding, relativePath)
-  await invoke('self_hosted_atomic_write', {
+  await platform.invoke.invoke('self_hosted_atomic_write', {
     workspaceId: binding.workspaceId,
     objectId,
     workspaceRoot: binding.localRoot,
@@ -2775,7 +2774,7 @@ async function recordAppliedCommandRevision(
         appliedContentHash = payload.plaintextHash
       }
       if (payload.domain === 'file' && typeof payload.content === 'string') {
-        const hash = await invoke<string>('self_hosted_sha256', { value: payload.content })
+        const hash = await platform.invoke.invoke<string>('self_hosted_sha256', { value: payload.content })
         appliedContentHash = hash
         await (await getDb()).execute(
           `update self_hosted_object_mappings

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@/lib/platform'
 
 import { getDefaultArticleAbsolutePath, getFilePathOptions } from '@/lib/workspace'
@@ -35,7 +34,7 @@ export async function moveEntriesToSystemTrash(relativePaths: string[], workspac
     if (isMobileDevice()) {
       for (const path of paths) await platform.fs.remove(path, { recursive: true })
     } else {
-      await invoke('move_paths_to_trash', { paths })
+      await platform.invoke.invoke('move_paths_to_trash', { paths })
     }
   }
   return journaled + paths.length

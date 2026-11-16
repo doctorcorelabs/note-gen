@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { getWorkspacePath } from '@/lib/workspace'
 import type { SkillScope } from './types'
 
@@ -80,7 +80,7 @@ async function buildRequest(input: SkillPackageInput) {
 export async function validateSkillPackage(
   input: SkillPackageInput
 ): Promise<SkillPackageValidation> {
-  return await invoke<SkillPackageValidation>('validate_skill_package', {
+  return await platform.invoke.invoke<SkillPackageValidation>('validate_skill_package', {
     request: await buildRequest(input),
   })
 }
@@ -88,7 +88,7 @@ export async function validateSkillPackage(
 export async function installSkillPackage(
   input: SkillPackageInput
 ): Promise<SkillPackageInstallResult> {
-  return await invoke<SkillPackageInstallResult>('install_skill_package', {
+  return await platform.invoke.invoke<SkillPackageInstallResult>('install_skill_package', {
     request: await buildRequest(input),
   })
 }

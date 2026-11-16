@@ -1,5 +1,4 @@
 import { platform } from "@/lib/platform";
-import { fetch } from "@tauri-apps/plugin-http";
 
 const BASE_URL = 'https://s.ee/api/v1/file'
 
@@ -17,7 +16,7 @@ export async function uploadImageBySmms(file: File) {
   formData.append('smfile', file)
   formData.append('format', 'json')
 
-  const response = await fetch(`${BASE_URL}/upload`, {
+  const response = await platform.http.fetch(`${BASE_URL}/upload`, {
     method: 'POST',
     body: formData,
     headers: {
@@ -41,7 +40,7 @@ export async function getUserInfo() {
   if (!config) return
   const token = config.token
 
-  const response = await fetch(`${BASE_URL}/domains`, {
+  const response = await platform.http.fetch(`${BASE_URL}/domains`, {
     method: 'GET',
     headers: {
       'Authorization': token,

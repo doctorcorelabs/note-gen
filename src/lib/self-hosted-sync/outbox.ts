@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { filterSyncData } from '@/config/sync-exclusions'
@@ -76,7 +75,7 @@ async function fileSnapshotMatchesMapping(
   if (!current) return false
   try {
     const content = await platform.fs.readTextFile(await platform.path.join(current.localRoot, relativePath))
-    const hash = await invoke<string>('self_hosted_sha256', { value: content })
+    const hash = await platform.invoke.invoke<string>('self_hosted_sha256', { value: content })
     return hash === current.contentHash
   } catch {
     return false
@@ -161,7 +160,7 @@ export async function enqueuePathMove(oldPath: string, newPath: string) {
     const relativePath = mapping.relativePath === oldPath
       ? newPath
       : `${newPath}${mapping.relativePath.slice(oldPath.length)}`
-    const portable = await invoke<{ normalized: string; caseFolded: string }>(
+    const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>(
       'self_hosted_portable_path', { relativePath },
     )
     const domain = mapping.kind === 'note' ? 'file' : mapping.kind
@@ -936,7 +935,7 @@ async function ensureObjectMapping(
   }
   const database = await getDb()
   const portable = domain === 'file' || domain === 'asset' || domain === 'folder'
-    ? await invoke<{ normalized: string; caseFolded: string }>(
+    ? await platform.invoke.invoke<{ normalized: string; caseFolded: string }>(
         'self_hosted_portable_path',
         { relativePath: localKey },
       )
@@ -1022,7 +1021,7 @@ async function ensureObjectMapping(
   const stablePersonalIdentity = domain === 'setting' || domain in STRUCTURED_DOMAINS
   let objectId = existing?.objectId ?? (stablePersonalIdentity
     ? await resolveStructuredObjectId(workspaceId, domain, normalizedLocalKey)
-    : canUseDeterministicImport ? await invoke<string>('self_hosted_import_object_id', {
+    : canUseDeterministicImport ? await platform.invoke.invoke<string>('self_hosted_import_object_id', {
         workspaceId,
         relativePath: `${domain}/${normalizedLocalKey}`,
       })

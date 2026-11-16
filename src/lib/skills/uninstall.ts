@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { getWorkspacePath } from '@/lib/workspace'
 import type { SkillScope } from './types'
 
@@ -15,7 +15,7 @@ export async function uninstallSkill(
   scope: SkillScope,
 ): Promise<UninstallSkillResult> {
   const workspace = scope === 'project' ? await getWorkspacePath() : null
-  return await invoke<UninstallSkillResult>('uninstall_skill', {
+  return await platform.invoke.invoke<UninstallSkillResult>('uninstall_skill', {
     request: {
       skillId,
       scope,

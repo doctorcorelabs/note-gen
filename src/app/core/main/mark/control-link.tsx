@@ -34,7 +34,6 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { isMobileDevice as checkIsMobileDevice } from '@/lib/check'
 import { hasText, readText } from 'tauri-plugin-clipboard-api'
 import { platform } from '@/lib/platform'
-import { invoke } from '@tauri-apps/api/core'
 import { toast } from '@/hooks/use-toast'
 import { RecordSaveTarget } from './record-save-target'
 import useSettingStore from '@/stores/setting'
@@ -220,7 +219,7 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
 
     try {
       const browserPagePromise = browserTabId
-        ? invoke<BrowserPageContent>('browser_get_content', { tabId: browserTabId }).catch(() => null)
+        ? platform.invoke.invoke<BrowserPageContent>('browser_get_content', { tabId: browserTabId }).catch(() => null)
         : Promise.resolve(null)
       setQueue(queueId, { progress: '30%' });
       const page = await captureLink(targetUrl)

@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { AlertTriangle, Cable, Copy, KeyRound, Network } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useState } from 'react'
@@ -68,14 +68,14 @@ export function LocalMcpServer() {
   }, [endpoint, secret])
 
   async function refresh() {
-    setStatus(await invoke<LocalMcpStatus>('get_local_mcp_status'))
+    setStatus(await platform.invoke.invoke<LocalMcpStatus>('get_local_mcp_status'))
   }
 
   useEffect(() => {
     if (!desktop) return
     void refresh().catch(error => toast({ title: t('loadFailed'), description: String(error), variant: 'destructive' }))
     const timer = window.setInterval(() => {
-      void invoke<LocalMcpStatus>('get_local_mcp_status').then(nextStatus => {
+      void platform.invoke.invoke<LocalMcpStatus>('get_local_mcp_status').then(nextStatus => {
         setStatus(nextStatus)
       }).catch(() => undefined)
     }, 5000)
@@ -96,7 +96,7 @@ export function LocalMcpServer() {
   async function toggle(enabled: boolean) {
     setPendingAction('toggle')
     try {
-      await invoke('set_local_mcp_enabled', { enabled })
+      await platform.invoke.invoke('set_local_mcp_enabled', { enabled })
       await refresh()
     } catch (error) {
       toast({ title: t('updateFailed'), description: String(error), variant: 'destructive' })
@@ -113,8 +113,8 @@ export function LocalMcpServer() {
   async function copyConnectionConfig() {
     setPendingAction('copy')
     try {
-      if (!status?.enabled) await invoke('set_local_mcp_enabled', { enabled: true })
-      const nextSecret = await invoke<LocalMcpConnectionSecret>('get_or_create_local_mcp_connection', {
+      if (!status?.enabled) await platform.invoke.invoke('set_local_mcp_enabled', { enabled: true })
+      const nextSecret = await platform.invoke.invoke<LocalMcpConnectionSecret>('get_or_create_local_mcp_connection', {
         name: t('defaultConnectionName'),
       })
       const nextConfig = JSON.stringify({
@@ -137,7 +137,7 @@ export function LocalMcpServer() {
   async function resetAccessToken() {
     setPendingAction('reset')
     try {
-      const nextSecret = await invoke<LocalMcpConnectionSecret>('reset_local_mcp_access_token', {
+      const nextSecret = await platform.invoke.invoke<LocalMcpConnectionSecret>('reset_local_mcp_access_token', {
         name: t('defaultConnectionName'),
       })
       const nextConfig = JSON.stringify({
@@ -164,7 +164,7 @@ export function LocalMcpServer() {
     }
     setPendingAction('port')
     try {
-      const nextStatus = await invoke<LocalMcpStatus>('set_local_mcp_port', { port: parsedPort })
+      const nextStatus = await platform.invoke.invoke<LocalMcpStatus>('set_local_mcp_port', { port: parsedPort })
       setStatus(nextStatus)
       toast({ title: t('portSaved') })
     } catch (error) {

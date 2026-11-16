@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 interface TerminalOutput { sessionId: string; data: string }
@@ -28,7 +28,7 @@ export async function connectPluginFrameCapabilities(options: {
   let unlistenOutput: UnlistenFn | undefined
   let unlistenClosed: UnlistenFn | undefined
   const send = (message: Record<string, unknown>) => { if (active) port.postMessage(message) }
-  const close = (sessionId: string) => invoke('plugin_terminal_close', { pluginId, workspaceId, sessionId })
+  const close = (sessionId: string) => platform.invoke.invoke('plugin_terminal_close', { pluginId, workspaceId, sessionId })
 
   if (terminal) {
     unlistenOutput = await listen<TerminalOutput>('plugin-terminal-output', event => {
@@ -63,7 +63,7 @@ export async function connectPluginFrameCapabilities(options: {
       if (method === 'terminal.open') {
         opening += 1
         try {
-          const sessionId = await invoke<string>('plugin_terminal_open', { pluginId, workspaceId, ...dimensions(request) })
+          const sessionId = await platform.invoke.invoke<string>('plugin_terminal_open', { pluginId, workspaceId, ...dimensions(request) })
           if (!active) { void close(sessionId).catch(() => undefined); return }
           sessions.add(sessionId)
           send({ id, result: sessionId })
@@ -83,9 +83,9 @@ export async function connectPluginFrameCapabilities(options: {
       if (typeof sessionId !== 'string' || !sessions.has(sessionId)) throw new Error('Terminal session is unavailable')
       if (method === 'terminal.write') {
         if (typeof request.data !== 'string' || request.data.length > 65_536) throw new Error('Invalid terminal input')
-        await invoke('plugin_terminal_write', { pluginId, workspaceId, sessionId, data: request.data })
+        await platform.invoke.invoke('plugin_terminal_write', { pluginId, workspaceId, sessionId, data: request.data })
       } else if (method === 'terminal.resize') {
-        await invoke('plugin_terminal_resize', { pluginId, workspaceId, sessionId, ...dimensions(request) })
+        await platform.invoke.invoke('plugin_terminal_resize', { pluginId, workspaceId, sessionId, ...dimensions(request) })
       } else if (method === 'terminal.close') {
         sessions.delete(sessionId)
         await close(sessionId)

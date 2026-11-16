@@ -6,7 +6,7 @@ import { syncStaleError } from './sync-stale-error'
 import { toast } from '@/hooks/use-toast';
 import { platform } from '@/lib/platform';
 import { v4 as uuid } from 'uuid';
-import { fetch, Proxy } from '@tauri-apps/plugin-http';
+import type { Proxy } from '@/lib/platform';
 import { fetch as encodeFetch } from './encode-fetch'
 import { buildRemoteLogicalPath, debugSyncPath, encodeRemoteFileContent, decodeBase64ToBytes } from './remote-file'
 import { 
@@ -229,7 +229,7 @@ export async function uploadFile({
           content: base64Content, encoding: 'base64',
           ...(expected ? { last_commit_id: expected.lastCommitId } : {}) }] })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(commitsApiUrl, { method: 'POST', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(commitsApiUrl, { method: 'POST', headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGitlabMutation(baseUrl, projectId, targetPath, branch, headers, proxy, expected, desiredVersion),
       })
       if (response.ok) return { data: await response.json() } as GitlabResponse<GitlabCommit>
@@ -263,11 +263,11 @@ export async function getDirectoryFiles({ path, repo }: { path: string; repo: st
   let page = 1
   while (true) {
     const params = new URLSearchParams({ path, ref: branch, per_page: '100', page: String(page) })
-    const response = await fetch(`${baseUrl}/projects/${projectId}/repository/tree?${params}`, {
+    const response = await platform.http.fetch(`${baseUrl}/projects/${projectId}/repository/tree?${params}`, {
       method: 'GET', headers, proxy,
     })
     if (response.status === 404 && !path && page === 1) {
-      const project = await readDirectoryResponse(await fetch(`${baseUrl}/projects/${projectId}`, { method: 'GET', headers, proxy }))
+      const project = await readDirectoryResponse(await platform.http.fetch(`${baseUrl}/projects/${projectId}`, { method: 'GET', headers, proxy }))
       if (project && typeof project === 'object' && 'empty_repo' in project && project.empty_repo === true) return []
     }
     if (response.status === 404 && path && page === 1) {
@@ -314,7 +314,7 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
     const fileUrl = `${baseUrl}/projects/${projectId}/repository/files/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
 
     try {
-      const fileResponse = await fetch(fileUrl, {
+      const fileResponse = await platform.http.fetch(fileUrl, {
         method: 'GET',
         headers,
         proxy
@@ -337,7 +337,7 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
     // 如果不是单个文件，尝试获取目录列表
     const url = `${baseUrl}/projects/${projectId}/repository/tree?path=${encodeURIComponent(path)}&ref=${encodeURIComponent(branch)}`;
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'GET',
       headers,
       proxy
@@ -401,7 +401,7 @@ export async function deleteFile({ path, sha, repo, beforeWrite }: { path: strin
       const url = `${baseUrl}/projects/${encodeURIComponent(projectId)}/repository/files/${encodeURIComponent(path)}`
       const body = JSON.stringify({ branch, commit_message: `Delete ${path}`, last_commit_id: expected.lastCommitId })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(url, { method: 'DELETE', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(url, { method: 'DELETE', headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGitlabMutation(baseUrl, projectId, path, branch, headers, proxy, expected),
       })
       if (response.ok) return true
@@ -435,7 +435,7 @@ export async function getFileCommits({ path, repo }: { path: string; repo: strin
     const encodedPath = encodeURIComponent(path);
     const url = `${baseUrl}/projects/${projectId}/repository/commits?path=${encodedPath}&per_page=100`;
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'GET',
       headers,
       proxy
@@ -522,7 +522,7 @@ export async function getUserInfo(token?: string): Promise<GitlabUserInfo> {
     headers.append('Authorization', `Bearer ${accessToken}`);
     headers.append('Content-Type', 'application/json');
 
-    const response = await fetch(`${baseUrl}/user`, {
+    const response = await platform.http.fetch(`${baseUrl}/user`, {
       method: 'GET',
       headers,
       proxy
@@ -574,7 +574,7 @@ export async function checkSyncProjectState(name: string): Promise<GitlabProject
     // 搜索项目
     const searchUrl = `${baseUrl}/projects?search=${name}&owned=true&per_page=10`;
     
-    const response = await fetch(searchUrl, {
+    const response = await platform.http.fetch(searchUrl, {
       method: 'GET',
       headers,
       proxy
@@ -612,7 +612,7 @@ export async function listUserRepositories(): Promise<string[]> {
   const baseUrl = await getGitlabApiBaseUrl()
   const headers = await getCommonHeaders()
   const proxy = await getProxyConfig()
-  const response = await fetch(
+  const response = await platform.http.fetch(
     `${baseUrl}/projects?owned=true&order_by=last_activity_at&sort=desc&per_page=100`,
     { method: 'GET', headers, proxy }
   )
@@ -647,7 +647,7 @@ export async function createSyncProject(name: string, isPrivate: boolean = true)
       default_branch: 'main'
     };
 
-    const response = await fetch(`${baseUrl}/projects`, {
+    const response = await platform.http.fetch(`${baseUrl}/projects`, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestBody),
@@ -703,7 +703,7 @@ export async function mutateFileConditionally(path: string, repo: string, condit
     const body = JSON.stringify({ branch, commit_message: `Sync: ${path}`, last_commit_id: expected?.lastCommitId,
       ...(content ? { content: encodeRemoteFileContent(content), encoding: 'base64' } : {}) })
     const response = await recoverRemoteMutation({ beforeWrite,
-      send: () => fetch(url, {
+      send: () => platform.http.fetch(url, {
         method: content ? condition.version === null ? 'POST' : 'PUT' : 'DELETE',
         headers: new Headers(headers), proxy, body,
       }),

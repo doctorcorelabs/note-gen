@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { ClientOptions } from '@tauri-apps/plugin-http';
+import type { ClientOptions } from '@/lib/platform';
+import { platform } from '@/lib/platform';
 
 const ERROR_REQUEST_CANCELLED = 'Request canceled';
 
@@ -46,7 +46,7 @@ async function fetch(input: string, init?: RequestInit & ClientOptions) {
   if (signal?.aborted) {
       throw new Error(ERROR_REQUEST_CANCELLED);
   }
-  const rid = await invoke('plugin:http|fetch', {
+  const rid = await platform.invoke.invoke('plugin:http|fetch', {
     clientConfig: {
       method: req.method,
       url: req.url,
@@ -58,13 +58,13 @@ async function fetch(input: string, init?: RequestInit & ClientOptions) {
       danger
     }
   });
-  const abort = () => invoke('plugin:http|fetch_cancel', { rid });
+  const abort = () => platform.invoke.invoke('plugin:http|fetch_cancel', { rid });
   if (signal?.aborted) {
     abort();
     throw new Error(ERROR_REQUEST_CANCELLED);
   }
   signal?.addEventListener('abort', () => void abort());
-  const { status, statusText, url, headers: responseHeaders, rid: responseRid } = await invoke<{
+  const { status, statusText, url, headers: responseHeaders, rid: responseRid } = await platform.invoke.invoke<{
     status: number;
     statusText: string;
     url: string;
@@ -73,7 +73,7 @@ async function fetch(input: string, init?: RequestInit & ClientOptions) {
   }>('plugin:http|fetch_send', {
     rid
   });
-  const body = await invoke('plugin:http|fetch_read_body', {
+  const body = await platform.invoke.invoke('plugin:http|fetch_read_body', {
     rid: responseRid
   });
   const res = new Response(body instanceof ArrayBuffer && body.byteLength !== 0

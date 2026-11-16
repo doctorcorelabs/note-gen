@@ -1,5 +1,4 @@
 import { platform } from '@/lib/platform'
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getDb, initAllDatabases } from '@/db'
 import useSyncStore from '@/stores/sync'
@@ -100,7 +99,7 @@ export async function refreshSelfHostedSyncRuntime(
   activeLibraryWorkspaceId = libraryWorkspaceId
   installRuntimeListeners(runtime)
   report('recover')
-  await invoke<number>('self_hosted_recover_file_journal')
+  await platform.invoke.invoke<number>('self_hosted_recover_file_journal')
   report('connect')
   runtime.start(reason)
   useSyncStore.getState().setSelfHostedConnected(true)

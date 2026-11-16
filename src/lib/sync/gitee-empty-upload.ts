@@ -1,5 +1,6 @@
 import { withGitRepoWriteLock } from './git-repo-write-lock'
-import { fetch, type Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { remoteRecord } from './directory-listing'
 import { fetchGiteeRead } from './gitee-request'
 import { fetchRemoteRead, isRemoteConnectionError, RemoteMutationTransportError } from './remote-mutation-recovery'
@@ -107,7 +108,7 @@ async function performEmptyUpload(
         // Use an owned ArrayBuffer for the native HTTP bridge on every platform.
       }
       response = body
-        ? await fetch(`${gitBase}${resource}`, { ...requestOptions, method: 'POST', body: Uint8Array.from(body).buffer })
+        ? await platform.http.fetch(`${gitBase}${resource}`, { ...requestOptions, method: 'POST', body: Uint8Array.from(body).buffer })
         : await fetchRemoteRead(`${gitBase}${resource}`, requestOptions)
     } catch (error) {
       const message = body

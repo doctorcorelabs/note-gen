@@ -1,13 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { Image as TauriImage } from '@tauri-apps/api/image'
 import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition } from '@tauri-apps/api/window'
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { save } from '@tauri-apps/plugin-dialog'
-import { platform } from '@/lib/platform'
 import { Check, Copy, Download, NotebookPen, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -73,7 +73,7 @@ export default function ScreenshotPinPage() {
     if (readyRef.current) return
     readyRef.current = true
     try {
-      await invoke('ready_pinned_screenshot')
+      await platform.invoke.invoke('ready_pinned_screenshot')
     } catch (cause) {
       readyRef.current = false
       console.error('Unable to show pinned screenshot:', cause)
@@ -166,7 +166,7 @@ export default function ScreenshotPinPage() {
     try {
       if (action === 'record') {
         const version = recordEventVersionRef.current
-        const nextState = await invoke<'pending' | 'saved'>('save_pinned_screenshot')
+        const nextState = await platform.invoke.invoke<'pending' | 'saved'>('save_pinned_screenshot')
         // The main window can acknowledge or reject the queued record before this reply arrives.
         if (mountedRef.current && recordEventVersionRef.current === version) {
           recordStateRef.current = nextState
@@ -175,7 +175,7 @@ export default function ScreenshotPinPage() {
         return
       }
       // The native command only reads the PNG belonging to this pin window.
-      const png = new Uint8Array(await invoke<ArrayBuffer>('read_pinned_screenshot'))
+      const png = new Uint8Array(await platform.invoke.invoke<ArrayBuffer>('read_pinned_screenshot'))
       if (action === 'copy') {
         const image = await TauriImage.fromBytes(png)
         try { await writeImage(image) } finally { await image.close() }
@@ -219,7 +219,7 @@ export default function ScreenshotPinPage() {
           return
         }
         unlisten = stop
-        const value = await invoke<PinnedScreenshotContext>('get_pinned_screenshot')
+        const value = await platform.invoke.invoke<PinnedScreenshotContext>('get_pinned_screenshot')
         if (disposed) return
         contextRef.current = value
         const lastEvent = lastRecordEventRef.current

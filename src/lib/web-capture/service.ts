@@ -1,4 +1,4 @@
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
+import { platform } from '@/lib/platform'
 import { extractWebPage } from './extract'
 import type {
   WebCaptureErrorCode,
@@ -196,7 +196,7 @@ export async function capturePublicWebPage(
   try {
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
       finalUrl = url.href
-      const response = await httpFetch(url.href, {
+      const response = await platform.http.fetch(url.href, {
         method: 'GET',
         redirect: 'manual',
         headers: {

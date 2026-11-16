@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { shouldExcludeFromSync } from '@/config/sync-exclusions'
@@ -239,7 +238,7 @@ async function replaceLibrary(input: ReplacementInput, workspace: SelfHostedRepl
     if (target && String(target.payload.relativePath) === file.relativePath) continue
     const accepted = await runEditorPathWriteTransaction(file.relativePath, async ({ hasQueuedSave }) => {
       if (hasQueuedSave()) return false
-      await invoke('self_hosted_delete_file', { workspaceId: workspace.workspaceId, objectId: null,
+      await platform.invoke.invoke('self_hosted_delete_file', { workspaceId: workspace.workspaceId, objectId: null,
         workspaceRoot: root, relativePath: file.relativePath, expectedHash: file.hash })
       markEditorPathMutation(file.relativePath, root)
       emitter.emit('editor-file-close', { path: file.relativePath })
@@ -258,7 +257,7 @@ async function replaceLibrary(input: ReplacementInput, workspace: SelfHostedRepl
       await prune(absolute, path)
       if ((await platform.fs.readDir(absolute)).length === 0) {
         input.assertActive()
-        await invoke('self_hosted_delete_directory', { workspaceId: workspace.workspaceId, objectId: null,
+        await platform.invoke.invoke('self_hosted_delete_directory', { workspaceId: workspace.workspaceId, objectId: null,
           workspaceRoot: root, relativePath: path, allowNonEmpty: false })
       }
     }
@@ -275,7 +274,7 @@ async function replaceLibrary(input: ReplacementInput, workspace: SelfHostedRepl
     const path = (await portable(String(entry.payload.relativePath))).normalized
     input.onProgress({ phase: 'apply', source: 'remote', kind: 'file', path, current: index, total: desired.length })
     if (entry.payload.domain === 'folder') {
-      await invoke('self_hosted_create_directory', { workspaceId: workspace.workspaceId, objectId: entry.object.objectId, workspaceRoot: root, relativePath: path })
+      await platform.invoke.invoke('self_hosted_create_directory', { workspaceId: workspace.workspaceId, objectId: entry.object.objectId, workspaceRoot: root, relativePath: path })
     } else {
       const accepted = await runEditorPathWriteTransaction(path, async ({ hasQueuedSave }) => {
         if (hasQueuedSave()) return false
@@ -283,7 +282,7 @@ async function replaceLibrary(input: ReplacementInput, workspace: SelfHostedRepl
         if (await platform.fs.exists(absolute)) {
           if (await hashBytes(await platform.fs.readFile(absolute)) !== expected.get(path)) throw stale(path)
         } else if (expected.has(path)) throw stale(path)
-        await invoke('self_hosted_atomic_write', { workspaceId: workspace.workspaceId, objectId: entry.object.objectId,
+        await platform.invoke.invoke('self_hosted_atomic_write', { workspaceId: workspace.workspaceId, objectId: entry.object.objectId,
           workspaceRoot: root, relativePath: path, contents: bytesToBase64Url(entry.bytes!), expectedHash: await hashBytes(entry.bytes!) })
         markEditorPathMutation(path, root)
         emitter.emit('editor-file-close', { path })
@@ -428,11 +427,11 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 function portable(relativePath: string) {
-  return invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath })
+  return platform.invoke.invoke<{ normalized: string; caseFolded: string }>('self_hosted_portable_path', { relativePath })
 }
 function contentHash(entry: SelfHostedReplacementObject) {
   return entry.payload.domain === 'file'
-    ? invoke<string>('self_hosted_sha256', { value: new TextDecoder().decode(entry.bytes!) })
+    ? platform.invoke.invoke<string>('self_hosted_sha256', { value: new TextDecoder().decode(entry.bytes!) })
     : hashBytes(entry.bytes!)
 }
 function excluded(name: string) { return name === '.notegen' || name === '.DS_Store' || name.endsWith('.tmp') }

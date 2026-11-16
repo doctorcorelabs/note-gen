@@ -1,5 +1,5 @@
 import { emitTo } from '@tauri-apps/api/event'
-import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { CustomThemeColors } from '@/types/theme'
 import type { Tag } from '@/db/tags'
@@ -7,7 +7,7 @@ import type { Tag } from '@/db/tags'
 export const QUICK_RECORD_WINDOW = 'quick-record'
 
 export async function hideQuickRecordWindow(): Promise<void> {
-  await invoke('hide_quick_record_window')
+  await platform.invoke.invoke('hide_quick_record_window')
 }
 
 export interface QuickRecordContext {

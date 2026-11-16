@@ -1,8 +1,6 @@
 import { platform } from '@/lib/platform'
-import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
 import { check, Update } from '@tauri-apps/plugin-updater'
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { compareVersions, extractVersionText } from '@/lib/version'
 
 export const MOBILE_UPDATE_MANIFEST_URL = 'https://download.notegen.top/updates/latest.json'
@@ -65,7 +63,7 @@ const useUpdateStore = create<UpdateState>((set, get) => ({
     set({ mobileUpdateStatus: 'checking', mobileUpdateError: '' })
 
     try {
-      const response = await httpFetch(MOBILE_UPDATE_MANIFEST_URL, {
+      const response = await platform.http.fetch(MOBILE_UPDATE_MANIFEST_URL, {
         cache: 'no-store',
         headers: {
           Accept: 'application/json',
@@ -133,7 +131,7 @@ const useUpdateStore = create<UpdateState>((set, get) => ({
   checkForUpdates: async (options) => {
     try {
       // Never fall back to the legacy MSI target if installation detection fails.
-      const target = await invoke<string | null>('get_desktop_update_target')
+      const target = await platform.invoke.invoke<string | null>('get_desktop_update_target')
       const update = await check({
         timeout: 5000,
         ...(target ? { target } : {}),

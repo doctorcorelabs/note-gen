@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, initAllDatabases } from '@/db'
 import { decryptText } from './crypto'
@@ -41,7 +40,7 @@ async function synchronizeLibraryFolderName(
   if (folderName === name) return { workspace, name }
   try {
     const key = await loadManagedWorkspaceKey(profileId, workspace.id, workspace.latestKeyVersion)
-    const encrypted = await invoke<EncryptedName>('self_hosted_encrypt', {
+    const encrypted = await platform.invoke.invoke<EncryptedName>('self_hosted_encrypt', {
       key, plaintext: folderName, associatedData: 'workspace-name:v1',
     })
     const { client } = await authenticatedClient(profileId)
@@ -171,8 +170,8 @@ export async function createLibrary(
 
 async function createRemoteLibrary(profileId: string, name: string, idempotencyKey: string) {
   const { client } = await authenticatedClient(profileId)
-  const key = await invoke<string>('self_hosted_generate_workspace_key')
-  const encryptedName = await invoke<EncryptedName>('self_hosted_encrypt', {
+  const key = await platform.invoke.invoke<string>('self_hosted_generate_workspace_key')
+  const encryptedName = await platform.invoke.invoke<EncryptedName>('self_hosted_encrypt', {
     key,
     plaintext: name.trim(),
     associatedData: 'workspace-name:v1',
@@ -542,7 +541,7 @@ async function reconcileLibraryFilesRaw(
     try {
       content = entry.kind === 'markdown' ? await platform.fs.readTextFile(absolutePath) : null
       hash = entry.kind === 'folder' ? null : entry.kind === 'markdown'
-        ? await invoke<string>('self_hosted_sha256', { value: content! })
+        ? await platform.invoke.invoke<string>('self_hosted_sha256', { value: content! })
         : await hashFileBytes(await platform.fs.readFile(absolutePath))
     } catch (error) {
       if (isMissingPathError(error)) {
@@ -578,7 +577,7 @@ async function reconcileLibraryFilesRaw(
       ))
       if (moved.length === 1) {
         const [oldPath, candidate] = moved[0]!
-        const portable = await invoke<{ normalized: string; caseFolded: string }>(
+        const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>(
           'self_hosted_portable_path', { relativePath: entry.relativePath },
         )
         const domain = expectedKind === 'note' ? 'file' : 'asset'
@@ -730,7 +729,7 @@ async function recordIgnoredSymlink(workspaceId: string, relativePath: string) {
 }
 
 async function portablePath(relativePath: string, seen: Map<string, string>) {
-  const portable = await invoke<{ normalized: string; caseFolded: string }>(
+  const portable = await platform.invoke.invoke<{ normalized: string; caseFolded: string }>(
     'self_hosted_portable_path', { relativePath },
   )
   const duplicate = seen.get(portable.caseFolded)

@@ -6,7 +6,7 @@ import { syncStaleError } from './sync-stale-error'
 import { toast } from '@/hooks/use-toast';
 import { platform } from '@/lib/platform';
 import { v4 as uuid } from 'uuid';
-import { fetch, Proxy } from '@tauri-apps/plugin-http';
+import type { Proxy } from '@/lib/platform';
 import { fetch as encodeFetch } from './encode-fetch'
 import { buildRemoteLogicalPath, buildRepoContentPath, debugSyncPath, readSyncResponseJson, encodeRemoteFileContent, decodeBase64ToBytes } from './remote-file'
 import { 
@@ -219,7 +219,7 @@ export async function uploadFile({
       const desiredVersion = await gitBlobVersion(decodeBase64ToBytes(base64Content), sha?.length)
       const body = JSON.stringify({ ...requestBody, branch: branch || undefined })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(url, { method, headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(url, { method, headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGiteaMutation(repoUrl, targetPath, branch, headers, proxy, sha || null, desiredVersion),
       });
 
@@ -245,7 +245,7 @@ export async function uploadFile({
         delete postBody.sha; // POST 不需要 sha
         if (await readGiteaMutationFile(repoUrl, targetPath, branch, headers, proxy)) throw new Error('SYNC_SWITCH_STALE')
         const postResponse = await recoverRemoteMutation({ beforeWrite,
-          send: () => fetch(url, { method: postMethod, headers: new Headers(headers), body: JSON.stringify(postBody), proxy }),
+          send: () => platform.http.fetch(url, { method: postMethod, headers: new Headers(headers), body: JSON.stringify(postBody), proxy }),
           reconcile: () => reconcileGiteaMutation(repoUrl, targetPath, branch, headers, proxy, null, desiredVersion),
         });
 
@@ -331,9 +331,9 @@ export async function getDirectoryFiles({ path, repo }: { path: string; repo: st
   const headers = await getCommonHeaders()
   const proxy = await getProxyConfig()
   const url = `${baseUrl}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repo)}/contents/${buildRepoContentPath({ path })}`
-  const response = await fetch(url, { method: 'GET', headers, proxy })
+  const response = await platform.http.fetch(url, { method: 'GET', headers, proxy })
   if (response.status === 404 && !path) {
-    const repository = await readDirectoryResponse(await fetch(`${baseUrl}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repo)}`, { method: 'GET', headers, proxy }))
+    const repository = await readDirectoryResponse(await platform.http.fetch(`${baseUrl}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repo)}`, { method: 'GET', headers, proxy }))
     if (repository && typeof repository === 'object' && 'empty' in repository && repository.empty === true) return []
   }
   if (response.status === 404 && path) {
@@ -367,7 +367,7 @@ export async function getFiles({ path, repo, sha }: { path: string; repo: string
     const shaParam = sha ? `?sha=${sha}` : '';
     const url = `${baseUrl}/repos/${giteaUsername}/${repo}/contents/${encodedPath}${shaParam}`;
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'GET',
       headers,
       proxy
@@ -445,7 +445,7 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
       const url = `${repoUrl}/contents/${encodedPath}`;
       const body = JSON.stringify({ message: `Delete ${path}`, sha: expectedVersion, branch })
       const response = await recoverRemoteMutation({ beforeWrite,
-        send: () => fetch(url, { method: 'DELETE', headers: new Headers(headers), body, proxy }),
+        send: () => platform.http.fetch(url, { method: 'DELETE', headers: new Headers(headers), body, proxy }),
         reconcile: () => reconcileGiteaMutation(repoUrl, logicalPath, branch, headers, proxy, expectedVersion),
       });
 
@@ -494,7 +494,7 @@ export async function getFileCommits({ path, repo }: { path: string; repo: strin
     const encodedPath = encodeURIComponent(path);
     const url = `${baseUrl}/repos/${giteaUsername}/${repo}/commits?sha=main&path=${encodedPath}&per_page=100`;
 
-    const response = await fetch(url, {
+    const response = await platform.http.fetch(url, {
       method: 'GET',
       headers,
       proxy
@@ -539,7 +539,7 @@ export async function getFileContentFromCommit({ path, ref, repo }: { path: stri
     // 先获取 commit 信息，获取 tree SHA
     const commitUrl = `${baseUrl}/repos/${giteaUsername}/${repo}/git/commits/${ref}`;
 
-    const commitResponse = await fetch(commitUrl, {
+    const commitResponse = await platform.http.fetch(commitUrl, {
       method: 'GET',
       headers,
       proxy
@@ -560,7 +560,7 @@ export async function getFileContentFromCommit({ path, ref, repo }: { path: stri
     // 获取文件在 tree 中的路径
     const treeUrl = `${baseUrl}/repos/${giteaUsername}/${repo}/git/trees/${treeSha}?recursive=1`;
 
-    const treeResponse = await fetch(treeUrl, {
+    const treeResponse = await platform.http.fetch(treeUrl, {
       method: 'GET',
       headers,
       proxy
@@ -581,7 +581,7 @@ export async function getFileContentFromCommit({ path, ref, repo }: { path: stri
     // 获取文件内容
     const blobUrl = `${baseUrl}/repos/${giteaUsername}/${repo}/git/blobs/${fileEntry.sha}`;
 
-    const blobResponse = await fetch(blobUrl, {
+    const blobResponse = await platform.http.fetch(blobUrl, {
       method: 'GET',
       headers,
       proxy
@@ -670,7 +670,7 @@ export async function getUserInfo(token?: string): Promise<GiteaUserInfo> {
     headers.append('Authorization', `token ${accessToken}`);
     headers.append('Content-Type', 'application/json');
 
-    const response = await fetch(`${baseUrl}/user`, {
+    const response = await platform.http.fetch(`${baseUrl}/user`, {
       method: 'GET',
       headers,
       proxy
@@ -722,7 +722,7 @@ export async function checkSyncRepoState(name: string): Promise<GiteaRepositoryI
     // 直接尝试获取仓库信息
     const repoUrl = `${baseUrl}/repos/${giteaUsername}/${name}`;
     
-    const response = await fetch(repoUrl, {
+    const response = await platform.http.fetch(repoUrl, {
       method: 'GET',
       headers,
       proxy
@@ -754,7 +754,7 @@ export async function listUserRepositories(): Promise<string[]> {
   const baseUrl = await getGiteaApiBaseUrl()
   const headers = await getCommonHeaders()
   const proxy = await getProxyConfig()
-  const response = await fetch(`${baseUrl}/user/repos?limit=100`, {
+  const response = await platform.http.fetch(`${baseUrl}/user/repos?limit=100`, {
     method: 'GET',
     headers,
     proxy,
@@ -789,7 +789,7 @@ export async function createSyncRepo(name: string, isPrivate: boolean = true): P
       default_branch: 'main'
     };
 
-    const response = await fetch(`${baseUrl}/user/repos`, {
+    const response = await platform.http.fetch(`${baseUrl}/user/repos`, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestBody),

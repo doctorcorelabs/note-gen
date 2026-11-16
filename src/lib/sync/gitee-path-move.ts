@@ -1,4 +1,5 @@
-import { fetch, type Proxy } from '@tauri-apps/plugin-http'
+import type { Proxy } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { remoteRecord } from './directory-listing'
 import { readSyncResponseJson } from './remote-file'
 import { withGitRepoWriteLock } from './git-repo-write-lock'
@@ -101,7 +102,7 @@ async function performGiteePathMove(options: Options, attempt = 0, verifyOnly = 
           headers: requestHeaders,
         }
         response = body
-          ? await fetch(`${gitBase}${resource}`, { ...requestOptions, method: 'POST', body: Uint8Array.from(body).buffer })
+          ? await platform.http.fetch(`${gitBase}${resource}`, { ...requestOptions, method: 'POST', body: Uint8Array.from(body).buffer })
           : await fetchRemoteRead(`${gitBase}${resource}`, requestOptions)
       } catch (error) {
         const message = failure('提交 Git 改名', '网络请求失败或超时，结果待确认，迁移记录已保留').message

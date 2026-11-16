@@ -623,14 +623,14 @@ export function EditorLayout() {
   useEffect(() => {
     const current = new Set(openTabs.filter(isBrowserEditorTab).map(tab => tab.id))
     for (const tabId of previousBrowserTabsRef.current) {
-      if (!current.has(tabId)) void import('@tauri-apps/api/core').then(({ invoke }) => invoke('browser_close', { tabId })).catch(() => {})
+      if (!current.has(tabId)) void platform.invoke.invoke('browser_close', { tabId }).catch(() => {})
     }
     previousBrowserTabsRef.current = current
   }, [isBrowserEditorTab, openTabs])
 
   useEffect(() => () => {
     for (const tabId of previousBrowserTabsRef.current) {
-      void import('@tauri-apps/api/core').then(({ invoke }) => invoke('browser_close', { tabId })).catch(() => {})
+      void platform.invoke.invoke('browser_close', { tabId }).catch(() => {})
     }
   }, [])
   const getRecordIdForTab = useCallback((tab: TabInfo) => tab.markId ?? getRecordIdFromTabPath(tab.path), [])

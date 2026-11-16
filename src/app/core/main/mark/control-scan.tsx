@@ -2,7 +2,7 @@
 
 import { TooltipButton } from "@/components/tooltip-button"
 import { useTranslations } from 'next-intl'
-import { invoke } from "@tauri-apps/api/core"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { AlertCircle, Check, LoaderCircle, Pin, RefreshCw, ScanText, X } from "lucide-react"
 import { convertFileSrc } from "@tauri-apps/api/core"
 import {
@@ -22,7 +22,6 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { useRef } from "react";
 import { ScreenshotImage } from "note-gen/screenshot"
-import { platform, BaseDirectory } from "@/lib/platform"
 import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 import './crop.css'
@@ -50,7 +49,7 @@ function cleanupPreviewGeneration(generationId: string) {
     let attempts = 0
     while (true) {
       try {
-        await invoke('cleanup_screenshot_cache', { generationIds: [generationId] })
+        await platform.invoke.invoke('cleanup_screenshot_cache', { generationIds: [generationId] })
         return
       } catch (error) {
         const delay = [1000, 2000, 5000, 30000, 300000][Math.min(attempts, 4)]
@@ -253,7 +252,7 @@ export function ControlScan() {
         return
       }
 
-      const fileNames = await invoke<ScreenshotImage[]>('screenshot')
+      const fileNames = await platform.invoke.invoke<ScreenshotImage[]>('screenshot')
       fileNames.forEach(file => {
         if (file.capture_id) screenshotGenerationsRef.current.add(file.capture_id)
       })
@@ -461,7 +460,7 @@ export function ControlScan() {
     try {
       const bytes = await getCroppedPngBytes(cropper)
       if (!openRef.current) return
-      await invoke('pin_screenshot', { pngBase64: bytesToBase64(bytes) })
+      await platform.invoke.invoke('pin_screenshot', { pngBase64: bytesToBase64(bytes) })
       pinOwnsFocusRef.current = true
       handleOpenChange(false)
     } catch (error) {

@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
-import { ensureWorkspaceDirectory } from '@/lib/managed-workspace'
 import { platform, BaseDirectory } from '@/lib/platform'
+import { ensureWorkspaceDirectory } from '@/lib/managed-workspace'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { shouldExcludeFromSync } from '@/config/sync-exclusions'
 import type { SwitchOperationProgress } from '@/lib/sync/platform-switch-plan'
@@ -64,7 +63,7 @@ function assertBackupPath(path: string) {
   if (!/^self-hosted-switch-backups\/\d+-[a-f0-9-]+$/.test(path)) throw new Error('SELF_HOSTED_BACKUP_INVALID')
 }
 async function portable(path: string) {
-  return (await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: path })).normalized
+  return (await platform.invoke.invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: path })).normalized
 }
 
 export async function captureSelfHostedSwitchBackup(input: {
@@ -142,7 +141,7 @@ export async function captureSelfHostedSwitchBackup(input: {
     personalAssets, excludeSensitiveConfig }
   input.assertActive()
   await platform.fs.writeFile(`${path}/manifest.json`, encoder.encode(JSON.stringify(manifest)), options)
-  await invoke('self_hosted_flush_switch_data', { relativePath: path })
+  await platform.invoke.invoke('self_hosted_flush_switch_data', { relativePath: path })
   input.assertActive()
   return path
 }
@@ -291,11 +290,11 @@ export async function restoreSelfHostedSwitchBackup(
       await platform.fs.mkdir(await platform.path.dirname(retained), { recursive: true })
       await platform.fs.writeFile(retained, current)
     }
-    await invoke('self_hosted_atomic_write', { workspaceId: manifest.libraries[0].workspaceId ?? manifest.profileId,
+    await platform.invoke.invoke('self_hosted_atomic_write', { workspaceId: manifest.libraries[0].workspaceId ?? manifest.profileId,
       workspaceRoot: await platform.path.appDataDir(), relativePath: asset.path, contents: bytesToBase64Url(bytes), expectedHash: asset.hash })
   }
   assertActive()
-  await invoke('self_hosted_flush_switch_data', { relativePath: restoredRelative })
+  await platform.invoke.invoke('self_hosted_flush_switch_data', { relativePath: restoredRelative })
   assertActive()
   try {
     await executeRecordTransaction(statements)

@@ -1,5 +1,4 @@
 import { platform, BaseDirectory } from '@/lib/platform'
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { assertPublicWebUrl } from './service'
 import type { WebCaptureResult } from './types'
 
@@ -124,7 +123,7 @@ async function downloadImage(sourceUrl: string, referer: string): Promise<Downlo
 
   try {
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-      const response = await httpFetch(url.href, {
+      const response = await platform.http.fetch(url.href, {
         method: 'GET',
         redirect: 'manual',
         headers: {
