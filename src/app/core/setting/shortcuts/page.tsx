@@ -20,7 +20,7 @@ export default function ShortcutsPage() {
       <SettingSection title={t('globalShortcuts.title')} desc={t('globalShortcuts.desc')}>
         {!globalShortcutsAvailable ? (
           <Alert>
-            <AlertDescription>Global shortcuts are only available in the desktop app. In the browser, shortcuts cannot capture keys pressed outside this tab.</AlertDescription>
+            <AlertDescription>{t('globalShortcuts.webUnavailable')}</AlertDescription>
           </Alert>
         ) : null}
         <ItemGroup className="gap-4">

@@ -560,7 +560,7 @@ export default function ScreenshotPage() {
     return (
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
-          <Alert className="max-w-lg"><AlertDescription>Desktop screenshot capture is not available in the web version.</AlertDescription></Alert>
+          <Alert className="max-w-lg"><AlertDescription>{t('webUnavailable')}</AlertDescription></Alert>
         </main>
       </ThemeProvider>
     )

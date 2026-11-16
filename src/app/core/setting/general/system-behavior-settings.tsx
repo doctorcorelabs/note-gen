@@ -136,7 +136,7 @@ export function SystemBehaviorSettings() {
         <Item variant="outline">
           <ItemMedia variant="icon"><Rocket /></ItemMedia>
           <ItemContent>
-            <ItemTitle>{t('autostart.title')} {!autostartAvailable && <Badge variant="secondary">Desktop only</Badge>}</ItemTitle>
+            <ItemTitle>{t('autostart.title')} {!autostartAvailable && <Badge variant="secondary">{t('autostart.desktopOnly')}</Badge>}</ItemTitle>
             <ItemDescription>{t('autostart.desc')}</ItemDescription>
           </ItemContent>
           <ItemActions className="ml-auto mobile-setting-inline-action">

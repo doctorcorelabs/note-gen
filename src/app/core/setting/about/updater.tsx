@@ -357,7 +357,7 @@ export default function Updater() {
       {!isTauri ? (
         <Alert>
           <Info />
-          <AlertDescription>In the web version, updates are installed on the server. There is nothing to download here.</AlertDescription>
+          <AlertDescription>{t('webUpdateNotice')}</AlertDescription>
         </Alert>
       ) : null}
 
