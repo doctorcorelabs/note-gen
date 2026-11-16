@@ -25,10 +25,14 @@
 //   reporting what succeeded and what failed. A 404 on
 //   delete/restore/permanent counts as success for that item and
 //   the loop continues; a 409 on a tag move stops the loop.
-// - The REST marks/tags routes land with V3-25; until then these
-//   calls answer 404 from the router. The flow specs cover this
-//   module against a fake transport, and live acceptance runs
-//   after V3-25 merges (V3-41).
+// - D-3D-1 RE-VERIFIED (r8f, trunk d8f55765, 17 Nov 2026): the REST
+//   /api/marks and /api/tags routes still do not exist; only the kind
+//   SqlAdapter handlers exist, over /api/transactions + /api/db/batch.
+//   The live UI path in this branch is therefore the kind-backed
+//   client, which exposes this same RecordsApi surface over kinds.
+//   This REST client is retained unchanged for use after V3-25 lands
+//   the REST routes; until then its marks/tags calls answer 404 from
+//   the router. Live acceptance runs after integrator wiring (V3-41).
 
 import { ApiClient, defaultApiClient } from "./api-client";
 import { ApiError } from "./errors";
