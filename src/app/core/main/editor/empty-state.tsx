@@ -309,7 +309,7 @@ export function EmptyState({
       const selected = await platform.dialog.open({
         directory: true,
         multiple: false,
-        title: '选择工作区目录'
+        title: t('actions.selectWorkspaceDialogTitle')
       })
       
       if (selected && typeof selected === 'string') {
@@ -632,7 +632,7 @@ export function EmptyState({
 
         <footer className="pb-4 pt-2 text-center">
           <p className="text-xs text-muted-foreground">
-            查看使用文档：
+            {t('viewDocs')}
             <a 
               href="https://notegen.top/" 
               target="_blank" 
