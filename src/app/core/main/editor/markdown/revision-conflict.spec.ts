@@ -22,6 +22,7 @@ import {
   DEFAULT_REVISION_CONFLICT_CHOICE,
   deriveCopyPath,
   extractConflictPayload,
+  isAlreadyExistsLike,
   isRevisionConflictLike,
   nextCopyPath,
   toRevisionConflictInfo,
@@ -193,6 +194,15 @@ describe("isRevisionConflictLike", () => {
     expect(isRevisionConflictLike(new Error("boom"))).toBe(false);
     expect(isRevisionConflictLike(null)).toBe(false);
     expect(isRevisionConflictLike("revision_conflict")).toBe(false);
+  });
+});
+
+describe("isAlreadyExistsLike", () => {
+  it("accepts only the create-new collision code", () => {
+    expect(isAlreadyExistsLike({ code: "already_exists" })).toBe(true);
+    expect(isAlreadyExistsLike({ code: "revision_conflict" })).toBe(false);
+    expect(isAlreadyExistsLike(new Error("boom"))).toBe(false);
+    expect(isAlreadyExistsLike(null)).toBe(false);
   });
 });
 

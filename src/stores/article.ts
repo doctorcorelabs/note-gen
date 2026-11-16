@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-16; see FORK.md.
 import type { RemoteDirectoryEntry } from '@/lib/sync/directory-listing'
 import { getDirectoryFiles as getGithubFiles } from '@/lib/sync/github'
 import { getDirectoryFiles as getGiteeFiles } from '@/lib/sync/gitee'

@@ -1,4 +1,5 @@
 'use client'
+// Modified for the web fork on 2026-11-16; see FORK.md.
 
 import useArticleStore from '@/stores/article'
 import { useEffect, useState, useCallback, useRef, RefObject } from 'react'
@@ -16,7 +17,7 @@ import {
 import { platform } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import { RevisionConflictDialog } from './revision-conflict-dialog'
-import type { RevisionConflictChoice } from './revision-conflict'
+import { isAlreadyExistsLike, type RevisionConflictChoice } from './revision-conflict'
 import { useShallow } from 'zustand/react/shallow'
 import useSettingStore, { useSettingsHydrationStore } from '@/stores/setting'
 import { useSidebarStore } from '@/stores/sidebar'
@@ -557,27 +558,32 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       let counter = 1
       let path = fileName
 
-      while (true) {
-        const pathOptions = await getFilePathOptions(fileName)
-        let fileExists = false
-        if (workspace.isCustom) {
-          fileExists = await platform.fs.exists(pathOptions.path)
-        } else {
-          fileExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+      // Create-new attempts instead of exists-then-write: the existence
+      // check raced between tabs, so the server guard (If-None-Match: *)
+      // decides the name. An already_exists answer advances to the next
+      // candidate; any other error propagates to the caller below.
+      for (;;) {
+        if (counter > 1000) {
+          throw new Error('Could not find a free untitled file name')
         }
-        if (!fileExists) break
-        fileName = `untitled-${counter}.md`
-        path = fileName
-        counter++
-      }
-
-      const pathOptions = await getFilePathOptions(path)
-      if (await writeSelfHostedWorkspaceText(path, content)) {
-        // Rust journal already persisted the file.
-      } else if (workspace.isCustom) {
-        await platform.fs.writeTextFile(pathOptions.path, content)
-      } else {
-        await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+        const pathOptions = await getFilePathOptions(fileName)
+        if (await writeSelfHostedWorkspaceText(path, content)) {
+          // Rust journal already persisted the file.
+          break
+        }
+        try {
+          if (workspace.isCustom) {
+            await platform.fs.writeTextFile(pathOptions.path, content, { createNew: true })
+          } else {
+            await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir, createNew: true })
+          }
+          break
+        } catch (error) {
+          if (!isAlreadyExistsLike(error)) throw error
+          fileName = `untitled-${counter}.md`
+          path = fileName
+          counter++
+        }
       }
 
       await articleState.setActiveFilePath(

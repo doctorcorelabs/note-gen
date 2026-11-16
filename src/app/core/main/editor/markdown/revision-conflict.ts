@@ -125,7 +125,12 @@ export function isRevisionConflictLike(err: unknown): boolean {
   return code === "revision_conflict" || code === "version_conflict";
 }
 
-function isAlreadyExistsError(err: unknown): boolean {
+/**
+ * True when an adapter error reports that a create-new target already
+ * exists. Structural, like {@link isRevisionConflictLike}: the caller
+ * only needs the stable wire code, not the error class.
+ */
+export function isAlreadyExistsLike(err: unknown): boolean {
   const record = asRecord(err);
   return record ? asString(record.code) === "already_exists" : false;
 }
@@ -332,7 +337,7 @@ export async function applyRevisionConflictChoice(
         ...writeOptions(copyOptions, { createNew: true }),
       });
     } catch (err) {
-      if (isAlreadyExistsError(err)) {
+      if (isAlreadyExistsLike(err)) {
         return {
           choice: "save-copy",
           status: "copy-exists",
