@@ -18,8 +18,6 @@ import {
   type PluginAttachment,
   type PluginPermissionName,
 } from '@notegen/plugin-api'
-import { writeHtml, writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { save } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 import { buildPluginHtmlFile, getPluginDocument, limitDocumentText, sanitizeDocumentHtml } from './documents'
@@ -100,7 +98,7 @@ async function outputPluginHtml(
       exportDialogs.add(owner)
       try {
         const requestedName = ('fileName' in options && options.fileName) || exportFileName(path)
-        selectedPath = await save({
+        selectedPath = await platform.dialog.save({
           defaultPath: /\.html$/i.test(requestedName) ? requestedName : `${requestedName}.html`,
           filters: [{ name: 'HTML', extensions: ['html'] }],
         })
@@ -169,8 +167,8 @@ async function outputPluginHtml(
     requirePluginUserAction(pluginId)
     try {
       if (output === 'file' && selectedPath) await platform.fs.writeFile(/\.html$/i.test(selectedPath) ? selectedPath : `${selectedPath}.html`, bytes)
-      else if (rich) await writeHtml(rich.html, rich.text)
-      else await writeText(generated.html)
+      else if (rich) await platform.clipboard.writeHtml(rich.html, rich.text)
+      else await platform.clipboard.writeText(generated.html)
     } catch (error) {
       await services.guard(permission)
       if (output === 'file') {
@@ -198,8 +196,8 @@ export async function writePluginClipboard(pluginId: string, owner: AbortSignal,
   if (checkIsTauri()) {
     if (html !== undefined && ['ios', 'android'].includes(getRuntimePlatform())) throw new PluginError('UnavailableOnPlatform', 'Rich-text clipboard is only supported on desktop')
     await guard()
-    if (html === undefined) await writeText(resolved.text)
-    else await writeHtml(html, resolved.text)
+    if (html === undefined) await platform.clipboard.writeText(resolved.text)
+    else await platform.clipboard.writeHtml(html, resolved.text)
   } else {
     if (!navigator.clipboard) throw new PluginError('UnavailableOnPlatform', 'Clipboard is unavailable')
     if (html === undefined) await navigator.clipboard.writeText(resolved.text)
@@ -231,7 +229,7 @@ export async function exportPluginFile(pluginId: string, owner: AbortSignal, opt
     if (exportDialogs.has(owner) || htmlExports.has(owner)) throw new PluginError('QuotaExceeded', 'Only one export dialog per plugin may be open')
     exportDialogs.add(owner)
     let path: string | null
-    try { path = await save({ defaultPath: options.fileName }) }
+    try { path = await platform.dialog.save({ defaultPath: options.fileName }) }
     finally { exportDialogs.delete(owner) }
     if (!path) return { saved: false }
     // Recheck authorization after the save dialog; switching workspace, stopping

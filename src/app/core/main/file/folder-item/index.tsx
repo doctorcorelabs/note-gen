@@ -42,7 +42,6 @@ import {
   setFileManagerDragData,
 } from '../file-dnd'
 import { debugSyncPath } from "@/lib/sync/remote-file";
-import { openPath } from '@tauri-apps/plugin-opener'
 import { BatchSelectionContextMenu } from "../batch-selection-context-menu";
 import { getTopLevelSelectionEntries, toFileSelectionEntry, type FileSelectionEntry } from "../file-selection";
 import { useShallow } from 'zustand/react/shallow';
@@ -311,10 +310,10 @@ export function FolderItem({
     const workspace = await getWorkspacePath()
     if (workspace.isCustom) {
       const pathOptions = await getFilePathOptions(path)
-      await openPath(pathOptions.path)
+      await platform.opener.openPath(pathOptions.path)
       return
     }
-    await openPath(await platform.path.join(await platform.path.appDataDir(), 'article', path))
+    await platform.opener.openPath(await platform.path.join(await platform.path.appDataDir(), 'article', path))
   }
 
   function handleCutFolder() {

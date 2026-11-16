@@ -1,7 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { platform } from '@/lib/platform';
+import { platform } from "@/lib/platform";
 import { getWorkspacePath } from "./workspace";
 
 const RESOLVED_IMAGE_SRC_RE = /^(?:https?:|data:|blob:|asset:|tauri:|file:)/i
@@ -40,7 +39,7 @@ export async function convertImage(path: string) {
 
   const appDataDirPath = await getCachedAppDataDir()
   const imagePath = appDataDirPath + normalizedPath
-  const src = convertFileSrc(imagePath)
+  const src = platform.assetUrl.convertFileSrc(imagePath)
   convertedImageSrcCache.set(normalizedPath, src)
   return src
 }
@@ -59,7 +58,7 @@ export async function convertImageByWorkspace(path: string) {
   } else {
     fullPath = `${await getCachedAppDataDir()}/article/${path}`
   }
-  const src = convertFileSrc(fullPath)
+  const src = platform.assetUrl.convertFileSrc(fullPath)
   convertedWorkspaceImageSrcCache.set(cacheKey, src)
   return src
 }

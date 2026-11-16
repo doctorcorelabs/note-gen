@@ -29,7 +29,6 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import emitter from "@/lib/emitter"
 import { useIsMobile } from '@/hooks/use-mobile'
 import { isMobileDevice as checkIsMobileDevice } from '@/lib/check'
-import { hasText, readText } from 'tauri-plugin-clipboard-api'
 import { platform } from '@/lib/platform'
 import { toast } from '@/hooks/use-toast'
 import { RecordSaveTarget } from './record-save-target'
@@ -76,9 +75,9 @@ export function ControlText() {
       // 如果勾选了 checkbox，立即读取剪贴板
       if (checked) {
         try {
-          const hasTextRes = await hasText()
+          const hasTextRes = await platform.clipboard.hasText()
           if (hasTextRes) {
-            const clipboardText = await readText()
+            const clipboardText = await platform.clipboard.readText()
             if (clipboardText) {
               setText(clipboardText)
             }
@@ -105,9 +104,9 @@ export function ControlText() {
     }
 
     try {
-      const hasTextRes = await hasText()
+      const hasTextRes = await platform.clipboard.hasText()
       if (hasTextRes) {
-        const clipboardText = await readText()
+        const clipboardText = await platform.clipboard.readText()
         if (clipboardText) {
           setText(clipboardText)
         }

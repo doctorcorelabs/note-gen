@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import { transcribeRecording } from '@/lib/audio'
-import { open } from '@tauri-apps/plugin-dialog'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { useRef } from 'react'
 import { isMobileDevice } from '@/lib/check'
@@ -217,7 +216,7 @@ export function ControlRecording() {
       }
 
       // PC端使用 Tauri dialog
-      const selected = await open({
+      const selected = await platform.dialog.open({
         multiple: false,
         filters: [{
           name: 'Audio',

@@ -77,8 +77,7 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
   async function exportDiagnostics() {
     setError(null)
     try {
-      const { save } = await import('@tauri-apps/plugin-dialog')
-      const path = await save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
+      const path = await platform.dialog.save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
       if (!path) return
       await platform.fs.writeTextFile(path, JSON.stringify({
         appVersion: useSettingStore.getState().version,
@@ -117,8 +116,7 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
   async function chooseDevelopmentDirectory() {
     setError(null)
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
+      const selected = await platform.dialog.open({
         directory: true,
         multiple: false,
         title: t('developer.chooseFolder'),

@@ -1,9 +1,8 @@
 'use client'
-import { clear, hasImage, hasText, readImageBase64, readText } from "tauri-plugin-clipboard-api";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { platform, BaseDirectory } from '@/lib/platform';
 import useSettingStore from "@/stores/setting";
 import useMarkStore from "@/stores/mark";
 import { v4 as uuid } from 'uuid'
@@ -29,8 +28,8 @@ export function Clipboard() {
   const completeRecord = useRecordCompletion()
 
   async function readHandler() {
-    const hasImageRes = await hasImage()
-    const hasTextRes = await hasText()
+    const hasImageRes = await platform.clipboard.hasImage()
+    const hasTextRes = await platform.clipboard.hasText()
 
     if (hasImageRes) {
       setType('image')
@@ -42,7 +41,7 @@ export function Clipboard() {
   }
 
   async function handleImage() {
-    const image = await readImageBase64()
+    const image = await platform.clipboard.readImageBase64()
     const uint8Array = Uint8Array.from(atob(image), c => c.charCodeAt(0))
     await platform.fs.writeFile('clipboard.png', uint8Array, { baseDir: BaseDirectory.AppData })
     setFileSize(convertBytesToSize(uint8Array.length))
@@ -50,12 +49,12 @@ export function Clipboard() {
   }
 
   async function handleText() {
-    const text = await readText()
+    const text = await platform.clipboard.readText()
     setText(text)
   }
 
   async function handleInset() {
-    await clear()
+    await platform.clipboard.clear()
     setImage('')
     const queueId = uuid()
     const tagId = await getDefaultRecordSaveTagId()
@@ -122,7 +121,7 @@ export function Clipboard() {
   }
 
   async function handleTextInset() {
-    await clear()
+    await platform.clipboard.clear()
     setText('')
     const tagId = await getDefaultRecordSaveTagId()
     const mark: Partial<Mark> = {
@@ -143,7 +142,7 @@ export function Clipboard() {
     setImage('')
     setText('')
     setFileSize('')
-    await clear()
+    await platform.clipboard.clear()
   }
 
   useEffect(() => {

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { ArrowRightLeft, FolderInput, FolderOpen, Loader2, Trash2, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -75,7 +74,7 @@ export function CloudFolderSync() {
   }
 
   async function chooseFolder() {
-    const selected = await openDialog({
+    const selected = await platform.dialog.open({
       directory: true,
       multiple: false,
       title: t('dialogTitle'),
@@ -117,7 +116,7 @@ export function CloudFolderSync() {
 
   async function migrateWorkspace() {
     if (!config.path || migrating || switchingWorkspace) return
-    const accepted = await confirm(t('migrationConfirm'), {
+    const accepted = await platform.dialog.confirm(t('migrationConfirm'), {
       title: t('migrationConfirmTitle'),
       kind: 'warning',
     })

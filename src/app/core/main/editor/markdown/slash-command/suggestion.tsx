@@ -31,7 +31,6 @@ import {
 import { SuggestionProps } from '@tiptap/suggestion'
 import { type Editor, type Range } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
-import { open } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { handleImageUpload } from '@/lib/image-handler'
 import useArticleStore from '@/stores/article'
@@ -607,7 +606,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
           if (isMobileDevice()) {
             fileObj = (await pickImagesFromPhotoLibrary())[0] || null
           } else {
-            const file = await open({
+            const file = await platform.dialog.open({
               multiple: false,
               filters: [
                 {
@@ -670,7 +669,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
         editor.chain().focus().deleteRange(range).run()
 
         try {
-          const selected = await open({
+          const selected = await platform.dialog.open({
             multiple: true,
             directory: false,
           })

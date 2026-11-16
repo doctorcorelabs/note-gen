@@ -1,7 +1,6 @@
 'use client'
 
 import { relaunch } from '@tauri-apps/plugin-process'
-import { open, save } from '@tauri-apps/plugin-dialog'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,7 @@ export function ConfigFileActions() {
 
   async function handleImport() {
     try {
-      const file = await open({ title: t('importConfigTitle') })
+      const file = await platform.dialog.open({ title: t('importConfigTitle') })
       if (!file) return
 
       const imported: unknown = JSON.parse(await platform.fs.readTextFile(file))
@@ -70,7 +69,7 @@ export function ConfigFileActions() {
   }
 
   async function handleExport() {
-    const file = await save({
+    const file = await platform.dialog.save({
       title: t('exportConfigTitle'),
       defaultPath: 'store.json',
     })

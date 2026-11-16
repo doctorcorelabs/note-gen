@@ -4,7 +4,6 @@ import { TooltipButton } from "@/components/tooltip-button"
 import { useTranslations } from 'next-intl'
 import { platform, BaseDirectory } from "@/lib/platform"
 import { AlertCircle, Check, LoaderCircle, Pin, RefreshCw, ScanText, X } from "lucide-react"
-import { convertFileSrc } from "@tauri-apps/api/core"
 import {
   Dialog,
   DialogContent,
@@ -259,7 +258,7 @@ export function ControlScan() {
       const convertedFiles = fileNames.map((fileName: ScreenshotImage) => ({
         ...fileName,
         source: fileName.source || 'window',
-        path: convertFileSrc(fileName.path),
+        path: platform.assetUrl.convertFileSrc(fileName.path),
       }))
 
       if (!openRef.current || captureRequestIdRef.current !== requestId) {

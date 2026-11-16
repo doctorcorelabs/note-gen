@@ -1,7 +1,7 @@
 import { Chat } from "@/db/chats"
 import useChatStore from "@/stores/chat"
 import { XIcon } from "lucide-react"
-import { clear, hasText, readText } from "tauri-plugin-clipboard-api"
+import { platform } from "@/lib/platform"
 import { useState } from "react"
 import { MessageInfo } from "./message-info"
 import { CondensedIndicator } from "./condensed-indicator"
@@ -22,12 +22,12 @@ export default function MessageControl({chat, children}: {chat: Chat, children: 
   
   async function deleteHandler() {
     if (chat.type === "clipboard" && !chat.image) {
-      const hasTextRes = await hasText()
+      const hasTextRes = await platform.clipboard.hasText()
       if (hasTextRes) {
         try {
-          const text = await readText()
+          const text = await platform.clipboard.readText()
           if (text === chat.content) {
-            await clear()
+            await platform.clipboard.clear()
           }
         } catch {}
       }

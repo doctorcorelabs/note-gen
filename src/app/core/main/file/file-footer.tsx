@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 import {
   ArrowRight,
   ChevronsUpDown,
@@ -201,7 +201,7 @@ export function FileFooter() {
     setOpen(false)
 
     try {
-      const selected = await openDialog({
+      const selected = await platform.dialog.open({
         directory: true,
         multiple: false,
         title: tFile('workspace.select'),

@@ -1,7 +1,7 @@
 import { TooltipButton } from "@/components/tooltip-button"
 import { FilePlus } from "lucide-react"
 import { useTranslations } from 'next-intl'
-import { open } from '@tauri-apps/plugin-dialog';
+import { platform } from '@/lib/platform';
 import useMarkStore from "@/stores/mark";
 import { insertMark } from "@/db/marks";
 import { useEffect, useCallback } from 'react'
@@ -34,7 +34,7 @@ export function ControlFile() {
   }, [handleSelectFile])
 
   async function selectFile() {
-    const filePath = await open({
+    const filePath = await platform.dialog.open({
       multiple: false,
       directory: false,
     });

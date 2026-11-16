@@ -14,7 +14,7 @@ import {
   ScanLine,
   Square,
 } from 'lucide-react'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { BaseNode, BaseNodeContent } from '@/components/base-node'
 import { Spinner } from '@/components/ui/spinner'
@@ -397,7 +397,7 @@ export const RecordCanvasNode = memo(function RecordCanvasNode({ id, data, selec
         style={nodeStyle(data)}
         className={cn('flex size-full flex-col overflow-hidden shadow-sm', previewClassName(data.previewState))}
         onDoubleClick={() => {
-          if (recordType === 'link' && data.url) void openUrl(data.url)
+          if (recordType === 'link' && data.url) void platform.opener.openUrl(data.url)
         }}
       >
         {isImageRecord && data.url ? (
@@ -442,7 +442,7 @@ export const LinkCanvasNode = memo(function LinkCanvasNode({ id, data }: NodePro
     <BaseNode
       style={nodeStyle(data)}
       className={cn('min-w-52 max-w-80 shadow-sm', previewClassName(data.previewState))}
-      onDoubleClick={() => data.url && void openUrl(data.url)}
+      onDoubleClick={() => data.url && void platform.opener.openUrl(data.url)}
     >
       <ConnectionHandles />
       <BaseNodeContent className="gap-1">

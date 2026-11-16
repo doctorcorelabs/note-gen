@@ -21,8 +21,6 @@ import { fetchAiDesc } from "@/lib/ai/description";
 import { platform, BaseDirectory } from "@/lib/platform";
 import { AlertCircle, CheckSquare, ImageUp, LoaderCircle, RefreshCw, Settings2, Square } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { confirm } from "@tauri-apps/plugin-dialog";
 import { AudioPlayer } from "@/components/audio-player";
 import { ImageViewer } from "@/components/image-viewer";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -866,7 +864,7 @@ export const MarkItem = React.memo(({
 
   const handleDelForever = useCallback(async (e?: React.MouseEvent) => {
     e?.stopPropagation()
-    const accepted = await confirm(`${t('record.mark.toolbar.deleteForever')}?\n${t('record.trash.syncWarning')}`, {
+    const accepted = await platform.dialog.confirm(`${t('record.mark.toolbar.deleteForever')}?\n${t('record.trash.syncWarning')}`, {
       title: t('record.trash.title'),
       kind: 'warning',
     })
@@ -945,11 +943,11 @@ export const MarkItem = React.memo(({
       }
 
       if (action.mode === 'reveal') {
-        await revealItemInDir(action.path)
+        await platform.opener.revealItemInDir(action.path)
         return
       }
 
-      await openPath(action.path)
+      await platform.opener.openPath(action.path)
     } catch (error) {
       console.error('Failed to open source folder:', error)
     }
@@ -965,7 +963,7 @@ export const MarkItem = React.memo(({
         return
       }
 
-      await openPath(action.path)
+      await platform.opener.openPath(action.path)
     } catch (error) {
       console.error('Failed to open source file:', error)
     }

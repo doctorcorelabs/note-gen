@@ -8,6 +8,7 @@ import { computedParentPath } from "@/lib/path";
 import { collectMarkdownFiles } from "@/lib/files";
 import { calculateFolderVectors } from "@/lib/folder-vector";
 import { WikiMenuItems } from '@/components/wiki/wiki-menu-items'
+import { platform } from "@/lib/platform";
 
 interface FolderVectorMenuProps {
   item: DirTree;
@@ -125,8 +126,7 @@ export function FolderVectorMenu({ item }: FolderVectorMenuProps) {
         return;
       }
 
-      const { ask } = await import('@tauri-apps/plugin-dialog');
-      const confirmed = await ask(
+      const confirmed = await platform.dialog.ask(
         t('context.confirmDeleteVectors', { count: markdownFiles.length }),
         {
           title: t('context.deleteVectors'),

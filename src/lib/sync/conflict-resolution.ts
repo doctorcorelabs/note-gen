@@ -1,5 +1,4 @@
 import { platform } from '@/lib/platform'
-import { confirm } from '@tauri-apps/plugin-dialog'
 import { getCurrentSyncContext, getSyncMetadataKey } from '@/lib/sync/sync-context'
 
 /**
@@ -249,7 +248,7 @@ async function promptUserForResolution(
   localContent: string,
   remoteContent: string
 ): Promise<ConflictResolution> {
-  const choice = await confirm(
+  const choice = await platform.dialog.confirm(
     `文件 ${filePath} 存在冲突\n\n` +
     `本地版本：${localContent.length} 字符\n` +
     `远程版本：${remoteContent.length} 字符\n\n` +

@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { platform } from '@/lib/platform'
-import { openPath } from '@tauri-apps/plugin-opener'
 import { Check, FolderOpen, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -276,7 +274,7 @@ export function SelfHostedWorkspaces({ profileId }: { profileId: string }) {
       const server = await client.capabilities()
       const link = new URL('/invitations/accept', server.web.accountUrl)
       link.searchParams.set('token', invitation.token)
-      await writeText(link.toString())
+      await platform.clipboard.writeText(link.toString())
     }
     toast.success(t('linkCopied'))
   }
@@ -351,7 +349,7 @@ export function SelfHostedWorkspaces({ profileId }: { profileId: string }) {
       if (!root) throw new Error(t('conflictCopyUnavailable'))
       const path = await platform.path.join(root, portable.normalized)
       if (!await platform.fs.exists(path)) throw new Error(t('conflictCopyUnavailable'))
-      await openPath(path)
+      await platform.opener.openPath(path)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('operationFailed'))
     }

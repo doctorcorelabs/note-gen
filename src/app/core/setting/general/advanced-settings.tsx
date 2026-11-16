@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { message } from '@tauri-apps/plugin-dialog'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
@@ -72,7 +71,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
       await store.clear()
       await platform.fs.remove('store.json', { baseDir: BaseDirectory.AppData })
       await platform.fs.remove('note.db', { baseDir: BaseDirectory.AppData })
-      await message(t('dataClearedRestartDesc'), {
+      await platform.dialog.message(t('dataClearedRestartDesc'), {
         title: t('dataClearedRestartTitle'),
         kind: 'info',
       })

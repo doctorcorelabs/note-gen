@@ -38,8 +38,6 @@ import { WikiMetadata } from './wiki-metadata-extension'
 import { SearchReplacePanel } from './search-replace-panel'
 import { useEffect, useId, useLayoutEffect, useRef, useCallback, useMemo, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type UIEvent as ReactUIEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { openPath, openUrl } from '@tauri-apps/plugin-opener'
-import { open } from '@tauri-apps/plugin-dialog'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { handleImageUpload, saveImageToWorkspace } from '@/lib/image-handler'
 import useArticleStore from '@/stores/article'
@@ -1532,7 +1530,7 @@ async function getOpenableLocalPath(path: string): Promise<string> {
 }
 
 async function openLocalPathWithDefaultApp(path: string) {
-  await openPath(await getOpenableLocalPath(path))
+  await platform.opener.openPath(await getOpenableLocalPath(path))
 }
 
 function parseImageDimension(value: unknown): number | null {
@@ -4705,7 +4703,7 @@ export function TipTapEditor({
       }
 
       if (protocol) {
-        await openUrl(href)
+        await platform.opener.openUrl(href)
         return
       }
 
@@ -5755,7 +5753,7 @@ export function TipTapEditor({
       if (isMobile) {
         fileObject = (await pickImagesFromPhotoLibrary())[0] || null
       } else {
-        const file = await open({
+        const file = await platform.dialog.open({
           multiple: false,
           filters: [
             {

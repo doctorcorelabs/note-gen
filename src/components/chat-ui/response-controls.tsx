@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { convertFileSrc } from '@tauri-apps/api/core'
-import { writeText } from 'tauri-plugin-clipboard-api'
+import { platform } from '@/lib/platform'
 import { type ResponseAction, type ResponseComponentProps, isResponseImageUrl } from '@/lib/chat-ui/response-catalog'
 import { assertResponseWorkspace, verifyResponseNote } from '@/lib/chat-ui/response-host'
 import { toWorkspaceRelativePath } from '@/lib/workspace'
@@ -40,7 +39,7 @@ function useResponseAction() {
   return async (action: ResponseAction) => {
     if (context.isPreview) return
     if (action.type === 'copy') {
-      await writeText(action.text)
+      await platform.clipboard.writeText(action.text)
       toast({ title: t('copied') })
       return
     }
@@ -188,7 +187,7 @@ export function ResponseImage({ src, alt, caption }: ResponseComponentProps<'Ima
       if (!artifact) throw new Error('RESPONSE_IMAGE_UNAVAILABLE')
       const file = await resolveChatArtifact(artifact.absolutePath, { allowedPaths: context.artifacts.allowedPaths })
       await assertResponseWorkspace(context.workspaceFingerprint)
-      return convertFileSrc(file.absolutePath)
+      return platform.assetUrl.convertFileSrc(file.absolutePath)
     }
     void resolve().then(url => { if (!cancelled) setResolved({ source: src, url }) })
       .catch(() => { if (!cancelled) setResolved({ source: src, failed: true }) })

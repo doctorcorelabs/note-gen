@@ -1,6 +1,5 @@
 import { platform } from '@/lib/platform'
 import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { executeRecordTransaction, getDb } from '@/db'
 import { SelfHostedApiError, SelfHostedClient, normalizeServerUrl } from './client'
 import type { ClientSession } from './protocol'
@@ -142,7 +141,7 @@ export async function connectWithBrowser(input: {
       platform: getRuntimePlatform(),
       encryptionPublicKey: keyPair.publicKey,
     })
-    await openUrl(authorization.verificationUriComplete)
+    await platform.opener.openUrl(authorization.verificationUriComplete)
     const deadline = Date.now() + authorization.expiresIn * 1_000
     try {
       while (Date.now() < deadline) {

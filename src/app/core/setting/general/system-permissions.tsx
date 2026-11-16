@@ -1,11 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { platform } from '@/lib/platform'
 import { isTauri } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification'
 import { Bell, Mic, Monitor } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -134,7 +133,7 @@ export function SystemPermissions() {
     if (!settingsUrl) return
     setBusy(true)
     try {
-      await openUrl(settingsUrl)
+      await platform.opener.openUrl(settingsUrl)
     } catch {
       toast({ title: t('openSettingsError'), variant: 'destructive' })
     } finally {

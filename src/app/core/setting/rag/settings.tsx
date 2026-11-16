@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { confirm } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, ChevronDown, FileSearch, FileText, Hash, Layers, ListFilter, Pause, Play, RefreshCw, Search, Shield, Target, Trash } from 'lucide-react'
@@ -84,7 +83,7 @@ export function Settings() {
   }
 
   async function handleDeleteIndex() {
-    if (!await confirm(t('deleteVectorConfirm'))) return
+    if (!await platform.dialog.confirm(t('deleteVectorConfirm'))) return
     await clearVectorDb()
     await initVectorDb()
     await markIndexDirty()
@@ -123,7 +122,7 @@ export function Settings() {
   }
 
   async function handlePurgeDisabledIndex() {
-    if (!await confirm(t('purgeDisabledConfirm'))) return
+    if (!await platform.dialog.confirm(t('purgeDisabledConfirm'))) return
     await purgeDisabledKnowledgeVectors()
     await refreshIndexStats()
     await refreshKnowledgeStats()

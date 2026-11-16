@@ -6,7 +6,7 @@ import { clearTrash, initMarksDb, restoreMarks } from '@/db/marks'
 import { Button } from '@/components/ui/button'
 import { FileText, Trash2, XCircle, RotateCcw } from 'lucide-react'
 import useMarkStore from '@/stores/mark'
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { platform } from '@/lib/platform'
 
 export function MobileMarkHeader() {
   const markT = useTranslations('record.mark')
@@ -26,7 +26,7 @@ export function MobileMarkHeader() {
   }, [trashState, fetchAllTrashMarks, fetchAllMarks])
 
   async function handleClearTrash() {
-    const accepted = await confirm(`${recordT('trash.confirm')}\n${recordT('trash.syncWarning')}`, {
+    const accepted = await platform.dialog.confirm(`${recordT('trash.confirm')}\n${recordT('trash.syncWarning')}`, {
       title: recordT('trash.title'),
       kind: 'warning',
     })

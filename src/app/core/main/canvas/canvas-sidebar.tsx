@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { open } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { ArrowDownAZ, ArrowLeft, BrainCircuit, CalendarDays, CloudAlert, CloudCheck, CloudUpload, Columns3, CopyPlus, DownloadCloud, EllipsisVertical, FileInput, FilePlus2, Grid2X2, LayoutGrid, List, Loader2, Palette, Pencil, Pin, PinOff, RefreshCw, RotateCcw, ShieldQuestion, Timer, Trash2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
@@ -165,7 +164,7 @@ export function CanvasActions() {
 
   const handleImport = async () => {
     try {
-      const path = await open({
+      const path = await platform.dialog.open({
         multiple: false,
         filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
       })
@@ -400,7 +399,7 @@ export function CanvasSidebar() {
 
   const handleImport = async () => {
     try {
-      const path = await open({
+      const path = await platform.dialog.open({
         multiple: false,
         filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
       })

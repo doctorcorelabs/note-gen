@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { openUrl } from '@tauri-apps/plugin-opener'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
+import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import useSettingStore from '@/stores/setting'
 import useUpdateStore, {
   ANDROID_DOWNLOAD_URL,
@@ -12,14 +12,14 @@ import useUpdateStore, {
 export type MobilePlatform = 'android' | 'ios'
 
 export function getMobilePlatform(): MobilePlatform | null {
-  const currentPlatform = platform()
+  const currentPlatform = osPlatform()
   return currentPlatform === 'android' || currentPlatform === 'ios'
     ? currentPlatform
     : null
 }
 
 export async function openMobileUpdatePage(currentPlatform: MobilePlatform) {
-  await openUrl(currentPlatform === 'android' ? ANDROID_DOWNLOAD_URL : IOS_TESTFLIGHT_URL)
+  await platform.opener.openUrl(currentPlatform === 'android' ? ANDROID_DOWNLOAD_URL : IOS_TESTFLIGHT_URL)
 }
 
 export function MobileUpdateChecker() {

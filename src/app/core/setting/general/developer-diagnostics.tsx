@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
-import { save } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
-import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { arch, locale, platform as getRuntimePlatform, version } from '@tauri-apps/plugin-os'
 import { Check, ClipboardCopy, Download, Eye, ScrollText, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -93,7 +91,7 @@ export function DeveloperDiagnostics() {
 
   async function copyPreview() {
     try {
-      await writeText(preview)
+      await platform.clipboard.writeText(preview)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1_500)
     } catch (error) {
@@ -107,7 +105,7 @@ export function DeveloperDiagnostics() {
 
   async function exportPreview() {
     try {
-      const destination = await save({
+      const destination = await platform.dialog.save({
         defaultPath: `notegen-redacted-diagnostics-${Date.now()}.json`,
         filters: [{ name: 'JSON', extensions: [android ? 'application/json' : 'json'] }],
       })

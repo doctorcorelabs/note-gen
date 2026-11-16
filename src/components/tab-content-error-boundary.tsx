@@ -8,7 +8,7 @@ import {
   RefreshCwIcon,
   XIcon,
 } from 'lucide-react'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -94,7 +94,7 @@ export class TabContentErrorBoundary extends Component<
       const issueUrl = new URL(GITHUB_BUG_REPORT_URL)
       issueUrl.searchParams.set('template', 'bug_report.yml')
       issueUrl.searchParams.set('title', '[bug] 标签页进入错误隔离模式')
-      await openUrl(issueUrl)
+      await platform.opener.openUrl(issueUrl)
       this.setState({
         actionError: diagnosticsCopied
           ? ''

@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button"
 import useSettingStore from "@/stores/setting"
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { useTranslations } from 'next-intl'
@@ -53,7 +52,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
         return
       }
 
-      const selected = await openDialog({
+      const selected = await platform.dialog.open({
         directory: true,
         multiple: false,
         title: t('workspace.select')

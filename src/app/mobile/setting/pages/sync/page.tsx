@@ -3,9 +3,8 @@
 import { FileDown, Loader2, RefreshCcw } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { confirm } from '@tauri-apps/plugin-dialog'
-import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { platform } from '@/lib/platform'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { GithubSync } from '@/app/core/setting/sync/github-sync'
 import { GiteeSync } from '@/app/core/setting/sync/gitee-sync'
 import { GitlabSync } from '@/app/core/setting/sync/gitlab-sync'
@@ -260,7 +259,7 @@ export default function SyncPage() {
 
   async function handleExcludeSensitiveConfigChange(checked: boolean) {
     if (!checked) {
-      const accepted = await confirm(t('settings.sync.autoDataSyncPrivacyDisableConfirm'), {
+      const accepted = await platform.dialog.confirm(t('settings.sync.autoDataSyncPrivacyDisableConfirm'), {
         title: t('settings.sync.autoDataSyncPrivacyTitle'),
         kind: 'warning',
       })

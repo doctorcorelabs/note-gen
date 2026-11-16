@@ -3,7 +3,6 @@ import { DirTree } from "@/stores/article";
 import { useTranslations } from "next-intl";
 import { computedParentPath } from "@/lib/path";
 import { platform } from '@/lib/platform';
-import { openPath } from "@tauri-apps/plugin-opener";
 import { FolderOpen } from "lucide-react"
 
 interface ViewDirectoryProps {
@@ -23,11 +22,11 @@ export function ViewDirectory({ item }: ViewDirectoryProps) {
     if (workspace.isCustom) {
       // 自定义工作区 - 直接使用工作区路径
       const pathOptions = await getFilePathOptions(path);
-      await openPath(pathOptions.path);
+      await platform.opener.openPath(pathOptions.path);
     } else {
       // 默认工作区 - 使用 AppData 目录
       const appDir = await platform.path.appDataDir();
-      await openPath(await platform.path.join(appDir, 'article', path));
+      await platform.opener.openPath(await platform.path.join(appDir, 'article', path));
     }
   }
 

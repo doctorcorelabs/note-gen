@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { platform } from '@/lib/platform'
 import { Check, Download, ExternalLink, RefreshCw, Sparkles } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -63,7 +63,7 @@ export function RecommendedSkills({ onCountChange }: { onCountChange?: (count: n
 
   const openSource = async (sourceUrl: string) => {
     try {
-      await openUrl(sourceUrl)
+      await platform.opener.openUrl(sourceUrl)
     } catch (reason) {
       toast({
         title: t('source'),

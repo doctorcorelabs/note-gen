@@ -69,7 +69,6 @@ import { platform, BaseDirectory } from "@/lib/platform"
 import { ImageRecognitionStage, recognizeImageWithFallback } from "@/lib/image-recognition"
 import { getImageRecognitionProgressText } from "@/lib/image-recognition-progress"
 import { toast } from "@/hooks/use-toast"
-import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener"
 import { canOpenMarkSource, getMarkOpenAction } from "./mark-open-path"
 import { createRecordTab, getRecordTabPath } from "./mark-record-tab"
 import { getMarkTypeListBadgeClasses } from "./mark-type-meta"
@@ -506,11 +505,11 @@ function MarkDetailToolbar({
       }
 
       if (action.mode === 'reveal') {
-        await revealItemInDir(action.path)
+        await platform.opener.revealItemInDir(action.path)
         return
       }
 
-      await openPath(action.path)
+      await platform.opener.openPath(action.path)
     } catch (error) {
       toast({
         title: t('common.error'),

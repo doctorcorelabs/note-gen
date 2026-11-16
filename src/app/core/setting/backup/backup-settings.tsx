@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { message, open as openDialog } from '@tauri-apps/plugin-dialog'
-import { openPath } from '@tauri-apps/plugin-opener'
 import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
@@ -104,7 +102,7 @@ export function BackupSettings() {
   }
 
   async function chooseDirectory() {
-    const selected = await openDialog({
+    const selected = await platform.dialog.open({
       directory: true,
       multiple: false,
       title: t('directory.dialogTitle'),
@@ -149,7 +147,7 @@ export function BackupSettings() {
       toast.error(t('directory.required'))
       return
     }
-    const selected = await openDialog({
+    const selected = await platform.dialog.open({
       multiple: false,
       directory: false,
       title: t('restore.chooseTitle'),
@@ -170,7 +168,7 @@ export function BackupSettings() {
       try {
         await restoreManagedBackup(restoreTarget, currentWorkspacePath)
       } catch (error) {
-        await message(t('restore.failedDescription', { error: String(error) }), {
+        await platform.dialog.message(t('restore.failedDescription', { error: String(error) }), {
           title: t('restore.failedTitle'),
           kind: 'error',
         })
@@ -204,7 +202,7 @@ export function BackupSettings() {
             </Button>
             {settings.directory ? (
               <>
-                <Button variant="ghost" onClick={() => void openPath(settings.directory)}>
+                <Button variant="ghost" onClick={() => void platform.opener.openPath(settings.directory)}>
                   {t('directory.open')}
                 </Button>
                 <Button variant="ghost" onClick={() => void clearDirectory()}>

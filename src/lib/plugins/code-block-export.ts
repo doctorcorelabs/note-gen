@@ -1,4 +1,3 @@
-import { save } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 
@@ -68,7 +67,7 @@ export async function exportCodeBlockImage(dataUrl: string, language: string, ti
   const baseName = language.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 64) || 'diagram'
   const filename = `${baseName}-${Date.now()}.${extension}`
   if (checkIsTauri()) {
-    const path = await save({ title, defaultPath: filename, filters: [{ name: format.toUpperCase(), extensions }] })
+    const path = await platform.dialog.save({ title, defaultPath: filename, filters: [{ name: format.toUpperCase(), extensions }] })
     if (!path) return false
     const hasExtension = extensions.some(value => path.toLowerCase().endsWith(`.${value}`))
     await platform.fs.writeFile(hasExtension ? path : `${path}.${extension}`, new Uint8Array(await blob.arrayBuffer()))

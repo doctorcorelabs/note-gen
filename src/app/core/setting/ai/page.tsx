@@ -5,7 +5,6 @@ import { useLocalStorage } from 'react-use';
 import { motion, useReducedMotion } from 'framer-motion';
 import { platform } from "@/lib/platform";
 import { v4 } from 'uuid';
-import { confirm } from '@tauri-apps/plugin-dialog';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ResponsiveSelect } from "@/components/responsive-select"
@@ -220,7 +219,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   const deleteModel = async (modelId: string) => {
     if (!currentConfig) return
     
-    const confirmed = await confirm('确定要删除这个模型吗？')
+    const confirmed = await platform.dialog.confirm('确定要删除这个模型吗？')
     if (!confirmed) return
     
     const updatedConfig = {
@@ -328,7 +327,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       return // 不能删除默认模型
     }
 
-    const confirmed = await confirm(t('deleteCustomModelConfirm'))
+    const confirmed = await platform.dialog.confirm(t('deleteCustomModelConfirm'))
     if (!confirmed) return
 
     const store = await platform.store.load('store.json')

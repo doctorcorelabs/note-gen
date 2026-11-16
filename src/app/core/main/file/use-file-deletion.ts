@@ -2,7 +2,6 @@
 
 import { useCallback } from 'react'
 import { useTranslations } from 'next-intl'
-import { ask } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import { cloneDeep } from 'lodash-es'
 
@@ -104,7 +103,7 @@ export function useFileDeletion() {
         toast({ title: t('deleteEntriesBusy'), variant: 'destructive' })
         return
       }
-      const confirmed = await ask(t(hasRemote ? 'confirmDeleteEntriesWithRemote'
+      const confirmed = await platform.dialog.ask(t(hasRemote ? 'confirmDeleteEntriesWithRemote'
         : isMobileDevice() ? 'confirmDeleteEntriesPermanently' : 'confirmDeleteEntries', { count: entries.length }), {
         title: entries.length === 1 ? entries[0].name : t('deleteSelected', { count: entries.length }),
         kind: 'warning',

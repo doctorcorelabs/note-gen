@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { platform as registryPlatform } from '@/lib/platform'
 import { platform as registry } from '@/lib/platform'
 import {
   Cloud,
@@ -298,7 +298,7 @@ export default function SyncPage() {
 
   async function handleExcludeSensitiveConfigChange(checked: boolean) {
     if (!checked) {
-      const accepted = await confirm(t('settings.sync.autoDataSyncPrivacyDisableConfirm'), {
+      const accepted = await registryPlatform.dialog.confirm(t('settings.sync.autoDataSyncPrivacyDisableConfirm'), {
         title: t('settings.sync.autoDataSyncPrivacyTitle'),
         kind: 'warning',
       })

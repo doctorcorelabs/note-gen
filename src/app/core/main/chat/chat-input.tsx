@@ -991,8 +991,7 @@ export const ChatInput = React.memo(function ChatInput() {
       }
 
       // PC端使用 Tauri dialog
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
+      const selected = await platform.dialog.open({
         multiple: true,
         filters: [{
           name: 'Images',
@@ -1019,8 +1018,7 @@ export const ChatInput = React.memo(function ChatInput() {
 
   async function handleSelectLocalFiles() {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({ multiple: true, directory: false })
+      const selected = await platform.dialog.open({ multiple: true, directory: false })
       if (!selected) return
       const paths = Array.isArray(selected) ? selected : [selected]
       const results = await Promise.allSettled(paths.map(createFileAttachment))
@@ -1037,8 +1035,7 @@ export const ChatInput = React.memo(function ChatInput() {
 
   async function handleSelectLocalFolders() {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({ multiple: true, directory: true })
+      const selected = await platform.dialog.open({ multiple: true, directory: true })
       if (!selected) return
       const paths = Array.isArray(selected) ? selected : [selected]
       const results = await Promise.allSettled(paths.map(createFolderAttachment))

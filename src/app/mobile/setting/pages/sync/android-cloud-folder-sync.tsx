@@ -1,10 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { openUrl } from '@tauri-apps/plugin-opener'
-import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { platform } from '@/lib/platform'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { CircleCheck, Cloud, CloudDownload, Copy, CopyCheck, ExternalLink, FolderSync, LogIn, LogOut, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -270,7 +268,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
       const next = await connectOneDrive(clientId, async code => {
         let copied = false
         try {
-          await writeText(code.userCode, { label: 'NoteGen OneDrive sign-in code' })
+          await platform.clipboard.writeText(code.userCode, { label: 'NoteGen OneDrive sign-in code' })
           copied = true
         } catch (cause) {
           console.error('Failed to copy the OneDrive sign-in code:', cause)
@@ -282,7 +280,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
         await waitForRedirect(1000, controller.signal)
         setRedirectSeconds(0)
         updatePanelStatus('openingBrowser')
-        await openUrl(code.verificationUrl)
+        await platform.opener.openUrl(code.verificationUrl)
         updatePanelStatus('waitingAuthorization')
       }, controller.signal)
       setLoginCode(null)
@@ -332,10 +330,10 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
     if (!loginCode) return
     setError('')
     try {
-      await writeText(loginCode.userCode, { label: 'NoteGen OneDrive sign-in code' })
+      await platform.clipboard.writeText(loginCode.userCode, { label: 'NoteGen OneDrive sign-in code' })
       setLoginCode({ ...loginCode, copied: true })
       updatePanelStatus('openingBrowser')
-      await openUrl(loginCode.verificationUrl)
+      await platform.opener.openUrl(loginCode.verificationUrl)
       updatePanelStatus('waitingAuthorization')
     } catch (cause) {
       console.error('Failed to open the OneDrive sign-in page:', cause)

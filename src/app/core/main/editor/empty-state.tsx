@@ -4,7 +4,6 @@ import { PluginEmbeddedView, useEmbeddedPluginViews } from '@/components/plugins
 import { FileText, MessageSquareText, Search, FolderOpen, GripVertical, SlidersHorizontal } from 'lucide-react'
 import useArticleStore from '@/stores/article'
 import { useTranslations } from 'next-intl'
-import { open } from '@tauri-apps/plugin-dialog'
 import { platform } from '@/lib/platform'
 import Image from 'next/image'
 import emitter from '@/lib/emitter'
@@ -307,7 +306,7 @@ export function EmptyState({
 
   const handleOpenWorkspace = async () => {
     try {
-      const selected = await open({
+      const selected = await platform.dialog.open({
         directory: true,
         multiple: false,
         title: '选择工作区目录'
