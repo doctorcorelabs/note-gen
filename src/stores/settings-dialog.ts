@@ -3,6 +3,7 @@ import { create } from 'zustand'
 export type BuiltinSettingSection =
   | 'about'
   | 'general'
+  | 'security'
   | 'record'
   | 'editor'
   | 'canvas'
@@ -33,6 +34,7 @@ export function isPluginSettingSection(section: string): section is PluginSettin
 export const settingSections: SettingSection[] = [
   'about',
   'general',
+  'security',
   'record',
   'editor',
   'canvas',

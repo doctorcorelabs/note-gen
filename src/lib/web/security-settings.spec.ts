@@ -19,6 +19,7 @@ import {
   isStepUpFresh,
   isTotpCode,
   normalizeRecoveryCodeInput,
+  securityErrorMessageKey,
   STEP_UP_WINDOW_MS,
   type SecurityTransport,
 } from "./security-settings";
@@ -170,6 +171,33 @@ describe("classifySecurityError", () => {
     expect(classifySecurityError(new Error("boom"))).toBe("unknown");
     expect(classifySecurityError(null)).toBe("unknown");
     expect(classifySecurityError("nope")).toBe("unknown");
+  });
+});
+
+describe("securityErrorMessageKey", () => {
+  it("maps every error kind to its camelCase message key", () => {
+    expect(securityErrorMessageKey("step_up_required")).toBe("stepUpRequired");
+    expect(securityErrorMessageKey("invalid_code")).toBe("invalidCode");
+    expect(securityErrorMessageKey("session_expired")).toBe("sessionExpired");
+    expect(securityErrorMessageKey("rate_limited")).toBe("rateLimited");
+    expect(securityErrorMessageKey("not_found")).toBe("notFound");
+    expect(securityErrorMessageKey("unavailable")).toBe("unavailable");
+    expect(securityErrorMessageKey("unknown")).toBe("unknown");
+  });
+
+  it("never returns a snake_case wire value", () => {
+    const kinds = [
+      "step_up_required",
+      "invalid_code",
+      "session_expired",
+      "rate_limited",
+      "not_found",
+      "unavailable",
+      "unknown",
+    ] as const;
+    for (const kind of kinds) {
+      expect(securityErrorMessageKey(kind)).not.toContain("_");
+    }
   });
 });
 

@@ -33,6 +33,7 @@ import RagSettingPage from '../rag/page'
 import RecordSettingPage from '../record/page'
 import ShortcutsPage from '../shortcuts/page'
 import SkillsSettingPage from '../skills/page'
+import SecuritySettingsPage from '../security/page'
 import PluginsSettingPage from '../plugins/page'
 import SyncPage from '../sync/page'
 import BackupPage from '../backup/page'
@@ -47,6 +48,7 @@ import { PluginSettingsPage } from '../plugins/plugin-settings-page'
 const settingPages: Record<BuiltinSettingSection, ComponentType> = {
   about: AboutPage,
   general: GeneralSettingsPage,
+  security: SecuritySettingsPage,
   record: RecordSettingPage,
   editor: EditorSettingPage,
   canvas: CanvasSettingPage,

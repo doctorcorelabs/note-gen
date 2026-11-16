@@ -226,6 +226,32 @@ export function classifySecurityError(error: unknown): SecurityErrorKind {
 }
 
 /**
+ * i18n key for a SecurityErrorKind under the
+ * `settings.security.errors` namespace. The kinds are snake_case
+ * wire values; the message keys are camelCase, so the mapping
+ * must be explicit: passing a kind straight to the translator
+ * would render the raw wire value instead of a message.
+ */
+export function securityErrorMessageKey(kind: SecurityErrorKind): string {
+  switch (kind) {
+    case "step_up_required":
+      return "stepUpRequired";
+    case "invalid_code":
+      return "invalidCode";
+    case "session_expired":
+      return "sessionExpired";
+    case "rate_limited":
+      return "rateLimited";
+    case "not_found":
+      return "notFound";
+    case "unavailable":
+      return "unavailable";
+    case "unknown":
+      return "unknown";
+  }
+}
+
+/**
  * A memory-only, show-once holder. The value is readable while it
  * is held and is destroyed by dismiss(); after dismiss the holder
  * yields nothing until set() receives a fresh value. There is no

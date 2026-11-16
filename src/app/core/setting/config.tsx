@@ -20,6 +20,7 @@ import {
   Globe2,
   Palette,
   Blocks,
+  ShieldCheck,
 } from "lucide-react"
 import type { ReactNode } from 'react'
 import type { BuiltinSettingSection } from '@/stores/settings-dialog'
@@ -50,6 +51,10 @@ const baseConfig: SettingNavigationItem[] = [
   {
     icon: <Settings className="size-4" />,
     anchor: 'general',
+  },
+  {
+    icon: <ShieldCheck className="size-4" />,
+    anchor: 'security',
   },
   {
     icon: <PenTool className="size-4" />,

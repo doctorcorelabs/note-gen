@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// This file is part of the NoteGen web fork. See LICENSE and FORK.md.
+
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -25,6 +28,7 @@ import {
   createShowOnce,
   isRecoveryCodeInput,
   isTotpCode,
+  securityErrorMessageKey,
   type RecoveryCodeSet,
   type SecuritySettingsApi,
   type TotpEnrollStart,
@@ -113,7 +117,7 @@ export function TotpSection({
   useEffect(() => resetFlow, [])
 
   function errorMessage(error: unknown): string {
-    return errorT(classifySecurityError(error))
+    return errorT(securityErrorMessageKey(classifySecurityError(error)))
   }
 
   async function copyText(value: string) {
