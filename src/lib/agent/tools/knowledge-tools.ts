@@ -57,7 +57,7 @@ function strings(value: unknown) {
 
 const knowledgeSearchTool: AgentTool = {
   name: 'knowledge_search',
-  title: '搜索统一知识库',
+  title: 'Search unified knowledge base',
   description: [
     'Search NoteGen articles, individual records, and canvases when the answer depends on the user’s saved knowledge, history, plans, prior decisions, or recorded material.',
     'Do not search for general knowledge, pure creation requests, or when the current article, selection, or current canvas already contains enough evidence.',
@@ -86,7 +86,7 @@ const knowledgeSearchTool: AgentTool = {
   },
   execute: async input => {
     const query = typeof input.query === 'string' ? input.query.trim() : ''
-    if (!query) return { ok: false, message: 'query 不能为空。', error: 'EMPTY_QUERY' }
+    if (!query) return { ok: false, message: 'query must not be empty.', error: 'EMPTY_QUERY' }
     const sourceTypes = strings(input.sourceTypes).filter(isKnowledgeSourceType)
     const sourceMode = input.sourceMode === 'only' ? 'only' : input.sourceMode === 'prefer' ? 'prefer' : undefined
     const results = await searchKnowledgeWithWiki(query, {
@@ -102,7 +102,7 @@ const knowledgeSearchTool: AgentTool = {
     })
     return {
       ok: true,
-      message: `找到 ${results.wikiPages.length} 个 Wiki 页面和 ${results.sources.length} 个文章、记录或画布候选。`,
+      message: `Found ${results.wikiPages.length} Wiki pages and ${results.sources.length} article, record, or canvas candidates.`,
       data: results.sources,
       wikiPages: results.wikiPages,
     }
@@ -111,7 +111,7 @@ const knowledgeSearchTool: AgentTool = {
 
 const knowledgeReadWikiTool: AgentTool = {
   name: 'knowledge_read_wiki',
-  title: '读取知识 Wiki',
+  title: 'Read knowledge Wiki',
   description: 'Read compiled Wiki pages returned by knowledge_search. These are AI-maintained summaries, not verbatim originals. Use only their valid source evidence; state when relying on Wiki. Source reference numbers retain their page-wide numbering across cursors; follow nextCursor for more content. For block-citations, sources belong to an entire supporting paragraph that spans cursors; they do not verify each clipped sentence. Page-linked sources on unnumbered handwritten text establish page provenance, not paragraph-level verification. Read originals before quoting exact wording, verifying numbers, or answering source-specific details.',
   category: 'note',
   risk: 'read',
@@ -168,14 +168,14 @@ const knowledgeReadWikiTool: AgentTool = {
         updatedAt: view.page.updatedAt })
     }
     await assertCurrent()
-    return pages.length ? { ok: true, message: `已读取 ${pages.length} 个 Wiki 页面。`, data: pages }
-      : { ok: false, message: 'Wiki 页面已过期、超出本次检索范围或不可读取，请重新搜索。', error: 'WIKI_NOT_READABLE' }
+    return pages.length ? { ok: true, message: `Read ${pages.length} Wiki pages.`, data: pages }
+      : { ok: false, message: 'The Wiki pages have expired, are outside this search scope, or cannot be read. Please search again.', error: 'WIKI_NOT_READABLE' }
   },
 }
 
 const knowledgeReadSourcesTool: AgentTool = {
   name: 'knowledge_read_sources',
-  title: '读取知识来源',
+  title: 'Read knowledge sources',
   description: 'Read complete content or the next page for candidates returned by knowledge_search. Read only sources needed for the answer. A record remains independent; a canvas is returned as all semantic nodes and explicit edges without visual styling.',
   category: 'note',
   risk: 'read',
@@ -213,14 +213,14 @@ const knowledgeReadSourcesTool: AgentTool = {
       if (page) pages.push(page)
     }
     return pages.length
-      ? { ok: true, message: `已读取 ${pages.length} 个知识来源页面。`, data: pages }
-      : { ok: false, message: '没有可读取的知识来源。', error: 'NO_READABLE_SOURCES' }
+      ? { ok: true, message: `Read ${pages.length} knowledge source pages.`, data: pages }
+      : { ok: false, message: 'There are no readable knowledge sources.', error: 'NO_READABLE_SOURCES' }
   },
 }
 
 const knowledgeCiteSourcesTool: AgentTool = {
   name: 'knowledge_cite_sources',
-  title: '确认知识来源',
+  title: 'Confirm knowledge sources',
   description: 'Mark only the retrieved article, record, or canvas sources actually used as evidence or as the basis of an action. Call this before the final answer.',
   category: 'note',
   risk: 'read',
@@ -257,8 +257,8 @@ const knowledgeCiteSourcesTool: AgentTool = {
       }
     }
     return valid.length
-      ? { ok: true, message: `已确认 ${valid.length} 个知识来源。`, data: { sourceKeys: valid } }
-      : { ok: false, message: 'sourceKeys 必须包含实际使用的知识来源。', error: 'EMPTY_KNOWLEDGE_SOURCES' }
+      ? { ok: true, message: `Confirmed ${valid.length} knowledge sources.`, data: { sourceKeys: valid } }
+      : { ok: false, message: 'sourceKeys must contain the knowledge sources actually used.', error: 'EMPTY_KNOWLEDGE_SOURCES' }
   },
 }
 
