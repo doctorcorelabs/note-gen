@@ -2,6 +2,7 @@ import type { OpenTabInfo } from '@/stores/article'
 import { checkIsTauri } from '@/lib/check'
 import { getDefaultArticleAbsolutePath, getWorkspacePath, isAbsoluteFsPath } from '@/lib/workspace'
 import { editorPathsCouldReferToSameFile, editorPathsReferToSameFile, isEditorPathMutationLocked } from '@/lib/editor-deactivation'
+import { platform } from '@/lib/platform'
 
 export const EDITOR_WINDOW_STORE = 'editor-windows.json'
 const openingEditorWindowPaths = new Set<string>()
@@ -49,7 +50,6 @@ export function canOpenInEditorWindow(tab: OpenTabInfo) {
 }
 
 async function resolveEditorWindowPath(tab: OpenTabInfo) {
-  const { join } = await import('@tauri-apps/api/path')
   const workspace = await getWorkspacePath()
   const workspaceRoot = workspace.isCustom
     ? workspace.path
@@ -57,7 +57,7 @@ async function resolveEditorWindowPath(tab: OpenTabInfo) {
   const absolutePath = isAbsoluteFsPath(tab.path)
     ? tab.path
     : workspace.isCustom
-      ? await join(workspace.path, tab.path)
+      ? await platform.path.join(workspace.path, tab.path)
       : await getDefaultArticleAbsolutePath(tab.path)
   return {
     absolutePath: normalizePath(absolutePath),
@@ -67,8 +67,7 @@ async function resolveEditorWindowPath(tab: OpenTabInfo) {
 }
 
 export async function loadEditorWindowSession(id: string) {
-  const { Store } = await import('@tauri-apps/plugin-store')
-  const store = await Store.load(EDITOR_WINDOW_STORE)
+  const store = await platform.store.load(EDITOR_WINDOW_STORE)
   const session = await store.get<unknown>(id)
   if (!validSession(session)) return null
   if (typeof session.workspaceIsCustom === 'boolean') return session
@@ -84,8 +83,7 @@ export async function loadEditorWindowSession(id: string) {
 }
 
 export async function removeEditorWindowSession(id: string) {
-  const { Store } = await import('@tauri-apps/plugin-store')
-  const store = await Store.load(EDITOR_WINDOW_STORE)
+  const store = await platform.store.load(EDITOR_WINDOW_STORE)
   await store.delete(id)
   await store.save()
 }
@@ -99,11 +97,8 @@ export async function focusEditorWindowForPath(
   const absolutePath = isAbsoluteFsPath(path)
     ? normalizePath(path)
     : (await resolveEditorWindowPath(tab)).absolutePath
-  const [{ getAllWebviewWindows }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
-    import('@tauri-apps/plugin-store'),
-  ])
-  const store = await Store.load(EDITOR_WINDOW_STORE)
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const store = await platform.store.load(EDITOR_WINDOW_STORE)
   const session = (await store.values<unknown>())
     .filter(validSession)
     .find(item => normalizePath(item.absolutePath) === absolutePath)
@@ -130,11 +125,8 @@ export async function hasEditorWindowForPaths(paths: readonly string[], workspac
     editorPathsCouldReferToSameFile(candidate, path, workspaceRoot)
   ))
   if ([...openingEditorWindowPaths].some(isAffected)) return true
-  const [{ getAllWebviewWindows }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
-    import('@tauri-apps/plugin-store'),
-  ])
-  const store = await Store.load(EDITOR_WINDOW_STORE)
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const store = await platform.store.load(EDITOR_WINDOW_STORE)
   const [sessions, windows] = await Promise.all([store.values<unknown>(), getAllWebviewWindows()])
   const sessionsByLabel = new Map<string, EditorWindowSession>(sessions.filter(validSession).map(session => [`editor-${session.id}`, session] as const))
   return [...openingEditorWindowPaths].some(isAffected)
@@ -165,13 +157,9 @@ async function createEditorWindow(
   tab: OpenTabInfo,
   { absolutePath, workspaceRoot, workspaceIsCustom }: Awaited<ReturnType<typeof resolveEditorWindowPath>>,
 ) {
-  const [{ WebviewWindow, getAllWebviewWindows }, { Store }, { exists }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
-    import('@tauri-apps/plugin-store'),
-    import('@tauri-apps/plugin-fs'),
-  ])
-  if (!await exists(absolutePath)) return false
-  const store = await Store.load(EDITOR_WINDOW_STORE)
+  const { WebviewWindow, getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  if (!await platform.fs.exists(absolutePath)) return false
+  const store = await platform.store.load(EDITOR_WINDOW_STORE)
   const sessions = (await store.values<unknown>()).filter(validSession)
   const existingSession = sessions.find(session => normalizePath(session.absolutePath) === absolutePath)
   if (existingSession) {
@@ -219,12 +207,9 @@ async function createEditorWindow(
 
 export async function restoreEditorWindows() {
   if (!checkIsTauri()) return
-  const [{ WebviewWindow, getAllWebviewWindows }, { Store }] = await Promise.all([
-    import('@tauri-apps/api/webviewWindow'),
-    import('@tauri-apps/plugin-store'),
-  ])
+  const { WebviewWindow, getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
   const openLabels = new Set((await getAllWebviewWindows()).map(window => window.label))
-  const store = await Store.load(EDITOR_WINDOW_STORE)
+  const store = await platform.store.load(EDITOR_WINDOW_STORE)
   const sessions = (await store.values<unknown>()).filter(validSession)
 
   for (const session of sessions) {

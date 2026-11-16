@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { Input } from "@/components/ui/input";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import useImageStore from "@/stores/imageHosting";
 import { checkPicgoState, type PicgoImageHostingSetting } from "@/lib/imageHosting/picgo";
 import { CheckCircle, LoaderCircle, XCircle } from "lucide-react";
@@ -30,7 +30,7 @@ export default function PicgoImageHosting() {
     const request = ++requestRef.current
     const isCurrent = () => scopeActive() && requestRef.current === request
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const saved = await store.get<PicgoImageHostingSetting>('picgo')
       if (!isCurrent()) return
       if (!saved?.url?.trim()) {
@@ -52,7 +52,7 @@ export default function PicgoImageHosting() {
     const revision = ++saveRevisionRef.current
     requestRef.current++
     setUrl(url)
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('picgo', { url })
     await store.save()
     if (scopeActive() && saveRevisionRef.current === revision) {
@@ -63,7 +63,7 @@ export default function PicgoImageHosting() {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const saved = await store.get<PicgoImageHostingSetting>('picgo')
       if (cancelled) return
       if (saved) setUrl(saved.url)

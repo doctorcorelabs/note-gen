@@ -5,7 +5,7 @@ import { FileText, MessageSquareText, Search, FolderOpen, GripVertical, SlidersH
 import useArticleStore from '@/stores/article'
 import { useTranslations } from 'next-intl'
 import { open } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import Image from 'next/image'
 import emitter from '@/lib/emitter'
 import { useEffect, useState } from 'react'
@@ -198,7 +198,7 @@ export function EmptyState({
 
   useEffect(() => {
     let disposed = false
-    void Store.load('store.json').then(async store => {
+    void platform.store.load('store.json').then(async store => {
       const saved = await store.get<StoredNewTabPreferences>(NEW_TAB_VISIBILITY_STORE_KEY)
       if (disposed || !saved) return
       const savedVisibility = saved.visibility ?? saved
@@ -229,7 +229,7 @@ export function EmptyState({
   }, [])
 
   const persistPreferences = (next: NewTabPreferences) => {
-    void Store.load('store.json').then(async store => {
+    void platform.store.load('store.json').then(async store => {
       await store.set(NEW_TAB_VISIBILITY_STORE_KEY, next)
       await store.save()
     }).catch(error => {

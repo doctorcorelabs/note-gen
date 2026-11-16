@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { exists, lstat, readFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { resolveConversationAssetPath } from '@/lib/conversation-assets'
 import { assetAssociatedData, bytesToBase64Url, downloadAsset, hashBytes, uploadAssetBytes } from './blob'
@@ -91,17 +90,17 @@ export function personalAssetManifest(payload: Record<string, unknown>, workspac
  * into an external directory. Writes use the native atomic writer's equivalent check. */
 export async function readPersonalAsset(path: string): Promise<Uint8Array | null> {
   if (!isManagedPersonalAssetPath(path)) throw new Error('SELF_HOSTED_PREVIEW_CONTENT_REQUIRED')
-  const root = await appDataDir()
+  const root = await platform.path.appDataDir()
   const segments = path.split('/')
   for (let index = 1; index <= segments.length; index++) {
-    const absolute = await join(root, ...segments.slice(0, index))
-    if (!await exists(absolute)) return null
-    const info = await lstat(absolute)
+    const absolute = await platform.path.join(root, ...segments.slice(0, index))
+    if (!await platform.fs.exists(absolute)) return null
+    const info = await platform.fs.lstat(absolute)
     if (info.isSymlink || (index < segments.length ? !info.isDirectory : !info.isFile)) {
       throw new Error('SELF_HOSTED_PREVIEW_CONTENT_REQUIRED')
     }
   }
-  return readFile(await join(root, path))
+  return platform.fs.readFile(await platform.path.join(root, path))
 }
 
 export async function preparePersonalAssetsUpload(input: {
@@ -132,7 +131,7 @@ export async function preparePersonalAssetsUpload(input: {
     }
     const hash = await hashBytes(bytes)
     if (existing?.plaintextHash === hash && existing.size === bytes.length) { assets.push(existing); continue }
-    const uploaded = await uploadAssetBytes({ ...input, localRoot: await appDataDir(), relativePath: path, plaintext: bytes })
+    const uploaded = await uploadAssetBytes({ ...input, localRoot: await platform.path.appDataDir(), relativePath: path, plaintext: bytes })
     stagingIds.push(uploaded.stagingId)
     assets.push({ path, blobId: uploaded.blobId, plaintextHash: uploaded.plaintextHash, size: uploaded.size,
       associatedData: uploaded.associatedData, keyVersion: input.keyVersion })
@@ -179,7 +178,7 @@ export async function applyPersonalAssetDownloads(assets: PreparedPersonalAsset[
     if (portableHashes.has(identity) && portableHashes.get(identity) !== asset.hash) throw new Error('SELF_HOSTED_PERSONAL_ASSET_CONFLICT')
     portableHashes.set(identity, asset.hash)
   }
-  const root = await appDataDir()
+  const root = await platform.path.appDataDir()
   for (const asset of unique.values()) {
     assertActive()
     const current = await readPersonalAsset(asset.path)

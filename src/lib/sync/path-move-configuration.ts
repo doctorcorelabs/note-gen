@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from '@/types/sync'
 import { getWorkspacePath } from '@/lib/workspace'
 import { supportsCloudFolderWorkspace } from './cloud-folder'
@@ -47,7 +47,7 @@ export function getCloudFolderPathMoveIdentity(config: CloudFolderConfig): strin
 /** Folder/iCloud workspaces already use the actual OS-managed sync directory.
  * All remote/cache-backed providers use the same durable rename queue. */
 export async function getPathMoveConfiguration(): Promise<PathMoveConfiguration | null> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const provider = await store.get<SyncPlatform>('primaryBackupMethod') || 'github'
   if (provider === 'local') return null
   if (provider === 'github') {

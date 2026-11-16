@@ -1,7 +1,7 @@
 import emitter from '@/lib/emitter'
 import { getDb, executeRecordTransaction, type RecordStatement } from "./index"
 import { normalizeTagName } from './tags'
-import { BaseDirectory, exists, mkdir, remove } from "@tauri-apps/plugin-fs"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { insertActivityEvent } from './activity'
 import { truncateActivityText } from '@/lib/activity/events'
 import { enqueueAutoDataSync } from '@/lib/sync/auto-data-sync-queue'
@@ -109,12 +109,12 @@ export async function updateRecordTags(id: number, tagIds: number[], expectedTag
 }
 
 async function deleteMarkLocalAsset(assetPath: string) {
-  const fileExists = await exists(assetPath, { baseDir: BaseDirectory.AppData })
+  const fileExists = await platform.fs.exists(assetPath, { baseDir: BaseDirectory.AppData })
   if (!fileExists) {
     return
   }
 
-  await remove(assetPath, { baseDir: BaseDirectory.AppData })
+  await platform.fs.remove(assetPath, { baseDir: BaseDirectory.AppData })
 }
 
 async function deleteMarkLocalAssets(marks: Pick<Mark, 'type' | 'url' | 'content'>[]) {
@@ -166,17 +166,17 @@ function reconcileRecordKnowledgeIndex() {
 
 // 创建 marks 表
 export async function initMarksDb() {
-  const isExist = await exists('screenshot', { baseDir: BaseDirectory.AppData})
+  const isExist = await platform.fs.exists('screenshot', { baseDir: BaseDirectory.AppData})
   if (!isExist) {
-    await mkdir('screenshot', { baseDir: BaseDirectory.AppData})
+    await platform.fs.mkdir('screenshot', { baseDir: BaseDirectory.AppData})
   }
-  const isImageDirExist = await exists('image', { baseDir: BaseDirectory.AppData })
+  const isImageDirExist = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData })
   if (!isImageDirExist) {
-    await mkdir('image', { baseDir: BaseDirectory.AppData })
+    await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData })
   }
-  const isRecordingDirExist = await exists('recordings', { baseDir: BaseDirectory.AppData })
+  const isRecordingDirExist = await platform.fs.exists('recordings', { baseDir: BaseDirectory.AppData })
   if (!isRecordingDirExist) {
-    await mkdir('recordings', { baseDir: BaseDirectory.AppData })
+    await platform.fs.mkdir('recordings', { baseDir: BaseDirectory.AppData })
   }
 }
 

@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Button } from "@/components/ui/button"
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import emitter from "@/lib/emitter";
 
 export function PinToggle() {
@@ -16,7 +16,7 @@ export function PinToggle() {
 
   useEffect(() => {
     async function loadPinState() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const pin = await store.get<boolean>('pin')
       setIsPin(!!pin)
     }
@@ -34,7 +34,7 @@ export function PinToggle() {
   }, [])
 
   async function togglePin() {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const newPinState = !isPin
     setIsPin(newPinState)
     const window = getCurrentWindow()

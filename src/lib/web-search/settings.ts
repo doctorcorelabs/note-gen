@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import type {
   AiConfig,
   ModelConfig,
@@ -118,9 +119,9 @@ function findLegacySettings(
 
 export async function saveWebSearchSettings(
   settings: WebSearchSettings,
-  targetStore?: Store
+  targetStore?: StoreHandle
 ) {
-  const store = targetStore || await Store.load('store.json')
+  const store = targetStore || await platform.store.load('store.json')
   await store.set(
     ENABLED_KEY,
     settings.nativeEnabled || settings.thirdPartyEnabled || settings.basicEnabled
@@ -135,10 +136,10 @@ export async function saveWebSearchSettings(
 }
 
 export async function loadWebSearchSettings(
-  targetStore?: Store,
+  targetStore?: StoreHandle,
   context: WebSearchSettingsContext = {}
 ): Promise<WebSearchSettings> {
-  const store = targetStore || await Store.load('store.json')
+  const store = targetStore || await platform.store.load('store.json')
   const [
     enabled,
     nativeEnabled,

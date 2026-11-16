@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { initVectorDb, processAllMarkdownFiles, processMarkdownFile, checkEmbeddingModelAvailable, initBM25Search } from '@/lib/rag';
 import { checkRerankModelAvailable } from '@/lib/ai/embedding';
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { toast } from '@/hooks/use-toast';
 import {
   clearVectorDb,
@@ -62,7 +62,7 @@ const useVectorStore = create<VectorState>((set, get) => ({
       await initBM25Search();
 
       // 读取用户设置
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const isAutoVectorEnabled = await store.get<boolean>('autoVectorEnabled') ?? true;
       const lastProcessTime = await store.get<number>('lastVectorProcessTime') || null;
       const structuredKnowledgeConsent = await store.get<boolean>('ragStructuredKnowledgeConsent') ?? false;
@@ -99,7 +99,7 @@ const useVectorStore = create<VectorState>((set, get) => ({
   },
 
   setAutoVectorEnabled: async (enabled: boolean) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('autoVectorEnabled', enabled);
     set({ isAutoVectorEnabled: enabled });
   },
@@ -165,7 +165,7 @@ const useVectorStore = create<VectorState>((set, get) => ({
 
       // 更新处理时间和状态
       const currentTime = Date.now();
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       await store.set('lastVectorProcessTime', currentTime);
 
       set({

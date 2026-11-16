@@ -30,7 +30,7 @@ import emitter from "@/lib/emitter"
 import { useIsMobile } from '@/hooks/use-mobile'
 import { isMobileDevice as checkIsMobileDevice } from '@/lib/check'
 import { hasText, readText } from 'tauri-plugin-clipboard-api'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { toast } from '@/hooks/use-toast'
 import { RecordSaveTarget } from './record-save-target'
 import { useRecordCompletion } from './use-record-completion'
@@ -55,7 +55,7 @@ export function ControlText() {
   useEffect(() => {
     async function loadSetting() {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const savedValue = await store.get<boolean>('autoReadClipboard')
         if (savedValue !== null && savedValue !== undefined) {
           setAutoReadClipboard(savedValue)
@@ -71,7 +71,7 @@ export function ControlText() {
   const handleAutoReadChange = useCallback(async (checked: boolean) => {
     setAutoReadClipboard(checked)
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('autoReadClipboard', checked)
       // 如果勾选了 checkbox，立即读取剪贴板
       if (checked) {
@@ -131,7 +131,7 @@ export function ControlText() {
     }
 
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('currentTagId', selectedTagId)
       await store.save()
 

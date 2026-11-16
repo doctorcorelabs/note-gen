@@ -1,3 +1,5 @@
+import { platform } from '@/lib/platform'
+
 export interface AgentDebugEntry {
   timestamp: string
   event: string
@@ -34,8 +36,7 @@ function scheduleDebugLogSave() {
     persistTimer = undefined
     const entries = [...(window.__NOTEGEN_AGENT_DEBUG_LOGS__ || [])]
     persistQueue = persistQueue.then(async () => {
-      const { Store } = await import('@tauri-apps/plugin-store')
-      const store = await Store.load('agent_debug_logs.json', { autoSave: false })
+      const store = await platform.store.load('agent_debug_logs.json', { autoSave: false })
       await store.set('entries', entries)
       await store.save()
     }).catch(error => console.warn('Failed to persist Agent debug logs:', error))

@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 
 import type { CloudFolderObject } from './cloud-folder'
 import type { CloudFolderConfig } from '@/types/sync'
@@ -12,11 +13,11 @@ type CloudFolderTreeCache = {
   files: CloudFolderObject[]
 }
 
-let cacheStorePromise: Promise<Store> | null = null
+let cacheStorePromise: Promise<StoreHandle> | null = null
 const memoryCache = new Map<string, CloudFolderObject[]>()
 
 function getCacheStore() {
-  cacheStorePromise ??= Store.load(CACHE_STORE_NAME)
+  cacheStorePromise ??= platform.store.load(CACHE_STORE_NAME)
   return cacheStorePromise
 }
 

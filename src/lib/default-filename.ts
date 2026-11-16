@@ -1,4 +1,4 @@
-import { exists } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions, getWorkspacePath } from './workspace'
 
 /**
@@ -23,9 +23,9 @@ export async function generateUniqueFilename(parentPath: string = '', baseName: 
     let fileExists = false
     try {
       if (workspace.isCustom) {
-        fileExists = await exists(pathOptions.path)
+        fileExists = await platform.fs.exists(pathOptions.path)
       } else {
-        fileExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        fileExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
     } catch {
       // 如果检查失败，假设文件不存在
@@ -69,9 +69,9 @@ export async function generateCopyFilename(parentPath: string, originalName: str
     let fileExists = false
     try {
       if (workspace.isCustom) {
-        fileExists = await exists(pathOptions.path)
+        fileExists = await platform.fs.exists(pathOptions.path)
       } else {
-        fileExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        fileExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
     } catch {
       // 如果检查失败，假设文件不存在
@@ -116,9 +116,9 @@ export async function generateCopyFoldername(parentPath: string, originalName: s
     let folderExists = false
     try {
       if (workspace.isCustom) {
-        folderExists = await exists(pathOptions.path)
+        folderExists = await platform.fs.exists(pathOptions.path)
       } else {
-        folderExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        folderExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
     } catch {
       // 如果检查失败，假设文件夹不存在

@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import {
   cacheWikiMarkdownDocument, getWikiMeta, getWikiPage, getWikiRevision, listWikiPages,
   getActiveWikiRevisions, listWikiJobs, listWikiSourceStates, removeWikiJob, removeWikiMarkdownCache,
@@ -60,8 +60,8 @@ export function noteWikiMarkdownFileChanged(path: string) {
 
 async function fileSignature(path: string): Promise<string | null> {
   const options = await getFilePathOptions(ensureWikiWorkspaceRelativePath(path))
-  if (!await exists(options.path, { baseDir: options.baseDir })) return null
-  const info = await stat(options.path, { baseDir: options.baseDir })
+  if (!await platform.fs.exists(options.path, { baseDir: options.baseDir })) return null
+  const info = await platform.fs.stat(options.path, { baseDir: options.baseDir })
   if (!info.isFile) return '!non-file'
   return info.mtime ? `${info.size}:${info.mtime.getTime()}:${info.birthtime?.getTime() ?? ''}` : null
 }
@@ -79,9 +79,9 @@ async function assertContext(contextId: string) {
 async function readFile(path: string): Promise<string | null> {
   const safePath = ensureWikiWorkspaceRelativePath(path)
   const options = await getFilePathOptions(safePath)
-  if (!await exists(options.path, { baseDir: options.baseDir })) return null
+  if (!await platform.fs.exists(options.path, { baseDir: options.baseDir })) return null
   // An I/O failure is not a deletion. Let callers retain the last known cache.
-  return readTextFile(options.path, { baseDir: options.baseDir })
+  return platform.fs.readTextFile(options.path, { baseDir: options.baseDir })
 }
 
 function refreshFileTree() {
@@ -118,13 +118,13 @@ async function writeFile(contextId: string, path: string, text: string, expected
   if (directory) {
     const parent = await getFilePathOptions(directory)
     assertCurrent()
-    await mkdir(parent.path, { baseDir: parent.baseDir, recursive: true })
+    await platform.fs.mkdir(parent.path, { baseDir: parent.baseDir, recursive: true })
   }
   const persist = async (value: string) => {
     assertCurrent()
     const journaled = await writeSelfHostedWorkspaceText(capturedAbsolutePath, value)
     assertCurrent()
-    if (!journaled) await writeTextFile(options.path, value, { baseDir: options.baseDir })
+    if (!journaled) await platform.fs.writeTextFile(options.path, value, { baseDir: options.baseDir })
   }
   assertCurrent()
   markEditorPathMutation(safePath, workspaceRoot)
@@ -142,7 +142,7 @@ async function writeFile(contextId: string, path: string, text: string, expected
       else {
         const journaled = await deleteSelfHostedWorkspacePath(capturedAbsolutePath, 'file')
         assertCurrent()
-        if (!journaled) await remove(options.path, { baseDir: options.baseDir })
+        if (!journaled) await platform.fs.remove(options.path, { baseDir: options.baseDir })
       }
       return false
     }

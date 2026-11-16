@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { SkillMetadata, SkillContent, SkillExecutionRecord } from '@/lib/skills/types'
 import { skillManager } from '@/lib/skills/manager'
 import { uninstallSkill } from '@/lib/skills/uninstall'
@@ -80,7 +80,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     try {
       set({ initializing: true })
 
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const enabled = await store.get<boolean>('skills.enabled')
       const autoMatch = await store.get<boolean>('skills.autoMatch')
 
@@ -110,7 +110,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   // 加载 Skills 配置
   loadSkillsConfig: async () => {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const enabled = await store.get<boolean>('skills.enabled')
       const autoMatch = await store.get<boolean>('skills.autoMatch')
 
@@ -125,7 +125,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   // 设置启用状态
   setEnabled: async (enabled: boolean) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('skills.enabled', enabled)
     await store.save()
     set({ enabled })
@@ -133,7 +133,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   // 设置自动匹配
   setAutoMatch: async (autoMatch: boolean) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('skills.autoMatch', autoMatch)
     await store.save()
     set({ autoMatch })
@@ -143,7 +143,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   refreshSkills: async () => {
     await skillManager.reload()
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const enabledSkills = await store.get<Record<string, boolean>>('skills.enabledSkills') || {}
     const allSkills = skillManager.getAllSkills()
 
@@ -174,7 +174,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     skill.metadata.updatedAt = Date.now()
 
     // 保存到本地存储
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const enabledSkills = await store.get<Record<string, boolean>>('skills.enabledSkills') || {}
     enabledSkills[id] = skill.metadata.enabled
     await store.set('skills.enabledSkills', enabledSkills)

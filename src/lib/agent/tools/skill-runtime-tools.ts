@@ -1,5 +1,4 @@
-import { copyFile, exists, lstat, mkdir } from '@tauri-apps/plugin-fs'
-import { appDataDir } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { resolveAttachmentChildPath, type RuntimeChatAttachment } from '@/lib/chat-attachments'
 import { skillManager } from '@/lib/skills'
 import {
@@ -156,14 +155,14 @@ function cleanRelativePath(value: unknown): string {
 }
 
 async function createInputDirectory(runtimeDir: string, runId: string): Promise<string> {
-  const appRoot = (await appDataDir()).replace(/\\/g, '/').replace(/\/+$/, '')
+  const appRoot = (await platform.path.appDataDir()).replace(/\\/g, '/').replace(/\/+$/, '')
   const directory = `${runtimeDir}/inputs/${runId}/${crypto.randomUUID()}`
   if (!directory.startsWith(`${appRoot}/skill-runtimes/`)) throw new Error('Invalid isolated Skill runtime directory')
   let current = appRoot
   for (const segment of directory.slice(appRoot.length + 1).split('/')) {
     current = `${current}/${segment}`
-    if (!(await exists(current))) await mkdir(current)
-    const info = await lstat(current)
+    if (!(await platform.fs.exists(current))) await platform.fs.mkdir(current)
+    const info = await platform.fs.lstat(current)
     if (!info.isDirectory || info.isSymlink) throw new Error('Skill input staging cannot traverse symbolic links')
   }
   return directory
@@ -212,7 +211,7 @@ export const prepareSkillInputsTool: AgentTool = {
         const request = value as Record<string, unknown>
         const attachment = context.context.attachments?.find(item => item.id === request.attachmentId)
         if (!attachment) throw new Error('The attachment is no longer available in this task')
-        if ((await lstat(attachment.path)).isSymlink) throw new Error('Symbolic-link attachments are not supported')
+        if ((await platform.fs.lstat(attachment.path)).isSymlink) throw new Error('Symbolic-link attachments are not supported')
         const relativePath = attachment.kind === 'folder' ? cleanRelativePath(request.relativePath) : ''
         if (attachment.kind === 'file' && request.relativePath) throw new Error('File attachments cannot have a relative child path')
         const source = await resolveAttachmentChildPath(attachment, relativePath)
@@ -225,7 +224,7 @@ export const prepareSkillInputsTool: AgentTool = {
         plans.push({ source, name: relativePath.split('/').pop() || relativePath, relativePath })
       }
       for (const plan of plans) {
-        const info = await lstat(plan.source)
+        const info = await platform.fs.lstat(plan.source)
         if (!info.isFile || info.isSymlink) throw new Error('Skill inputs must be regular files; folders and symbolic links are not copied')
       }
       context.signal?.throwIfAborted()
@@ -234,7 +233,7 @@ export const prepareSkillInputsTool: AgentTool = {
       for (const [index, plan] of plans.entries()) {
         context.signal?.throwIfAborted()
         const path = `${inputDirectory}/${index + 1}-${plan.name}`
-        await copyFile(plan.source, path)
+        await platform.fs.copyFile(plan.source, path)
         files.push({ path, name: plan.name, attachmentId: plan.attachmentId, relativePath: plan.relativePath })
       }
       return { ok: true, message: `Prepared ${files.length} original input file(s). Originals are unchanged; pass the returned paths to Skill scripts or task code.`, data: { skill_id: skillId, input_directory: inputDirectory, files } }

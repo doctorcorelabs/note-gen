@@ -3,8 +3,8 @@
 import { Button } from "@/components/ui/button"
 import useSettingStore from "@/stores/setting"
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { BaseDirectory, exists, mkdir } from "@tauri-apps/plugin-fs"
-import { platform } from '@tauri-apps/plugin-os'
+import { platform, BaseDirectory } from '@/lib/platform'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { useTranslations } from 'next-intl'
 import useArticleStore from "@/stores/article"
 import { useSkillsStore } from "@/stores/skills"
@@ -47,7 +47,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
   // 选择工作区目录
   async function handleSelectWorkspace() {
     try {
-      if (platform() === 'ios') {
+      if (getRuntimePlatform() === 'ios') {
         const selected = await pickIOSSyncFolder()
         if (selected) await switchWorkspace(selected.path, selected)
         return
@@ -101,7 +101,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
     if (!await prepareWorkspaceSwitch()) return
 
     const previousWorkspacePath = workspacePath
-    const isIOS = platform() === 'ios'
+    const isIOS = getRuntimePlatform() === 'ios'
     const previousIOSAccess = isIOS ? await getIOSWorkspaceFolderAccess() : null
     setSwitchingWorkspace(true)
     let nextIOSAccess = selectedIOSAccess
@@ -173,9 +173,9 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
   async function handleResetWorkspace() {
     try {
       // 确保默认目录存在
-      const exists1 = await exists('article', { baseDir: BaseDirectory.AppData })
+      const exists1 = await platform.fs.exists('article', { baseDir: BaseDirectory.AppData })
       if (!exists1) {
-        await mkdir('article', { baseDir: BaseDirectory.AppData })
+        await platform.fs.mkdir('article', { baseDir: BaseDirectory.AppData })
       }
       await switchWorkspace('')
     } catch (error) {

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { Chat, clearChatsByConversationId, clearChatsByTagId, deleteChat, insertChat, updateChat, updateChatsInsertedById, getChatsByConversation } from '@/db/chats'
 import { initAllDatabases } from '@/db'
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { locales } from '@/lib/locales';
 import { AgentState, ToolCall } from '@/lib/agent/types'
 import { LinkedResource } from '@/lib/files'
@@ -455,13 +455,13 @@ const useChatStore = create<ChatState>((set, get) => ({
 
   locale: locales[0],
   getLocale: async () => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const res = (await store.get<string>('note_locale')) || locales[0]
     set({ locale: res })
   },
   setLocale: async (locale) => {
     set({ locale })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('note_locale', locale)
   },
 

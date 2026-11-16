@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import {
   deleteKnowledgeSource,
   getKnowledgeSource,
@@ -25,13 +25,13 @@ const pendingKeys = new Set<string>()
 let drainPromise: Promise<void> | null = null
 
 async function isAutoIndexEnabled() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   return (await getKnowledgeSettings()).semanticSearchEnabled
     && (await store.get<boolean>('autoVectorEnabled') ?? true)
 }
 
 async function hasStructuredIndexConsent() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   return await store.get<boolean>('ragStructuredKnowledgeConsent') ?? false
 }
 
@@ -186,7 +186,7 @@ export async function bootstrapStructuredKnowledgeRegistry() {
     ...await collectCanvasKnowledgeDocuments(),
   ]
   for (const document of documents) await registerDocument(document)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const consent = await store.get<boolean>('ragStructuredKnowledgeConsent')
   if (consent === undefined) {
     await store.set('ragStructuredKnowledgeConsent', documents.length === 0)

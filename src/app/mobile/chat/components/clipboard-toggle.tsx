@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useEffect, useState } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { Clipboard } from 'lucide-react'
 import { Label } from '@/components/ui/label'
@@ -14,7 +14,7 @@ export function ClipboardToggle() {
   
   async function initClipboardMonitor() {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const enabled = await store.get<boolean>('clipboardMonitorEnabled')
       if (enabled !== null && enabled !== undefined) {
         setIsEnabled(enabled)
@@ -27,7 +27,7 @@ export function ClipboardToggle() {
   async function toggleClipboardMonitor(enabled: boolean) {
     setIsEnabled(enabled)
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('clipboardMonitorEnabled', enabled)
       await store.save()
     } catch (error) {

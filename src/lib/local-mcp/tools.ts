@@ -1,4 +1,4 @@
-import { exists, lstat, readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 import { moveEntryToSystemTrash } from '@/app/core/main/file/system-trash'
 import { getTags } from '@/db/tags'
@@ -105,12 +105,12 @@ async function assertNoSymlink(normalized: string, allowMissingLeaf = false): Pr
     const candidate = segments.slice(0, index).join('/')
     const options = await getFilePathOptions(candidate)
     const candidateExists = options.baseDir
-      ? await exists(options.path, { baseDir: options.baseDir })
-      : await exists(options.path)
+      ? await platform.fs.exists(options.path, { baseDir: options.baseDir })
+      : await platform.fs.exists(options.path)
     if (!candidateExists) continue
     const info = options.baseDir
-      ? await lstat(options.path, { baseDir: options.baseDir })
-      : await lstat(options.path)
+      ? await platform.fs.lstat(options.path, { baseDir: options.baseDir })
+      : await platform.fs.lstat(options.path)
     if (info.isSymlink) throw new Error('路径包含符号链接，已拒绝访问')
   }
 }
@@ -127,8 +127,8 @@ async function listWorkspaceFolders(folderPath: string, recursive: boolean): Pro
   const visit = async (relativePath: string): Promise<void> => {
     const options = await getFilePathOptions(relativePath)
     const entries = options.baseDir
-      ? await readDir(options.path, { baseDir: options.baseDir })
-      : await readDir(options.path)
+      ? await platform.fs.readDir(options.path, { baseDir: options.baseDir })
+      : await platform.fs.readDir(options.path)
     for (const entry of entries) {
       if (!entry.isDirectory || entry.isSymlink || entry.name.startsWith('.')) continue
       const childPath = relativePath ? `${relativePath}/${entry.name}` : entry.name
@@ -159,8 +159,8 @@ async function readNote(filePath: string, workspace: string): Promise<NoteSnapsh
   } else {
     const options = await getFilePathOptions(normalized)
     content = options.baseDir
-      ? await readTextFile(options.path, { baseDir: options.baseDir })
-      : await readTextFile(options.path)
+      ? await platform.fs.readTextFile(options.path, { baseDir: options.baseDir })
+      : await platform.fs.readTextFile(options.path)
   }
   await assertWorkspaceUnchanged(workspace)
   return {

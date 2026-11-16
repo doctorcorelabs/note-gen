@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 
 import { SyncStateEnum } from '@/lib/sync/github.types'
 import { getOptionalSyncRepoName } from '@/lib/sync/repo-utils'
@@ -32,7 +33,7 @@ const providerStatusChecks = new Map<string, ProviderStatusCheck>()
 const latestProviderRequests = new Map<SyncPlatform, number>()
 let providerRequestId = 0
 
-async function getProviderCheckTarget(store: Store, platform: GitSyncPlatform): Promise<ProviderCheckTarget> {
+async function getProviderCheckTarget(store: StoreHandle, platform: GitSyncPlatform): Promise<ProviderCheckTarget> {
   const tokenKey = platform === 'github' ? 'accessToken' : `${platform}AccessToken`
   const credentials = await Promise.all([
     store.get<string>(tokenKey),
@@ -47,7 +48,7 @@ async function getProviderCheckTarget(store: Store, platform: GitSyncPlatform): 
 }
 
 async function isProviderCheckTargetCurrent(
-  store: Store,
+  store: StoreHandle,
   platform: GitSyncPlatform,
   target: ProviderCheckTarget,
   isActive: () => boolean,
@@ -66,7 +67,7 @@ async function getSelfHostedCheckTarget() {
   )
 }
 
-async function getProviderStatusKey(store: Store, platform: SyncPlatform): Promise<string> {
+async function getProviderStatusKey(store: StoreHandle, platform: SyncPlatform): Promise<string> {
   if (platform === 'github' || platform === 'gitee' || platform === 'gitlab' || platform === 'gitea') {
     return JSON.stringify([platform, await getProviderCheckTarget(store, platform)])
   }
@@ -88,7 +89,7 @@ function failProviderCheck(platform: SyncPlatform) {
   }
 }
 
-async function checkGithubStatus(store: Store, isActive: () => boolean) {
+async function checkGithubStatus(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('accessToken')
   const target = await getProviderCheckTarget(store, 'github')
@@ -125,7 +126,7 @@ async function checkGithubStatus(store: Store, isActive: () => boolean) {
   }
 }
 
-async function checkGiteeStatus(store: Store, isActive: () => boolean) {
+async function checkGiteeStatus(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('giteeAccessToken')
   const target = await getProviderCheckTarget(store, 'gitee')
@@ -162,7 +163,7 @@ async function checkGiteeStatus(store: Store, isActive: () => boolean) {
   }
 }
 
-async function checkGitlabStatus(store: Store, isActive: () => boolean) {
+async function checkGitlabStatus(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('gitlabAccessToken')
   const target = await getProviderCheckTarget(store, 'gitlab')
@@ -199,7 +200,7 @@ async function checkGitlabStatus(store: Store, isActive: () => boolean) {
   }
 }
 
-async function checkGiteaStatus(store: Store, isActive: () => boolean) {
+async function checkGiteaStatus(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('giteaAccessToken')
   const target = await getProviderCheckTarget(store, 'gitea')
@@ -236,7 +237,7 @@ async function checkGiteaStatus(store: Store, isActive: () => boolean) {
   }
 }
 
-async function checkS3Status(store: Store, isActive: () => boolean) {
+async function checkS3Status(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const config = await store.get<S3Config>('s3SyncConfig')
   if (!isActive()) return
@@ -248,7 +249,7 @@ async function checkS3Status(store: Store, isActive: () => boolean) {
   }
 }
 
-async function checkWebDAVStatus(store: Store, isActive: () => boolean) {
+async function checkWebDAVStatus(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const config = await store.get<WebDAVConfig>('webdavSyncConfig')
   if (!isActive()) return
@@ -260,7 +261,7 @@ async function checkWebDAVStatus(store: Store, isActive: () => boolean) {
   }
 }
 
-async function checkCloudFolderStatus(store: Store, isActive: () => boolean) {
+async function checkCloudFolderStatus(store: StoreHandle, isActive: () => boolean) {
   const syncStore = useSyncStore.getState()
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
   if (!isActive()) return
@@ -307,7 +308,7 @@ async function checkSelfHostedStatus(isActive: () => boolean) {
   }
 }
 
-async function runProviderStatusCheck(store: Store, platform: SyncPlatform, isActive: () => boolean) {
+async function runProviderStatusCheck(store: StoreHandle, platform: SyncPlatform, isActive: () => boolean) {
   if (!isActive()) return
   switch (platform) {
     case 'local':
@@ -332,7 +333,7 @@ async function runProviderStatusCheck(store: Store, platform: SyncPlatform, isAc
 }
 
 function joinProviderStatusCheck(
-  store: Store,
+  store: StoreHandle,
   platform: SyncPlatform,
   targetKey: string,
   caller: () => boolean,
@@ -364,43 +365,43 @@ function joinProviderStatusCheck(
   return entry
 }
 
-export async function checkSyncProviderStatus(platform: SyncPlatform, options: SyncProviderCheckOptions = {}): Promise<void> {
+export async function checkSyncProviderStatus(targetPlatform: SyncPlatform, options: SyncProviderCheckOptions = {}): Promise<void> {
   const isActive = options.isActive ?? (() => true)
-  if (platform === 'local' || !isActive()) return
+  if (targetPlatform === 'local' || !isActive()) return
   let requestId: number | undefined
-  let store: Store | undefined
+  let store: StoreHandle | undefined
   let targetKey: string | undefined
   let check: ProviderStatusCheck | undefined
   const isCurrent = async () => {
-    if (requestId === undefined || !isActive() || latestProviderRequests.get(platform) !== requestId) return false
+    if (requestId === undefined || !isActive() || latestProviderRequests.get(targetPlatform) !== requestId) return false
     if (!store || !targetKey) return true
     try {
-      const currentKey = await getProviderStatusKey(store, platform)
-      return isActive() && latestProviderRequests.get(platform) === requestId && currentKey === targetKey
+      const currentKey = await getProviderStatusKey(store, targetPlatform)
+      return isActive() && latestProviderRequests.get(targetPlatform) === requestId && currentKey === targetKey
     } catch {
-      return isActive() && latestProviderRequests.get(platform) === requestId
+      return isActive() && latestProviderRequests.get(targetPlatform) === requestId
     }
   }
   try {
-    store = await Store.load('store.json')
+    store = await platform.store.load('store.json')
     if (!isActive()) return
-    targetKey = await getProviderStatusKey(store, platform)
+    targetKey = await getProviderStatusKey(store, targetPlatform)
     if (!isActive()) return
     // Only callers that still authorize a check take ownership of its status.
     // A cancelled target lookup leaves any existing check untouched.
     requestId = ++providerRequestId
-    latestProviderRequests.set(platform, requestId)
-    useSyncStore.getState().setProviderChecking(platform)
-    check = joinProviderStatusCheck(store, platform, targetKey, isActive)
+    latestProviderRequests.set(targetPlatform, requestId)
+    useSyncStore.getState().setProviderChecking(targetPlatform)
+    check = joinProviderStatusCheck(store, targetPlatform, targetKey, isActive)
     await check.promise
-    if (await isCurrent()) useSyncStore.getState().setProviderCheckSettled(platform)
+    if (await isCurrent()) useSyncStore.getState().setProviderCheckSettled(targetPlatform)
   } catch (error) {
-    if (await isCurrent()) failProviderCheck(platform)
+    if (await isCurrent()) failProviderCheck(targetPlatform)
     throw error
   } finally {
     check?.callers.delete(isActive)
-    if (requestId !== undefined && latestProviderRequests.get(platform) === requestId && !isActive()) {
-      useSyncStore.getState().setProviderCheckSettled(platform)
+    if (requestId !== undefined && latestProviderRequests.get(targetPlatform) === requestId && !isActive()) {
+      useSyncStore.getState().setProviderCheckSettled(targetPlatform)
     }
   }
 }

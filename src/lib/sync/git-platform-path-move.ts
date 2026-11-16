@@ -1,5 +1,5 @@
 import { fetch, type Proxy } from '@tauri-apps/plugin-http'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { GITLAB_INSTANCES, GitlabInstanceType } from './gitlab.types'
 import { GITEA_INSTANCES, GiteaInstanceType } from './gitea.types'
 import { remoteRecord } from './directory-listing'
@@ -91,7 +91,7 @@ export function isGitPlatformPathSnapshot(value: unknown): value is GitPlatformP
 }
 
 async function config(provider: GitMoveProvider): Promise<PlatformConfig | null> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const [username, repo, token, proxyUrl] = await Promise.all([
     store.get<string>(`${provider}Username`), getOptionalSyncRepoName(provider),
     store.get<string>(`${provider}AccessToken`), store.get<string>('proxy'),

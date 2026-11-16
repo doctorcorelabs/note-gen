@@ -1,4 +1,4 @@
-import { BaseDirectory, readTextFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { createHash } from 'crypto'
 import { getCanvasProject, getCanvasProjects } from '@/db/canvases'
 import { getAllMarks, getMarkById, type Mark } from '@/db/marks'
@@ -136,8 +136,8 @@ export async function getArticleKnowledgeDocument(filePath: string): Promise<Kno
   try {
     const options = await getFilePathOptions(filePath)
     const content = options.baseDir === undefined
-      ? await readTextFile(options.path)
-      : await readTextFile(options.path, { baseDir: options.baseDir || BaseDirectory.AppData })
+      ? await platform.fs.readTextFile(options.path)
+      : await platform.fs.readTextFile(options.path, { baseDir: options.baseDir || BaseDirectory.AppData })
     const { chunkText } = await import('@/lib/rag')
     return {
       sourceKey: createKnowledgeSourceKey('article', filePath),

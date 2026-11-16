@@ -1,6 +1,5 @@
 import { Tool, ToolResult } from '../types'
-import { BaseDirectory, readTextFile, writeTextFile, remove, rename, copyFile, stat, exists } from '@tauri-apps/plugin-fs'
-import { appDataDir } from '@tauri-apps/api/path'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { getAllMarkdownFiles, MarkdownFile } from '@/lib/files'
 import {
   ensureSafeWorkspaceRelativePath,
@@ -14,7 +13,6 @@ import useChatStore from '@/stores/chat'
 import { isLinkedFolder } from '@/lib/files'
 import emitter from '@/lib/emitter'
 import { getVectorDocumentKey } from '@/lib/vector-document-key'
-import { Store } from '@tauri-apps/plugin-store'
 import { DEFAULT_EXCLUDED_RAG_PATHS, isPathAllowedForRag } from '@/lib/rag-retrieval-policy'
 import {
   markEditorPathMutation,
@@ -206,9 +204,9 @@ export const listMarkdownFilesTool: Tool = {
 export async function readNoteFileSnapshot(filePath: string): Promise<string | undefined> {
   const normalizedFilePath = await ensureSafeWorkspaceRelativePath(filePath)
   const { path, baseDir } = await getFilePathOptions(normalizedFilePath)
-  const fileExists = baseDir ? await exists(path, { baseDir }) : await exists(path)
+  const fileExists = baseDir ? await platform.fs.exists(path, { baseDir }) : await platform.fs.exists(path)
   if (!fileExists) return undefined
-  return baseDir ? readTextFile(path, { baseDir }) : readTextFile(path)
+  return baseDir ? platform.fs.readTextFile(path, { baseDir }) : platform.fs.readTextFile(path)
 }
 
 // Read the saved on-disk content for a note file.
@@ -258,16 +256,16 @@ export const readMarkdownFileTool: Tool = {
       const { path, baseDir } = await getFilePathOptions(normalizedFilePath)
 
       const fileExists = baseDir
-        ? await exists(path, { baseDir })
-        : await exists(path)
+        ? await platform.fs.exists(path, { baseDir })
+        : await platform.fs.exists(path)
       if (!fileExists) {
         return missingFileReadResult(normalizedFilePath)
       }
 
       if (baseDir) {
-        content = await readTextFile(path, { baseDir })
+        content = await platform.fs.readTextFile(path, { baseDir })
       } else {
-        content = await readTextFile(path)
+        content = await platform.fs.readTextFile(path)
       }
 
       return {
@@ -312,8 +310,8 @@ export const openMarkdownFileTool: Tool = {
       const normalizedFilePath = await ensureSafeWorkspaceRelativePath(params.filePath)
       const { path, baseDir } = await getFilePathOptions(normalizedFilePath)
       const content = baseDir
-        ? await readTextFile(path, { baseDir })
-        : await readTextFile(path)
+        ? await platform.fs.readTextFile(path, { baseDir })
+        : await platform.fs.readTextFile(path)
 
       const articleStore = useArticleStore.getState()
       emitter.emit('editor-file-content-updated', {
@@ -417,15 +415,14 @@ export const createFileTool: Tool = {
       const parentFolderPath = filePath.substring(0, filePath.lastIndexOf('/'))
       const needsParentFolder = parentFolderPath && parentFolderPath !== filePath
 
-      const { exists } = await import('@tauri-apps/plugin-fs')
-      const fileAlreadyExists = baseDir
-        ? await exists(path, { baseDir })
-        : await exists(path)
+            const fileAlreadyExists = baseDir
+        ? await platform.fs.exists(path, { baseDir })
+        : await platform.fs.exists(path)
 
       if (fileAlreadyExists) {
         const existingContent = baseDir
-          ? await readTextFile(path, { baseDir })
-          : await readTextFile(path)
+          ? await platform.fs.readTextFile(path, { baseDir })
+          : await platform.fs.readTextFile(path)
         if (existingContent === params.content) {
           return {
             success: true,
@@ -455,25 +452,24 @@ export const createFileTool: Tool = {
         const { path: parentPath, baseDir: parentBaseDir } = specialParentRelativePath
           ? { path: specialParentRelativePath as string, baseDir: BaseDirectory.AppData }
           : await getEditFilePathOptions(parentFolderPath, params)
-        const { mkdir } = await import('@tauri-apps/plugin-fs')
-        if (parentBaseDir) {
-          await mkdir(parentPath, { baseDir: parentBaseDir, recursive: true })
+                if (parentBaseDir) {
+          await platform.fs.mkdir(parentPath, { baseDir: parentBaseDir, recursive: true })
         } else {
-          await mkdir(parentPath, { recursive: true })
+          await platform.fs.mkdir(parentPath, { recursive: true })
         }
       }
 
       await assertEditWorkspace(params)
       if (baseDir) {
-        await writeTextFile(path, params.content, { baseDir, createNew: true })
+        await platform.fs.writeTextFile(path, params.content, { baseDir, createNew: true })
       } else {
-        await writeTextFile(path, params.content, { createNew: true })
+        await platform.fs.writeTextFile(path, params.content, { createNew: true })
       }
 
       appliedChange = { filePath, after: params.content }
 
       // Keep the result bound to the path used for the write, even after a workspace switch.
-      const fullPath = baseDir ? `${await appDataDir()}/${path}` : path
+      const fullPath = baseDir ? `${await platform.path.appDataDir()}/${path}` : path
       if (!await isEditWorkspaceCurrent(params)) {
         return { success: true, data: { filePath, fullPath }, message: `成功创建文件: ${filePath}` }
       }
@@ -562,8 +558,8 @@ export const updateMarkdownFileTool: Tool = {
         }
 
         const currentStat = baseDir
-          ? await stat(path, { baseDir })
-          : await stat(path)
+          ? await platform.fs.stat(path, { baseDir })
+          : await platform.fs.stat(path)
         const currentModifiedAt = currentStat.mtime
 
         if (currentModifiedAt && currentModifiedAt.getTime() !== expectedModifiedAt.getTime()) {
@@ -581,15 +577,15 @@ export const updateMarkdownFileTool: Tool = {
       }
 
       const currentContent = baseDir
-        ? await readTextFile(path, { baseDir })
-        : await readTextFile(path)
+        ? await platform.fs.readTextFile(path, { baseDir })
+        : await platform.fs.readTextFile(path)
       if (typeof params.expectedContent === 'string' && currentContent !== params.expectedContent) {
         return { success: false, error: 'FILE_CONTENT_CHANGED', message: '文件内容已变化，本次改动未应用。' }
       }
       if (currentContent === params.content) {
         const currentStat = baseDir
-          ? await stat(path, { baseDir })
-          : await stat(path)
+          ? await platform.fs.stat(path, { baseDir })
+          : await platform.fs.stat(path)
         return {
           success: true,
           data: {
@@ -605,23 +601,23 @@ export const updateMarkdownFileTool: Tool = {
       markEditorPathMutation(normalizedFilePath)
       const didUpdate = await runEditorPathWriteTransaction(normalizedFilePath, async ({ hasQueuedSave }) => {
         const latestContent = baseDir
-          ? await readTextFile(path, { baseDir })
-          : await readTextFile(path)
+          ? await platform.fs.readTextFile(path, { baseDir })
+          : await platform.fs.readTextFile(path)
         if (latestContent !== currentContent) return false
 
         await assertEditWorkspace(params)
         try {
           if (baseDir) {
-            await writeTextFile(path, updatedContent, { baseDir })
+            await platform.fs.writeTextFile(path, updatedContent, { baseDir })
           } else {
-            await writeTextFile(path, updatedContent)
+            await platform.fs.writeTextFile(path, updatedContent)
           }
         } catch (writeError) {
           try {
             if (baseDir) {
-              await writeTextFile(path, currentContent, { baseDir })
+              await platform.fs.writeTextFile(path, currentContent, { baseDir })
             } else {
-              await writeTextFile(path, currentContent)
+              await platform.fs.writeTextFile(path, currentContent)
             }
           } catch (restoreError) {
             console.error(`恢复更新失败的文件时出错: ${normalizedFilePath}`, restoreError)
@@ -633,9 +629,9 @@ export const updateMarkdownFileTool: Tool = {
         const editorIsStable = !targetIsActive || prepareActiveEditorDeactivation()
         if (!editorIsStable || hasQueuedSave()) {
           if (baseDir) {
-            await writeTextFile(path, currentContent, { baseDir })
+            await platform.fs.writeTextFile(path, currentContent, { baseDir })
           } else {
-            await writeTextFile(path, currentContent)
+            await platform.fs.writeTextFile(path, currentContent)
           }
           return false
         }
@@ -667,8 +663,8 @@ export const updateMarkdownFileTool: Tool = {
       }
 
       const updatedStat = baseDir
-        ? await stat(path, { baseDir })
-        : await stat(path)
+        ? await platform.fs.stat(path, { baseDir })
+        : await platform.fs.stat(path)
 
       return {
         success: true,
@@ -723,24 +719,24 @@ export const deleteMarkdownFileTool: Tool = {
       // 统一使用 getFilePathOptions 来处理路径
       const { path, baseDir } = await getEditFilePathOptions(normalizedFilePath, params)
       const fileExists = baseDir
-        ? await exists(path, { baseDir })
-        : await exists(path)
+        ? await platform.fs.exists(path, { baseDir })
+        : await platform.fs.exists(path)
 
       if (fileExists) {
-        const beforeDelete = baseDir ? await readTextFile(path, { baseDir }) : await readTextFile(path)
+        const beforeDelete = baseDir ? await platform.fs.readTextFile(path, { baseDir }) : await platform.fs.readTextFile(path)
         if (typeof params.expectedContent === 'string' && beforeDelete !== params.expectedContent) {
           return { success: false, error: 'FILE_CONTENT_CHANGED', message: '文件内容已变化，本次删除未应用。' }
         }
         const didDelete = await runEditorPathWriteTransaction(normalizedFilePath, async ({ hasQueuedSave }) => {
-          const latest = baseDir ? await readTextFile(path, { baseDir }) : await readTextFile(path)
+          const latest = baseDir ? await platform.fs.readTextFile(path, { baseDir }) : await platform.fs.readTextFile(path)
           if (latest !== beforeDelete || hasQueuedSave()) return false
           await assertEditWorkspace(params)
-          if (baseDir) await remove(path, { baseDir })
-          else await remove(path)
+          if (baseDir) await platform.fs.remove(path, { baseDir })
+          else await platform.fs.remove(path)
           appliedChange = { filePath: normalizedFilePath, before: beforeDelete }
           if ((useArticleStore.getState().activeFilePath === normalizedFilePath && !prepareActiveEditorDeactivation()) || hasQueuedSave()) {
-            if (baseDir) await writeTextFile(path, beforeDelete, { baseDir })
-            else await writeTextFile(path, beforeDelete)
+            if (baseDir) await platform.fs.writeTextFile(path, beforeDelete, { baseDir })
+            else await platform.fs.writeTextFile(path, beforeDelete)
             appliedChange = undefined
             return false
           }
@@ -831,7 +827,7 @@ Use folderPath to limit scope to a specific folder.`,
       const normalizedFolderPath = params.folderPath
         ? await ensureSafeWorkspaceRelativePath(params.folderPath)
         : undefined
-      const ragStore = await Store.load('store.json')
+      const ragStore = await platform.store.load('store.json')
       const excludedPaths = await ragStore.get<string[]>('ragExcludedPaths') ?? DEFAULT_EXCLUDED_RAG_PATHS
       const isSearchablePath = (relativePath: string) => isPathAllowedForRag(relativePath, { excludedPaths })
 
@@ -928,9 +924,9 @@ Use folderPath to limit scope to a specific folder.`,
           const { path, baseDir } = await getFilePathOptions(file.relativePath)
 
           if (baseDir) {
-            content = await readTextFile(path, { baseDir })
+            content = await platform.fs.readTextFile(path, { baseDir })
           } else {
-            content = await readTextFile(path)
+            content = await platform.fs.readTextFile(path)
           }
 
           if (content.toLowerCase().includes(params.query.toLowerCase())) {
@@ -1047,9 +1043,9 @@ export const readMarkdownFilesBatchTool: Tool = {
           const { path, baseDir } = await getFilePathOptions(normalizedFilePath)
 
           if (baseDir) {
-            content = await readTextFile(path, { baseDir })
+            content = await platform.fs.readTextFile(path, { baseDir })
           } else {
-            content = await readTextFile(path)
+            content = await platform.fs.readTextFile(path)
           }
 
           results.push({ filePath: normalizedFilePath, content })
@@ -1127,9 +1123,9 @@ export const deleteMarkdownFilesBatchTool: Tool = {
           const { path, baseDir } = await getFilePathOptions(normalizedFilePath)
 
           if (baseDir) {
-            await remove(path, { baseDir })
+            await platform.fs.remove(path, { baseDir })
           } else {
-            await remove(path)
+            await platform.fs.remove(path)
           }
 
           await articleStore.cleanTabsByDeletedFile(normalizedFilePath)
@@ -1349,8 +1345,8 @@ export const renameFileTool: Tool = {
         try {
           if (!currentFileContent) {
             currentFileContent = baseDir
-              ? await readTextFile(oldPath, { baseDir })
-              : await readTextFile(oldPath)
+              ? await platform.fs.readTextFile(oldPath, { baseDir })
+              : await platform.fs.readTextFile(oldPath)
           }
         } catch {
           currentFileContent = articleStore.currentArticle
@@ -1365,14 +1361,13 @@ export const renameFileTool: Tool = {
       const { path: newPath, baseDir: newBaseDir } = await getFilePathOptions(newRelativePath)
 
       // 检查新文件名是否已存在
-      const { exists } = await import('@tauri-apps/plugin-fs')
-      const targetExists = newBaseDir
-        ? await exists(newPath, { baseDir: newBaseDir })
-        : await exists(newPath)
+            const targetExists = newBaseDir
+        ? await platform.fs.exists(newPath, { baseDir: newBaseDir })
+        : await platform.fs.exists(newPath)
 
       const sourceExists = baseDir
-        ? await exists(oldPath, { baseDir })
-        : await exists(oldPath)
+        ? await platform.fs.exists(oldPath, { baseDir })
+        : await platform.fs.exists(oldPath)
 
       if (targetExists && (!sourceExists || newRelativePath === normalizedFilePath)) {
         return {
@@ -1406,9 +1401,9 @@ export const renameFileTool: Tool = {
 
       // 执行重命名
       if (baseDir) {
-        await rename(oldPath, newPath, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir })
+        await platform.fs.rename(oldPath, newPath, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir })
       } else {
-        await rename(oldPath, newPath)
+        await platform.fs.rename(oldPath, newPath)
       }
       await articleStore.syncOpenTabsForPathChange(normalizedFilePath, newRelativePath)
 
@@ -1507,12 +1502,11 @@ export const moveFileTool: Tool = {
         : fileName
 
       // 验证目标文件夹是否存在
-      const { exists } = await import('@tauri-apps/plugin-fs')
-      const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(normalizedTargetFolderPath)
+            const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(normalizedTargetFolderPath)
 
       const targetFolderExists = targetBaseDir
-        ? await exists(targetFolderDir, { baseDir: targetBaseDir })
-        : await exists(targetFolderDir)
+        ? await platform.fs.exists(targetFolderDir, { baseDir: targetBaseDir })
+        : await platform.fs.exists(targetFolderDir)
 
       if (!targetFolderExists) {
         return {
@@ -1530,8 +1524,8 @@ export const moveFileTool: Tool = {
         try {
           if (!currentFileContent) {
             currentFileContent = oldBaseDir
-              ? await readTextFile(oldPath, { baseDir: oldBaseDir })
-              : await readTextFile(oldPath)
+              ? await platform.fs.readTextFile(oldPath, { baseDir: oldBaseDir })
+              : await platform.fs.readTextFile(oldPath)
           }
         } catch {
           currentFileContent = articleStore.currentArticle
@@ -1540,12 +1534,12 @@ export const moveFileTool: Tool = {
 
       // 检查目标位置是否已存在同名文件
       const targetExists = newBaseDir
-        ? await exists(newPath, { baseDir: newBaseDir })
-        : await exists(newPath)
+        ? await platform.fs.exists(newPath, { baseDir: newBaseDir })
+        : await platform.fs.exists(newPath)
 
       const sourceExists = oldBaseDir
-        ? await exists(oldPath, { baseDir: oldBaseDir })
-        : await exists(oldPath)
+        ? await platform.fs.exists(oldPath, { baseDir: oldBaseDir })
+        : await platform.fs.exists(oldPath)
 
       if (targetExists && (!sourceExists || newRelativePath === normalizedFilePath)) {
         return {
@@ -1578,9 +1572,9 @@ export const moveFileTool: Tool = {
 
       // 执行移动（使用 rename）
       if (oldBaseDir) {
-        await rename(oldPath, newPath, { oldPathBaseDir: oldBaseDir, newPathBaseDir: oldBaseDir })
+        await platform.fs.rename(oldPath, newPath, { oldPathBaseDir: oldBaseDir, newPathBaseDir: oldBaseDir })
       } else {
-        await rename(oldPath, newPath)
+        await platform.fs.rename(oldPath, newPath)
       }
       await articleStore.syncOpenTabsForPathChange(normalizedFilePath, newRelativePath)
 
@@ -1690,12 +1684,11 @@ export const copyFileTool: Tool = {
 
       // 验证目标文件夹是否存在（如果指定了目标文件夹）
       if (normalizedTargetFolderPath) {
-        const { exists } = await import('@tauri-apps/plugin-fs')
-        const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(normalizedTargetFolderPath)
+                const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(normalizedTargetFolderPath)
 
         const targetFolderExists = targetBaseDir
-          ? await exists(targetFolderDir, { baseDir: targetBaseDir })
-          : await exists(targetFolderDir)
+          ? await platform.fs.exists(targetFolderDir, { baseDir: targetBaseDir })
+          : await platform.fs.exists(targetFolderDir)
 
         if (!targetFolderExists) {
           return {
@@ -1710,10 +1703,9 @@ export const copyFileTool: Tool = {
       const { path: newPath, baseDir: newBaseDir } = await getFilePathOptions(newRelativePath)
 
       // 检查目标位置是否已存在同名文件
-      const { exists } = await import('@tauri-apps/plugin-fs')
-      let targetExists = newBaseDir
-        ? await exists(newPath, { baseDir: newBaseDir })
-        : await exists(newPath)
+            let targetExists = newBaseDir
+        ? await platform.fs.exists(newPath, { baseDir: newBaseDir })
+        : await platform.fs.exists(newPath)
 
       // 如果存在同名文件且没有指定新文件名，自动添加序号
       if (targetExists && !params.newName) {
@@ -1727,8 +1719,8 @@ export const copyFileTool: Tool = {
 
           const { path: checkPath, baseDir: checkBaseDir } = await getFilePathOptions(newRelativePath)
           targetExists = checkBaseDir
-            ? await exists(checkPath, { baseDir: checkBaseDir })
-            : await exists(checkPath)
+            ? await platform.fs.exists(checkPath, { baseDir: checkBaseDir })
+            : await platform.fs.exists(checkPath)
           counter++
         } while (targetExists && counter < 1000)
       }
@@ -1738,9 +1730,9 @@ export const copyFileTool: Tool = {
 
       // 执行复制
       if (oldBaseDir && finalNewBaseDir) {
-        await copyFile(oldPath, finalNewPath, { fromPathBaseDir: oldBaseDir, toPathBaseDir: finalNewBaseDir })
+        await platform.fs.copyFile(oldPath, finalNewPath, { fromPathBaseDir: oldBaseDir, toPathBaseDir: finalNewBaseDir })
       } else {
-        await copyFile(oldPath, finalNewPath)
+        await platform.fs.copyFile(oldPath, finalNewPath)
       }
 
       const copiedVectorUpdatedAt = await mirrorVectorDocuments(normalizedFilePath, newRelativePath)
@@ -1833,12 +1825,11 @@ export const moveFilesBatchTool: Tool = {
             : fileName
 
           // 验证目标文件夹是否存在
-          const { exists } = await import('@tauri-apps/plugin-fs')
-          const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(targetFolderPath)
+                    const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(targetFolderPath)
 
           const targetFolderExists = targetBaseDir
-            ? await exists(targetFolderDir, { baseDir: targetBaseDir })
-            : await exists(targetFolderDir)
+            ? await platform.fs.exists(targetFolderDir, { baseDir: targetBaseDir })
+            : await platform.fs.exists(targetFolderDir)
 
           if (!targetFolderExists) {
             errors.push({ filePath, error: `目标文件夹 "${targetFolderPath}" 不存在` })
@@ -1851,8 +1842,8 @@ export const moveFilesBatchTool: Tool = {
 
           // 检查目标位置是否已存在同名文件
           const targetExists = newBaseDir
-            ? await exists(newPath, { baseDir: newBaseDir })
-            : await exists(newPath)
+            ? await platform.fs.exists(newPath, { baseDir: newBaseDir })
+            : await platform.fs.exists(newPath)
 
           if (targetExists) {
             errors.push({ filePath, error: '目标位置已存在同名文件' })
@@ -1861,9 +1852,9 @@ export const moveFilesBatchTool: Tool = {
 
           // 执行移动（使用 rename）
           if (oldBaseDir) {
-            await rename(oldPath, newPath, { oldPathBaseDir: oldBaseDir, newPathBaseDir: oldBaseDir })
+            await platform.fs.rename(oldPath, newPath, { oldPathBaseDir: oldBaseDir, newPathBaseDir: oldBaseDir })
           } else {
-            await rename(oldPath, newPath)
+            await platform.fs.rename(oldPath, newPath)
           }
           await articleStore.syncOpenTabsForPathChange(filePath, newRelativePath)
 
@@ -1968,12 +1959,11 @@ export const copyFilesBatchTool: Tool = {
 
           // 验证目标文件夹是否存在（如果指定了目标文件夹）
           if (targetFolderPath) {
-            const { exists } = await import('@tauri-apps/plugin-fs')
-            const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(targetFolderPath)
+                        const { path: targetFolderDir, baseDir: targetBaseDir } = await getFilePathOptions(targetFolderPath)
 
             const targetFolderExists = targetBaseDir
-              ? await exists(targetFolderDir, { baseDir: targetBaseDir })
-              : await exists(targetFolderDir)
+              ? await platform.fs.exists(targetFolderDir, { baseDir: targetBaseDir })
+              : await platform.fs.exists(targetFolderDir)
 
             if (!targetFolderExists) {
               errors.push({ filePath, error: `目标文件夹 "${targetFolderPath}" 不存在` })
@@ -1986,10 +1976,9 @@ export const copyFilesBatchTool: Tool = {
           const { path: newPath, baseDir: newBaseDir } = await getFilePathOptions(newRelativePath)
 
           // 检查目标位置是否已存在同名文件
-          const { exists } = await import('@tauri-apps/plugin-fs')
-          let targetExists = newBaseDir
-            ? await exists(newPath, { baseDir: newBaseDir })
-            : await exists(newPath)
+                    let targetExists = newBaseDir
+            ? await platform.fs.exists(newPath, { baseDir: newBaseDir })
+            : await platform.fs.exists(newPath)
 
           // 如果存在同名文件且没有指定新文件名，自动添加序号
           if (targetExists && !newName) {
@@ -2003,8 +1992,8 @@ export const copyFilesBatchTool: Tool = {
 
               const { path: checkPath, baseDir: checkBaseDir } = await getFilePathOptions(newRelativePath)
               targetExists = checkBaseDir
-                ? await exists(checkPath, { baseDir: checkBaseDir })
-                : await exists(checkPath)
+                ? await platform.fs.exists(checkPath, { baseDir: checkBaseDir })
+                : await platform.fs.exists(checkPath)
               counter++
             } while (targetExists && counter < 1000)
           }
@@ -2014,9 +2003,9 @@ export const copyFilesBatchTool: Tool = {
 
           // 执行复制
           if (oldBaseDir && finalNewBaseDir) {
-            await copyFile(oldPath, finalNewPath, { fromPathBaseDir: oldBaseDir, toPathBaseDir: finalNewBaseDir })
+            await platform.fs.copyFile(oldPath, finalNewPath, { fromPathBaseDir: oldBaseDir, toPathBaseDir: finalNewBaseDir })
           } else {
-            await copyFile(oldPath, finalNewPath)
+            await platform.fs.copyFile(oldPath, finalNewPath)
           }
 
           const copiedVectorUpdatedAt = await mirrorVectorDocuments(filePath, newRelativePath)
@@ -2121,10 +2110,9 @@ export const renameFilesBatchTool: Tool = {
           const { path: newPath, baseDir: newBaseDir } = await getFilePathOptions(newRelativePath)
 
           // 检查新文件名是否已存在
-          const { exists } = await import('@tauri-apps/plugin-fs')
-          const targetExists = newBaseDir
-            ? await exists(newPath, { baseDir: newBaseDir })
-            : await exists(newPath)
+                    const targetExists = newBaseDir
+            ? await platform.fs.exists(newPath, { baseDir: newBaseDir })
+            : await platform.fs.exists(newPath)
 
           if (targetExists) {
             errors.push({ filePath, error: `文件名 "${newName}" 已存在` })
@@ -2133,9 +2121,9 @@ export const renameFilesBatchTool: Tool = {
 
           // 执行重命名
           if (baseDir) {
-            await rename(oldPath, newPath, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir })
+            await platform.fs.rename(oldPath, newPath, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir })
           } else {
-            await rename(oldPath, newPath)
+            await platform.fs.rename(oldPath, newPath)
           }
           await articleStore.syncOpenTabsForPathChange(filePath, newRelativePath)
 

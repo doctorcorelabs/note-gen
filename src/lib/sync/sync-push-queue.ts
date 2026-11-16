@@ -1,8 +1,7 @@
 'use client'
 
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
-import { readFile } from '@tauri-apps/plugin-fs'
 import emitter from '@/lib/emitter'
 import { setLocalRecordedSha, getLocalRecordedSha } from './auto-sync'
 import { isSyncConfigured } from './sync-manager'
@@ -40,7 +39,7 @@ async function enqueueSelfHostedFile(path: string) {
 }
 
 async function getCloudFolderWorkspaceConfig(): Promise<CloudFolderConfig | null> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
   return config && supportsCloudFolderWorkspace(config) ? config : null
 }
@@ -392,7 +391,7 @@ class SyncPushQueue {
           attempt,
           maxRetries,
         })
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const provider = (await store.get<string>('primaryBackupMethod') || 'github') as SyncProvider
         providerForLog = provider
         if (provider === 'selfHosted') {
@@ -404,8 +403,8 @@ class SyncPushQueue {
         // 从磁盘读取最新内容，确保上传的是本地最新内容
         const pathOptions = await getFilePathOptions(path)
         const content = pathOptions.baseDir
-          ? await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-          : await readFile(pathOptions.path)
+          ? await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+          : await platform.fs.readFile(pathOptions.path)
         const textContent = decodeSyncText(path, content)
         const proofKey = /^notegen-wiki-data:/m.test(textContent || '')
           ? await getFileSyncProofKey(path, provider).catch(() => null) : null
@@ -638,7 +637,7 @@ class SyncPushQueue {
         return { success: false }
       }
 
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const provider = (await store.get<string>('primaryBackupMethod') || 'github') as SyncProvider
       if (provider === 'selfHosted') {
         await enqueueSelfHostedFile(path)
@@ -652,8 +651,8 @@ class SyncPushQueue {
       // 从磁盘读取最新内容
       const pathOptions = await getFilePathOptions(path)
       const content = pathOptions.baseDir
-        ? await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-        : await readFile(pathOptions.path)
+        ? await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        : await platform.fs.readFile(pathOptions.path)
       const textContent = decodeSyncText(path, content)
       const proofKey = /^notegen-wiki-data:/m.test(textContent || '')
         ? await getFileSyncProofKey(path, provider).catch(() => null) : null

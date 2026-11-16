@@ -1,5 +1,4 @@
-import { BaseDirectory, exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory, type StoreHandle } from '@/lib/platform'
 import { deleteFile as deleteGithubFile, getFiles as githubGetFiles, uploadFile as uploadGithubFile } from './github'
 import { deleteFile as deleteGiteeFile, getFiles as giteeGetFiles, uploadFile as uploadGiteeFile } from './gitee'
 import { deleteFile as deleteGitlabFile, getFileContent as gitlabGetFileContent, getFiles as gitlabGetFiles, uploadFile as uploadGitlabFile } from './gitlab'
@@ -125,7 +124,7 @@ interface ConversationRemoteStorage {
   remove: (path: string) => Promise<boolean>
 }
 
-async function getConversationSyncVersionsKey(store: Store, platform?: SyncPlatform) {
+async function getConversationSyncVersionsKey(store: StoreHandle, platform?: SyncPlatform) {
   const provider = platform ?? (await store.get<string>('primaryBackupMethod') || 'github')
   let target: unknown
   if (provider === 's3') {
@@ -143,27 +142,27 @@ async function getConversationSyncVersionsKey(store: Store, platform?: SyncPlatf
   return `${CONVERSATION_SYNC_VERSIONS_KEY}:${JSON.stringify([provider, target])}`
 }
 
-async function getConversationSyncVersions(store: Store) {
+async function getConversationSyncVersions(store: StoreHandle) {
   const key = await getConversationSyncVersionsKey(store)
   return await store.get<Record<string, number>>(key) || {}
 }
 
-async function setConversationSyncVersions(store: Store, versions: Record<string, number>) {
+async function setConversationSyncVersions(store: StoreHandle, versions: Record<string, number>) {
   await store.set(await getConversationSyncVersionsKey(store), versions)
 }
 
-async function getConversationTagIdsKey(store: Store, platform?: SyncPlatform) {
+async function getConversationTagIdsKey(store: StoreHandle, platform?: SyncPlatform) {
   const provider = platform ?? await store.get<SyncPlatform>('primaryBackupMethod') ?? 'github'
   const identity = await import('./platform-switch-plan').then(module => module.targetIdentity(provider))
   const target = await hashBytes(new TextEncoder().encode(JSON.stringify([identity, await store.get<string>('workspacePath') || ''])))
   return `${await getConversationSyncVersionsKey(store, provider)}:tags:${target}`
 }
 
-export async function acceptPlatformSwitchConversationTagIds(ids: Record<string, number>, platform: SyncPlatform, remoteTags: Tag[] = [], localTags?: Tag[]) {
-  const store = await Store.load('store.json')
+export async function acceptPlatformSwitchConversationTagIds(ids: Record<string, number>, syncPlatform: SyncPlatform, remoteTags: Tag[] = [], localTags?: Tag[]) {
+  const store = await platform.store.load('store.json')
   // Reuse the device-local metadata prefix so aliases are always excluded from
   // settings sync, regardless of the sensitive-settings preference.
-  const key = await getConversationTagIdsKey(store, platform)
+  const key = await getConversationTagIdsKey(store, syncPlatform)
   await store.set(key, ids)
   const resolvedLocalTags: Tag[] = localTags ?? await import('@/db/tags').then(module => module.getTags()) ?? []
   const local = new Map(resolvedLocalTags.map(tag => [tag.id, tag]))
@@ -175,14 +174,14 @@ export async function acceptPlatformSwitchConversationTagIds(ids: Record<string,
   await store.save()
 }
 
-export async function getConversationSyncTagIds(platform?: SyncPlatform) {
-  const store = await Store.load('store.json')
-  return await store.get<Record<string, number>>(await getConversationTagIdsKey(store, platform)) || {}
+export async function getConversationSyncTagIds(syncPlatform?: SyncPlatform) {
+  const store = await platform.store.load('store.json')
+  return await store.get<Record<string, number>>(await getConversationTagIdsKey(store, syncPlatform)) || {}
 }
 
-export async function getConversationSyncTagIdentity(platform?: SyncPlatform) {
-  const store = await Store.load('store.json')
-  return await store.get<TagSyncIdentityBaseline>(`${await getConversationTagIdsKey(store, platform)}:identity`) || {}
+export async function getConversationSyncTagIdentity(syncPlatform?: SyncPlatform) {
+  const store = await platform.store.load('store.json')
+  return await store.get<TagSyncIdentityBaseline>(`${await getConversationTagIdsKey(store, syncPlatform)}:identity`) || {}
 }
 
 function getConversationItemPath(syncId: string) {
@@ -201,7 +200,7 @@ function decodeRemoteContent(value: unknown, path: string) {
   catch { throw syncDataError('INVALID_SCHEMA', path) }
 }
 
-async function createConversationRemoteStorage(store: Store): Promise<ConversationRemoteStorage | null> {
+async function createConversationRemoteStorage(store: StoreHandle): Promise<ConversationRemoteStorage | null> {
   const storage = await createRawConversationRemoteStorage(store)
   if (!storage) return null
   const provider = await store.get<string>('primaryBackupMethod') || 'github'
@@ -219,7 +218,7 @@ async function createConversationRemoteStorage(store: Store): Promise<Conversati
   } }
 }
 
-async function createRawConversationRemoteStorage(store: Store): Promise<ConversationRemoteStorage | null> {
+async function createRawConversationRemoteStorage(store: StoreHandle): Promise<ConversationRemoteStorage | null> {
   const provider = await store.get<string>('primaryBackupMethod') || 'github'
 
   if (provider === 'github') {
@@ -799,9 +798,9 @@ export async function replacePlatformSwitchConversations(items: ConversationSync
   await refreshConversationStoreAfterSync()
 }
 
-export async function acceptPlatformSwitchConversationVersions(items: ConversationSyncItem[], platform: SyncPlatform) {
-  const store = await Store.load('store.json')
-  await store.set(await getConversationSyncVersionsKey(store, platform), Object.fromEntries(items.map(item => [item.syncId, item.syncUpdatedAt])))
+export async function acceptPlatformSwitchConversationVersions(items: ConversationSyncItem[], syncPlatform: SyncPlatform) {
+  const store = await platform.store.load('store.json')
+  await store.set(await getConversationSyncVersionsKey(store, syncPlatform), Object.fromEntries(items.map(item => [item.syncId, item.syncUpdatedAt])))
   await store.save()
 }
 
@@ -838,7 +837,7 @@ async function readImageSource(source: string): Promise<{ bytes: Uint8Array; mim
   const path = resolveConversationAssetPath(source)
   if (!path) return null
   try {
-    const bytes = await readFile(path, { baseDir: BaseDirectory.AppData })
+    const bytes = await platform.fs.readFile(path, { baseDir: BaseDirectory.AppData })
     return { bytes }
   } catch {
     return null
@@ -847,14 +846,14 @@ async function readImageSource(source: string): Promise<{ bytes: Uint8Array; mim
 
 async function ensureLocalConversationAsset(path: string, bytes: Uint8Array) {
   if (!resolveConversationAssetPath(path)) throw new Error('Invalid conversation asset path')
-  if (!await exists(LOCAL_CONVERSATION_ASSETS_DIRECTORY, { baseDir: BaseDirectory.AppData })) {
-    await mkdir(LOCAL_CONVERSATION_ASSETS_DIRECTORY, {
+  if (!await platform.fs.exists(LOCAL_CONVERSATION_ASSETS_DIRECTORY, { baseDir: BaseDirectory.AppData })) {
+    await platform.fs.mkdir(LOCAL_CONVERSATION_ASSETS_DIRECTORY, {
       baseDir: BaseDirectory.AppData,
       recursive: true,
     })
   }
-  if (!await exists(path, { baseDir: BaseDirectory.AppData })) {
-    await writeFile(path, bytes, { baseDir: BaseDirectory.AppData })
+  if (!await platform.fs.exists(path, { baseDir: BaseDirectory.AppData })) {
+    await platform.fs.writeFile(path, bytes, { baseDir: BaseDirectory.AppData })
   }
 }
 
@@ -865,7 +864,7 @@ async function normalizeAndUploadImageReference(source: string, upload = true) {
   if (localAssetPath) {
     const remotePath = `${CONVERSATION_SYNC_ASSETS_DIRECTORY}/${source.split('/').pop() || ''}`
     if (upload && !await remoteFileExists(remotePath, 'data')) {
-      const bytes = await readFile(localAssetPath, { baseDir: BaseDirectory.AppData })
+      const bytes = await platform.fs.readFile(localAssetPath, { baseDir: BaseDirectory.AppData })
       await uploadRemoteBytes(
         remotePath,
         bytes,
@@ -969,7 +968,7 @@ async function downloadConversationAssets(items: ConversationSyncItem[]) {
   ))
   let downloaded = 0
   for (const localPath of references) {
-    if (await exists(localPath, { baseDir: BaseDirectory.AppData })) continue
+    if (await platform.fs.exists(localPath, { baseDir: BaseDirectory.AppData })) continue
     const fileName = localPath.split('/').pop()
     if (!fileName) throw new Error(`Invalid conversation asset path: ${localPath}`)
     const remotePath = `${CONVERSATION_SYNC_ASSETS_DIRECTORY}/${fileName}`
@@ -1390,7 +1389,7 @@ export function getRemoteConversationSyncFingerprint(content: string | null) {
 }
 
 export async function hasRemoteConversationSyncData() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createConversationRemoteStorage(store)
   if (!storage) return false
   return Boolean(
@@ -1537,7 +1536,7 @@ interface ConversationTagContext {
   persistDependencies: (items: ConversationSyncItem[]) => Promise<void>
 }
 
-async function prepareConversationTagContext(storage: ConversationRemoteStorage, store: Store, publish: boolean, items: ConversationSyncItem[] = []): Promise<ConversationTagContext> {
+async function prepareConversationTagContext(storage: ConversationRemoteStorage, store: StoreHandle, publish: boolean, items: ConversationSyncItem[] = []): Promise<ConversationTagContext> {
   const { getTags } = await import('@/db/tags')
   const local = normalizeTagSnapshot(await getTags())
   const content = await storage.read(CONVERSATION_TAGS_PATH)
@@ -1592,7 +1591,7 @@ async function prepareConversationTagContext(storage: ConversationRemoteStorage,
 
 export async function uploadConversations() {
   const startedAt = Date.now()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createConversationRemoteStorage(store)
   if (!storage) return false
   const [items, tombstones] = await Promise.all([
@@ -1741,7 +1740,7 @@ export async function uploadConversations() {
 
 export async function downloadConversations() {
   const startedAt = Date.now()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createConversationRemoteStorage(store)
   if (!storage) return false
   try {

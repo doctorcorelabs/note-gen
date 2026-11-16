@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { AlertTriangle, ListChecks, Loader2, LogIn, LogOut, RefreshCw, Server } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -88,7 +88,7 @@ export function SelfHostedSync({ active = true }: { active?: boolean }) {
   }, [profileId])
 
   useEffect(() => {
-    void Store.load('store.json')
+    void platform.store.load('store.json')
       .then(store => store.get<boolean>('selfHostedExperimentalAcknowledged'))
       .then(acknowledged => setExperimentalAcknowledged(acknowledged === true))
       .catch(() => setExperimentalAcknowledged(false))
@@ -96,7 +96,7 @@ export function SelfHostedSync({ active = true }: { active?: boolean }) {
 
   useEffect(() => {
     let cancelled = false
-    void Store.load('store.json').then(store => store.get<string>('selfHostedConnectionReviewProfileId'))
+    void platform.store.load('store.json').then(store => store.get<string>('selfHostedConnectionReviewProfileId'))
       .then(pending => { if (!cancelled) setConnectionReviewRequired(Boolean(profileId && pending === profileId)) })
       .catch(error => console.warn('[self-hosted-sync] Failed to read pending connection review', error))
     return () => { cancelled = true }
@@ -115,7 +115,7 @@ export function SelfHostedSync({ active = true }: { active?: boolean }) {
     }
     window.addEventListener('self-hosted-profile-state-changed', handleProfileStateChange)
     void (async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const serverUrlDraft = await store.get<string>('selfHostedServerUrlDraft')
       if (cancelled) return
       if (serverUrlDraft) {
@@ -264,7 +264,7 @@ export function SelfHostedSync({ active = true }: { active?: boolean }) {
 
   async function acknowledgeExperimentalRisk() {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('selfHostedExperimentalAcknowledged', true)
       await store.save()
       setExperimentalAcknowledged(true)
@@ -475,7 +475,7 @@ export function SelfHostedSync({ active = true }: { active?: boolean }) {
 
 function persistServerUrlDraft(value: string) {
   serverUrlDraftWrite = serverUrlDraftWrite.catch(() => undefined).then(async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('selfHostedServerUrlDraft', value)
     await store.save()
   })

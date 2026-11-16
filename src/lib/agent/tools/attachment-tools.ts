@@ -1,4 +1,4 @@
-import { readDir } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import {
   isReadableAttachmentName,
   resolveAttachmentChildPath,
@@ -35,7 +35,7 @@ export const listAttachmentsTool: AgentTool = {
     try {
       const relativePath = typeof input.relativePath === 'string' ? input.relativePath : ''
       const directoryPath = await resolveAttachmentChildPath(attachment, relativePath)
-      const entries = (await readDir(directoryPath))
+      const entries = (await platform.fs.readDir(directoryPath))
         .filter((entry) => !entry.name.startsWith('.'))
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((entry) => ({

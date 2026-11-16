@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { MCPServerConfig, MCPServerState } from '@/lib/mcp/types'
 
 interface MCPState {
@@ -42,7 +42,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
   initialized: false,
 
   addServer: async (server: MCPServerConfig) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const servers = [...get().servers, server]
     await store.set('mcp.servers', servers)
     await store.save()
@@ -50,7 +50,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
   },
   
   updateServer: async (id: string, updates: Partial<MCPServerConfig>) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const servers = get().servers.map(s =>
       s.id === id ? { ...s, ...updates } : s
     )
@@ -60,7 +60,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
   },
   
   deleteServer: async (id: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const servers = get().servers.filter(s => s.id !== id)
     const selectedServerIds = get().selectedServerIds.filter(sid => sid !== id)
     await store.set('mcp.servers', servers)
@@ -75,7 +75,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
   },
   
   toggleServerEnabled: async (id: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const servers = get().servers.map(s =>
       s.id === id ? { ...s, enabled: !s.enabled } : s
     )
@@ -95,7 +95,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
   },
   
   setSelectedServers: async (ids: string[]) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('mcp.selectedServerIds', ids)
     await store.save()
     set({ selectedServerIds: ids })
@@ -107,14 +107,14 @@ export const useMcpStore = create<MCPState>((set, get) => ({
       ? selectedServerIds.filter(sid => sid !== id)
       : [...selectedServerIds, id]
     
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('mcp.selectedServerIds', newSelected)
     await store.save()
     set({ selectedServerIds: newSelected })
   },
   
   clearSelectedServers: async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('mcp.selectedServerIds', [])
     await store.save()
     set({ selectedServerIds: [] })
@@ -122,7 +122,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
   
   loadMcpConfig: async () => {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const servers = await store.get<MCPServerConfig[]>('mcp.servers')
       const selectedServerIds = await store.get<string[]>('mcp.selectedServerIds')
 
@@ -143,7 +143,7 @@ export const useMcpStore = create<MCPState>((set, get) => ({
     }
 
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const servers = await store.get<MCPServerConfig[]>('mcp.servers')
       const selectedServerIds = await store.get<string[]>('mcp.selectedServerIds')
 

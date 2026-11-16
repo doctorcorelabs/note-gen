@@ -1,6 +1,5 @@
-import { appDataDir } from '@tauri-apps/api/path'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
-import { BaseDirectory, exists, mkdir, readDir, readFile } from '@tauri-apps/plugin-fs'
 import { getWorkspacePath } from '@/lib/workspace'
 import { isMobileDevice } from '@/lib/check'
 import { skillManager } from './manager'
@@ -177,7 +176,7 @@ function resolveRegisteredScript(skillId: string, scriptId: string): SkillScript
 }
 
 async function verifyScriptIntegrity(scriptPath: string, expectedHash: string): Promise<void> {
-  const bytes = await readFile(scriptPath)
+  const bytes = await platform.fs.readFile(scriptPath)
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
   if (actualHash !== expectedHash) {
@@ -227,7 +226,7 @@ async function validateArguments(args: string[], context: SkillRuntimeContext): 
 
     if (!isAbsolute && !normalized.startsWith('-')) {
       const workspacePath = `${context.appArticleDir}/${normalized}`
-      if (await exists(workspacePath)) {
+      if (await platform.fs.exists(workspacePath)) {
         validated.push(workspacePath)
         continue
       }
@@ -260,12 +259,12 @@ async function validateArguments(args: string[], context: SkillRuntimeContext): 
 }
 
 async function ensureDir(path: string, baseDir?: BaseDirectory): Promise<void> {
-  const present = baseDir ? await exists(path, { baseDir }) : await exists(path)
+  const present = baseDir ? await platform.fs.exists(path, { baseDir }) : await platform.fs.exists(path)
   if (!present) {
     if (baseDir) {
-      await mkdir(path, { baseDir, recursive: true })
+      await platform.fs.mkdir(path, { baseDir, recursive: true })
     } else {
-      await mkdir(path, { recursive: true })
+      await platform.fs.mkdir(path, { recursive: true })
     }
   }
 }
@@ -284,7 +283,7 @@ export async function getSkillRuntimeContext(skillId: string, scope?: SkillScope
   if (!skill || !fileInfo) {
     throw new Error(`Cannot resolve Skill directory: ${skillId}`)
   }
-  const appDataPath = (await appDataDir()).replace(/\\/g, '/').replace(/\/+$/, '')
+  const appDataPath = (await platform.path.appDataDir()).replace(/\\/g, '/').replace(/\/+$/, '')
   const appArticleDir = workspace.isCustom
     ? workspace.path.replace(/\\/g, '/').replace(/\/+$/, '')
     : `${appDataPath}/article`
@@ -516,8 +515,8 @@ async function listOutputFiles(context: SkillRuntimeContext): Promise<SkillOutpu
   async function walk(directory: string, relative = '', depth = 0): Promise<void> {
     if (depth > MAX_OUTPUT_DEPTH || files.size >= MAX_OUTPUT_FILES) return
     const entries = context.outputBaseDir
-      ? await readDir(directory, { baseDir: context.outputBaseDir })
-      : await readDir(directory)
+      ? await platform.fs.readDir(directory, { baseDir: context.outputBaseDir })
+      : await platform.fs.readDir(directory)
 
     for (const entry of entries) {
       if (!entry.name || files.size >= MAX_OUTPUT_FILES) break

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 export type ManagedBackupSchedule = 'disabled' | 'daily' | 'weekly'
 
@@ -47,7 +47,7 @@ function normalizeRetention(value: unknown): number {
 }
 
 export async function loadManagedBackupSettings(): Promise<ManagedBackupSettings> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   return {
     directory: (await store.get<string>('managedBackupDirectory')) ?? '',
     schedule: (await store.get<ManagedBackupSchedule>('managedBackupSchedule')) ?? 'disabled',
@@ -60,7 +60,7 @@ export async function loadManagedBackupSettings(): Promise<ManagedBackupSettings
 export async function saveManagedBackupSettings(
   settings: Pick<ManagedBackupSettings, 'directory' | 'schedule' | 'retention'>,
 ): Promise<void> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set('managedBackupDirectory', settings.directory)
   await store.set('managedBackupSchedule', settings.schedule)
   await store.set('managedBackupRetention', normalizeRetention(settings.retention))
@@ -73,7 +73,7 @@ export async function saveManagedBackupSettings(
 }
 
 async function updateBackupResult(successAt: number | null, error: string | null): Promise<void> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (successAt !== null) {
     await store.set('managedBackupLastSuccessAt', successAt)
   }
@@ -97,7 +97,7 @@ export async function createManagedBackup(
 
   backupInProgress = true
   try {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const workspacePath = (await store.get<string>('workspacePath')) ?? ''
     const backup = await invoke<ManagedBackupInfo>('create_managed_backup', {
       backupDir: current.directory,
@@ -125,7 +125,7 @@ export async function restoreManagedBackup(
   currentWorkspacePath: string,
 ): Promise<ManagedBackupRestoreResult> {
   const { usePlatformSwitchStore } = await import('@/stores/sync-platform-switch')
-  if (usePlatformSwitchStore.getState().platform || await (await Store.load('store.json')).get('platformSwitchRecovery')) {
+  if (usePlatformSwitchStore.getState().platform || await (await platform.store.load('store.json')).get('platformSwitchRecovery')) {
     throw new Error('Finish or recover the sync platform switch before restoring a backup')
   }
   return invoke<ManagedBackupRestoreResult>('restore_managed_backup', {

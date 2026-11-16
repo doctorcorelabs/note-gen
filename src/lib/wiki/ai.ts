@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type OpenAI from 'openai'
 import { z } from 'zod'
 import type { AiConfig } from '@/app/core/setting/config'
@@ -41,7 +41,7 @@ export function isWikiConfigurationError(error: unknown) {
 }
 
 export async function createWikiAiSession(modelId: string | null | undefined, language: string): Promise<WikiAiSession> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const selectedModel = modelId || await store.get<string>('primaryModel') || ''
   const config = await getAISettingsByModelId(selectedModel, store)
   if (!config?.model || !config.baseURL) throw new Error('WIKI_MODEL_NOT_CONFIGURED')

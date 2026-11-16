@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { readTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'tsv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg',
@@ -131,7 +131,7 @@ export async function parseLocalDocument(path: string, name = path): Promise<Par
 
   if (isTextDocumentName(documentName)) {
     try {
-      const markdown = await readTextFile(path)
+      const markdown = await platform.fs.readTextFile(path)
       return {
         markdown,
         format: getDocumentExtension(documentName),

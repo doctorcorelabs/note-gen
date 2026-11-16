@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { confirm } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { ArrowRightLeft, FolderOpen, Loader2, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -64,7 +64,7 @@ export function ICloudFolderSync({ onActiveProviderChange }: ICloudFolderSyncPro
 
     async function initialize() {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const saved = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
         if (!saved?.path || saved.provider === 'oneDrive') return
 
@@ -104,7 +104,7 @@ export function ICloudFolderSync({ onActiveProviderChange }: ICloudFolderSyncPro
   }, [setCloudFolderConnected, t])
 
   async function saveConfig(next: CloudFolderConfig) {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const previous = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     if (previous?.provider === 'oneDrive') await disconnectOneDrive()
     await store.set('cloudFolderSyncConfig', { ...next, provider: 'folder' } satisfies CloudFolderConfig)

@@ -1,9 +1,9 @@
 import { toast } from "@/hooks/use-toast";
-import { Store } from "@tauri-apps/plugin-store";
+import type { StoreHandle } from "@/lib/platform";
+import { platform } from "@/lib/platform";
 import type OpenAI from 'openai';
 import { AiConfig } from "@/app/core/setting/config";
-import { readFile } from "@tauri-apps/plugin-fs";
-import { platform } from "@tauri-apps/plugin-os";
+import { platform as getRuntimePlatform } from "@tauri-apps/plugin-os";
 import { createTauriOpenAIClient, normalizeReasoningEffort, type OpenAICompatibleClient } from "./tauri-client";
 import {
   AGENT_CORE_PROMPT_VERSION,
@@ -19,7 +19,7 @@ import fallbackCommonMessages from '../../../messages/common/zh.json';
  * 获取当前的prompt内容
  */
 export async function getPromptContent(): Promise<string> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const currentPromptId = await store.get<string>('currentPromptId')
   let promptContent = ''
   
@@ -40,7 +40,7 @@ export async function getPromptContent(): Promise<string> {
  * 获取 Agent 系统提示词
  */
 export async function getSystemPromptContent(): Promise<string> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const extension = await store.get<string>('agentSystemPromptExtension')
   if (typeof extension === 'string') {
     return extension.trim()
@@ -62,7 +62,7 @@ export async function getSystemPromptContent(): Promise<string> {
  * 获取AI设置
  */
 export async function getAISettings(modelType?: string): Promise<AiConfig | undefined> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const modelId = await store.get(modelType || 'primaryModel')
 
   return typeof modelId === 'string'
@@ -76,9 +76,9 @@ export async function getAISettings(modelType?: string): Promise<AiConfig | unde
  */
 export async function getAISettingsByModelId(
   modelId: string,
-  loadedStore?: Store
+  loadedStore?: StoreHandle
 ): Promise<AiConfig | undefined> {
-  const store = loadedStore ?? await Store.load('store.json')
+  const store = loadedStore ?? await platform.store.load('store.json')
   const aiConfigs = await store.get<AiConfig[]>('aiModelList')
 
   if (!modelId || !aiConfigs) {
@@ -206,7 +206,7 @@ export async function convertImageToBase64(imageUrl: string): Promise<string | n
     try {
       const url = new URL(imageUrl)
       filePath = decodeURIComponent(url.pathname)
-      if (platform() === 'windows' && filePath.startsWith('/')) {
+      if (getRuntimePlatform() === 'windows' && filePath.startsWith('/')) {
         filePath = filePath.substring(1)
       }
     } catch {
@@ -214,7 +214,7 @@ export async function convertImageToBase64(imageUrl: string): Promise<string | n
     }
 
     // 读取文件
-    const fileData = await readFile(filePath)
+    const fileData = await platform.fs.readFile(filePath)
 
     // 转换为 base64
     const base64 = btoa(
@@ -399,7 +399,7 @@ export async function prepareMessages(
  * 创建OpenAI客户端，适用于所有AI类型
  */
 export async function createOpenAIClient(AiConfig?: AiConfig): Promise<OpenAICompatibleClient> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
 
   if (AiConfig) {
     return createTauriOpenAIClient(AiConfig)

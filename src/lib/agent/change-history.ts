@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getChatById, updateChatAgentHistory } from '@/db/chats'
 import useArticleStore from '@/stores/article'
 import useChatStore from '@/stores/chat'
@@ -81,9 +81,9 @@ export async function revertAgentChange(requested: AgentChange, chatId: number):
       // A tool may report a completed write followed by a failed refresh. Read
       // its pinned file before treating that partial result as a completed undo.
       const options = pinnedFile.baseDir === undefined ? {} : { baseDir: pinnedFile.baseDir }
-      const present = await exists(pinnedFile.path, options)
+      const present = await platform.fs.exists(pinnedFile.path, options)
       return change.before === undefined ? !present
-        : present && await readTextFile(pinnedFile.path, options) === change.before
+        : present && await platform.fs.readTextFile(pinnedFile.path, options) === change.before
     }
 
     if (change.before === undefined) {
@@ -99,14 +99,14 @@ export async function revertAgentChange(requested: AgentChange, chatId: number):
       const options = pinnedFile
       if (!await currentWorkspace()) return { ok: false, reason: 'workspace' }
       const fsOptions = options.baseDir === undefined ? {} : { baseDir: options.baseDir }
-      if (await exists(options.path, fsOptions)) return { ok: false, reason: 'changed' }
+      if (await platform.fs.exists(options.path, fsOptions)) return { ok: false, reason: 'changed' }
       const parentSeparator = Math.max(options.path.lastIndexOf('/'), options.path.lastIndexOf('\\'))
       const parent = options.path.slice(0, parentSeparator + 1)
-      if (parent) await mkdir(parent, { recursive: true, ...fsOptions })
+      if (parent) await platform.fs.mkdir(parent, { recursive: true, ...fsOptions })
       const before = change.before
       const restored = await runEditorPathWriteTransaction(path, async ({ hasQueuedSave }) => {
-        if (hasQueuedSave() || !await currentWorkspace() || await exists(options.path, fsOptions)) return false
-        await writeTextFile(options.path, before, { ...fsOptions, createNew: true })
+        if (hasQueuedSave() || !await currentWorkspace() || await platform.fs.exists(options.path, fsOptions)) return false
+        await platform.fs.writeTextFile(options.path, before, { ...fsOptions, createNew: true })
         markEditorPathMutation(path, root)
         return true
       }, root)

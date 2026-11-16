@@ -65,11 +65,10 @@ import useArticleStore from "@/stores/article"
 import useSettingStore from "@/stores/setting"
 import { parseTodoMarkContent } from "./mark-list-item-content"
 import type { Priority } from "./todo-form"
-import { BaseDirectory, readFile } from "@tauri-apps/plugin-fs"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { ImageRecognitionStage, recognizeImageWithFallback } from "@/lib/image-recognition"
 import { getImageRecognitionProgressText } from "@/lib/image-recognition-progress"
 import { toast } from "@/hooks/use-toast"
-import { appDataDir } from "@tauri-apps/api/path"
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener"
 import { canOpenMarkSource, getMarkOpenAction } from "./mark-open-path"
 import { createRecordTab, getRecordTabPath } from "./mark-record-tab"
@@ -499,7 +498,7 @@ function MarkDetailToolbar({
 
   const handleOpenSource = useCallback(async (target: 'folder' | 'file') => {
     try {
-      const appDir = await appDataDir()
+      const appDir = await platform.path.appDataDir()
       const action = getMarkOpenAction(mark, appDir, target)
 
       if (!action?.path) {
@@ -886,7 +885,7 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
       let imageUrl = mark.url
 
       if (localImagePath) {
-        const bytes = await readFile(localImagePath, { baseDir: BaseDirectory.AppData })
+        const bytes = await platform.fs.readFile(localImagePath, { baseDir: BaseDirectory.AppData })
         imageUrl = `data:${getImageMimeType(mark.url)};base64,${bytesToBase64(bytes)}`
       }
 

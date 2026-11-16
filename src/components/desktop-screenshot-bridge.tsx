@@ -2,8 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { BaseDirectory, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef } from 'react'
 
@@ -35,7 +34,7 @@ type AcknowledgementRetry = { attempts: number; timer: ReturnType<typeof setTime
 const acknowledgementRetries = new Map<string, AcknowledgementRetry>()
 
 async function getScreenshotSaveTarget(sessionId: string) {
-  const store = await Store.load('desktop-screenshot.json')
+  const store = await platform.store.load('desktop-screenshot.json')
   const storedTarget = await store.get<number>(sessionId)
   const tags = await getTags()
   if (tags.length === 0) throw new Error('No record tags are available')
@@ -52,7 +51,7 @@ async function getScreenshotSaveTarget(sessionId: string) {
 async function acknowledgeScreenshot(sessionId: string) {
   try {
     await invoke('remove_desktop_screenshot_result', { sessionId })
-    const store = await Store.load('desktop-screenshot.json')
+    const store = await platform.store.load('desktop-screenshot.json')
     await store.delete(sessionId)
     await store.save()
     const pending = acknowledgementRetries.get(sessionId)
@@ -221,11 +220,11 @@ export function DesktopScreenshotBridge({ ready }: { ready: boolean }) {
       const tagId = await getScreenshotSaveTarget(result.sessionId)
       const filename = `${result.sessionId}.png`
       // Read only the native session's result directory, never an event-supplied path.
-      const bytes = await readFile(`desktop_screenshot/results/${result.sessionId}.png`, {
+      const bytes = await platform.fs.readFile(`desktop_screenshot/results/${result.sessionId}.png`, {
         baseDir: BaseDirectory.AppData,
       })
-      await mkdir(SCREENSHOT_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
-      await writeFile(`${SCREENSHOT_DIR}/${filename}`, bytes, { baseDir: BaseDirectory.AppData })
+      await platform.fs.mkdir(SCREENSHOT_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
+      await platform.fs.writeFile(`${SCREENSHOT_DIR}/${filename}`, bytes, { baseDir: BaseDirectory.AppData })
 
       const settings = useSettingStore.getState()
       const saved = await insertExternalMark({

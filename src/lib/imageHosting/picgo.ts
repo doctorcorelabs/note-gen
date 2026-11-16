@@ -1,6 +1,4 @@
-import { Store } from "@tauri-apps/plugin-store";
-import { appDataDir } from '@tauri-apps/api/path'
-import { mkdir, exists, writeFile, remove } from "@tauri-apps/plugin-fs";
+import { platform } from "@/lib/platform";
 import { v4 as uuid } from 'uuid';
 import { toast } from "@/hooks/use-toast";
 
@@ -10,20 +8,20 @@ export interface PicgoImageHostingSetting {
 }
 
 export async function uploadImageByPicgo(image: File) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const picgoSetting = await store.get<PicgoImageHostingSetting>('picgo')
   if (!picgoSetting) {
     return null
   }
   // 将 File 保存至缓存目录
-  const cacheDir = await appDataDir()
+  const cacheDir = await platform.path.appDataDir()
   const cachePath = `${cacheDir}/picgo`
-  if (!await exists(cachePath)) {
-    await mkdir(cachePath)
+  if (!await platform.fs.exists(cachePath)) {
+    await platform.fs.mkdir(cachePath)
   }
   const cacheFile = `${cachePath}/${uuid()}.png`
   const uint8Array = new Uint8Array(await image.arrayBuffer())
-  await writeFile(cacheFile, uint8Array)
+  await platform.fs.writeFile(cacheFile, uint8Array)
   const body = {
     list: [cacheFile]
   }
@@ -45,12 +43,12 @@ export async function uploadImageByPicgo(image: File) {
     })
     return null
   } finally {
-    await remove(cacheFile)
+    await platform.fs.remove(cacheFile)
   }
 }
 
 export async function checkPicgoState() {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const picgoSetting = await store.get<PicgoImageHostingSetting>('picgo')
   if (!picgoSetting) {
     return false

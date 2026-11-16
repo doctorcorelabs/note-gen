@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { confirm } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, ChevronDown, FileSearch, FileText, Hash, Layers, ListFilter, Pause, Play, RefreshCw, Search, Shield, Target, Trash } from 'lucide-react'
 import { toast } from 'sonner'
@@ -88,7 +88,7 @@ export function Settings() {
     await clearVectorDb()
     await initVectorDb()
     await markIndexDirty()
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.delete('lastVectorProcessTime')
     useVectorStore.setState({ lastProcessTime: null })
     await refreshIndexStats()
@@ -99,14 +99,14 @@ export function Settings() {
     if (rebuildRequested) return
     setRebuildRequested(true)
     try {
-      const consentStore = await Store.load('store.json')
+      const consentStore = await platform.store.load('store.json')
       await consentStore.set('ragStructuredKnowledgeConsent', true)
       if (hasEmbeddingModel) await processAllDocuments()
       else {
         await initBM25Search()
         await markIndexClean()
         const builtAt = Date.now()
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await store.set('lastVectorProcessTime', builtAt)
         useVectorStore.setState({ lastProcessTime: builtAt })
         toast.success(t('lexicalIndexRebuilt'))

@@ -1,4 +1,4 @@
-import type { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
 import { SYNC_PLATFORMS, type SyncPlatform, type CloudFolderConfig } from '@/types/sync'
 import { sanitizeSyncErrorMessage } from './remote-file'
 
@@ -31,7 +31,7 @@ export function withPrimaryPlatformLock<T>(action: () => Promise<T>): Promise<T>
   return pending
 }
 
-export async function restoreInterruptedPrimaryPlatform(store: Store) {
+export async function restoreInterruptedPrimaryPlatform(store: StoreHandle) {
   return withPrimaryPlatformLock(async () => {
     const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
     if (!recovery || !SYNC_PLATFORMS.includes(recovery.platform)) return null

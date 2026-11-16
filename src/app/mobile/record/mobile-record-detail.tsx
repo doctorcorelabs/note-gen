@@ -15,7 +15,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { AudioPlayer } from '@/components/audio-player'
 import { LocalImage } from '@/components/local-image'
 import { Badge } from '@/components/ui/badge'
@@ -193,7 +193,7 @@ export function MobileRecordDetail({ markId, isActive }: MobileRecordDetailProps
     clearActiveMark()
     useChatStore.getState().setMobileActiveContexts({ markId: null })
     router.push('/mobile/record')
-    void Store.load('store.json').then(store => store.set('currentPage', '/mobile/record'))
+    void platform.store.load('store.json').then(store => store.set('currentPage', '/mobile/record'))
   }
 
   const refreshRecords = useCallback(async (deleted: boolean) => {

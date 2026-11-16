@@ -7,7 +7,7 @@ import { PluginRightSidebar } from '@/components/plugins/plugin-right-sidebar'
 import dynamic from 'next/dynamic'
 import { useSidebarStore } from "@/stores/sidebar"
 import { useEffect, useState, useRef } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { Layout, PanelImperativeHandle } from 'react-resizable-panels'
 import { restoreEditorWindows } from '@/lib/editor-windows'
 import { MainStatusBar } from './main-status-bar'
@@ -306,7 +306,7 @@ function Page() {
   useEffect(() => {
     // 保存当前页面路径
     async function saveCurrentPage() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('currentPage', '/core/main')
       await store.save()
     }

@@ -1,6 +1,6 @@
 import emitter from '@/lib/emitter'
 import { getDb } from "./index"
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { enqueueAutoDataSync } from '@/lib/sync/auto-data-sync-queue'
 import { tagPathMatches } from '@/lib/record-tags'
 import { normalizeTagBoolean, invalidateLocalTagSyncIdentity } from '@/lib/tag-sync'
@@ -53,7 +53,7 @@ export async function initTagsDb() {
       ['Idea', true, true]
     )
     const tag = (await db.select<Tag[]>("select * from tags where name = $1", ['Idea']))[0]
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('currentTagId', tag.id)
     await store.save()
   }
@@ -188,7 +188,7 @@ export async function delTag(id: number, options: { sync?: boolean } = {}) {
     [id, fallback.id]
   )
   if (result.rowsAffected !== 1) throw new Error('Tag could not be deleted; refresh and try again')
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get<number>('currentTagId') === id) {
     await store.set('currentTagId', fallback.id)
     await store.save()

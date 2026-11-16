@@ -1,5 +1,5 @@
 import { getVersion } from '@tauri-apps/api/app'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import {
   getAllVectorDocuments,
   replaceAllVectorDocuments,
@@ -162,7 +162,7 @@ export async function uploadKnowledgeBaseSnapshot(
   const dimensions = new Set(documents.map(document => parseEmbedding(document.embedding).length))
   if (dimensions.size !== 1) throw new Error('本地知识库包含不同维度的向量，请先重新计算')
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const pages = (['article', 'record', 'canvas'] as KnowledgeSourceType[]).flatMap(sourceType => (
     splitDocumentsIntoPages(documents.filter(document => (
       (parseKnowledgeSourceKey(document.filename)?.sourceType || 'article') === sourceType
@@ -234,7 +234,7 @@ export async function downloadKnowledgeBaseSnapshot(
   }
 
   await replaceAllVectorDocuments(documents)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set('lastVectorProcessTime', manifest.generatedAt)
   await store.set('lastDownloadedRagSnapshot', manifest)
 
@@ -280,6 +280,6 @@ export async function downloadKnowledgeBaseSnapshot(
 }
 
 export async function getLastDownloadedKnowledgeBaseSnapshot(): Promise<RagSnapshotManifest | null> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   return await store.get<RagSnapshotManifest>('lastDownloadedRagSnapshot') || null
 }

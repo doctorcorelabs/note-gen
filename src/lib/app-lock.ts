@@ -1,5 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
-import { BaseDirectory, exists } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 // Device-local UI privacy only; never include this file in settings sync/export.
 const STORE_PATH = 'app-lock.json'
@@ -13,10 +12,10 @@ export interface AppLockCredential {
 }
 
 async function loadAppLockStore() {
-  const store = await Store.load(STORE_PATH, { autoSave: false })
+  const store = await platform.store.load(STORE_PATH, { autoSave: false })
   // Store.load ignores disk parse errors. Reload explicitly to fail closed if
   // an existing lock file is unreadable, rather than treating it as disabled.
-  if (await exists(STORE_PATH, { baseDir: BaseDirectory.AppData })) await store.reload()
+  if (await platform.fs.exists(STORE_PATH, { baseDir: BaseDirectory.AppData })) await store.reload()
   return store
 }
 

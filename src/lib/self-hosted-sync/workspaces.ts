@@ -1,7 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { exists, mkdir, readDir, readFile, readTextFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, initAllDatabases } from '@/db'
 import { decryptText } from './crypto'
 import { SelfHostedApiError } from './client'
@@ -166,7 +164,7 @@ export async function createLibrary(
   if (!resolvedName) throw new Error('工作区名称不能为空')
   const workspaceId = await createRemoteLibrary(profileId, resolvedName, idempotencyKey)
   const resolvedLocalRoot = localRoot ?? await getManagedLibraryWorkspacePath(workspaceId, resolvedName)
-  if (localRoot === null) await mkdir(resolvedLocalRoot, { recursive: true })
+  if (localRoot === null) await platform.fs.mkdir(resolvedLocalRoot, { recursive: true })
   await bindLibrary(profileId, workspaceId, resolvedLocalRoot, localRoot !== null)
   return workspaceId
 }
@@ -193,9 +191,9 @@ export async function getManagedLibraryWorkspacePath(workspaceId: string, name: 
     'select local_root as localRoot from self_hosted_workspace_bindings where workspace_id = $1', [workspaceId],
   )
   if (bindings[0]?.localRoot) return bindings[0].localRoot
-  const parent = await join(await appDataDir(), 'workspaces', 'self-hosted')
-  const legacy = await join(parent, workspaceId)
-  if (await exists(legacy)) return legacy
+  const parent = await platform.path.join(await platform.path.appDataDir(), 'workspaces', 'self-hosted')
+  const legacy = await platform.path.join(parent, workspaceId)
+  if (await platform.fs.exists(legacy)) return legacy
   // Keep Unicode names, remove cross-platform forbidden characters, and bound
   // component length even for multi-byte UTF-8 names. Never rename an existing root.
   let label = Array.from(name.normalize('NFC').replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, '-').trim())
@@ -206,19 +204,19 @@ export async function getManagedLibraryWorkspacePath(workspaceId: string, name: 
     'select local_root as localRoot from self_hosted_workspace_bindings where local_root is not null',
   )
   const reserved = new Set(reservedRoots.map(row => normalizeWorkspaceNamePath(row.localRoot).toLowerCase()))
-  await mkdir(parent, { recursive: true })
+  await platform.fs.mkdir(parent, { recursive: true })
   for (let length = 8; length <= identity.length; length += 4) {
     const directory = `${label}--${identity.slice(0, length)}`
-    const root = await join(parent, directory)
+    const root = await platform.path.join(parent, directory)
     if (reserved.has(normalizeWorkspaceNamePath(root).toLowerCase())) continue
-    const entries = await readDir(parent)
+    const entries = await platform.fs.readDir(parent)
     if (entries.some(entry => entry.name?.toLowerCase() === directory.toLowerCase())) continue
     try {
       // Exclusive creation also handles a collision with another window.
-      await mkdir(root)
+      await platform.fs.mkdir(root)
       return root
     } catch (error) {
-      if (!await exists(root)) throw error
+      if (!await platform.fs.exists(root)) throw error
     }
   }
   throw new Error('Unable to allocate a unique workspace directory')
@@ -302,7 +300,7 @@ export async function ensureLibraryLocalWorkspace(profileId: string, workspaceId
   const workspace = (await client.workspaces()).find(item => item.id === workspaceId && item.type === 'library')
   if (!workspace) throw new Error('工作区不存在或当前账号无权访问')
   const localRoot = await getManagedLibraryWorkspacePath(workspaceId, await decryptLibraryName(profileId, workspace))
-  await mkdir(localRoot, { recursive: true })
+  await platform.fs.mkdir(localRoot, { recursive: true })
   await bindLibrary(profileId, workspaceId, localRoot, false)
   return localRoot
 }
@@ -461,7 +459,7 @@ export async function bindLibrary(
   await ensureManagedWorkspaceKey(profileId, workspaceId, workspace.latestKeyVersion)
   await cacheLibraryName(workspace)
   await refreshCachedWorkspaceNames()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const deferred = await store.get<string[]>('selfHostedDeferredWorkspacePaths') ?? []
   if (deferred.includes(localRoot)) {
     await store.set('selfHostedDeferredWorkspacePaths', deferred.filter(path => path !== localRoot))
@@ -517,7 +515,7 @@ async function reconcileLibraryFilesRaw(
   const location = await getWorkspacePath()
   const currentRoot = location.isCustom ? location.path : await getDefaultArticleAbsolutePath('')
   const pendingMoves = normalizeLocalRoot(localRoot) === normalizeLocalRoot(currentRoot)
-    && await (await Store.load('store.json')).get<string>('primaryBackupMethod') === 'selfHosted'
+    && await (await platform.store.load('store.json')).get<string>('primaryBackupMethod') === 'selfHosted'
     ? await (await import('@/lib/sync/workspace-path-moves')).getPendingWorkspacePathMoves()
     : []
   const entries = await scanPortableEntries(localRoot, workspaceId)
@@ -531,7 +529,7 @@ async function reconcileLibraryFilesRaw(
   const mappedByPath = new Map(mapped.map(item => [item.relativePath, item]))
   const localPaths = new Set(entries.map(entry => entry.relativePath))
   for (const [index, entry] of entries.entries()) {
-    const absolutePath = await join(localRoot, entry.relativePath)
+    const absolutePath = await platform.path.join(localRoot, entry.relativePath)
     onProgress?.({ path: absolutePath, current: index, total: entries.length })
     // A pending remote rename already owns these identities. In particular,
     // do not infer A→C by hash while an offline A→B→C journal is replaying.
@@ -542,10 +540,10 @@ async function reconcileLibraryFilesRaw(
     let content: string | null
     let hash: string | null
     try {
-      content = entry.kind === 'markdown' ? await readTextFile(absolutePath) : null
+      content = entry.kind === 'markdown' ? await platform.fs.readTextFile(absolutePath) : null
       hash = entry.kind === 'folder' ? null : entry.kind === 'markdown'
         ? await invoke<string>('self_hosted_sha256', { value: content! })
-        : await hashFileBytes(await readFile(absolutePath))
+        : await hashFileBytes(await platform.fs.readFile(absolutePath))
     } catch (error) {
       if (isMissingPathError(error)) {
         console.info('[Self-hosted sync] Skipped library entry removed during reconciliation', {
@@ -679,9 +677,9 @@ async function scanPortableEntries(root: string, workspaceId: string) {
   const result: Array<{ relativePath: string; kind: 'folder' | 'markdown' | 'asset' }> = []
   const caseFoldedPaths = new Map<string, string>()
   async function visit(absolute: string, prefix: string) {
-    let entries: Awaited<ReturnType<typeof readDir>>
+    let entries: Awaited<ReturnType<typeof platform.fs.readDir>>
     try {
-      entries = await readDir(absolute)
+      entries = await platform.fs.readDir(absolute)
     } catch (error) {
       if (prefix && isMissingPathError(error)) return
       throw error
@@ -696,7 +694,7 @@ async function scanPortableEntries(root: string, workspaceId: string) {
       if (entry.isDirectory) {
         const portable = await portablePath(relative, caseFoldedPaths)
         result.push({ relativePath: portable, kind: 'folder' })
-        await visit(await join(absolute, entry.name), relative)
+        await visit(await platform.path.join(absolute, entry.name), relative)
       } else if (entry.isFile) {
         const portable = await portablePath(relative, caseFoldedPaths)
         result.push({

@@ -1,4 +1,4 @@
-import { BaseDirectory, readFile, rename, writeFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 export interface SwitchJournalOperation {
   id: number
@@ -22,7 +22,7 @@ export function assertSwitchBackupPath(path: string) {
 }
 export async function readSwitchJournal(path: string): Promise<SwitchJournalData> {
   assertSwitchBackupPath(path)
-  const raw: unknown = JSON.parse(new TextDecoder().decode(await readFile(`${path}/journal.json`, { baseDir: BaseDirectory.AppData })))
+  const raw: unknown = JSON.parse(new TextDecoder().decode(await platform.fs.readFile(`${path}/journal.json`, { baseDir: BaseDirectory.AppData })))
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid sync recovery journal')
   const value = raw as SwitchJournalData
   if (value.version !== 1 || !['applying', 'verified', 'restoring', 'restored'].includes(value.status) || typeof value.workspace !== 'string' || !Array.isArray(value.operations)
@@ -38,8 +38,8 @@ export async function readSwitchJournal(path: string): Promise<SwitchJournalData
 async function saveSwitchJournal(path: string, data: SwitchJournalData): Promise<void> {
   assertSwitchBackupPath(path)
   const options = { baseDir: BaseDirectory.AppData }
-  await writeFile(`${path}/journal.tmp`, new TextEncoder().encode(JSON.stringify(data)), options)
-  await rename(`${path}/journal.tmp`, `${path}/journal.json`, { oldPathBaseDir: BaseDirectory.AppData, newPathBaseDir: BaseDirectory.AppData })
+  await platform.fs.writeFile(`${path}/journal.tmp`, new TextEncoder().encode(JSON.stringify(data)), options)
+  await platform.fs.rename(`${path}/journal.tmp`, `${path}/journal.json`, { oldPathBaseDir: BaseDirectory.AppData, newPathBaseDir: BaseDirectory.AppData })
 }
 
 /** Settle only after the primary-platform commit, or a proven mutation-free cancellation. */

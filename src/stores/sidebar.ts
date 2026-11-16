@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { create } from 'zustand'
 
 
@@ -77,12 +77,12 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     set((state) => ({
       fileSidebarVisible: !state.fileSidebarVisible
     }))
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     store.set('fileSidebarVisible', !store.get('fileSidebarVisible'))
   },
   showFileSidebar: async () => {
     set({ fileSidebarVisible: true })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     store.set('fileSidebarVisible', true)
   },
   noteSidebarVisible: true,
@@ -90,12 +90,12 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     set((state) => ({
       noteSidebarVisible: !state.noteSidebarVisible
     }))
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     store.set('noteSidebarVisible', !store.get('noteSidebarVisible'))
   },
   showNoteSidebar: async () => {
     set({ noteSidebarVisible: true })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     store.set('noteSidebarVisible', true)
   },
   leftSidebarVisible: initialState.left,
@@ -110,7 +110,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     }))
     localStorage.setItem('leftSidebarVisible', 'true')
     localStorage.setItem('leftSidebarTab', leftSidebarTab)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('leftSidebarVisible', true)
     await store.set('leftSidebarTab', leftSidebarTab)
     await store.save()
@@ -131,7 +131,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     const newState = !leftSidebarVisible
     set({ leftSidebarVisible: newState })
     localStorage.setItem('leftSidebarVisible', String(newState))
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('leftSidebarVisible', newState)
     await store.save()
   },
@@ -143,7 +143,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
 
     set({ centerPanelVisible: true })
     localStorage.setItem('centerPanelVisible', 'true')
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('centerPanelVisible', true)
     await store.save()
   },
@@ -167,7 +167,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     const newState = !centerPanelVisible
     set({ centerPanelVisible: newState })
     localStorage.setItem('centerPanelVisible', String(newState))
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('centerPanelVisible', newState)
     await store.save()
   },
@@ -192,7 +192,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     const newState = !rightSidebarVisible
     set({ rightSidebarVisible: newState })
     localStorage.setItem('rightSidebarVisible', String(newState))
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('rightSidebarVisible', newState)
     await store.save()
   },
@@ -201,12 +201,12 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     const normalizedTab = normalizeLeftSidebarTab(tab)
     set({ leftSidebarTab: normalizedTab })
     localStorage.setItem('leftSidebarTab', normalizedTab)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('leftSidebarTab', normalizedTab)
     await store.save()
   },
   initSidebarState: async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const leftState = await store.get<boolean>('leftSidebarVisible')
     const centerState = await store.get<boolean>('centerPanelVisible')
     const rightState = await store.get<boolean>('rightSidebarVisible')

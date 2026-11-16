@@ -16,7 +16,7 @@ import {
   Undo
 } from 'lucide-react'
 import { getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
-import { readFile, writeFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { toast } from '@/hooks/use-toast'
 import useArticleStore from '@/stores/article'
 import { Separator } from '@/components/ui/separator'
@@ -138,9 +138,9 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
       
       let imageData: Uint8Array
       if (workspace.isCustom) {
-        imageData = await readFile(pathOptions.path)
+        imageData = await platform.fs.readFile(pathOptions.path)
       } else {
-        imageData = await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        imageData = await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
 
       if (version !== loadVersionRef.current || currentPathRef.current !== filePath || editingRef.current) return
@@ -320,9 +320,9 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         if (workspace.path !== source.workspace.path || workspace.isCustom !== source.workspace.isCustom) {
           throw new Error(t('changedOnDisk'))
         }
-        const diskBytes = await readFile(source.options.path, { baseDir: source.options.baseDir })
+        const diskBytes = await platform.fs.readFile(source.options.path, { baseDir: source.options.baseDir })
         if (!sameFileBytes(diskBytes, original)) throw new Error(t('changedOnDisk'))
-        await writeFile(source.options.path, uint8Array, { baseDir: source.options.baseDir })
+        await platform.fs.writeFile(source.options.path, uint8Array, { baseDir: source.options.baseDir })
         markEditorPathMutation(filePath)
         return true
       })

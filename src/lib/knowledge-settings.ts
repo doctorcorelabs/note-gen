@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { KnowledgeSource, KnowledgeSourceType } from '@/types/knowledge'
 
 export interface KnowledgeSettings {
@@ -16,7 +16,7 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: KnowledgeSettings = {
 }
 
 export async function getKnowledgeSettings(): Promise<KnowledgeSettings> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   return {
     enabledSourceTypes: await store.get<KnowledgeSourceType[]>('ragEnabledSourceTypes')
       ?? DEFAULT_KNOWLEDGE_SETTINGS.enabledSourceTypes,

@@ -18,7 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import { File, FolderTree, NotebookPen, Palette, SearchX, Tags } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import useArticleStore, {
   beginDeferredFileActivation,
   isDeferredFileActivationCurrent,
@@ -327,7 +327,7 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
       setRelatedLoading(false)
       return
     }
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const enabled = await store.get<boolean>('ragGlobalSemanticSearchEnabled') ?? true
     if (!enabled || requestId !== semanticRequestRef.current) {
       setRelatedResult([])
@@ -487,7 +487,7 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
 
   useEffect(() => {
     const loadSearchFilter = async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const savedFilter = await store.get<SearchFilter>('globalSearchFilter')
       if (savedFilter === 'all' || savedFilter === 'record' || savedFilter === 'article' || savedFilter === 'canvas') {
         setSearchFilter(savedFilter)
@@ -499,7 +499,7 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
 
   useEffect(() => {
     const persistSearchFilter = async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('globalSearchFilter', searchFilter)
     }
 

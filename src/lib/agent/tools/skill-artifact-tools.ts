@@ -1,5 +1,4 @@
-import { join } from '@tauri-apps/api/path'
-import { lstat, open, BaseDirectory } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { inspectChatImage, type ImageInspectionCrop } from '@/lib/chat-image-context'
 import { skillManager } from '@/lib/skills/manager'
 import { getSkillWorkspaceIdentity } from '@/lib/skills/runtime'
@@ -75,14 +74,14 @@ async function resolveArtifact(skillId: unknown, path: unknown, expectedWorkspac
   const workspaceRoot = workspace.isCustom ? workspace.path : 'article'
   const baseDir = workspace.isCustom ? undefined : BaseDirectory.AppData
   const fsOptions = baseDir ? { baseDir } : undefined
-  const rootInfo = await lstat(workspaceRoot, fsOptions)
+  const rootInfo = await platform.fs.lstat(workspaceRoot, fsOptions)
   if (rootInfo.isSymlink || !rootInfo.isDirectory) {
     throw new ArtifactAccessError('ARTIFACT_SYMLINK_BLOCKED', '工作区必须是实际目录。')
   }
   let targetPath = workspaceRoot
   for (let index = 0; index < segments.length; index += 1) {
-    targetPath = await join(targetPath, segments[index])
-    const info = await lstat(targetPath, fsOptions)
+    targetPath = await platform.path.join(targetPath, segments[index])
+    const info = await platform.fs.lstat(targetPath, fsOptions)
     if (info.isSymlink) {
       throw new ArtifactAccessError('ARTIFACT_SYMLINK_BLOCKED', '产物路径不能经过符号链接。')
     }
@@ -111,7 +110,7 @@ async function assertArtifactWorkspace(artifact: ResolvedArtifact): Promise<void
 async function readArtifactBytes(artifact: ResolvedArtifact, maxBytes: number, signal?: AbortSignal) {
   throwIfAborted(signal)
   await assertArtifactWorkspace(artifact)
-  const handle = await open(artifact.path, { read: true, baseDir: artifact.baseDir })
+  const handle = await platform.fs.open(artifact.path, { read: true, baseDir: artifact.baseDir })
   try {
     const info = await handle.stat()
     if (!info.isFile || info.size > maxBytes) {

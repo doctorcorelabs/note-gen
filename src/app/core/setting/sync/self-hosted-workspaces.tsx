@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { exists, readFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { Check, FolderOpen, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react'
@@ -349,10 +348,10 @@ export function SelfHostedWorkspaces({ profileId }: { profileId: string }) {
     try {
       const portable = await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: conflict.localCopyPath })
       const backup = /^self-hosted-conflict-backups\/[a-f0-9-]+\.json$/.test(portable.normalized)
-      const root = backup ? await appDataDir() : conflict.localRoot
+      const root = backup ? await platform.path.appDataDir() : conflict.localRoot
       if (!root) throw new Error(t('conflictCopyUnavailable'))
-      const path = await join(root, portable.normalized)
-      if (!await exists(path)) throw new Error(t('conflictCopyUnavailable'))
+      const path = await platform.path.join(root, portable.normalized)
+      if (!await platform.fs.exists(path)) throw new Error(t('conflictCopyUnavailable'))
       await openPath(path)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('operationFailed'))
@@ -368,9 +367,9 @@ export function SelfHostedWorkspaces({ profileId }: { profileId: string }) {
       return
     }
     try {
-      const bytes = await readFile(await join(source.localRoot, conflict.localCopyPath))
+      const bytes = await platform.fs.readFile(await platform.path.join(source.localRoot, conflict.localCopyPath))
       let targetPath = conflict.localCopyPath
-      if (await exists(await join(target.localRoot, targetPath))) {
+      if (await platform.fs.exists(await platform.path.join(target.localRoot, targetPath))) {
         const dot = targetPath.lastIndexOf('.')
         const suffix = `.viewer-copy-${Date.now()}`
         targetPath = dot > targetPath.lastIndexOf('/')

@@ -1,4 +1,4 @@
-import type { BaseDirectory, WriteFileOptions } from '@tauri-apps/plugin-fs'
+import type { BaseDirectory, WriteFileOptions } from '@/lib/platform'
 import { debugSyncPath } from '@/lib/sync/remote-file'
 
 type FilePathOptions = {

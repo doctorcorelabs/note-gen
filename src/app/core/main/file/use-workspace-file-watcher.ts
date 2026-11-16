@@ -1,7 +1,7 @@
 'use client'
 
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { watch, type WatchEvent } from '@tauri-apps/plugin-fs'
+import type { WatchEvent } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { useEffect } from 'react'
 
 import useSettingStore from '@/stores/setting'
@@ -63,10 +63,10 @@ export function useWorkspaceFileWatcher() {
     async function startWatching() {
       const workspaceRoot = workspacePath
         ? workspacePath
-        : await join(await appDataDir(), 'article')
+        : await platform.path.join(await platform.path.appDataDir(), 'article')
       const normalizedRoot = workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '')
 
-      unwatch = await watch(workspaceRoot, event => {
+      unwatch = await platform.fs.watch(workspaceRoot, event => {
         if (disposed) return
         if (workspacePath !== useSettingStore.getState().workspacePath) return
         void getSelfHostedSyncRuntime().wake('file-watcher')

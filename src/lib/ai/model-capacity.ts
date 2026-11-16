@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { AiConfig } from '@/app/core/setting/config'
 import { agentDebugLog } from '@/lib/agent/debug-log'
 
@@ -78,7 +78,7 @@ export async function resolveModelCapacity(
     }
   }
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const learned = await store.get<LearnedContextWindows>(LEARNED_CONTEXT_WINDOWS_KEY) || {}
   const stored = learned[getModelCapacityKey(config)]
   const learnedWindow = normalizeContextWindow(
@@ -187,7 +187,7 @@ async function saveLearnedContextWindow(
     return
   }
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const learned = await store.get<LearnedContextWindows>(LEARNED_CONTEXT_WINDOWS_KEY) || {}
   learned[getModelCapacityKey(config)] = {
     contextWindow: normalized,

@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { platform } from '@tauri-apps/plugin-os'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { CircleCheck, Cloud, CloudDownload, Copy, CopyCheck, ExternalLink, FolderSync, LogIn, LogOut, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -127,7 +127,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
 
     async function initialize() {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const saved = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
         const pending = await store.get<CloudFolderConfig>(PENDING_ONE_DRIVE_CONFIG_KEY)
         const candidate = saved?.path && saved.provider === 'oneDrive'
@@ -182,7 +182,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
     if (switchTarget !== 'cloudFolder' || switchStep !== 'completed' || primaryBackupMethod !== 'cloudFolder') return
     let cancelled = false
     void (async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const active = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
       if (cancelled || active?.provider !== 'oneDrive') return
       setConfig(active)
@@ -230,7 +230,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
       strategy, mode: preparation.mode, remoteFiles: preparation.remoteFiles.length,
     })
     const configured: CloudFolderConfig = { ...next, oneDriveWorkspacePath: preparation.path }
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const previousConfig = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     // The shared coordinator owns preparation recovery, backups, synchronization,
     // verification and the final primary-provider commit. Never select first.
@@ -248,7 +248,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
     await refreshWorkspaceContent().catch(cause => console.warn('OneDrive view refresh failed', cause))
     await store.delete(PENDING_ONE_DRIVE_CONFIG_KEY).then(() => store.save()).catch(cause => console.warn('OneDrive setup cleanup failed', cause))
     toast({ title: oneDriveT('workspaceReadyTitle') })
-    if (platform() === 'ios' && previousConfig?.bookmarkBase64) {
+    if (getRuntimePlatform() === 'ios' && previousConfig?.bookmarkBase64) {
       await setIOSWorkspaceFolderAccess(null).catch(() => undefined)
       await releaseIOSSyncFolder(previousConfig.bookmarkBase64).catch(() => undefined)
     } else if (previousConfig?.path.startsWith('content://') && previousConfig.path !== next.path) {
@@ -288,7 +288,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
       setLoginCode(null)
       updatePanelStatus('connecting')
       if (!await testCloudFolderConnection(next)) throw new Error(oneDriveT('connectFailed'))
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set(PENDING_ONE_DRIVE_CONFIG_KEY, next)
       await store.save()
       setConfig(next)
@@ -351,7 +351,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
     updatePanelStatus('disconnecting')
     try {
       await disconnectOneDrive()
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const activeConfig = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
       await store.delete(PENDING_ONE_DRIVE_CONFIG_KEY)
       if (activeConfig?.provider === 'oneDrive') {

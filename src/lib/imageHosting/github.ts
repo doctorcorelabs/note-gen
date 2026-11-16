@@ -1,4 +1,4 @@
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
 import { GithubError, GithubRepoInfo } from "../sync/github.types";
 import { toast } from '@/hooks/use-toast';
@@ -9,7 +9,7 @@ import { withGithubRepoWriteLock } from '../sync/github-repo-write-lock';
 
 // 创建 Github 图床仓库
 export async function createImageRepo(name: string, isPrivate?: boolean) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('githubImageAccessToken')
   if (!accessToken) return;
   
@@ -53,7 +53,7 @@ export async function createImageRepo(name: string, isPrivate?: boolean) {
 
 // 检查 Github 仓库
 export async function checkImageRepoState(name: string) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const githubUsername = await store.get('githubImageUsername')
   const accessToken = await store.get('githubImageAccessToken')
   if (!accessToken) return;
@@ -88,7 +88,7 @@ export async function checkImageRepoState(name: string) {
 }
 
 export async function uploadImageByGithub(file: File) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('githubImageAccessToken')
   const username = await store.get('githubImageUsername')
   const repoName = await getImageRepoName()
@@ -142,7 +142,7 @@ export async function uploadImageByGithub(file: File) {
       };
     });
 
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const jsdelivr = await store.get('jsdelivr')
     let imageUrl = data.content.download_url
     if (jsdelivr) {
@@ -161,7 +161,7 @@ export async function uploadImageByGithub(file: File) {
 }
 
 export async function getImageFiles({ path }: { path: string }) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('githubImageAccessToken')
   if (!accessToken) return;
   

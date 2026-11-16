@@ -4,7 +4,7 @@ import { fetchRemoteRead, recoverRemoteMutation } from './remote-mutation-recove
 import { gitBlobVersion } from './remote-content-cache'
 import { syncStaleError } from './sync-stale-error'
 import { toast } from '@/hooks/use-toast';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { v4 as uuid } from 'uuid';
 import { fetch, Proxy } from '@tauri-apps/plugin-http';
 import { fetch as encodeFetch } from './encode-fetch'
@@ -33,7 +33,7 @@ function resolveUploadPath(path: string | undefined, filename: string | undefine
 }
 
 export async function getGiteaApiBaseUrl(): Promise<string> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const instanceType = await store.get<GiteaInstanceType>('giteaInstanceType') || GiteaInstanceType.OFFICIAL;
 
   if (instanceType === GiteaInstanceType.SELF_HOSTED) {
@@ -60,7 +60,7 @@ export async function getGiteaApiBaseUrl(): Promise<string> {
 
 // 获取通用请求头
 async function getCommonHeaders(): Promise<any> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('giteaAccessToken');
 
   if (!accessToken) {
@@ -77,7 +77,7 @@ async function getCommonHeaders(): Promise<any> {
 
 // 获取代理配置
 async function getProxyConfig(): Promise<Proxy | undefined> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const proxyUrl = await store.get<string>('proxy');
   return proxyUrl ? { all: proxyUrl } : undefined;
 }
@@ -169,7 +169,7 @@ export async function uploadFile({
   beforeWrite?: () => Promise<void>;
 }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
 
     if (!giteaUsername) {
@@ -324,7 +324,7 @@ export async function updateFileContent({
  * @param params 查询参数
  */
 export async function getDirectoryFiles({ path, repo }: { path: string; repo: string }): Promise<RemoteDirectoryEntry[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const username = await store.get<string>('giteaUsername')
   if (!username) throw new Error('Gitea sync is not configured')
   const baseUrl = await getGiteaApiBaseUrl()
@@ -345,7 +345,7 @@ export async function getDirectoryFiles({ path, repo }: { path: string; repo: st
 
 export async function getFiles({ path, repo, sha }: { path: string; repo: string; sha?: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
 
     if (!giteaUsername) {
@@ -416,7 +416,7 @@ export async function getFiles({ path, repo, sha }: { path: string; repo: string
  */
 export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite }: { path: string; sha?: string; repo: string; guarded?: boolean; beforeWrite?: () => Promise<void> }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
@@ -478,7 +478,7 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
  */
 export async function getFileCommits({ path, repo }: { path: string; repo: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
@@ -525,7 +525,7 @@ export async function getFileCommits({ path, repo }: { path: string; repo: strin
  */
 export async function getFileContentFromCommit({ path, ref, repo }: { path: string; ref: string; repo: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
 
     if (!giteaUsername) {
@@ -605,7 +605,7 @@ export async function getFileContentFromCommit({ path, ref, repo }: { path: stri
 
 export async function getFileContent({ path, ref, repo }: { path: string; ref?: string; repo: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
@@ -656,7 +656,7 @@ export async function getFileContent({ path, ref, repo }: { path: string; ref?: 
  */
 export async function getUserInfo(token?: string): Promise<GiteaUserInfo> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const accessToken = token || await store.get<string>('giteaAccessToken');
     
     if (!accessToken) {
@@ -708,7 +708,7 @@ export async function getUserInfo(token?: string): Promise<GiteaUserInfo> {
  */
 export async function checkSyncRepoState(name: string): Promise<GiteaRepositoryInfo | null> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
@@ -749,7 +749,7 @@ export async function checkSyncRepoState(name: string): Promise<GiteaRepositoryI
 }
 
 export async function listUserRepositories(): Promise<string[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const username = await store.get<string>('giteaUsername')
   const baseUrl = await getGiteaApiBaseUrl()
   const headers = await getCommonHeaders()

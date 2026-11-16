@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { mergeSyncData, shouldExcludeFromSync } from '@/config/sync-exclusions'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { recordTagIds } from '@/lib/record-tags'
@@ -292,7 +292,7 @@ export async function deleteStructuredObject(workspaceId: string, objectId: stri
 
 async function applySettings(value: unknown) {
   if (!isRecord(value)) return
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const local = Object.fromEntries(await store.entries()) as Record<string, unknown>
   const excludeSensitiveConfig = await store.get<boolean>('excludeSensitiveConfig') !== false
   const merged = mergeSyncData(local, value, { excludeSensitiveConfig })

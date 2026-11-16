@@ -1,7 +1,6 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { exists, lstat, mkdir } from '@tauri-apps/plugin-fs'
-import type { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
+import type { StoreHandle } from '@/lib/platform'
 import type { PlatformSwitchRecovery } from '@/lib/sync/platform-switch-recovery'
 
 // iOS exposes the same app container through both /var/mobile and
@@ -21,7 +20,7 @@ const iosContainer = new RegExp(`^(?:(?:/private)?/var/mobile|/Users/[^/]+/Libra
 export async function managedWorkspaceLocation(path: string): Promise<string | null> {
   let root: string
   try {
-    root = normalizeManagedWorkspacePath(await appDataDir())
+    root = normalizeManagedWorkspacePath(await platform.path.appDataDir())
   } catch {
     // Web fork POC: appDataDir() rejects in a plain browser (no Tauri IPC).
     // Treat the path as unmanaged so callers keep it as-is instead of
@@ -48,28 +47,28 @@ export async function managedWorkspaceLocation(path: string): Promise<string | n
 
 export async function resolveManagedWorkspacePath(path: string): Promise<string> {
   const location = await managedWorkspaceLocation(path)
-  return location === null ? path : join(await appDataDir(), location)
+  return location === null ? path : platform.path.join(await platform.path.appDataDir(), location)
 }
 
 /** Only app-owned roots may be created automatically. External roots need re-selection. */
 export async function ensureWorkspaceDirectory(path: string): Promise<void> {
   const location = await managedWorkspaceLocation(path)
-  if (location !== null && normalizeManagedWorkspacePath(path) !== normalizeManagedWorkspacePath(await join(await appDataDir(), location))) {
+  if (location !== null && normalizeManagedWorkspacePath(path) !== normalizeManagedWorkspacePath(await platform.path.join(await platform.path.appDataDir(), location))) {
     throw new Error('Workspace directory is unavailable: the saved workspace location must be refreshed')
   }
-  if (!await exists(path)) {
+  if (!await platform.fs.exists(path)) {
     if (location === null) {
       throw new Error('Workspace directory is unavailable: please select the workspace folder again')
     }
-    await mkdir(path, { recursive: true })
+    await platform.fs.mkdir(path, { recursive: true })
   }
-  const metadata = await lstat(path)
+  const metadata = await platform.fs.lstat(path)
   if (metadata.isSymlink) throw new Error('Symbolic-link workspace roots are not synchronized')
   if (!metadata.isDirectory) throw new Error('Workspace root is not a directory')
 }
 
 /** Refresh device-local path caches before hydrating settings or starting sync. */
-export async function restoreManagedWorkspaceSettings(store: Store): Promise<void> {
+export async function restoreManagedWorkspaceSettings(store: StoreHandle): Promise<void> {
   let changed = false
   const migrate = async (path: string) => {
     const resolved = await resolveManagedWorkspacePath(path)

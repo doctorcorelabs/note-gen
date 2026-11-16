@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 import { getOptionalSyncRepoName } from '@/lib/sync/repo-utils'
 import type { DirTree } from '@/stores/article'
@@ -76,38 +76,38 @@ export async function getSyncConfiguration(): Promise<{
   platform: SyncPlatform
   reason?: SyncConfigurationReason
 }> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storedPlatform = await store.get<string>('primaryBackupMethod') ?? 'github'
-  const platform = SYNC_PLATFORMS.find(candidate => candidate === storedPlatform)
-  if (!platform) {
+  const resolvedPlatform = SYNC_PLATFORMS.find(candidate => candidate === storedPlatform)
+  if (!resolvedPlatform) {
     return { platform: 'github', configured: false, reason: 'unsupported-platform' }
   }
-  if (platform === 'local') {
-    return { platform, configured: false }
+  if (resolvedPlatform === 'local') {
+    return { platform: resolvedPlatform, configured: false }
   }
 
-  if (platform === 's3') {
+  if (resolvedPlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     return {
-      platform,
+      platform: resolvedPlatform,
       configured: Boolean(config?.accessKeyId && config.secretAccessKey && config.region && config.bucket),
     }
   }
 
-  if (platform === 'webdav') {
+  if (resolvedPlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     return {
-      platform,
+      platform: resolvedPlatform,
       configured: Boolean(config?.url && config.username && config.password),
     }
   }
 
-  if (platform === 'cloudFolder') {
+  if (resolvedPlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-    return { platform, configured: Boolean(config?.path) }
+    return { platform: resolvedPlatform, configured: Boolean(config?.path) }
   }
 
-  if (platform === 'selfHosted') {
+  if (resolvedPlatform === 'selfHosted') {
     const { getDb, initAllDatabases } = await import('@/db')
     await initAllDatabases()
     const database = await getDb()
@@ -120,12 +120,12 @@ export async function getSyncConfiguration(): Promise<{
     const profile = profiles[0]
     if (profile?.state === 'reauthentication-required') {
       console.info('[self-hosted-sync] availability.reauthentication-required', { profileId: profile.id })
-      return { platform, configured: false, reason: 'reauthentication-required' }
+      return { platform: resolvedPlatform, configured: false, reason: 'reauthentication-required' }
     }
     const profileId = profile?.state === 'connected' ? profile.id : undefined
     if (!profileId) {
       console.info('[self-hosted-sync] availability.no-connected-profile')
-      return { platform, configured: false, reason: 'missing-credentials' }
+      return { platform: resolvedPlatform, configured: false, reason: 'missing-credentials' }
     }
     try {
       console.info('[self-hosted-sync] availability.prepare-workspace', { profileId })
@@ -133,7 +133,7 @@ export async function getSyncConfiguration(): Promise<{
       await ensureDefaultLibraryForCurrentWorkspace(profileId, '我的工作区')
     } catch (error) {
       console.warn('[self-hosted-sync] availability.prepare-workspace-failed', { profileId, error })
-      return { platform, configured: false, reason: 'missing-credentials' }
+      return { platform: resolvedPlatform, configured: false, reason: 'missing-credentials' }
     }
     const { getCurrentWorkspaceRoot } = await import('@/lib/self-hosted-sync/workspaces')
     const localRoot = await getCurrentWorkspaceRoot()
@@ -144,7 +144,7 @@ export async function getSyncConfiguration(): Promise<{
     )
     const configured = (rows[0]?.total ?? 0) > 0
     console.info('[self-hosted-sync] availability.result', { profileId, configured })
-    return { platform, configured }
+    return { platform: resolvedPlatform, configured }
   }
 
   const credentials: Record<Exclude<SyncPlatform, 'local' | 's3' | 'webdav' | 'cloudFolder' | 'selfHosted'>, [string, string]> = {
@@ -153,18 +153,18 @@ export async function getSyncConfiguration(): Promise<{
     gitlab: ['gitlabAccessToken', 'gitlabUsername'],
     gitea: ['giteaAccessToken', 'giteaUsername'],
   }
-  const [tokenKey, usernameKey] = credentials[platform]
+  const [tokenKey, usernameKey] = credentials[resolvedPlatform]
   const [token, username] = await Promise.all([
     store.get<string>(tokenKey),
     store.get<string>(usernameKey),
   ])
 
   if (!token?.trim() || !username?.trim()) {
-    return { platform, configured: false, reason: 'missing-credentials' }
+    return { platform: resolvedPlatform, configured: false, reason: 'missing-credentials' }
   }
 
-  const repo = await getOptionalSyncRepoName(platform)
+  const repo = await getOptionalSyncRepoName(resolvedPlatform)
   return repo
-    ? { platform, configured: true }
-    : { platform, configured: false, reason: 'missing-repository' }
+    ? { platform: resolvedPlatform, configured: true }
+    : { platform: resolvedPlatform, configured: false, reason: 'missing-repository' }
 }

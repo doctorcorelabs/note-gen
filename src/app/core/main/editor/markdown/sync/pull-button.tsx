@@ -9,8 +9,7 @@ import { compareFileVersions, setLocalRecordedSha } from '@/lib/sync/auto-sync'
 import { updateFileSyncTime } from '@/lib/sync/conflict-resolution'
 import emitter from '@/lib/emitter'
 import { toast } from '@/hooks/use-toast'
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
 import { getCurrentEditorWorkspaceRoot, markEditorPathMutation, prepareActiveEditorDeactivationDurably, runEditorPathWriteTransaction } from '@/lib/editor-deactivation'
 import { captureWorkspaceRemoteWriteGuard } from '@/lib/sync/workspace-remote-write-guard'
@@ -127,31 +126,31 @@ export function usePullSync({ editor, markdown, getMarkdown, prepareExternalActi
     assertCurrent()
     await useArticleStore.getState().flushPendingArticleSave(activeFilePath)
     assertCurrent()
-    const platform = useSettingStore.getState().primaryBackupMethod
-    if (platform === 'local' || platform === 'selfHosted') return false
-    const localWriteGuard = await captureWorkspaceRemoteWriteGuard(activeFilePath, platform)
-    const metadataKey = await getSyncMetadataKey(activeFilePath, platform)
+    const primaryPlatform = useSettingStore.getState().primaryBackupMethod
+    if (primaryPlatform === 'local' || primaryPlatform === 'selfHosted') return false
+    const localWriteGuard = await captureWorkspaceRemoteWriteGuard(activeFilePath, primaryPlatform)
+    const metadataKey = await getSyncMetadataKey(activeFilePath, primaryPlatform)
     const pathOptions = await getFilePathOptions(activeFilePath)
     const absolutePath = pathOptions.baseDir === undefined
-      ? pathOptions.path : await join(await appDataDir(), pathOptions.path)
+      ? pathOptions.path : await platform.path.join(await platform.path.appDataDir(), pathOptions.path)
     const workspaceRoot = await getCurrentEditorWorkspaceRoot()
     assertCurrent()
-    const diskSnapshot = await readTextFile(absolutePath)
+    const diskSnapshot = await platform.fs.readTextFile(absolutePath)
     assertCurrent()
     if (diskSnapshot !== localSnapshot) {
       throw syncStaleError({ stage: 'apply', path: activeFilePath, source: 'local', check: 'content' })
     }
-    const restoreDiskSnapshot = () => writeTextFile(absolutePath, diskSnapshot)
+    const restoreDiskSnapshot = () => platform.fs.writeTextFile(absolutePath, diskSnapshot)
     markEditorPathMutation(activeFilePath)
     const didSave = await runEditorPathWriteTransaction(activeFilePath, async ({ hasQueuedSave }) => {
       assertCurrent()
       await localWriteGuard?.()
       assertCurrent()
-      const currentDisk = await readTextFile(absolutePath)
+      const currentDisk = await platform.fs.readTextFile(absolutePath)
       if (currentDisk !== diskSnapshot || hasQueuedSave()) return false
       assertCurrent()
       try {
-        await writeTextFile(absolutePath, remoteFile.content)
+        await platform.fs.writeTextFile(absolutePath, remoteFile.content)
       } catch (error) {
         await restoreDiskSnapshot()
         throw error

@@ -3,7 +3,7 @@
 import { Highlighter, MessageSquare, Palette, Plus, Square, SquarePen } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -140,7 +140,7 @@ export function AppFootbar() {
       chatState.setMobileActiveContexts({ canvasId: activeCanvasId })
     }
     router.push(item.url)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('currentPage', item.url)
   }, [activeCanvasId, activeFilePath, activeMarkId, isRecording, router])
 

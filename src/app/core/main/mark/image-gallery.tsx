@@ -8,7 +8,7 @@ import { LocalImage } from "@/components/local-image"
 import { useTranslations } from "next-intl"
 import useMarkStore from "@/stores/mark"
 import useTagStore from "@/stores/tag"
-import { appDataDir } from "@tauri-apps/api/path"
+import { platform } from "@/lib/platform"
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener"
 import { toast } from "@/hooks/use-toast"
 import { fetchAiDesc } from "@/lib/ai/description"
@@ -115,7 +115,7 @@ function ImageItem({ mark }: { mark: Mark }) {
 
   async function handelShowInFolder(e?: React.MouseEvent) {
     e?.stopPropagation()
-    const appDir = await appDataDir()
+    const appDir = await platform.path.appDataDir()
     const action = getMarkOpenAction(mark, appDir, 'folder')
     if (!action?.path) return
 
@@ -129,7 +129,7 @@ function ImageItem({ mark }: { mark: Mark }) {
 
   async function handelShowInFile(e?: React.MouseEvent) {
     e?.stopPropagation()
-    const appDir = await appDataDir()
+    const appDir = await platform.path.appDataDir()
     const action = getMarkOpenAction(mark, appDir, 'file')
     if (!action?.path) return
 

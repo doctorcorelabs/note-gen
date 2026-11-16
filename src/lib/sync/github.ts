@@ -4,7 +4,7 @@ import { fetchRemoteRead, recoverRemoteMutation } from './remote-mutation-recove
 import { gitBlobVersion } from './remote-content-cache'
 import { syncStaleError } from './sync-stale-error'
 import { toast } from '@/hooks/use-toast';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { v4 as uuid } from 'uuid';
 import { GithubError, GithubRepoInfo, OctokitResponse } from './github.types';
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
@@ -111,7 +111,7 @@ export async function uploadFile(
   { file, filename, sha, message, repo, path, guarded = false, beforeWrite }:
   { file: string | Uint8Array, filename?: string, sha?: string, message?: string, repo: string, path?: string, guarded?: boolean, beforeWrite?: () => Promise<void> })
 {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('accessToken')
   const githubUsername = await store.get('githubUsername')
   const id = uuid()
@@ -179,7 +179,7 @@ export async function uploadFile(
 }
 
 export async function getDirectoryFiles({ path, repo, cache }: { path: string; repo: string; cache?: Map<string, Promise<unknown>> }) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const token = await store.get<string>('accessToken')
   const username = await store.get<string>('githubUsername')
   if (!token || !username) throw new Error('GitHub sync is not configured')
@@ -198,7 +198,7 @@ export async function getDirectoryFiles({ path, repo, cache }: { path: string; r
 }
 
 export async function getFiles({ path, repo, ref }: { path: string, repo: string, ref?: string }) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('accessToken')
   if (!accessToken) throw new Error('GitHub sync is not configured')
 
@@ -273,7 +273,7 @@ export async function deleteFile(
   { path, sha, repo, token, username, guarded = false, beforeWrite }:
   { path: string, sha: string, repo: string, token?: string, username?: string, guarded?: boolean, beforeWrite?: () => Promise<void> }
 ) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = token || await store.get('accessToken')
   if (!accessToken) return;
   
@@ -322,7 +322,7 @@ export async function deleteFile(
 
 export async function getFileCommits({ path, repo }: { path: string, repo: string }) {
   if (!path) return;
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('accessToken')
   if (!accessToken) return;
 
@@ -372,7 +372,7 @@ export async function getFileCommits({ path, repo }: { path: string, repo: strin
 
 // 获取 Github 用户信息
 export async function getUserInfo(token?: string) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = token || await store.get('accessToken')
   if (!accessToken) return;
   
@@ -414,7 +414,7 @@ export async function getUserInfo(token?: string) {
 
 // 检查 Github 仓库
 export async function checkSyncRepoState(name: string) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const githubUsername = await store.get('githubUsername')
   const accessToken = await store.get('accessToken')
   if (!accessToken) return;
@@ -451,7 +451,7 @@ export async function checkSyncRepoState(name: string) {
 }
 
 export async function listUserRepositories(): Promise<string[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const accessToken = await store.get<string>('accessToken')
   if (!accessToken) throw new Error('GitHub Access Token 未配置')
 
@@ -476,7 +476,7 @@ export async function listUserRepositories(): Promise<string[]> {
 
 // 创建 Github 仓库
 export async function createSyncRepo(name: string, isPrivate?: boolean) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('accessToken')
   if (!accessToken) return;
   
@@ -520,7 +520,7 @@ export async function createSyncRepo(name: string, isPrivate?: boolean) {
 
 // 读取 release
 export async function getRelease(): Promise<GithubRelease | false | undefined> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('accessToken')
   
   // 获取代理设置
@@ -562,7 +562,7 @@ export async function getRelease(): Promise<GithubRelease | false | undefined> {
 
 // 读取 release 列表
 export async function getReleases(options: GetReleasesOptions = {}): Promise<GithubRelease[] | false | undefined> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('accessToken')
   const cachedReleases = await store.get<GithubReleasesCache>(GITHUB_RELEASES_CACHE_KEY)
 

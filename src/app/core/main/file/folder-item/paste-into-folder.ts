@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readDir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 import { toast } from '@/hooks/use-toast'
 import { generateCopyFilename, generateCopyFoldername } from '@/lib/default-filename'
@@ -41,26 +41,26 @@ async function copyWorkspaceFile(
   const targetOptions = await getFilePathOptions(targetPath)
 
   if (sourceOptions.baseDir || targetOptions.baseDir) {
-    await copyFile(sourceOptions.path, targetOptions.path, {
+    await platform.fs.copyFile(sourceOptions.path, targetOptions.path, {
       fromPathBaseDir: sourceOptions.baseDir,
       toPathBaseDir: targetOptions.baseDir,
     })
   } else {
-    await copyFile(sourceOptions.path, targetOptions.path)
+    await platform.fs.copyFile(sourceOptions.path, targetOptions.path)
   }
 
   if (!/\.(?:md|markdown)$/i.test(sourcePath)) return
 
   const content = sourceOptions.baseDir
-    ? await readTextFile(sourceOptions.path, { baseDir: sourceOptions.baseDir })
-    : await readTextFile(sourceOptions.path)
+    ? await platform.fs.readTextFile(sourceOptions.path, { baseDir: sourceOptions.baseDir })
+    : await platform.fs.readTextFile(sourceOptions.path)
   const rewrittenContent = rewriteMarkdownMediaPaths(content, sourcePath, targetPath, pathMoves)
   if (rewrittenContent === content) return
 
   if (targetOptions.baseDir) {
-    await writeTextFile(targetOptions.path, rewrittenContent, { baseDir: targetOptions.baseDir })
+    await platform.fs.writeTextFile(targetOptions.path, rewrittenContent, { baseDir: targetOptions.baseDir })
   } else {
-    await writeTextFile(targetOptions.path, rewrittenContent)
+    await platform.fs.writeTextFile(targetOptions.path, rewrittenContent)
   }
 }
 
@@ -73,8 +73,8 @@ async function copyWorkspaceDirectory(
 ): Promise<void> {
   const sourceOptions = await getFilePathOptions(sourcePath)
   const entries = sourceOptions.baseDir
-    ? await readDir(sourceOptions.path, { baseDir: sourceOptions.baseDir })
-    : await readDir(sourceOptions.path)
+    ? await platform.fs.readDir(sourceOptions.path, { baseDir: sourceOptions.baseDir })
+    : await platform.fs.readDir(sourceOptions.path)
 
   for (const entry of entries) {
     if (isPasteIntoSelf && sourcePath === pathMoves[0]?.sourcePath && entry.name === rootTargetName) {
@@ -86,9 +86,9 @@ async function copyWorkspaceDirectory(
     if (entry.isDirectory) {
       const targetOptions = await getFilePathOptions(targetEntryPath)
       if (targetOptions.baseDir) {
-        await mkdir(targetOptions.path, { baseDir: targetOptions.baseDir })
+        await platform.fs.mkdir(targetOptions.path, { baseDir: targetOptions.baseDir })
       } else {
-        await mkdir(targetOptions.path)
+        await platform.fs.mkdir(targetOptions.path)
       }
       await copyWorkspaceDirectory(
         sourceEntryPath,
@@ -171,9 +171,9 @@ export async function pasteIntoFolder({
       if (item.isDirectory) {
         const targetOptions = await getFilePathOptions(targetPath)
         if (targetOptions.baseDir) {
-          await mkdir(targetOptions.path, { baseDir: targetOptions.baseDir })
+          await platform.fs.mkdir(targetOptions.path, { baseDir: targetOptions.baseDir })
         } else {
-          await mkdir(targetOptions.path)
+          await platform.fs.mkdir(targetOptions.path)
         }
         await copyWorkspaceDirectory(
           item.path,

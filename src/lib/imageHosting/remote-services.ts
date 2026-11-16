@@ -1,5 +1,5 @@
 import { fetch, type Proxy } from '@tauri-apps/plugin-http'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { v4 as uuid } from 'uuid'
 
 import type {
@@ -11,7 +11,7 @@ import type {
 } from './types'
 
 async function getProxy(): Promise<Proxy | undefined> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const proxyUrl = await store.get<string>('proxy')
   return proxyUrl ? { all: proxyUrl } : undefined
 }
@@ -103,7 +103,7 @@ export async function testLskyConnection(config: LskyConfig) {
 }
 
 export async function uploadImageByLsky(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<LskyConfig>('lskyImageConfig')
   if (!config || !isLskyConfigComplete(config)) return undefined
 
@@ -155,7 +155,7 @@ export async function testWebDavImageConnection(config: WebDavImageConfig) {
 }
 
 export async function uploadImageByWebDav(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<WebDavImageConfig>('webdavImageConfig')
   if (!config || !isWebDavImageConfigComplete(config)) return undefined
 
@@ -213,7 +213,7 @@ export function isCustomHttpImageConfigComplete(config: CustomHttpImageConfig) {
 }
 
 export async function uploadImageByCustomHttp(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<CustomHttpImageConfig>('customHttpImageConfig')
   if (!config || !isCustomHttpImageConfigComplete(config)) return undefined
 
@@ -268,7 +268,7 @@ export function isCloudinaryConfigComplete(config: CloudinaryConfig) {
 }
 
 export async function uploadImageByCloudinary(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<CloudinaryConfig>('cloudinaryImageConfig')
   if (!config || !isCloudinaryConfigComplete(config)) return undefined
 
@@ -310,7 +310,7 @@ export async function testImageKitConnection(config: ImageKitConfig) {
 }
 
 export async function uploadImageByImageKit(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<ImageKitConfig>('imageKitImageConfig')
   if (!config || !isImageKitConfigComplete(config)) return undefined
 

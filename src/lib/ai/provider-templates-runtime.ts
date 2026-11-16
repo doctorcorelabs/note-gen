@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 import type { AiConfig } from '@/app/core/setting/config'
 import { fetchConfigCenterConfig } from '@/lib/config-center/client'
@@ -139,7 +139,7 @@ function enforceStorefrontPolicy(
 
 export async function getCachedProviderTemplates(): Promise<AiConfig[]> {
   const configKey = await getProviderTemplateConfigKey()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const cached = await store.get<ProviderTemplateCache>(PROVIDER_TEMPLATE_CACHE_KEY)
 
   if (!cached || cached.configKey !== configKey || !cached.content?.providers?.length) {
@@ -185,7 +185,7 @@ async function fetchProviderTemplatesFromConfigCenter(
 
 export async function loadProviderTemplates(builtinTemplates: AiConfig[]): Promise<AiConfig[]> {
   const configKey = await getProviderTemplateConfigKey()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const cached = await store.get<ProviderTemplateCache>(PROVIDER_TEMPLATE_CACHE_KEY)
   const matchingCache = cached?.configKey === configKey ? cached : undefined
 

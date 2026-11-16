@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import useSettingStore, { CUSTOM_CSS_CHANGED_EVENT } from '@/stores/setting'
 
 const STYLE_ID = 'notegen-custom-css'
@@ -17,7 +17,7 @@ export function CustomCssController() {
       if (state.customCss !== previous.customCss) changed = true
     })
 
-    void Store.load('store.json')
+    void platform.store.load('store.json')
       .then(store => store.get<unknown>('customCss'))
       .then(saved => {
         if (!disposed && !changed && typeof saved === 'string') {

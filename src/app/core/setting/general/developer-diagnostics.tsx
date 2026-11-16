@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
 import { save } from '@tauri-apps/plugin-dialog'
-import { writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { arch, locale, platform, version } from '@tauri-apps/plugin-os'
+import { arch, locale, platform as getRuntimePlatform, version } from '@tauri-apps/plugin-os'
 import { Check, ClipboardCopy, Download, Eye, ScrollText, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -112,7 +112,7 @@ export function DeveloperDiagnostics() {
         filters: [{ name: 'JSON', extensions: [android ? 'application/json' : 'json'] }],
       })
       if (!destination) return
-      await writeTextFile(destination, preview)
+      await platform.fs.writeTextFile(destination, preview)
       toast({ title: t('exported') })
     } catch (error) {
       toast({
@@ -182,7 +182,7 @@ export function DeveloperDiagnostics() {
 function readSystemInformation() {
   try {
     return {
-      platform: platform(),
+      platform: getRuntimePlatform(),
       osVersion: version(),
       arch: arch(),
     }

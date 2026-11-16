@@ -1,4 +1,4 @@
-import { exists, rename } from "@tauri-apps/plugin-fs"
+import { platform } from "@/lib/platform"
 
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
 import { moveSelfHostedWorkspacePath } from '@/lib/self-hosted-sync/files'
@@ -149,9 +149,9 @@ async function moveFileManagerPath(sourcePath: string, targetPath: string, journ
     if (await moveSelfHostedWorkspacePath(sourcePath, targetPath)) {
       // Rust journal already completed the atomic move.
     } else if (workspace.isCustom) {
-      await rename(oldPathOptions.path, newPathOptions.path)
+      await platform.fs.rename(oldPathOptions.path, newPathOptions.path)
     } else {
-      await rename(oldPathOptions.path, newPathOptions.path, {
+      await platform.fs.rename(oldPathOptions.path, newPathOptions.path, {
         newPathBaseDir: newPathOptions.baseDir,
         oldPathBaseDir: oldPathOptions.baseDir,
       })
@@ -184,7 +184,7 @@ export async function moveFileManagerPaths(plans: Array<{ sourcePath: string; ta
     }
     targets.add(plan.targetPath)
     const options = await getFilePathOptions(plan.targetPath)
-    if (await exists(options.path, { baseDir: options.baseDir })) throw new Error(`目标路径已存在：${plan.targetPath}`)
+    if (await platform.fs.exists(options.path, { baseDir: options.baseDir })) throw new Error(`目标路径已存在：${plan.targetPath}`)
   }
   await withWorkspacePathMoves(moves.map(plan => ({ source: plan.sourcePath, target: plan.targetPath })), async () => {
     const moved: typeof moves = []
@@ -197,8 +197,8 @@ export async function moveFileManagerPaths(plans: Array<{ sourcePath: string; ta
         } catch (error) {
           const source = await getFilePathOptions(plan.sourcePath)
           const target = await getFilePathOptions(plan.targetPath)
-          if (!await exists(source.path, { baseDir: source.baseDir })
-            && await exists(target.path, { baseDir: target.baseDir }) && !moved.includes(plan)) moved.push(plan)
+          if (!await platform.fs.exists(source.path, { baseDir: source.baseDir })
+            && await platform.fs.exists(target.path, { baseDir: target.baseDir }) && !moved.includes(plan)) moved.push(plan)
           throw error
         }
       }
@@ -235,8 +235,8 @@ export async function moveFileManagerEntries(
 
     const targetOptions = await getFilePathOptions(plan.targetPath)
     const targetExists = targetOptions.baseDir
-      ? await exists(targetOptions.path, { baseDir: targetOptions.baseDir })
-      : await exists(targetOptions.path)
+      ? await platform.fs.exists(targetOptions.path, { baseDir: targetOptions.baseDir })
+      : await platform.fs.exists(targetOptions.path)
     if (targetExists) {
       failed.push({ path: plan.sourcePath, reason: 'conflict' })
     }

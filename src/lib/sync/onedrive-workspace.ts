@@ -1,5 +1,4 @@
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { mkdir, readDir } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 import {
   androidCloudFolderWorkspaceList,
@@ -29,8 +28,8 @@ function stableWorkspaceKey(config: CloudFolderConfig): string {
 }
 
 export async function getOneDriveWorkspacePath(config: CloudFolderConfig): Promise<string> {
-  return await join(
-    await appDataDir(),
+  return await platform.path.join(
+    await platform.path.appDataDir(),
     'workspaces',
     'onedrive',
     stableWorkspaceKey(config),
@@ -43,10 +42,10 @@ export async function prepareOneDriveWorkspace(
   strategy: OneDriveWorkspaceStrategy = 'resume',
 ): Promise<OneDriveWorkspacePreparation> {
   const path = config.oneDriveWorkspacePath || await getOneDriveWorkspacePath(config)
-  await mkdir(path, { recursive: true })
+  await platform.fs.mkdir(path, { recursive: true })
 
   const [entries, remoteFiles] = await Promise.all([
-    readDir(path),
+    platform.fs.readDir(path),
     androidCloudFolderWorkspaceList(config),
   ])
   const hasLocalFiles = entries.some(entry => !entry.name.startsWith('.') && !entry.isSymlink)

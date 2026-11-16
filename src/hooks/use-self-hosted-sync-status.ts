@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import emitter from '@/lib/emitter'
 import { workspaceRootsReferToSameLocation } from '@/lib/editor-deactivation'
@@ -112,7 +112,7 @@ async function readSummary(workspacePath: string, completedAt?: number): Promise
         (select count(*) from self_hosted_inbox where state = 'pending' and error_code is null
           and workspace_id in (select value from json_each($1))) as incomingCount`,
       [ids, hasPersonal, enabledKinds, enabledDeleteKinds, library?.workspaceId ?? '', toggles.attachments === false ? 0 : 1])
-    const [store, settings] = await Promise.all([Store.load('self-hosted-sync-ui.json'), Store.load('store.json')])
+    const [store, settings] = await Promise.all([platform.store.load('self-hosted-sync-ui.json'), platform.store.load('store.json')])
     const successKey = JSON.stringify([profile?.profileId ?? '', root])
     let lastSuccessAt = await store.get<number>(successKey) ?? null
     const reviewProfileId = await settings.get<string>('selfHostedConnectionReviewProfileId')

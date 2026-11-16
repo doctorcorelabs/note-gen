@@ -2,8 +2,7 @@
 
 import { relaunch } from '@tauri-apps/plugin-process'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { BaseDirectory, copyFile, readTextFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
@@ -31,12 +30,12 @@ export function ConfigFileActions() {
       const file = await open({ title: t('importConfigTitle') })
       if (!file) return
 
-      const imported: unknown = JSON.parse(await readTextFile(file))
+      const imported: unknown = JSON.parse(await platform.fs.readTextFile(file))
       if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
         throw new Error(t('importConfigInvalid'))
       }
       await withPrimaryPlatformLock(async () => {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         if (usePlatformSwitchStore.getState().platform || await store.get('platformSwitchRecovery')) {
           throw new Error(switchT('interrupted'))
         }
@@ -77,7 +76,7 @@ export function ConfigFileActions() {
     })
     if (!file) return
 
-    await copyFile('store.json', file, { fromPathBaseDir: BaseDirectory.AppData })
+    await platform.fs.copyFile('store.json', file, { fromPathBaseDir: BaseDirectory.AppData })
     toast({ title: t('exportConfigSuccess') })
   }
 

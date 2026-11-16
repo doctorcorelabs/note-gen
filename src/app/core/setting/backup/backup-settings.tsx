@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { message, open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openPath } from '@tauri-apps/plugin-opener'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
   ArchiveRestore,
@@ -163,7 +163,7 @@ export function BackupSettings() {
     setRestoring(true)
     try {
       await createManagedBackup('pre-restore', settings)
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const currentWorkspacePath = (await store.get<string>('workspacePath')) ?? ''
       const { db } = await import('@/db')
       await db.close()

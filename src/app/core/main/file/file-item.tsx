@@ -5,19 +5,17 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import useArticleStore, { DirTree } from "@/stores/article";
-import { BaseDirectory, exists, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { moveSelfHostedWorkspacePath } from '@/lib/self-hosted-sync/files'
 import { withWorkspacePathMove } from '@/lib/sync/workspace-path-moves'
 import { Copy, Download, ExternalLink, File, FileCode, FileJson, FileLock, FileText, FileUp, FolderOpen, ImageIcon, LoaderCircle, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, useCallback } from "react";
-import { platform } from '@tauri-apps/plugin-os';
 import { cloneDeep } from "lodash-es";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";
 import { toast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
 import useClipboardStore from "@/stores/clipboard";
-import { appDataDir, join } from '@tauri-apps/api/path';
 import { generateUniqueFilename } from "@/lib/default-filename";
 import { MobileActionMenu, MobileMenuItem, MobileSeparator } from "./mobile-action-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -435,8 +433,8 @@ export function FileItem({
         const oldPathOptions = await getFilePathOptions(path)
         const newPathOptions = await getFilePathOptions(targetRelativePath)
         const targetExists = workspace.isCustom
-          ? await exists(newPathOptions.path)
-          : await exists(newPathOptions.path, { baseDir: newPathOptions.baseDir })
+          ? await platform.fs.exists(newPathOptions.path)
+          : await platform.fs.exists(newPathOptions.path, { baseDir: newPathOptions.baseDir })
         if (targetExists) {
           setRenameError(t('error.fileExists'))
           setTimeout(() => inputRef.current?.focus(), 0)
@@ -454,9 +452,9 @@ export function FileItem({
             if (await moveSelfHostedWorkspacePath(path, targetRelativePath)) {
               // Rust journal already completed the atomic move.
             } else if (workspace.isCustom) {
-              await rename(oldPathOptions.path, newPathOptions.path)
+              await platform.fs.rename(oldPathOptions.path, newPathOptions.path)
             } else {
-              await rename(oldPathOptions.path, newPathOptions.path, {
+              await platform.fs.rename(oldPathOptions.path, newPathOptions.path, {
                 newPathBaseDir: BaseDirectory.AppData,
                 oldPathBaseDir: BaseDirectory.AppData
               })
@@ -471,9 +469,9 @@ export function FileItem({
               if (await moveSelfHostedWorkspacePath(targetRelativePath, path)) {
                 // Rust journal already completed the rollback.
               } else if (workspace.isCustom) {
-                await rename(newPathOptions.path, oldPathOptions.path)
+                await platform.fs.rename(newPathOptions.path, oldPathOptions.path)
               } else {
-                await rename(newPathOptions.path, oldPathOptions.path, {
+                await platform.fs.rename(newPathOptions.path, oldPathOptions.path, {
                   newPathBaseDir: BaseDirectory.AppData,
                   oldPathBaseDir: BaseDirectory.AppData,
                 })
@@ -500,9 +498,9 @@ export function FileItem({
         // 检查文件是否已存在
         let isExists = false
         if (workspace.isCustom) {
-          isExists = await exists(pathOptions.path)
+          isExists = await platform.fs.exists(pathOptions.path)
         } else {
-          isExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          isExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
         }
         
         if (isExists) {
@@ -512,9 +510,9 @@ export function FileItem({
         } else {
           // 创建新文件
           if (workspace.isCustom) {
-            await writeTextFile(pathOptions.path, '')
+            await platform.fs.writeTextFile(pathOptions.path, '')
           } else {
-            await writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+            await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
           }
         }
       }
@@ -586,8 +584,8 @@ export function FileItem({
       const pathOptions = await getFilePathOptions(targetPath)
       await openInFileManager(pathOptions.path)
     } else {
-      const appDir = await appDataDir()
-      await openInFileManager(await join(appDir, 'article', targetPath))
+      const appDir = await platform.path.appDataDir()
+      await openInFileManager(await platform.path.join(appDir, 'article', targetPath))
     }
   }
 
@@ -783,7 +781,7 @@ export function FileItem({
 
   useEffect(() => {
     try {
-      const p = platform()
+      const p = platform.os.platform()
       if (p === 'macos') {
         setCurrentPlatform('macos')
       } else if (p === 'windows') {

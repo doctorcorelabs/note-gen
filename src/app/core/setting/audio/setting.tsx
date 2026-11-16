@@ -4,7 +4,7 @@ import { ModelSelect } from "../components/model-select";
 import { Gauge, Volume2, Mic } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { useState, useEffect } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import useSettingStore from "@/stores/setting";
 import { ResponsiveSelect } from "@/components/responsive-select";
 import type { SpeechMode } from '@/lib/speech/types';
@@ -29,7 +29,7 @@ export function Setting() {
   useEffect(() => {
     async function loadSpeed() {
       if (!audioModel) return;
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const models = await store.get<any[]>('aiModelList');
       if (!models) return;
       
@@ -67,7 +67,7 @@ export function Setting() {
     
     if (!audioModel) return;
     
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const models = await store.get<any[]>('aiModelList') || [];
     
     // 更新TTS模型的语速设置，适配新的多模型数据结构

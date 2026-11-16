@@ -1,4 +1,4 @@
-import { exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { platform } from "@/lib/platform";
 import { collectMarkdownFiles } from "@/lib/files";
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace";
 import { checkEmbeddingModelAvailable, processMarkdownFile } from "@/lib/rag";
@@ -101,8 +101,8 @@ export async function calculateFolderVectors({
       const pathOptions = await getFilePathOptions(file.path);
       await assertWorkspace();
       const fileExists = pathOptions.baseDir
-        ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-        : await exists(pathOptions.path);
+        ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        : await platform.fs.exists(pathOptions.path);
       await assertWorkspace();
 
       if (!fileExists) {
@@ -112,8 +112,8 @@ export async function calculateFolderVectors({
       }
 
       const content = pathOptions.baseDir
-        ? await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-        : await readTextFile(pathOptions.path);
+        ? await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        : await platform.fs.readTextFile(pathOptions.path);
       await assertWorkspace();
 
       const successResult = await processMarkdownFile(file.path, content);

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform as registry } from '@/lib/platform'
 import { openPath } from '@tauri-apps/plugin-opener'
 import {
   ArrowDown,
@@ -298,7 +298,7 @@ export function WorkspaceRepoMapping({
     let cancelled = false
 
     async function resolveDefaultWorkspacePath() {
-      const resolvedPath = await join(await appDataDir(), 'article')
+      const resolvedPath = await registry.path.join(await registry.path.appDataDir(), 'article')
       if (!cancelled) setDefaultWorkspacePath(resolvedPath)
     }
 
@@ -539,7 +539,7 @@ export function WorkspaceRepoMapping({
 
   async function handleOpenWorkspace(workspacePath: string) {
     try {
-      const resolvedPath = workspacePath || defaultWorkspacePath || await join(await appDataDir(), 'article')
+      const resolvedPath = workspacePath || defaultWorkspacePath || await registry.path.join(await registry.path.appDataDir(), 'article')
       await openPath(resolvedPath)
     } catch (error) {
       console.error('Failed to open workspace path:', error)

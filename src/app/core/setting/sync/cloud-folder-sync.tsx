@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { ArrowRightLeft, FolderInput, FolderOpen, Loader2, Trash2, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -45,7 +45,7 @@ export function CloudFolderSync() {
   useEffect(() => {
     let cancelled = false
     async function initialize() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const saved = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
       if (cancelled) return
       if (saved) setConfig(saved)
@@ -59,7 +59,7 @@ export function CloudFolderSync() {
 
   async function saveConfig(next: CloudFolderConfig) {
     setConfig(next)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('cloudFolderSyncConfig', next)
     await store.save()
   }

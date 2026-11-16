@@ -1,5 +1,4 @@
-import { BaseDirectory, mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { syncStaleError, withSyncStaleContext } from './sync-stale-error'
 
 const CACHE_ROOT = 'sync-remote-content-cache/v1'
@@ -59,7 +58,7 @@ export async function openRemoteContentCache(identity: string) {
   // Hash the target identity: credentials and server settings never enter the index.
   const namespace = await contentHash(new TextEncoder().encode(identity))
   let entries: Record<string, CachedFile> = {}
-  try { entries = readIndex(await (await Store.load('sync_remote_content_cache.json')).get('entries')) }
+  try { entries = readIndex(await (await platform.store.load('sync_remote_content_cache.json')).get('entries')) }
   catch (error) { console.warn('Remote content cache index unavailable', error) }
   const changed = new Map<string, CachedFile>()
   const invalid = new Set<string>()
@@ -91,7 +90,7 @@ export async function openRemoteContentCache(identity: string) {
       const cached = entries[key]
       if (expected && cached?.version === expected && (size === undefined || cached.size === size)) {
         try {
-          const bytes = await readFile(`${CACHE_ROOT}/${cached.hash}.bin`, { baseDir: BaseDirectory.AppData })
+          const bytes = await platform.fs.readFile(`${CACHE_ROOT}/${cached.hash}.bin`, { baseDir: BaseDirectory.AppData })
           if (bytes.length === cached.size && await contentHash(bytes) === cached.hash) {
             const updated = { ...cached, usedAt: Date.now() }
             changed.set(key, updated)
@@ -116,8 +115,8 @@ export async function openRemoteContentCache(identity: string) {
       const verifiedVersion = expected && actualVersion === expected ? expected : undefined
       if (verifiedVersion && result.content.length <= MAX_FILE_SIZE) {
         try {
-          await mkdir(CACHE_ROOT, { baseDir: BaseDirectory.AppData, recursive: true })
-          await writeFile(`${CACHE_ROOT}/${hash}.bin`, result.content, { baseDir: BaseDirectory.AppData })
+          await platform.fs.mkdir(CACHE_ROOT, { baseDir: BaseDirectory.AppData, recursive: true })
+          await platform.fs.writeFile(`${CACHE_ROOT}/${hash}.bin`, result.content, { baseDir: BaseDirectory.AppData })
           const entry = { version: verifiedVersion, hash, size: result.content.length, usedAt: Date.now() }
           entries[key] = entry
           changed.set(key, entry)
@@ -129,7 +128,7 @@ export async function openRemoteContentCache(identity: string) {
     async commit() {
       if (!changed.size && !invalid.size) return
       const save = commits.then(async () => {
-        const store = await Store.load('sync_remote_content_cache.json')
+        const store = await platform.store.load('sync_remote_content_cache.json')
         const current = readIndex(await store.get('entries'))
         const oldHashes = new Set(Object.values(current).map(entry => entry.hash))
         for (const key of invalid) delete current[key]
@@ -146,7 +145,7 @@ export async function openRemoteContentCache(identity: string) {
         const live = new Set(kept.map(([, entry]) => entry.hash))
         for (const hash of new Set([...oldHashes, ...writtenHashes])) {
           if (!live.has(hash)) {
-            try { await remove(`${CACHE_ROOT}/${hash}.bin`, { baseDir: BaseDirectory.AppData }) }
+            try { await platform.fs.remove(`${CACHE_ROOT}/${hash}.bin`, { baseDir: BaseDirectory.AppData }) }
             catch { /* Cache eviction does not affect sync or durable backups. */ }
           }
         }

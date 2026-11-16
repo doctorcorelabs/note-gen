@@ -13,7 +13,7 @@ import {
   normalizeOutlineWidth,
   OUTLINE_WIDTH_STORE_KEY,
 } from '@/lib/outline-preferences'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useShallow } from 'zustand/react/shallow'
 import useSettingStore, { useSettingsHydrationStore } from '@/stores/setting'
 import { useSidebarStore } from '@/stores/sidebar'
@@ -191,7 +191,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
   }, [filePath])
 
   const loadOutlineWidth = useCallback(async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     setOutlineWidth(normalizeOutlineWidth(await store.get(OUTLINE_WIDTH_STORE_KEY)))
   }, [])
 
@@ -208,7 +208,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
   useEffect(() => {
     let disposed = false
     const loadOutlineOpen = async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const storedValue = await store.get<boolean>(getFileOutlineOpenStoreKey(workspacePath, filePath))
       if (!disposed) setOutlineOpen(typeof storedValue === 'boolean' ? storedValue : enableOutline)
     }
@@ -228,7 +228,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
     }
     setOutlineOpen(current => {
       const next = !current
-      void Store.load('store.json').then(async store => {
+      void platform.store.load('store.json').then(async store => {
         await store.set(getFileOutlineOpenStoreKey(workspacePath, filePath), next)
         await store.save()
       })
@@ -243,7 +243,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
   const handleOutlineWidthCommit = useCallback(async (width: number) => {
     const normalizedWidth = normalizeOutlineWidth(width)
     setOutlineWidth(normalizedWidth)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set(OUTLINE_WIDTH_STORE_KEY, normalizedWidth)
   }, [])
 
@@ -277,12 +277,11 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
 
     void (async () => {
       try {
-        const [{ readTextFile }, { getFilePathOptions }] = await Promise.all([
-          import('@tauri-apps/plugin-fs'),
+        const [{ getFilePathOptions }] = await Promise.all([
           import('@/lib/workspace'),
         ])
         const pathOptions = await getFilePathOptions(filePath)
-        const content = await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        const content = await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
         if (disposed || loadedPathsRef.current.has(filePath)) return
         if (tabContentsRef.current) tabContentsRef.current[filePath] = content
         loadedPathsRef.current.add(filePath)
@@ -393,8 +392,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       if (!await prepareActiveEditorDeactivationDurably(articleState.activeFilePath)) {
         return
       }
-      const { exists, writeTextFile } = await import('@tauri-apps/plugin-fs')
-      const workspace = await import('@/lib/workspace').then(m => m.getWorkspacePath())
+            const workspace = await import('@/lib/workspace').then(m => m.getWorkspacePath())
       const { getFilePathOptions } = await import('@/lib/workspace')
 
       let fileName = 'untitled.md'
@@ -405,9 +403,9 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
         const pathOptions = await getFilePathOptions(fileName)
         let fileExists = false
         if (workspace.isCustom) {
-          fileExists = await exists(pathOptions.path)
+          fileExists = await platform.fs.exists(pathOptions.path)
         } else {
-          fileExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          fileExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
         }
         if (!fileExists) break
         fileName = `untitled-${counter}.md`
@@ -419,9 +417,9 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       if (await writeSelfHostedWorkspaceText(path, content)) {
         // Rust journal already persisted the file.
       } else if (workspace.isCustom) {
-        await writeTextFile(pathOptions.path, content)
+        await platform.fs.writeTextFile(pathOptions.path, content)
       } else {
-        await writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+        await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
       }
 
       await articleState.setActiveFilePath(

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from 'next-intl';
 import { useLocalStorage } from 'react-use';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { v4 } from 'uuid';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import { Input } from "@/components/ui/input";
@@ -281,7 +281,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
         modelType: 'chat',
       }
       const updatedList = [newProvider, ...aiModelListRef.current]
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
 
       await store.set('aiModelList', updatedList)
       await store.save()
@@ -310,7 +310,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       })) || []
     }
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const aiModelList = await store.get<AiConfig[]>('aiModelList') || []
     const updatedList = [...aiModelList, newConfig]
     
@@ -331,7 +331,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
     const confirmed = await confirm(t('deleteCustomModelConfirm'))
     if (!confirmed) return
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const aiModelList = await store.get<AiConfig[]>('aiModelList') || []
     const updatedList = aiModelList.filter(item => item.key !== currentConfig.key)
     
@@ -394,7 +394,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
 
   useEffect(() => {
     async function init() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const shouldHideBuiltInOpenAI = await isMainlandChinaAppStore()
       setHideBuiltInOpenAI(shouldHideBuiltInOpenAI)
       let templates: AiConfig[] = []

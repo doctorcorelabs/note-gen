@@ -1,7 +1,6 @@
 import { Tool, ToolResult } from '../types'
-import { mkdir, remove, exists, readDir } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { ensureSafeWorkspaceRelativePath, getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
-import { join } from '@tauri-apps/api/path'
 import useArticleStore from '@/stores/article'
 import { getVectorDocumentKey } from '@/lib/vector-document-key'
 import { prepareActiveEditorPathMutationDurably } from '@/lib/editor-deactivation'
@@ -66,12 +65,12 @@ export const checkFolderExistsTool: Tool = {
       let folderExists = false
 
       if (workspace.isCustom) {
-        fullPath = await join(workspace.path, normalizedFolderPath)
-        folderExists = await exists(fullPath)
+        fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
+        folderExists = await platform.fs.exists(fullPath)
       } else {
         const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
         fullPath = path
-        folderExists = await exists(fullPath, { baseDir })
+        folderExists = await platform.fs.exists(fullPath, { baseDir })
       }
 
       return {
@@ -128,10 +127,10 @@ export const createFolderTool: Tool = {
 
       if (workspace.isCustom) {
         // 自定义工作区：使用绝对路径
-        const fullPath = await join(workspace.path, normalizedFolderPath)
+        const fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
         
         // 检查文件夹是否已存在
-        const folderExists = await exists(fullPath)
+        const folderExists = await platform.fs.exists(fullPath)
         if (folderExists) {
           // 文件夹已存在，视为成功
           return {
@@ -142,13 +141,13 @@ export const createFolderTool: Tool = {
         }
 
         // 创建文件夹
-        await mkdir(fullPath, { recursive: true })
+        await platform.fs.mkdir(fullPath, { recursive: true })
       } else {
         // 默认工作区：使用 baseDir
         const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
         
         // 检查文件夹是否已存在
-        const folderExists = await exists(path, { baseDir })
+        const folderExists = await platform.fs.exists(path, { baseDir })
         if (folderExists) {
           // 文件夹已存在，视为成功
           return {
@@ -159,7 +158,7 @@ export const createFolderTool: Tool = {
         }
 
         // 创建文件夹
-        await mkdir(path, { baseDir, recursive: true })
+        await platform.fs.mkdir(path, { baseDir, recursive: true })
       }
 
       const articleStore = useArticleStore.getState()
@@ -221,25 +220,25 @@ export const deleteFolderTool: Tool = {
 
       if (workspace.isCustom) {
         // 自定义工作区：使用绝对路径
-        const fullPath = await join(workspace.path, normalizedFolderPath)
+        const fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
         
         // 检查文件夹是否存在
-        folderExists = await exists(fullPath)
+        folderExists = await platform.fs.exists(fullPath)
 
         if (folderExists) {
           filePathsInFolder = await getMarkdownFilesForFolder(normalizedFolderPath)
-          await remove(fullPath, { recursive: true })
+          await platform.fs.remove(fullPath, { recursive: true })
         }
       } else {
         // 默认工作区：使用 baseDir
         const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
         
         // 检查文件夹是否存在
-        folderExists = await exists(path, { baseDir })
+        folderExists = await platform.fs.exists(path, { baseDir })
 
         if (folderExists) {
           filePathsInFolder = await getMarkdownFilesForFolder(normalizedFolderPath)
-          await remove(path, { baseDir, recursive: true })
+          await platform.fs.remove(path, { baseDir, recursive: true })
         }
       }
 
@@ -292,11 +291,11 @@ export const listFoldersTool: Tool = {
       if (workspace.isCustom) {
         // 自定义工作区：使用绝对路径
         const fullPath = normalizedFolderPath
-          ? await join(workspace.path, normalizedFolderPath)
+          ? await platform.path.join(workspace.path, normalizedFolderPath)
           : workspace.path
 
         // 检查路径是否存在
-        const pathExists = await exists(fullPath)
+        const pathExists = await platform.fs.exists(fullPath)
 
         if (!pathExists) {
           return {
@@ -306,7 +305,7 @@ export const listFoldersTool: Tool = {
         }
 
         // 读取目录内容
-        const entries = await readDir(fullPath)
+        const entries = await platform.fs.readDir(fullPath)
 
         // 过滤出文件夹
         const folders = entries
@@ -326,7 +325,7 @@ export const listFoldersTool: Tool = {
         const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
 
         // 检查路径是否存在
-        const pathExists = await exists(path, { baseDir })
+        const pathExists = await platform.fs.exists(path, { baseDir })
 
         if (!pathExists) {
           return {
@@ -336,7 +335,7 @@ export const listFoldersTool: Tool = {
         }
 
         // 读取目录内容
-        const entries = await readDir(path, { baseDir })
+        const entries = await platform.fs.readDir(path, { baseDir })
 
         // 过滤出文件夹
         const folders = entries
@@ -397,21 +396,21 @@ export const createFoldersBatchTool: Tool = {
           const normalizedFolderPath = await ensureSafeWorkspaceRelativePath(folderPath)
 
           if (workspace.isCustom) {
-            const fullPath = await join(workspace.path, normalizedFolderPath)
-            const folderExists = await exists(fullPath)
+            const fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
+            const folderExists = await platform.fs.exists(fullPath)
             if (folderExists) {
               skipped.push({ path: normalizedFolderPath, reason: '文件夹已存在' })
               continue
             }
-            await mkdir(fullPath, { recursive: true })
+            await platform.fs.mkdir(fullPath, { recursive: true })
           } else {
             const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
-            const folderExists = await exists(path, { baseDir })
+            const folderExists = await platform.fs.exists(path, { baseDir })
             if (folderExists) {
               skipped.push({ path: normalizedFolderPath, reason: '文件夹已存在' })
               continue
             }
-            await mkdir(path, { baseDir, recursive: true })
+            await platform.fs.mkdir(path, { baseDir, recursive: true })
           }
           created.push(normalizedFolderPath)
         } catch (error) {
@@ -488,21 +487,21 @@ export const deleteFoldersBatchTool: Tool = {
           filePathsByFolder.set(normalizedFolderPath, await getMarkdownFilesForFolder(normalizedFolderPath))
 
           if (workspace.isCustom) {
-            const fullPath = await join(workspace.path, normalizedFolderPath)
-            const folderExists = await exists(fullPath)
+            const fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
+            const folderExists = await platform.fs.exists(fullPath)
             if (!folderExists) {
               errors.push({ path: normalizedFolderPath, error: '文件夹不存在' })
               continue
             }
-            await remove(fullPath, { recursive: true })
+            await platform.fs.remove(fullPath, { recursive: true })
           } else {
             const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
-            const folderExists = await exists(path, { baseDir })
+            const folderExists = await platform.fs.exists(path, { baseDir })
             if (!folderExists) {
               errors.push({ path: normalizedFolderPath, error: '文件夹不存在' })
               continue
             }
-            await remove(path, { baseDir, recursive: true })
+            await platform.fs.remove(path, { baseDir, recursive: true })
           }
           await articleStore.cleanTabsByDeletedFolder(normalizedFolderPath)
           results.push(normalizedFolderPath)

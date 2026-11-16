@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { message } from '@tauri-apps/plugin-dialog'
-import { BaseDirectory, exists, remove } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
   AlertDialog,
@@ -69,10 +68,10 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
   async function handleClearData() {
     setPendingAction('data')
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.clear()
-      await remove('store.json', { baseDir: BaseDirectory.AppData })
-      await remove('note.db', { baseDir: BaseDirectory.AppData })
+      await platform.fs.remove('store.json', { baseDir: BaseDirectory.AppData })
+      await platform.fs.remove('note.db', { baseDir: BaseDirectory.AppData })
       await message(t('dataClearedRestartDesc'), {
         title: t('dataClearedRestartTitle'),
         kind: 'info',
@@ -88,8 +87,8 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
     try {
       const folders = ['screenshot', 'article', 'clipboard', 'image']
       for (const folder of folders) {
-        if (await exists(folder, { baseDir: BaseDirectory.AppData })) {
-          await remove(folder, { baseDir: BaseDirectory.AppData, recursive: true })
+        if (await platform.fs.exists(folder, { baseDir: BaseDirectory.AppData })) {
+          await platform.fs.remove(folder, { baseDir: BaseDirectory.AppData, recursive: true })
         }
       }
       toast({ title: t('filesCleared') })
@@ -102,7 +101,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
     // Serialize blur and switch events so an older save cannot restore a manual
     // address after system proxy has been enabled.
     proxySaveQueue.current = proxySaveQueue.current.then(async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('proxyCustomURL', address.trim())
       // Existing sync/image/skill clients use an empty proxy to let reqwest
       // discover the system configuration when creating their next client.
@@ -116,7 +115,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
 
   useEffect(() => {
     async function loadProxy() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const storedProxy = await store.get<string>('proxy')
       const useSystem = (await store.get<boolean>('systemProxy')) === true
       const customProxy = useSystem ? await store.get<string>('proxyCustomURL') : storedProxy

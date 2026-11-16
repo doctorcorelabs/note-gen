@@ -9,10 +9,9 @@ import useArticleStore from '@/stores/article'
 import useSyncStore from '@/stores/sync'
 import useSettingStore from '@/stores/setting'
 import { useShallow } from 'zustand/react/shallow'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getOptionalSyncRepoName } from '@/lib/sync/repo-utils'
 import { getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
-import { readTextFile } from '@tauri-apps/plugin-fs'
 import { isSyncConfigured } from '@/lib/sync/sync-manager'
 import emitter from '@/lib/emitter'
 import { setLocalRecordedSha } from '@/lib/sync/auto-sync'
@@ -270,7 +269,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
       logPerf('start')
       await useArticleStore.getState().flushPendingArticleSave(activeFilePath)
       assertCurrent()
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const provider = (await store.get<string>('primaryBackupMethod') || 'github') as SyncProvider
       const { prepareWorkspacePathUpload } = await import('@/lib/sync/workspace-path-moves')
       await prepareWorkspacePathUpload(activeFilePath)
@@ -304,8 +303,8 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
       const workspace = await getWorkspacePath()
       const pathOptions = await getFilePathOptions(activeFilePath)
       const content = editorMarkdown ?? (workspace.isCustom
-        ? await readTextFile(pathOptions.path)
-        : await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir }))
+        ? await platform.fs.readTextFile(pathOptions.path)
+        : await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir }))
       const localWriteGuard = await captureWorkspaceRemoteWriteGuard(activeFilePath, provider)
       const metadataKey = await getSyncMetadataKey(activeFilePath, provider)
       const beforeWrite = async () => {

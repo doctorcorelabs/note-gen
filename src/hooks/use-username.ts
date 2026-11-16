@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import useSyncStore from "@/stores/sync"
 import useSettingStore from "@/stores/setting"
-import { Store } from "@tauri-apps/plugin-store"
+import { platform } from "@/lib/platform"
 
 // 获取当前主要备份方式的用户名，以确保配置正确
 function useUsername() {
@@ -28,7 +28,7 @@ function useUsername() {
 
 // 单独导出一个异步函数用于 S3
 export async function getS3BucketName(): Promise<string | null> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const s3Config = await store.get<{ bucket: string }>('s3SyncConfig')
   return s3Config?.bucket || null
 }

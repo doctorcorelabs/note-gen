@@ -15,12 +15,10 @@ import {
   RotateCcwIcon,
   Trash2Icon,
 } from 'lucide-react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
-import { appConfigDir, appDataDir, join } from '@tauri-apps/api/path'
-import { exists, remove } from '@tauri-apps/plugin-fs'
-import { platform, version as osVersion } from '@tauri-apps/plugin-os'
+import { platform as getRuntimePlatform, version as osVersion } from '@tauri-apps/plugin-os'
 import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { save } from '@tauri-apps/plugin-dialog'
@@ -114,7 +112,7 @@ function getSafeRoute() {
 }
 
 async function clearStartupState() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set('openTabs', [])
   await store.set('activeTabId', '')
   await store.set('activeFilePath', '')
@@ -157,7 +155,7 @@ export function ErrorRecovery({
       }
       try {
         nextDiagnosticContext.appVersion = await getVersion()
-        nextDiagnosticContext.platform = platform()
+        nextDiagnosticContext.platform = getRuntimePlatform()
         nextDiagnosticContext.osVersion = osVersion()
       } catch (diagnosticError) {
         console.error('读取诊断环境失败:', diagnosticError)
@@ -168,7 +166,7 @@ export function ErrorRecovery({
         const routeCanvasId = window.location.pathname.includes('/canvas/editor')
           ? new URLSearchParams(window.location.search).get('id')
           : null
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const tabs = await store.get<StoredTab[]>('openTabs') || []
         const activeTabId = await store.get<string>('activeTabId')
         const activeTab = tabs.find(tab => tab.id === activeTabId)
@@ -216,11 +214,11 @@ export function ErrorRecovery({
 
   function clearTemporaryData() {
     void runRecovery('clear-cache', async () => {
-      const dataDirectory = await appDataDir()
+      const dataDirectory = await platform.path.appDataDir()
       for (const directory of TEMPORARY_DIRECTORIES) {
-        const path = await join(dataDirectory, directory)
-        if (await exists(path)) {
-          await remove(path, { recursive: true })
+        const path = await platform.path.join(dataDirectory, directory)
+        if (await platform.fs.exists(path)) {
+          await platform.fs.remove(path, { recursive: true })
         }
       }
       for (const key of LAYOUT_STORAGE_KEYS) {
@@ -239,9 +237,9 @@ export function ErrorRecovery({
 
   function openDataDirectory() {
     void runRecovery('open-data', async () => {
-      const configDirectory = await appConfigDir()
-      const databasePath = await join(configDirectory, 'note.db')
-      if (await exists(databasePath)) {
+      const configDirectory = await platform.path.appConfigDir()
+      const databasePath = await platform.path.join(configDirectory, 'note.db')
+      if (await platform.fs.exists(databasePath)) {
         await revealItemInDir(databasePath)
       } else {
         await openPath(configDirectory)
@@ -270,9 +268,9 @@ export function ErrorRecovery({
     void runRecovery('clear-canvases', async () => {
       const { clearCanvasProjects } = await import('@/db/canvases')
       await clearCanvasProjects()
-      const thumbnailDirectory = await join(await appDataDir(), 'canvas-thumbnails')
-      if (await exists(thumbnailDirectory)) {
-        await remove(thumbnailDirectory, { recursive: true })
+      const thumbnailDirectory = await platform.path.join(await platform.path.appDataDir(), 'canvas-thumbnails')
+      if (await platform.fs.exists(thumbnailDirectory)) {
+        await platform.fs.remove(thumbnailDirectory, { recursive: true })
       }
       await clearStartupState()
       openSafeRoute()
@@ -281,7 +279,7 @@ export function ErrorRecovery({
 
   function resetSettings() {
     void runRecovery('reset-settings', async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.clear()
       await store.set('currentPage', getSafeRoute())
       await store.save()

@@ -7,7 +7,7 @@ import { File, FolderOpen, ExternalLink } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener'
-import { appDataDir } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 
 interface FileMetadata {
@@ -36,7 +36,7 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
         if (workspace.isCustom) {
           setFullPath(workspace.path + '/' + filePath)
         } else {
-          const appDir = await appDataDir()
+          const appDir = await platform.path.appDataDir()
           setFullPath(appDir + '/article/' + filePath)
         }
       } catch (error) {
@@ -55,11 +55,10 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
       setMetadata(null)
 
       try {
-        const { exists, stat } = await import('@tauri-apps/plugin-fs')
-        const pathOptions = await getFilePathOptions(filePath)
+                const pathOptions = await getFilePathOptions(filePath)
         const fileExists = pathOptions.baseDir
-          ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-          : await exists(pathOptions.path)
+          ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          : await platform.fs.exists(pathOptions.path)
 
         // 同步列表中可能暂时存在尚未下载的远程路径。它不是本地文件，
         // 因此没有可读取的元数据，也不应作为错误上报。
@@ -68,8 +67,8 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
         }
 
         const fileStat = pathOptions.baseDir
-          ? await stat(pathOptions.path, { baseDir: pathOptions.baseDir })
-          : await stat(pathOptions.path)
+          ? await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+          : await platform.fs.stat(pathOptions.path)
 
         if (cancelled) return
 
@@ -126,9 +125,8 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
         await openPath(pathOptions.path)
       } else {
         // 默认工作区：使用 AppData 目录
-        const appDir = await appDataDir()
-        const { join } = await import('@tauri-apps/api/path')
-        await openPath(await join(appDir, 'article', filePath))
+        const appDir = await platform.path.appDataDir()
+                await openPath(await platform.path.join(appDir, 'article', filePath))
       }
     } catch (error) {
       console.error('Failed to open file:', error)
@@ -147,9 +145,8 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
         const pathOptions = await getFilePathOptions(targetPath)
         await openInFileManager(pathOptions.path)
       } else {
-        const appDir = await appDataDir()
-        const { join } = await import('@tauri-apps/api/path')
-        await openInFileManager(await join(appDir, 'article', targetPath))
+        const appDir = await platform.path.appDataDir()
+                await openInFileManager(await platform.path.join(appDir, 'article', targetPath))
       }
     } catch (error) {
       console.error('Failed to open directory:', error)

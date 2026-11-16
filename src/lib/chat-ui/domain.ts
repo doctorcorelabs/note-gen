@@ -1,5 +1,5 @@
 import type { Spec } from '@json-render/core'
-import { readDir } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
 import { getTags } from '@/db/tags'
 import { getChatUiFields } from './catalog'
@@ -17,7 +17,7 @@ export async function loadChatUiDomainOptions(types?: ChatUiField['type'][]): Pr
     const walk = async (relativePath: string, depth: number): Promise<void> => {
       if (depth > 32) throw new Error('Workspace directory depth exceeds the picker limit.')
       const options = await getFilePathOptions(relativePath)
-      const entries = await readDir(options.path, options.baseDir ? { baseDir: options.baseDir } : undefined)
+      const entries = await platform.fs.readDir(options.path, options.baseDir ? { baseDir: options.baseDir } : undefined)
       for (const entry of entries) {
         if (entry.name.startsWith('.') || entry.isSymlink) continue
         if (++entryCount > 25_000) throw new Error('Workspace is too large for this picker.')

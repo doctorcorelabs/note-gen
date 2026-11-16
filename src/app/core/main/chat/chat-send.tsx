@@ -7,7 +7,7 @@ import { TooltipButton } from "@/components/tooltip-button"
 import { useEffect, useImperativeHandle, forwardRef, useRef } from "react"
 import { useTranslations } from "next-intl"
 import { LinkedResource, isLinkedFolder, type MarkdownFile } from "@/lib/files"
-import { readTextFile } from "@tauri-apps/plugin-fs"
+import { platform } from "@/lib/platform"
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
 import { AgentHandler } from "@/lib/agent/agent-handler"
 import { requestChatUiInteraction } from '@/lib/chat-ui/interaction'
@@ -878,10 +878,10 @@ export const ChatSend = forwardRef<ChatSendHandle, ChatSendProps>(({
           const workspace = await getWorkspacePath()
           let linkedFileContent = ''
           if (workspace.isCustom) {
-            linkedFileContent = await readTextFile(request.linkedResource.path)
+            linkedFileContent = await platform.fs.readTextFile(request.linkedResource.path)
           } else {
             const { path, baseDir } = await getFilePathOptions(request.linkedResource.path)
-            linkedFileContent = await readTextFile(path, { baseDir })
+            linkedFileContent = await platform.fs.readTextFile(path, { baseDir })
           }
 
           if (request.linkedResourcePreview) {

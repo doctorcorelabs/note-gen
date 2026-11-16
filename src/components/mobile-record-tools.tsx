@@ -2,7 +2,7 @@
 
 import { SimpleMobileTool } from '@/components/simple-mobile-tool'
 import emitter from '@/lib/emitter'
-import { exists, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
 import useArticleStore from '@/stores/article'
 import { useRouter } from 'next/navigation'
@@ -39,8 +39,8 @@ export function MobileRecordTools({ onClose, onOrganize }: MobileRecordToolsProp
     while (true) {
       const pathOptions = await getFilePathOptions(fileName)
       const fileExists = pathOptions.baseDir
-        ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-        : await exists(pathOptions.path)
+        ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        : await platform.fs.exists(pathOptions.path)
       if (!fileExists) break
 
       index += 1
@@ -49,9 +49,9 @@ export function MobileRecordTools({ onClose, onOrganize }: MobileRecordToolsProp
 
     const pathOptions = await getFilePathOptions(fileName)
     if (pathOptions.baseDir) {
-      await writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+      await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
     } else {
-      await writeTextFile(pathOptions.path, '')
+      await platform.fs.writeTextFile(pathOptions.path, '')
     }
 
     return fileName

@@ -1,5 +1,5 @@
 import { fetch, type Proxy } from '@tauri-apps/plugin-http'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { remoteRecord } from './directory-listing'
 import { readSyncResponseJson } from './remote-file'
 import { getSyncRepoName } from './repo-utils'
@@ -77,7 +77,7 @@ export async function moveGithubPath({
   let captured = expected === undefined ? undefined : pathEntry(expected)
   const matches = (entry: GitTreeEntry, identity: GitPathEntry): boolean => entry.sha === identity.sha
     && entry.type === identity.type && entry.mode === identity.mode
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   // All requests in this operation use the same credentials and destination.
   const [token, owner, repo, proxyUrl] = await Promise.all([
     store.get<string>('accessToken'),

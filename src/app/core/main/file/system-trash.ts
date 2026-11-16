@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { join } from '@tauri-apps/api/path'
-import { exists, remove } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 import { getDefaultArticleAbsolutePath, getFilePathOptions } from '@/lib/workspace'
 import { deleteSelfHostedWorkspacePath } from '@/lib/self-hosted-sync/files'
@@ -8,13 +7,13 @@ import { isMobileDevice } from '@/lib/check'
 
 async function resolveExistingAbsolutePath(relativePath: string, workspaceRoot?: string) {
   if (workspaceRoot) {
-    const absolutePath = await join(workspaceRoot, relativePath)
-    return await exists(absolutePath) ? absolutePath : null
+    const absolutePath = await platform.path.join(workspaceRoot, relativePath)
+    return await platform.fs.exists(absolutePath) ? absolutePath : null
   }
   const options = await getFilePathOptions(relativePath)
   const pathExists = options.baseDir
-    ? await exists(options.path, { baseDir: options.baseDir })
-    : await exists(options.path)
+    ? await platform.fs.exists(options.path, { baseDir: options.baseDir })
+    : await platform.fs.exists(options.path)
 
   if (!pathExists) return null
   return options.baseDir
@@ -34,7 +33,7 @@ export async function moveEntriesToSystemTrash(relativePaths: string[], workspac
 
   if (paths.length > 0) {
     if (isMobileDevice()) {
-      for (const path of paths) await remove(path, { recursive: true })
+      for (const path of paths) await platform.fs.remove(path, { recursive: true })
     } else {
       await invoke('move_paths_to_trash', { paths })
     }

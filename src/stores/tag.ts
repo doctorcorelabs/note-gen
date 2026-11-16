@@ -12,7 +12,7 @@ import { cloudFolderDownload, cloudFolderUpload } from '@/lib/sync/cloud-folder'
 import { getDataSyncRepoName } from '@/lib/sync/repo-utils'
 import { getRemoteFileContent, isMissingRemoteFileError, parseSyncJson, syncDataError } from '@/lib/sync/remote-file'
 import { normalizeTagSnapshot } from '@/lib/tag-sync'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { create } from 'zustand'
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
 import { setAutoDataSyncApplyingRemote } from '@/lib/sync/auto-data-sync-queue'
@@ -51,11 +51,11 @@ const useTagStore = create<TagState>((set, get) => ({
   currentTagId: 1,
   setCurrentTagId: async(currentTagId: number) => {
     set({ currentTagId })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('currentTagId', currentTagId)
   },
   initTags: async () => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const currentTagId = await store.get<number>('currentTagId')
     if (currentTagId) set({ currentTagId })
     get().getCurrentTag()
@@ -106,7 +106,7 @@ const useTagStore = create<TagState>((set, get) => ({
     const path = '.data'
     const filename = 'tags.json'
     const tags = tagsOverride ?? await getTags()
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github';
     let result = false
     let res;
@@ -219,7 +219,7 @@ const useTagStore = create<TagState>((set, get) => ({
   downloadTags: async (options: RecordDataDownloadOptions = {}) => {
     const path = '.data'
     const filename = 'tags.json'
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github';
     let result: Tag[] = []
     let hasRemoteData = false

@@ -1,6 +1,7 @@
 
 import Database, { type QueryResult } from '@tauri-apps/plugin-sql'
 import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@/lib/platform'
 
 export interface RecordStatement {
   sql: string
@@ -178,8 +179,7 @@ async function initializeAllDatabases() {
   const { bootstrapStructuredKnowledgeRegistry } = await import('@/lib/knowledge-index');
   await bootstrapStructuredKnowledgeRegistry();
 
-  const { Store } = await import('@tauri-apps/plugin-store')
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get<boolean>('conversationSyncInitialized') === undefined) {
     await store.set('conversationSyncInitialized', true)
     await store.save()

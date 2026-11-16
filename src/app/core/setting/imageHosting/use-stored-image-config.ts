@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 export function useStoredImageConfig<T extends object>(
   key: string,
@@ -13,7 +13,7 @@ export function useStoredImageConfig<T extends object>(
 
   useEffect(() => {
     async function load() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const saved = await store.get<Partial<T>>(key)
       setConfig(saved ? { ...defaultValue, ...saved } : defaultValue)
       setLoaded(true)
@@ -27,7 +27,7 @@ export function useStoredImageConfig<T extends object>(
     saveQueue.current = saveQueue.current
       .catch(() => undefined)
       .then(async () => {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await store.set(key, nextConfig)
         await store.save()
       })

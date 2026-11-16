@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { testWebDAVConnection } from '@/lib/sync/webdav';
 import { WebDAVConfig } from '@/types/sync';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import useSyncStore from '@/stores/sync';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
@@ -33,7 +33,7 @@ export function WebDAVSync() {
   useEffect(() => {
     const initConfig = async () => {
       try {
-        const store = await Store.load('store.json');
+        const store = await platform.store.load('store.json');
         const savedConfig = await store.get<WebDAVConfig>('webdavSyncConfig');
         if (savedConfig) {
           setConfig(savedConfig);
@@ -70,7 +70,7 @@ export function WebDAVSync() {
 
     const timer = setTimeout(async () => {
       try {
-        const store = await Store.load('store.json');
+        const store = await platform.store.load('store.json');
         await store.set('webdavSyncConfig', config);
         await store.save();
       } catch (error) {

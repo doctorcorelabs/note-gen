@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BaseDirectory, copyFile, exists, mkdir, readDir, rename as fsRename, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
@@ -22,7 +22,6 @@ import { EntryListItem } from './entry-list-item'
 import { NameInputDialog } from './name-input-dialog'
 import { BrowserEntry } from './types'
 import { getChildrenByPath, getNodeByPath, isMarkdownFile, normalizePath, parentPath } from './browser-utils'
-import { Store } from '@tauri-apps/plugin-store'
 import { CloudFolderConfig } from '@/types/sync'
 import { buildMoveTargetPath, isInvalidFolderMoveTarget, moveFileManagerEntry, moveFileManagerPaths } from '@/app/core/main/file/file-dnd'
 import { getFileSelectionEntries } from '@/app/core/main/file/file-selection'
@@ -57,7 +56,7 @@ function getVisibleDirectoryPath(path: string, assetsFolderName: string) {
 
 async function isMobileOneDriveSyncEnabled() {
   if (getRuntimePlatform() !== 'android' && getRuntimePlatform() !== 'ios') return false
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get<string>('primaryBackupMethod') !== 'cloudFolder') return false
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
   return config?.provider === 'oneDrive' && Boolean(config.path)
@@ -248,8 +247,8 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
         try {
           const pathOptions = await getFilePathOptions(relativePath)
           const fileStat = pathOptions.baseDir
-            ? await stat(pathOptions.path, { baseDir: pathOptions.baseDir })
-            : await stat(pathOptions.path)
+            ? await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+            : await platform.fs.stat(pathOptions.path)
 
           updates[relativePath] = {
             modifiedAt: fileStat.mtime?.toISOString(),
@@ -478,8 +477,8 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
     const { targetPath } = buildMoveTargetPath(entry.relativePath, targetDirectoryPath)
     const targetPathOptions = await getFilePathOptions(targetPath)
     const targetExists = targetPathOptions.baseDir
-      ? await exists(targetPathOptions.path, { baseDir: targetPathOptions.baseDir })
-      : await exists(targetPathOptions.path)
+      ? await platform.fs.exists(targetPathOptions.path, { baseDir: targetPathOptions.baseDir })
+      : await platform.fs.exists(targetPathOptions.path)
 
     if (targetExists) {
       toast({ title: tFile('error.fileExists') })
@@ -583,14 +582,14 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
     if (!dir) return
     const parentPathOptions = await getFilePathOptions(dir)
     const parentExists = parentPathOptions.baseDir
-      ? await exists(parentPathOptions.path, { baseDir: parentPathOptions.baseDir })
-      : await exists(parentPathOptions.path)
+      ? await platform.fs.exists(parentPathOptions.path, { baseDir: parentPathOptions.baseDir })
+      : await platform.fs.exists(parentPathOptions.path)
 
     if (!parentExists) {
       if (parentPathOptions.baseDir) {
-        await mkdir(parentPathOptions.path, { baseDir: parentPathOptions.baseDir, recursive: true })
+        await platform.fs.mkdir(parentPathOptions.path, { baseDir: parentPathOptions.baseDir, recursive: true })
       } else {
-        await mkdir(parentPathOptions.path, { recursive: true })
+        await platform.fs.mkdir(parentPathOptions.path, { recursive: true })
       }
     }
   }, [])
@@ -733,25 +732,25 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
 
     if (!isDirectory) {
       if (source.baseDir || target.baseDir) {
-        await copyFile(source.path, target.path, {
+        await platform.fs.copyFile(source.path, target.path, {
           fromPathBaseDir: source.baseDir || BaseDirectory.AppData,
           toPathBaseDir: target.baseDir || BaseDirectory.AppData,
         })
       } else {
-        await copyFile(source.path, target.path)
+        await platform.fs.copyFile(source.path, target.path)
       }
       return
     }
 
     if (target.baseDir) {
-      await mkdir(target.path, { baseDir: target.baseDir, recursive: true })
+      await platform.fs.mkdir(target.path, { baseDir: target.baseDir, recursive: true })
     } else {
-      await mkdir(target.path, { recursive: true })
+      await platform.fs.mkdir(target.path, { recursive: true })
     }
 
     const entries = source.baseDir
-      ? await readDir(source.path, { baseDir: source.baseDir })
-      : await readDir(source.path)
+      ? await platform.fs.readDir(source.path, { baseDir: source.baseDir })
+      : await platform.fs.readDir(source.path)
     for (const child of entries) {
       if (child.isSymlink) continue
       const sourceChild = `${sourceRelativePath}/${child.name}`
@@ -876,15 +875,15 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
         const relativePath = targetDir ? `${targetDir}/${fileNameToCreate}` : fileNameToCreate
         const pathOptions = await getFilePathOptions(relativePath)
         const fileExists = pathOptions.baseDir
-          ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-          : await exists(pathOptions.path)
+          ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          : await platform.fs.exists(pathOptions.path)
 
         if (!fileExists) {
           if (!await prepareActiveEditorDeactivationDurably(normalizedActivePath)) return
           if (pathOptions.baseDir) {
-            await writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+            await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
           } else {
-            await writeTextFile(pathOptions.path, '')
+            await platform.fs.writeTextFile(pathOptions.path, '')
           }
           emitter.emit('article-saved', { path: relativePath, content: '' })
           await refreshTree(targetDir, {
@@ -901,14 +900,14 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
         const relativePath = targetDir ? `${targetDir}/${rawName}` : rawName
         const pathOptions = await getFilePathOptions(relativePath)
         const folderExists = pathOptions.baseDir
-          ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-          : await exists(pathOptions.path)
+          ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          : await platform.fs.exists(pathOptions.path)
 
         if (!folderExists) {
           if (pathOptions.baseDir) {
-            await mkdir(pathOptions.path, { baseDir: pathOptions.baseDir, recursive: true })
+            await platform.fs.mkdir(pathOptions.path, { baseDir: pathOptions.baseDir, recursive: true })
           } else {
-            await mkdir(pathOptions.path, { recursive: true })
+            await platform.fs.mkdir(pathOptions.path, { recursive: true })
           }
           await refreshTree(targetDir, {
             includeRemote: shouldLoadRemoteOnTreeRefresh({ isCreateFlow: true })
@@ -958,8 +957,8 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
       const oldPathOptions = await getFilePathOptions(renameTarget.relativePath)
       const newPathOptions = await getFilePathOptions(newRelativePath)
       const newExists = newPathOptions.baseDir
-        ? await exists(newPathOptions.path, { baseDir: newPathOptions.baseDir })
-        : await exists(newPathOptions.path)
+        ? await platform.fs.exists(newPathOptions.path, { baseDir: newPathOptions.baseDir })
+        : await platform.fs.exists(newPathOptions.path)
       if (newExists) {
         toast({ title: tFile('error.fileExists') })
         return
@@ -974,12 +973,12 @@ export function MobileFileBrowser({ active, onOpenFile }: MobileFileBrowserProps
         if (await moveSelfHostedWorkspacePath(renameTarget.relativePath, newRelativePath)) {
           // The native journal completed the local move.
         } else if (oldPathOptions.baseDir || newPathOptions.baseDir) {
-          await fsRename(oldPathOptions.path, newPathOptions.path, {
+          await platform.fs.rename(oldPathOptions.path, newPathOptions.path, {
             oldPathBaseDir: oldPathOptions.baseDir || BaseDirectory.AppData,
             newPathBaseDir: newPathOptions.baseDir || BaseDirectory.AppData,
           })
         } else {
-          await fsRename(oldPathOptions.path, newPathOptions.path)
+          await platform.fs.rename(oldPathOptions.path, newPathOptions.path)
         }
         await syncOpenTabsForPathChange(renameTarget.relativePath, newRelativePath, false)
         const { renameVectorDocumentsByPrefix } = await import('@/db/vector')

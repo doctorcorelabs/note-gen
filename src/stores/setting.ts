@@ -1,5 +1,5 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { emit } from '@tauri-apps/api/event'
 import { create } from 'zustand'
 import { getVersion } from '@tauri-apps/api/app'
@@ -571,7 +571,7 @@ async function persistChangedSettings(
   changedKeys: string[],
   syncableKeys: string[],
 ) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const stateRecord = state as unknown as Record<string, unknown>
 
   for (const key of changedKeys) {
@@ -588,7 +588,7 @@ async function persistChangedSettings(
 
 const useSettingStore = create<SettingState>((set, get) => ({
   initSettingData: (options) => withSettingsHydration(async () => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     if (!options?.hydrateOnly) {
       // Detect existing RAG users before first-run defaults install an embedding model.
       const { initializeWikiPreferences } = await import('@/lib/wiki/settings')
@@ -1033,7 +1033,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setAppFontFamily: async (fontFamily) => {
     set({ appFontFamily: fontFamily })
     applyAppFontFamily(fontFamily)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('appFontFamily', fontFamily)
     await store.save()
   },
@@ -1041,7 +1041,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   closeBehavior: 'minimize',
   setCloseBehavior: async (closeBehavior) => {
     set({ closeBehavior })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('closeBehavior', closeBehavior)
     await store.save()
   },
@@ -1049,7 +1049,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autostartMinimized: false,
   setAutostartMinimized: async (autostartMinimized) => {
     set({ autostartMinimized })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('autostartMinimized', autostartMinimized)
     await store.save()
   },
@@ -1057,7 +1057,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   developerMode: false,
   setDeveloperMode: async (developerMode) => {
     set({ developerMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('developerMode', developerMode)
     await store.save()
     await emit(DEVELOPER_MODE_CHANGED_EVENT, developerMode).catch(() => undefined)
@@ -1078,42 +1078,42 @@ const useSettingStore = create<SettingState>((set, get) => ({
   editorModel: '',
   setEditorModel: async (editorModel) => {
     set({ editorModel })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('editorModel', editorModel)
     await store.save()
   },
 
   placeholderModel: '',
   setPlaceholderModel: async (placeholderModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('placeholderModel', placeholderModel)
     set({ placeholderModel })
   },
 
   completionModel: '',
   setCompletionModel: async (completionModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('completionModel', completionModel)
     set({ completionModel })
   },
 
   markDescModel: '',
   setMarkDescModel: async (markDescModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('markDescModel', markDescModel)
     set({ markDescModel })
   },
 
   commitModel: '',
   setCommitModel: async (commitModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('commitModel', commitModel)
     set({ commitModel })
   },
 
   embeddingModel: '',
   setEmbeddingModel: async (embeddingModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('embeddingModel', embeddingModel)
     set({ embeddingModel })
     const {
@@ -1126,28 +1126,28 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   rerankingModel: '',
   setRerankingModel: async (rerankingModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('rerankingModel', rerankingModel)
     set({ rerankingModel })
   },
 
   imageMethodModel: '',
   setImageMethodModel: async (imageMethodModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('imageMethodModel', imageMethodModel)
     set({ imageMethodModel })
   },
 
   audioModel: '',
   setAudioModel: async (audioModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('audioModel', audioModel)
     set({ audioModel })
   },
 
   sttModel: '',
   setSttModel: async (sttModel) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('sttModel', sttModel)
     set({ sttModel })
   },
@@ -1155,7 +1155,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   textToSpeechMode: 'auto',
   setTextToSpeechMode: async (mode) => {
     const normalizedMode = normalizeSpeechMode(mode)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('textToSpeechMode', normalizedMode)
     set({ textToSpeechMode: normalizedMode })
   },
@@ -1163,7 +1163,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   speechToTextMode: 'auto',
   setSpeechToTextMode: async (mode) => {
     const normalizedMode = normalizeSpeechMode(mode)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('speechToTextMode', normalizedMode)
     set({ speechToTextMode: normalizedMode })
   },
@@ -1171,7 +1171,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   systemPrompt: '',
   setSystemPrompt: async (systemPrompt) => {
     set({ systemPrompt })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('agentSystemPromptExtension', systemPrompt)
     await store.set('agentCorePromptVersion', AGENT_CORE_PROMPT_VERSION)
     await store.save()
@@ -1180,7 +1180,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   agentPermissionMode: 'ask',
   setAgentPermissionMode: async (agentPermissionMode) => {
     set({ agentPermissionMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('agentPermissionMode', agentPermissionMode)
     await store.save()
   },
@@ -1206,7 +1206,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   ],
   setTemplateList: async (templateList) => {
     set({ templateList })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('templateList', templateList)
   },
 
@@ -1222,14 +1222,14 @@ const useSettingStore = create<SettingState>((set, get) => ({
   githubUsername: '',
   setGithubUsername: async (githubUsername) => {
     set({ githubUsername })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('githubUsername', githubUsername)
     await store.save()
   },
 
   accessToken: '',
   setAccessToken: async (accessToken) => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const hasAccessToken = await store.get('accessToken') === accessToken
     if (!hasAccessToken) {
       await get().setGithubUsername('')
@@ -1240,14 +1240,14 @@ const useSettingStore = create<SettingState>((set, get) => ({
   jsdelivr: true,
   setJsdelivr: async (jsdelivr: boolean) => {
     set({ jsdelivr })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('jsdelivr', jsdelivr)
   },
 
   useImageRepo: false,
   setUseImageRepo: async (useImageRepo: boolean) => {
     set({ useImageRepo })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('useImageRepo', useImageRepo)
     if (useImageRepo) {
       const normalizedImageHosting = getNormalizedImageHosting(await store.get<string>('mainImageHosting'))
@@ -1261,14 +1261,14 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoSync: '5',
   setAutoSync: async (autoSync: string) => {
     set({ autoSync })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('autoSync', autoSync)
   },
 
   autoRecordSyncEnabled: true,
   setAutoRecordSyncEnabled: async (autoRecordSyncEnabled: boolean) => {
     set({ autoRecordSyncEnabled })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('autoRecordSyncEnabled', autoRecordSyncEnabled)
     await store.set(
       'autoDataSyncEnabled',
@@ -1281,7 +1281,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoSettingsSyncEnabled: true,
   setAutoSettingsSyncEnabled: async (autoSettingsSyncEnabled: boolean) => {
     set({ autoSettingsSyncEnabled })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('autoSettingsSyncEnabled', autoSettingsSyncEnabled)
     await store.set(
       'autoDataSyncEnabled',
@@ -1294,7 +1294,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoConversationSyncEnabled: true,
   setAutoConversationSyncEnabled: async (autoConversationSyncEnabled: boolean) => {
     set({ autoConversationSyncEnabled })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('autoConversationSyncEnabled', autoConversationSyncEnabled)
     await store.set(
       'autoDataSyncEnabled',
@@ -1309,7 +1309,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   excludeSensitiveConfig: true,
   setExcludeSensitiveConfig: async (excludeSensitiveConfig: boolean) => {
     set({ excludeSensitiveConfig })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('excludeSensitiveConfig', excludeSensitiveConfig)
     await store.save()
 
@@ -1322,7 +1322,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoPullOnOpen: true,
   setAutoPullOnOpen: async (autoPullOnOpen: boolean) => {
     set({ autoPullOnOpen })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('autoPullOnOpen', autoPullOnOpen)
 
     // 同步更新 sync-manager 的配置
@@ -1338,7 +1338,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   lastSettingPage: 'about',
   setLastSettingPage: async (page: string) => {
     set({ lastSettingPage: page })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('lastSettingPage', page)
   },
 
@@ -1353,7 +1353,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
     try {
       const { invalidateMemoryCache } = await import('@/lib/memory/cache-version')
       invalidateMemoryCache()
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const {
         beginEditorWorkspaceTransition,
         finishEditorWorkspaceTransition,
@@ -1426,20 +1426,20 @@ const useSettingStore = create<SettingState>((set, get) => ({
     const currentHistory = get().workspaceHistory
     const newHistory = [path, ...currentHistory.filter(p => p !== path)].slice(0, 10) // 最多保存10个历史路径
     set({ workspaceHistory: newHistory })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('workspaceHistory', newHistory)
     await store.save()
   },
   removeWorkspaceHistory: async (path: string) => {
     const newHistory = get().workspaceHistory.filter(p => p !== path)
     set({ workspaceHistory: newHistory })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('workspaceHistory', newHistory)
     await store.save()
   },
   clearWorkspaceHistory: async () => {
     set({ workspaceHistory: [] })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('workspaceHistory', [])
     await store.save()
   },
@@ -1448,21 +1448,21 @@ const useSettingStore = create<SettingState>((set, get) => ({
   giteeAccessToken: '',
   setGiteeAccessToken: async (giteeAccessToken: string) => {
     set({ giteeAccessToken })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('giteeAccessToken', giteeAccessToken)
   },
 
   giteeAutoSync: 'disabled',
   setGiteeAutoSync: async (giteeAutoSync: string) => {
     set({ giteeAutoSync })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('giteeAutoSync', giteeAutoSync)
   },
 
   // Gitlab 相关设置
   gitlabInstanceType: GitlabInstanceType.OFFICIAL,
   setGitlabInstanceType: async (instanceType: GitlabInstanceType) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('gitlabInstanceType', instanceType)
     await store.save()
     set({ gitlabInstanceType: instanceType })
@@ -1470,7 +1470,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   gitlabCustomUrl: '',
   setGitlabCustomUrl: async (customUrl: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('gitlabCustomUrl', customUrl)
     await store.save()
     set({ gitlabCustomUrl: customUrl })
@@ -1483,7 +1483,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   gitlabAutoSync: 'disabled',
   setGitlabAutoSync: async (gitlabAutoSync: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('gitlabAutoSync', gitlabAutoSync)
     await store.save()
     set({ gitlabAutoSync })
@@ -1491,7 +1491,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   gitlabUsername: '',
   setGitlabUsername: async (gitlabUsername: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('gitlabUsername', gitlabUsername)
     await store.save()
     set({ gitlabUsername })
@@ -1500,7 +1500,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   // Gitea 相关实现
   giteaInstanceType: GiteaInstanceType.OFFICIAL,
   setGiteaInstanceType: async (instanceType: GiteaInstanceType) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('giteaInstanceType', instanceType)
     await store.save()
     set({ giteaInstanceType: instanceType })
@@ -1508,7 +1508,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   giteaCustomUrl: '',
   setGiteaCustomUrl: async (customUrl: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('giteaCustomUrl', customUrl)
     await store.save()
     set({ giteaCustomUrl: customUrl })
@@ -1522,14 +1522,14 @@ const useSettingStore = create<SettingState>((set, get) => ({
   giteaAutoSync: 'disabled',
   setGiteaAutoSync: async (giteaAutoSync: string) => {
     set({ giteaAutoSync })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('giteaAutoSync', giteaAutoSync)
     await store.save()
   },
 
   giteaUsername: '',
   setGiteaUsername: async (giteaUsername: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('giteaUsername', giteaUsername)
     await store.save()
     set({ giteaUsername })
@@ -1549,7 +1549,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   },
   commitVerifiedPrimaryBackupMethod: async (method: 'local' | 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder' | 'selfHosted', onProgress?: (step: 'preparing' | 'saving' | 'starting' | 'reconciling') => void, strategy: InitialDataSyncStrategy = 'auto', reconcile?: () => Promise<void | { selfHostedRuntimeReady: true }>, assertActive?: () => void) => {
     assertActive?.()
-    const pendingRecovery = await (await Store.load('store.json')).get<PlatformSwitchRecovery>('platformSwitchRecovery')
+    const pendingRecovery = await (await platform.store.load('store.json')).get<PlatformSwitchRecovery>('platformSwitchRecovery')
     if (pendingRecovery && (pendingRecovery.commitPlatform ?? pendingRecovery.platform) !== method) throw syncStaleError({ stage: 'verify', path: 'platformSwitchRecovery / commitPlatform', check: 'configuration' })
     if (method === get().primaryBackupMethod && !reconcile && (pendingRecovery?.commitPlatform ?? pendingRecovery?.platform) !== method) return
 
@@ -1565,7 +1565,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
     ])
 
     const previous = get().primaryBackupMethod
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     let committed = false
     try {
       // Reconciliation uses an explicit target. Keep the visible primary until
@@ -1624,7 +1624,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
 
   commitUnverifiedPrimaryBackupMethod: async (method, assertActive) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const previous = get().primaryBackupMethod
     await withPrimaryPlatformLock(async () => {
       await assertActive()
@@ -1660,7 +1660,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   assetsPath: 'assets',
   setAssetsPath: async (path: string) => {
     set({ assetsPath: path })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('assetsPath', path)
     await store.save()
   },
@@ -1669,7 +1669,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   githubImageAccessToken: '',
   setGithubImageAccessToken: async (githubImageAccessToken: string) => {
     set({ githubImageAccessToken })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('githubImageAccessToken', githubImageAccessToken)
     await store.save()
   },
@@ -1678,7 +1678,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   enableImageRecognition: true,
   setEnableImageRecognition: async (enable: boolean) => {
     set({ enableImageRecognition: enable })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('enableImageRecognition', enable)
     await store.save()
   },
@@ -1687,7 +1687,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   uiScale: 100,
   setUiScale: async (scale: number) => {
     set({ uiScale: scale })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('uiScale', scale)
     await store.save()
     
@@ -1699,7 +1699,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   contentTextScale: 100,
   setContentTextScale: async (scale: number) => {
     set({ contentTextScale: scale })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('contentTextScale', scale)
     await store.save()
   },
@@ -1708,7 +1708,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   fileManagerTextSize: 'sm',
   setFileManagerTextSize: async (size: string) => {
     set({ fileManagerTextSize: size })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('fileManagerTextSize', size)
     await store.save()
   },
@@ -1717,7 +1717,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   recordTextSize: 'sm',
   setRecordTextSize: async (size: string) => {
     set({ recordTextSize: size })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('recordTextSize', size)
     await store.save()
   },
@@ -1763,7 +1763,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   },
   setCustomThemeColors: async (colors: CustomThemeColors) => {
     set({ customThemeColors: colors })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('customThemeColors', colors)
     await store.save()
 
@@ -1810,7 +1810,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
       },
     }
     set({ customThemeColors: defaultColors })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('customThemeColors', defaultColors)
     await store.save()
 
@@ -1820,7 +1820,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   customCss: '',
   setCustomCss: async (css: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('customCss', css)
     await store.save()
     set({ customCss: css })
@@ -1849,7 +1849,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   githubCustomImageRepo: '',
   setGithubCustomImageRepo: async (repo: string) => {
     set({ githubCustomImageRepo: repo })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('githubCustomImageRepo', repo)
     await store.save()
   },
@@ -1866,7 +1866,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   ],
   setRecordToolbarConfig: async (config: RecordToolbarItem[]) => {
     set({ recordToolbarConfig: config })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('recordToolbarConfig', config)
     await store.save()
   },
@@ -1875,7 +1875,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setRecordViewMode: async (mode) => {
     const recordViewMode = normalizeRecordViewMode(mode)
     set({ recordViewMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('recordViewMode', recordViewMode)
     await store.save()
   },
@@ -1884,7 +1884,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setRecordSortMode: async (mode) => {
     const recordSortMode = normalizeRecordSortMode(mode)
     set({ recordSortMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('recordSortMode', recordSortMode)
     await store.save()
   },
@@ -1893,7 +1893,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setRecordSaveTargetMode: async (mode) => {
     const recordSaveTargetMode = normalizeRecordSaveTargetMode(mode)
     set({ recordSaveTargetMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('recordSaveTargetMode', recordSaveTargetMode)
     await store.save()
   },
@@ -1902,7 +1902,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setFixedRecordTagId: async (tagId) => {
     const fixedRecordTagId = normalizeRecordTagId(tagId)
     set({ fixedRecordTagId })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('fixedRecordTagId', fixedRecordTagId)
     await store.save()
   },
@@ -1911,7 +1911,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setLastRecordTagId: async (tagId) => {
     const lastRecordTagId = normalizeRecordTagId(tagId)
     set({ lastRecordTagId })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('lastRecordTagId', lastRecordTagId)
     await store.save()
   },
@@ -1920,7 +1920,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setRecordCompletionBehavior: async (behavior) => {
     const recordCompletionBehavior = normalizeRecordCompletionBehavior(behavior)
     set({ recordCompletionBehavior })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('recordCompletionBehavior', recordCompletionBehavior)
     await store.save()
   },
@@ -1928,7 +1928,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   // 保留旧偏好键，移动端默认显示统计。
   showEditorStats: true,
   setShowEditorStats: async (show: boolean) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('showEditorStats', show)
     await store.save()
     set({ showEditorStats: show })
@@ -1938,7 +1938,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   showEditorUndoRedo: true,
   setShowEditorUndoRedo: async (show: boolean) => {
     set({ showEditorUndoRedo: show })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('showEditorUndoRedo', show)
     await store.save()
   },
@@ -1946,7 +1946,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   showSourceLineNumbers: true,
   setShowSourceLineNumbers: async (showSourceLineNumbers) => {
     set({ showSourceLineNumbers })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('showSourceLineNumbers', showSourceLineNumbers)
     await store.save()
   },
@@ -1954,7 +1954,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   editorSourceWrap: true,
   setEditorSourceWrap: async (editorSourceWrap) => {
     set({ editorSourceWrap })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('editorSourceWrap', editorSourceWrap)
     await store.save()
   },
@@ -1962,7 +1962,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   showMobileEditorToolbar: true,
   setShowMobileEditorToolbar: async (showMobileEditorToolbar) => {
     set({ showMobileEditorToolbar })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('showMobileEditorToolbar', showMobileEditorToolbar)
     await store.save()
   },
@@ -1970,7 +1970,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   editorContentWidth: DEFAULT_EDITOR_CONTENT_WIDTH,
   setEditorContentWidth: async (editorContentWidth) => {
     set({ editorContentWidth })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('editorContentWidth', editorContentWidth)
     await store.save()
   },
@@ -1978,7 +1978,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   editorLineHeight: DEFAULT_EDITOR_LINE_HEIGHT,
   setEditorLineHeight: async (editorLineHeight) => {
     set({ editorLineHeight })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('editorLineHeight', editorLineHeight)
     await store.save()
   },
@@ -1990,7 +1990,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
       && !prepareActiveEditorDeactivation()
     ) return
     set({ editorViewMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('editorViewMode', editorViewMode)
     await store.save()
   },
@@ -1998,7 +1998,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   enableOutline: false,
   setEnableOutline: async (enableOutline) => {
     set({ enableOutline })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('enableOutline', enableOutline)
     await store.save()
   },
@@ -2007,13 +2007,13 @@ const useSettingStore = create<SettingState>((set, get) => ({
   outlinePlacement: DEFAULT_OUTLINE_PLACEMENT,
   setOutlinePlacement: async (outlinePlacement) => {
     set({ outlinePlacement })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('outlinePlacement', outlinePlacement)
     await store.save()
   },
   setOutlinePosition: async (outlinePosition) => {
     set({ outlinePosition })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('outlinePosition', outlinePosition)
     await store.save()
   },
@@ -2021,7 +2021,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   canvasGridVisible: DEFAULT_CANVAS_GRID_VISIBLE,
   setCanvasGridVisible: async (canvasGridVisible) => {
     set({ canvasGridVisible })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasGridVisible', canvasGridVisible)
     await store.save()
   },
@@ -2029,7 +2029,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   canvasSnapToGrid: DEFAULT_CANVAS_SNAP_TO_GRID,
   setCanvasSnapToGrid: async (canvasSnapToGrid) => {
     set({ canvasSnapToGrid })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasSnapToGrid', canvasSnapToGrid)
     await store.save()
   },
@@ -2037,7 +2037,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   canvasMinimapVisible: DEFAULT_CANVAS_MINIMAP_VISIBLE,
   setCanvasMinimapVisible: async (canvasMinimapVisible) => {
     set({ canvasMinimapVisible })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasMinimapVisible', canvasMinimapVisible)
     await store.save()
   },
@@ -2046,7 +2046,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasGridStyle: async (style) => {
     const canvasGridStyle = normalizeCanvasGridStyle(style)
     set({ canvasGridStyle })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasGridStyle', canvasGridStyle)
     await store.save()
   },
@@ -2055,7 +2055,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasGridGap: async (gap) => {
     const canvasGridGap = normalizeCanvasGridGap(gap)
     set({ canvasGridGap })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasGridGap', canvasGridGap)
     await store.save()
   },
@@ -2064,7 +2064,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasDefaultZoom: async (zoom) => {
     const canvasDefaultZoom = normalizeCanvasZoom(zoom)
     set({ canvasDefaultZoom })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasDefaultZoom', canvasDefaultZoom)
     await store.save()
   },
@@ -2073,7 +2073,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasManagerViewMode: async (mode) => {
     const canvasManagerViewMode = normalizeCanvasManagerViewMode(mode)
     set({ canvasManagerViewMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasManagerViewMode', canvasManagerViewMode)
     await store.save()
   },
@@ -2082,7 +2082,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasManagerSortMode: async (mode) => {
     const canvasManagerSortMode = normalizeCanvasManagerSortMode(mode)
     set({ canvasManagerSortMode })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasManagerSortMode', canvasManagerSortMode)
     await store.save()
   },
@@ -2091,7 +2091,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasWheelBehavior: async (behavior) => {
     const canvasWheelBehavior = normalizeCanvasWheelBehavior(behavior)
     set({ canvasWheelBehavior })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasWheelBehavior', canvasWheelBehavior)
     await store.save()
   },
@@ -2100,7 +2100,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   setCanvasInsertBehavior: async (behavior) => {
     const canvasInsertBehavior = normalizeCanvasInsertBehavior(behavior)
     set({ canvasInsertBehavior })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('canvasInsertBehavior', canvasInsertBehavior)
     await store.save()
   },

@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { AiConfig, ModelConfig } from '@/app/core/setting/config'
 import useChatStore from '@/stores/chat'
 import useSettingStore from '@/stores/setting'
@@ -91,7 +91,7 @@ export async function changePrimaryChatModel(input: {
 
   useChatStore.getState().setReasoningOverride(null)
   settingState.setPrimaryModel(input.modelId)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set('primaryModel', input.modelId)
   await store.save()
 

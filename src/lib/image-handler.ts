@@ -1,5 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
-import { writeFile, exists, mkdir } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { v4 as uuidv4 } from 'uuid'
 import { isImageHostingReady, uploadImage } from './imageHosting'
 import { getFilePathOptions, isAbsoluteFsPath, toWorkspaceRelativePath } from './workspace'
@@ -111,7 +110,7 @@ async function saveImageLocally(file: File, markdownPath: string): Promise<{
   const ext = file.name.split('.').pop() || 'png'
   const filename = `${uuidv4()}.${ext}`.replace(/\s/g, '_')
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const assetsDirName = getWritingAssetsDirName(await store.get<string>('assetsPath'))
   const workspaceRelativeMarkdownPath = await toWorkspaceRelativePath(markdownPath)
   const normalizedMarkdownPath = workspaceRelativeMarkdownPath
@@ -142,7 +141,7 @@ async function saveImageLocally(file: File, markdownPath: string): Promise<{
 
   const pathOptions = await getFilePathOptions(imageRelativePath)
 
-  await writeFile(pathOptions.path, uint8Array, {
+  await platform.fs.writeFile(pathOptions.path, uint8Array, {
     baseDir: pathOptions.baseDir,
   })
 
@@ -185,13 +184,13 @@ async function ensureDirectoryExists(dirPath: string): Promise<void> {
     const pathOptions = await getFilePathOptions(dirPath)
 
     // 检查目录是否已存在
-    const dirExists = await exists(pathOptions.path, {
+    const dirExists = await platform.fs.exists(pathOptions.path, {
       baseDir: pathOptions.baseDir,
     })
 
     if (!dirExists) {
       // 如果目录不存在，创建它
-      await mkdir(pathOptions.path, {
+      await platform.fs.mkdir(pathOptions.path, {
         baseDir: pathOptions.baseDir,
         recursive: true,
       })

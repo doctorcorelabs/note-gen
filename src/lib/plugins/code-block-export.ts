@@ -1,5 +1,5 @@
 import { save } from '@tauri-apps/plugin-dialog'
-import { writeFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 
 export type CodeBlockImageFormat = 'png' | 'svg' | 'jpeg'
@@ -71,7 +71,7 @@ export async function exportCodeBlockImage(dataUrl: string, language: string, ti
     const path = await save({ title, defaultPath: filename, filters: [{ name: format.toUpperCase(), extensions }] })
     if (!path) return false
     const hasExtension = extensions.some(value => path.toLowerCase().endsWith(`.${value}`))
-    await writeFile(hasExtension ? path : `${path}.${extension}`, new Uint8Array(await blob.arrayBuffer()))
+    await platform.fs.writeFile(hasExtension ? path : `${path}.${extension}`, new Uint8Array(await blob.arrayBuffer()))
   } else {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')

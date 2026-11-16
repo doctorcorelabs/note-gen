@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
 import { authenticatedClient } from './profile'
@@ -71,7 +71,7 @@ const identity = (binding: Binding) => JSON.stringify([
 ])
 
 async function activeBinding(): Promise<Binding | null> {
-  const settings = await Store.load('store.json')
+  const settings = await platform.store.load('store.json')
   if (await settings.get<string>('primaryBackupMethod') !== 'selfHosted') return null
   const workspace = await getWorkspacePath()
   const localRoot = workspace.isCustom ? workspace.path : await getDefaultArticleAbsolutePath('')
@@ -150,7 +150,7 @@ export async function moveSelfHostedRemotePath(
   const context = identity(binding)
   const current = async () => {
     if (!await assertCurrent() || await getSelfHostedPathMoveIdentity() !== context
-      || await (await Store.load('store.json')).get('platformSwitchRecovery')) {
+      || await (await platform.store.load('store.json')).get('platformSwitchRecovery')) {
       throw new Error('自托管同步配置或本地路径已变化，重命名待办已保留')
     }
   }

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import useSettingStore from '@/stores/setting'
 import { HSLValue } from '@/types/theme'
 import { applyThemeColors, hslToHex } from '@/lib/theme-utils'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 
@@ -338,7 +338,7 @@ export default function ThemeSettingsPage() {
       },
     }
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('customThemeColors', updatedColors)
     await store.save()
     useSettingStore.setState({ customThemeColors: updatedColors })
@@ -411,7 +411,7 @@ export default function ThemeSettingsPage() {
       },
     }
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('customThemeColors', updatedColors)
     await store.save()
     useSettingStore.setState({ customThemeColors: updatedColors })

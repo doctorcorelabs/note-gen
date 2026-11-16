@@ -1,4 +1,4 @@
-import { BaseDirectory, mkdir, writeFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { authenticatedClient, getProfile, isSelfHostedAuthenticationError, isSelfHostedSecureStorageError } from './profile'
 import { decryptPackedJson, encryptJson, loadWorkspaceKey, objectAssociatedData } from './crypto'
@@ -151,8 +151,8 @@ export async function recoverPersonalRevisionConflicts(context: Context, session
       // Capture both the rejected bytes and the latest editable row, including
       // edits queued after the original rejection, before retiring any source.
       const copyPath = `self-hosted-conflict-backups/${crypto.randomUUID()}.json`
-      await mkdir('self-hosted-conflict-backups', { baseDir: BaseDirectory.AppData, recursive: true })
-      await writeFile(copyPath, new TextEncoder().encode(JSON.stringify({ version: 1, workspaceId: context.workspaceId,
+      await platform.fs.mkdir('self-hosted-conflict-backups', { baseDir: BaseDirectory.AppData, recursive: true })
+      await platform.fs.writeFile(copyPath, new TextEncoder().encode(JSON.stringify({ version: 1, workspaceId: context.workspaceId,
         objectId, commands, changes, base, local, remote: remotePayload, remoteObject: remote, merged: payload })), { baseDir: BaseDirectory.AppData })
       if (!same(changes, await readChanges())) continue
       const commandId = crypto.randomUUID(), now = Date.now()

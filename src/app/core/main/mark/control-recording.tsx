@@ -9,7 +9,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import { transcribeRecording } from '@/lib/audio'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readFile, writeFile, BaseDirectory, exists, mkdir } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { useRef } from 'react'
 import { isMobileDevice } from '@/lib/check'
 import { convertToWav } from '@/lib/audio-converter'
@@ -128,9 +128,9 @@ export function ControlRecording() {
     const audioDir = 'recordings'
     
     // 确保目录存在
-    const dirExists = await exists(audioDir, { baseDir: BaseDirectory.AppData })
+    const dirExists = await platform.fs.exists(audioDir, { baseDir: BaseDirectory.AppData })
     if (!dirExists) {
-      await mkdir(audioDir, { baseDir: BaseDirectory.AppData, recursive: true })
+      await platform.fs.mkdir(audioDir, { baseDir: BaseDirectory.AppData, recursive: true })
     }
     
     // 将 Blob 转换为 ArrayBuffer
@@ -139,7 +139,7 @@ export function ControlRecording() {
     
     // 保存文件
     const filePath = `${audioDir}/${filename}`
-    await writeFile(filePath, uint8Array, { baseDir: BaseDirectory.AppData })
+    await platform.fs.writeFile(filePath, uint8Array, { baseDir: BaseDirectory.AppData })
     
     return filePath
   }
@@ -229,7 +229,7 @@ export function ControlRecording() {
 
       // 读取文件
       const filePath = selected as string
-      const fileData = await readFile(filePath)
+      const fileData = await platform.fs.readFile(filePath)
       
       // 根据文件扩展名确定 MIME 类型
       const extension = filePath.split('.').pop()?.toLowerCase()

@@ -15,9 +15,8 @@ import {
   type CollisionDetection,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { platform } from '@tauri-apps/plugin-os'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Layout } from 'react-resizable-panels'
 import { useTranslations } from 'next-intl'
@@ -411,7 +410,7 @@ export function EditorLayout() {
       await Promise.all([initOpenTabs(), initShowCloudFiles()])
       const articleState = useArticleStore.getState()
       const tabs = articleState.openTabs
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const storedLayout = await store.get<EditorWorkspaceLayout>(EDITOR_LAYOUT_STORE_KEY)
       const workspaceKey = getEditorWorkspaceKey(await getWorkspacePath())
       let restoredLayout = normalizeEditorWorkspaceLayout(storedLayout, tabs)
@@ -461,7 +460,7 @@ export function EditorLayout() {
     if (!layoutReady) return
     const timer = window.setTimeout(() => {
       layoutPersistQueueRef.current = layoutPersistQueueRef.current.catch(() => undefined).then(async () => {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await store.set(EDITOR_LAYOUT_STORE_KEY, layout)
         await store.save()
       }).catch(error => {
@@ -577,13 +576,13 @@ export function EditorLayout() {
   }, [currentOnboardingTask])
 
   const persistOnboardingProgress = useCallback(async (progress: OnboardingProgress) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set(ONBOARDING_PROGRESS_STORE_KEY, progress)
     await store.save()
   }, [])
 
   useEffect(() => {
-    void Store.load('store.json').then(async store => {
+    void platform.store.load('store.json').then(async store => {
       const saved = await store.get<OnboardingProgress>(ONBOARDING_PROGRESS_STORE_KEY)
       setOnboardingProgress(normalizeOnboardingProgress(saved))
     })
@@ -652,18 +651,17 @@ export function EditorLayout() {
     workspaceRoot?: string,
   ): Promise<boolean | null> => {
     try {
-      const { exists } = await import('@tauri-apps/plugin-fs')
-      if (workspaceRoot) {
+            if (workspaceRoot) {
         const resolvedPath = isAbsoluteFsPath(path)
           ? path
-          : await (await import('@tauri-apps/api/path')).join(workspaceRoot, path)
-        return await exists(resolvedPath)
+          : await platform.path.join(workspaceRoot, path)
+        return await platform.fs.exists(resolvedPath)
       }
       const { getFilePathOptions } = await import('@/lib/workspace')
       const options = await getFilePathOptions(path)
       return options.baseDir
-        ? await exists(options.path, { baseDir: options.baseDir })
-        : await exists(options.path)
+        ? await platform.fs.exists(options.path, { baseDir: options.baseDir })
+        : await platform.fs.exists(options.path)
     } catch {
       return null
     }
@@ -1561,7 +1559,7 @@ export function EditorLayout() {
       try {
         focusTargetPath = isAbsoluteFsPath(checkedTargetPath)
           ? checkedTargetPath
-          : await (await import('@tauri-apps/api/path')).join(
+          : await platform.path.join(
               navigationWorkspaceRoot,
               checkedTargetPath,
             )
@@ -1715,7 +1713,7 @@ export function EditorLayout() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return
       let currentPlatform = ''
-      try { currentPlatform = platform() } catch { currentPlatform = '' }
+      try { currentPlatform = platform.os.platform() } catch { currentPlatform = '' }
       const isMac = currentPlatform === 'macos'
       const navigationDirection = isMac
         ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey

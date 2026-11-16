@@ -32,8 +32,7 @@ import { SuggestionProps } from '@tiptap/suggestion'
 import { type Editor, type Range } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { handleImageUpload } from '@/lib/image-handler'
 import useArticleStore from '@/stores/article'
 import { toast } from '@/hooks/use-toast'
@@ -197,8 +196,8 @@ async function getWorkspaceRelativePathForAbsolutePath(path: string): Promise<st
     return getPathInsideRoot(path, workspace.path)
   }
 
-  const appDir = await appDataDir()
-  const defaultWorkspacePath = await join(appDir, 'article')
+  const appDir = await platform.path.appDataDir()
+  const defaultWorkspacePath = await platform.path.join(appDir, 'article')
   return getPathInsideRoot(path, defaultWorkspacePath)
 }
 
@@ -619,7 +618,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
             })
 
             if (typeof file === 'string') {
-              const fileData = await readFile(file)
+              const fileData = await platform.fs.readFile(file)
               const ext = file.split('.').pop() || 'png'
               const fileName = file.split('/').pop() || `image.${ext}`
               const arrayBuffer = new Uint8Array(fileData).buffer

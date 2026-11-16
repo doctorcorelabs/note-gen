@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import useArticleStore from '@/stores/article'
 import useSettingStore from '@/stores/setting'
 import { Editor } from '@tiptap/react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getSyncRepoName } from '@/lib/sync/repo-utils'
 import { getFileCommits as getGithubFileCommits, getFiles as getGithubFiles, decodeBase64ToString } from '@/lib/sync/github'
 import { getFileCommits as getGiteeFileCommits, getFiles as getGiteeFiles, decodeBase64ToString as decodeGiteeBase64 } from '@/lib/sync/gitee'
@@ -52,7 +52,7 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
   // Get the sync provider
   const getProvider = useCallback(async (): Promise<SyncProvider | null> => {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const provider = await store.get<string>('primaryBackupMethod')
       if (provider === 'github' || provider === 'gitee' || provider === 'gitlab' || provider === 'gitea') {
         return provider
@@ -100,7 +100,7 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
         }
       }
 
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       let githubUsername: string | undefined
       let giteeUsername: string | undefined
       let gitlabProjectId: string | undefined

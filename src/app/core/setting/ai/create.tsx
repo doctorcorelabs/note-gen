@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { Plus } from "lucide-react"
-import { Store } from "@tauri-apps/plugin-store"
+import { platform } from "@/lib/platform"
 import { v4 } from "uuid"
 
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,7 @@ export default function CreateConfig({ onConfigCreated }: CreateConfigProps) {
 
     setCreating(true)
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const aiModelList = await store.get<AiConfig[]>('aiModelList') || []
       const id = v4()
       const newProvider: AiConfig = {

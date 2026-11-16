@@ -1,6 +1,6 @@
 'use client'
 
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { AlertCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useState } from 'react'
@@ -39,7 +39,7 @@ export function SyncPlatformCard({
   useEffect(() => {
     async function init() {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const token = await store.get<string>(config.tokenKey)
         if (token) setAccessToken(token)
       } catch (initError) {
@@ -58,7 +58,7 @@ export function SyncPlatformCard({
     setError(null)
 
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set(config.tokenKey, value)
       await store.save()
     } catch (saveError) {

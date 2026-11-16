@@ -2,7 +2,7 @@
 
 import { PluginThemeSelector } from '@/components/plugins/plugin-theme-selector'
 import { useState } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { useTheme } from 'next-themes'
 import { Item, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemActions } from '@/components/ui/item'
@@ -70,7 +70,7 @@ export function CustomThemeSettings() {
     }
 
     // 立即保存到 store
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('customThemeColors', updatedColors)
     await store.save()
 
@@ -147,7 +147,7 @@ export function CustomThemeSettings() {
       },
     }
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('customThemeColors', updatedColors)
     await store.save()
     useSettingStore.setState({ customThemeColors: updatedColors })

@@ -1,6 +1,6 @@
 import { getDb } from '@/db'
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { encryptJson, decryptPackedJson, encodeUtf8Base64Url, loadWorkspaceKey, objectAssociatedData } from './crypto'
 import { getSelfHostedSyncRuntime } from './runtime'
 import { authenticatedClient, getProfile } from './profile'
@@ -615,7 +615,7 @@ async function assertBindingEnabled(binding: DocumentBinding, writing = false) {
 }
 
 async function assertCollaborationEntry() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get('primaryBackupMethod') !== 'selfHosted'
     || await store.get('platformSwitchRecovery')
     || await store.get('selfHostedConnectionReviewProfileId')) throw new Error('SELF_HOSTED_COLLABORATION_PAUSED')

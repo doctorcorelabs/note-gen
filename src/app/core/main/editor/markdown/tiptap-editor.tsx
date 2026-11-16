@@ -40,8 +40,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useCallback, useMemo, useSta
 import { createPortal } from 'react-dom'
 import { openPath, openUrl } from '@tauri-apps/plugin-opener'
 import { open } from '@tauri-apps/plugin-dialog'
-import { BaseDirectory, readFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { handleImageUpload, saveImageToWorkspace } from '@/lib/image-handler'
 import useArticleStore from '@/stores/article'
 import { cn, convertImage, convertImageByWorkspace } from '@/lib/utils'
@@ -1415,8 +1414,8 @@ async function getWorkspaceRelativePathForAbsolutePath(path: string): Promise<st
     return getPathInsideRoot(path, workspace.path)
   }
 
-  const appDir = await appDataDir()
-  const defaultWorkspacePath = await join(appDir, 'article')
+  const appDir = await platform.path.appDataDir()
+  const defaultWorkspacePath = await platform.path.join(appDir, 'article')
   return getPathInsideRoot(path, defaultWorkspacePath)
 }
 
@@ -1528,8 +1527,8 @@ async function getOpenableLocalPath(path: string): Promise<string> {
     return pathOptions.path
   }
 
-  const appDir = await appDataDir()
-  return await join(appDir, 'article', path)
+  const appDir = await platform.path.appDataDir()
+  return await platform.path.join(appDir, 'article', path)
 }
 
 async function openLocalPathWithDefaultApp(path: string) {
@@ -5768,7 +5767,7 @@ export function TipTapEditor({
 
         if (!isCurrentOperation()) return
         if (typeof file === 'string') {
-          const fileData = await readFile(file)
+          const fileData = await platform.fs.readFile(file)
           const ext = file.split('.').pop() || 'png'
           const fileName = file.split('/').pop() || `image.${ext}`
           const arrayBuffer = new Uint8Array(fileData).buffer
@@ -6797,7 +6796,7 @@ export function TipTapEditor({
                   throw new Error('无法获取图片记录的本地文件路径')
                 }
 
-                const bytes = await readFile(localAssetPath, { baseDir: BaseDirectory.AppData })
+                const bytes = await platform.fs.readFile(localAssetPath, { baseDir: BaseDirectory.AppData })
                 if (!isCurrentOperation()) return
                 const fileName = localAssetPath.split('/').pop() || mark.url
                 const imageFile = new File([bytes], fileName, {
