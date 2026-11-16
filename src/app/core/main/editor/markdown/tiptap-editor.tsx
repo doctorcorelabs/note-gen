@@ -338,7 +338,7 @@ function EditorScrollbar({
   return (
     <div
       role="scrollbar"
-      aria-label="编辑器滚动条"
+      aria-label="Editor scrollbar"
       aria-controls={scrollContainerId}
       aria-orientation="vertical"
       aria-valuemin={0}
@@ -1850,7 +1850,7 @@ function createRemoteCursorDecorations(
       const cursorElement = document.createElement('span')
       cursorElement.className = 'self-hosted-remote-cursor'
       cursorElement.style.borderColor = color
-      cursorElement.setAttribute('aria-label', `${cursor.label} 的光标`)
+      cursorElement.setAttribute('aria-label', `Cursor of ${cursor.label}`)
       const label = document.createElement('span')
       label.className = 'self-hosted-remote-cursor-label'
       label.style.backgroundColor = color
@@ -3477,7 +3477,7 @@ export function TipTapEditor({
               controller.updatePresence(
                 sourceSelectionRef.current.from,
                 sourceSelectionRef.current.to,
-                isMobile ? '移动端' : '桌面端',
+                isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
                 'markdown',
               )
             }
@@ -3486,7 +3486,7 @@ export function TipTapEditor({
             controller.updatePresence(
               selection.anchor,
               selection.head,
-              isMobile ? '移动端' : '桌面端',
+              isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
               'prosemirror',
             )
           }
@@ -3547,7 +3547,7 @@ export function TipTapEditor({
       selfHostedCollaborationRef.current?.updatePresence(
         selection.anchor,
         selection.head,
-        isMobile ? '移动端' : '桌面端',
+        isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
         'prosemirror',
       )
     }
@@ -3576,7 +3576,7 @@ export function TipTapEditor({
       controller.updatePresence(
         sourceSelectionRef.current.from,
         sourceSelectionRef.current.to,
-        isMobile ? '移动端' : '桌面端',
+        isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
         'markdown',
       )
       return
@@ -3586,7 +3586,7 @@ export function TipTapEditor({
       controller.updatePresence(
         selection.anchor,
         selection.head,
-        isMobile ? '移动端' : '桌面端',
+        isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
         'prosemirror',
       )
     } else {
@@ -3669,7 +3669,7 @@ export function TipTapEditor({
     selfHostedCollaborationRef.current?.updatePresence(
       selection.from,
       selection.to,
-      isMobile ? '移动端' : '桌面端',
+      isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
       'markdown',
     )
 
@@ -3724,7 +3724,7 @@ export function TipTapEditor({
     controller.updatePresence(
       sourceSelectionRef.current.from,
       sourceSelectionRef.current.to,
-      isMobile ? '移动端' : '桌面端',
+      isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
       'markdown',
     )
   }, [isActive, isMobile])
@@ -3764,7 +3764,7 @@ export function TipTapEditor({
       selfHostedCollaborationRef.current?.updatePresence(
         state.selection.from,
         state.selection.to,
-        isMobile ? '移动端' : '桌面端',
+        isMobile ? tSelfHosted('presenceDeviceMobile') : tSelfHosted('presenceDeviceDesktop'),
         'markdown',
       )
     }
@@ -5468,7 +5468,7 @@ export function TipTapEditor({
           const project = canvasId ? await getCanvasProject(canvasId) : null
           if (!isCurrentOperation()) return
           const activeFilePath = targetFilePath
-          if (!project || !activeFilePath) throw new Error('无法读取画布或当前 Markdown 文件')
+          if (!project || !activeFilePath) throw new Error(t('canvasDrop.readFailed'))
           const safeTitle = project.title.replace(/[\\/:*?"<>|]/g, '-').trim() || 'NoteGen-Canvas'
           const imageFile = await canvasDocumentToPngFile(project.document, `${safeTitle}.png`)
           if (!isCurrentOperation()) return
@@ -5545,8 +5545,8 @@ export function TipTapEditor({
           }
 
           toast({
-            title: '无法获取文件路径',
-            description: '当前拖拽来源没有提供真实文件路径，无法生成可打开的链接。',
+            title: t('fileDrop.noFilePath'),
+            description: t('fileDrop.noFilePathDescription'),
             variant: 'destructive',
           })
           return
@@ -5565,7 +5565,7 @@ export function TipTapEditor({
             ? t('canvasDrop.failed')
             : droppedImageFiles.length > 0
               ? tImage('failed')
-              : '插入文件链接失败',
+              : t('slashCommand.fileInsert.failed'),
           description: error instanceof Error ? error.message : undefined,
           variant: 'destructive',
         })
@@ -6474,8 +6474,8 @@ export function TipTapEditor({
 
       if (!context.trim()) {
         toast({
-          title: '续写失败',
-          description: '请先输入一些内容',
+          title: t('aiGenerate.continueFailed'),
+          description: t('aiGenerate.enterContentFirst'),
           variant: 'destructive',
         })
         return
@@ -6531,7 +6531,7 @@ export function TipTapEditor({
           editorChain()
             .deleteRange({ from: startPosition, to: startPosition + accumulatedResult.length })
             .run()
-          throw new Error('模型未返回续写内容，请检查模型配置后重试')
+          throw new Error(t('aiGenerate.noContinuationReturned'))
         }
 
         editorChain()
@@ -6564,7 +6564,7 @@ export function TipTapEditor({
         // Show error toast (but not for aborted requests)
         if (!currentController.signal.aborted) {
           toast({
-            title: '续写失败',
+            title: t('aiGenerate.continueFailed'),
             description: error instanceof Error ? error.message : String(error),
             variant: 'destructive',
           })
@@ -6589,10 +6589,10 @@ export function TipTapEditor({
 
     let abortController: AbortController | null = null
 
-    const actionTitle: Record<EditorAiGenerationAction, string> = {
-      section: '生成章节',
-      summary: '总结',
-      custom: '自定义指令',
+    const actionFailedTitle: Record<EditorAiGenerationAction, string> = {
+      section: t('aiGenerate.sectionFailed'),
+      summary: t('aiGenerate.summaryFailed'),
+      custom: t('aiGenerate.customFailed'),
     }
 
     const handleAIGenerate = async (event: Event) => {
@@ -6620,8 +6620,8 @@ export function TipTapEditor({
 
       if (action === 'custom' && !instruction) {
         toast({
-          title: '自定义指令失败',
-          description: '请输入指令',
+          title: t('aiGenerate.customFailed'),
+          description: t('aiGenerate.enterInstruction'),
           variant: 'destructive',
         })
         return
@@ -6636,8 +6636,8 @@ export function TipTapEditor({
 
       if (action !== 'custom' && !plainText.trim()) {
         toast({
-          title: `${actionTitle[action]}失败`,
-          description: '请先输入一些内容',
+          title: actionFailedTitle[action],
+          description: t('aiGenerate.enterContentFirst'),
           variant: 'destructive',
         })
         return
@@ -6741,8 +6741,8 @@ export function TipTapEditor({
 
         if (error instanceof Error && error.message !== 'Request was aborted.') {
           toast({
-            title: `${actionTitle[action]}失败`,
-            description: error.message || '网络错误',
+            title: actionFailedTitle[action],
+            description: error.message || t('aiGenerate.networkError'),
             variant: 'destructive',
           })
         }
@@ -6791,7 +6791,7 @@ export function TipTapEditor({
               if (!/^https?:\/\//i.test(mark.url)) {
                 const localAssetPath = getMarkLocalAssetPath(mark)
                 if (!localAssetPath) {
-                  throw new Error('无法获取图片记录的本地文件路径')
+                  throw new Error(t('markDrop.localPathFailed'))
                 }
 
                 const bytes = await platform.fs.readFile(localAssetPath, { baseDir: BaseDirectory.AppData })
@@ -6823,8 +6823,8 @@ export function TipTapEditor({
                 .run()
 
               toast({
-                title: '已插入记录',
-                description: mark.desc || '图片记录',
+                title: t('markDrop.inserted'),
+                description: mark.desc || t('markDrop.imageRecord'),
               })
             })().catch(error => {
               if (!isCurrentOperation()) return
@@ -6846,8 +6846,8 @@ export function TipTapEditor({
               editor?.commands.insertContent(markdown, { contentType: 'markdown' })
             }
             toast({
-              title: '已插入记录',
-              description: mark.desc || mark.content?.slice(0, 50) || '记录内容'
+              title: t('markDrop.inserted'),
+              description: mark.desc || mark.content?.slice(0, 50) || t('markDrop.recordContent')
             })
           }).catch(error => {
             if (isCurrentOperation()) console.error('Failed to insert dropped mark:', error)
@@ -7203,11 +7203,11 @@ export function TipTapEditor({
         }
         const sourceController = sourceEditorControllerRef.current
         try {
-          if (!sourceController) throw new Error('源码编辑器未就绪，已取消写入。')
+          if (!sourceController) throw new Error('The source editor is not ready, so the write was cancelled.')
           if (insertFrom === 0 && insertTo === markdown.length && markdown.length > 0) {
-            throw new EditorEditSkipped('本次源码编辑会替换全文，已拒绝执行；请拆分为局部修改。')
+            throw new EditorEditSkipped('This source edit would replace the entire document, so it was rejected. Split it into local edits.')
           }
-          if (isCancelled?.()) throw new Error('编辑操作已取消，未写入。')
+          if (isCancelled?.()) throw new Error('The edit operation was cancelled; nothing was written.')
           sourceController.applyEdits([{ from: insertFrom, to: insertTo, text: content }])
           sourceController.setSelection(nextSelection.from, nextSelection.to)
           sourceSelectionRef.current = nextSelection
@@ -7253,7 +7253,7 @@ export function TipTapEditor({
           const transaction = buildAgentRangeEdit(editor, content, insertionScope, true)
           const updatedMarkdown = buildAgentRangeMarkdown(editor, currentMarkdown, transaction.doc)
           editor.view.dispatch(transaction)
-          if (!editor.state.doc.eq(transaction.doc)) throw new EditorEditSkipped('改动未应用。')
+          if (!editor.state.doc.eq(transaction.doc)) throw new EditorEditSkipped('The change was not applied.')
           visualMarkdownSnapshotRef.current = { doc: editor.state.doc, markdown: updatedMarkdown }
           if (transaction.docChanged) editor.view.dispatch(closeHistory(editor.state.tr))
           flushMarkdownChange(editor)
@@ -7335,13 +7335,13 @@ export function TipTapEditor({
               || range.to < range.from
               || range.to > markdown.length
             ) {
-              resolve({ success: false, insertedLength: 0, error: '无效或不可用的 Markdown 范围' })
+              resolve({ success: false, insertedLength: 0, error: 'Invalid or unavailable Markdown range' })
               return
             }
             const from = range.from
             const to = range.to
             if (from === 0 && to === markdown.length && markdown.length > 0) {
-              throw new EditorEditSkipped('本次源码编辑会替换全文，已拒绝执行；请拆分为局部修改。')
+              throw new EditorEditSkipped('This source edit would replace the entire document, so it was rejected. Split it into local edits.')
             }
             nextMarkdown = `${markdown.slice(0, from)}${newContent}${markdown.slice(to)}`
             replacedLength = to - from
@@ -7360,7 +7360,7 @@ export function TipTapEditor({
             }
 
             if (foundIndex === -1) {
-              resolve({ success: false, insertedLength: 0, error: `找不到文本 "${searchContent}"` })
+              resolve({ success: false, insertedLength: 0, error: `Could not find the text "${searchContent}"` })
               return
             }
 
@@ -7382,14 +7382,14 @@ export function TipTapEditor({
             replacedLength = to - from
             newCursorPosition = from + newContent.length
           } else {
-            resolve({ success: false, insertedLength: 0, error: '请提供 content、range、searchContent 或 startLine/endLine 参数' })
+            resolve({ success: false, insertedLength: 0, error: 'Provide the content, range, searchContent, or startLine/endLine parameter' })
             return
           }
 
           if (!range) assertAgentMarkdownChangeLocal(editor, markdown, nextMarkdown)
           const sourceController = sourceEditorControllerRef.current
-          if (!sourceController) throw new Error('源码编辑器未就绪，已取消写入。')
-          if (isCancelled?.()) throw new Error('编辑操作已取消，未写入。')
+          if (!sourceController) throw new Error('The source editor is not ready, so the write was cancelled.')
+          if (isCancelled?.()) throw new Error('The edit operation was cancelled; nothing was written.')
           const sourceEdits = buildEditorTextEdits(markdown, nextMarkdown)
           if (sourceEdits.length > 0) sourceController.applyEdits(sourceEdits)
           if (newCursorPosition !== undefined) {
@@ -7403,7 +7403,7 @@ export function TipTapEditor({
           resolve({
             success: true,
             insertedLength: newContent.length,
-            message: `成功替换 ${replacedLength} 个字符为 ${newContent.length} 个字符`,
+            message: `Successfully replaced ${replacedLength} characters with ${newContent.length} characters`,
             newCursorPosition,
           })
         } catch (error) {
@@ -7437,7 +7437,7 @@ export function TipTapEditor({
           while (currentOccurrence < (occurrence || 1)) {
             foundIndex = contentLower.indexOf(searchLower, searchFrom)
             if (foundIndex === -1) {
-              resolve({ success: false, insertedLength: 0, error: `找不到文本 "${searchContent}"` })
+              resolve({ success: false, insertedLength: 0, error: `Could not find the text "${searchContent}"` })
               return
             }
             currentOccurrence++
@@ -7479,7 +7479,7 @@ export function TipTapEditor({
         else if (content) {
           // Don't change from/to, use current selection
         } else {
-          resolve({ success: false, insertedLength: 0, error: '请提供 content、range、searchContent 或 startLine/endLine 参数' })
+          resolve({ success: false, insertedLength: 0, error: 'Provide the content, range, searchContent, or startLine/endLine parameter' })
           return
         }
 
@@ -7516,7 +7516,7 @@ export function TipTapEditor({
               resolve({
                 success: true,
                 insertedLength: newContent.length,
-                message: `成功替换第 ${startLine}-${endLine} 行内容`,
+                message: `Successfully replaced the content of lines ${startLine}-${endLine}`,
               })
               return
             }
@@ -7537,7 +7537,7 @@ export function TipTapEditor({
             const transaction = buildAgentRangeEdit(editor, newContent, { from, to })
             const updatedMarkdown = buildAgentRangeMarkdown(editor, currentMarkdown, transaction.doc)
             editor.view.dispatch(transaction)
-            if (!editor.state.doc.eq(transaction.doc)) throw new EditorEditSkipped('改动未应用。')
+            if (!editor.state.doc.eq(transaction.doc)) throw new EditorEditSkipped('The change was not applied.')
             visualMarkdownSnapshotRef.current = { doc: editor.state.doc, markdown: updatedMarkdown }
             if (transaction.docChanged) editor.view.dispatch(closeHistory(editor.state.tr))
             flushMarkdownChange(editor)
@@ -7549,7 +7549,7 @@ export function TipTapEditor({
           resolve({
             success: true,
             insertedLength: newContent.length,
-            message: `成功替换 ${to - from} 个字符为 ${newContent.length} 个字符`,
+            message: `Successfully replaced ${to - from} characters with ${newContent.length} characters`,
             newCursorPosition: editor.state.selection.from,
           })
         }, (error) => {
@@ -8275,7 +8275,7 @@ export function TipTapEditor({
           type="button"
           variant="outline"
           size="icon"
-          aria-label="返回顶部"
+          aria-label={t('backToTop')}
           className="mobile-scroll-top-button absolute right-4 size-11 rounded-full border-border/70 bg-background/90 text-foreground shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/75"
           onMouseDown={(event) => event.preventDefault()}
           onClick={handleMobileScrollTop}
@@ -8329,7 +8329,7 @@ export function TipTapEditor({
         <div className="absolute inset-0 z-50 flex items-start justify-end p-4 bg-background/20 pointer-events-none">
           <div className="flex items-center gap-2 bg-background/90 border rounded-md px-3 py-2 shadow-md pointer-events-auto">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">AI 整理中</span>
+            <span className="text-xs text-muted-foreground">{t('aiGenerate.organizing')}</span>
             {onTerminate && (
               <Button
                 variant="ghost"
@@ -8369,7 +8369,7 @@ export function TipTapEditor({
           onOpenChange={setMathDialogOpen}
           onInsert={handleMathInsert}
           type={mathType}
-          title={mathType === 'inline' ? '插入行内公式' : '插入块级公式'}
+          title={mathType === 'inline' ? t('mathDialog.insertInline') : t('mathDialog.insertBlock')}
         />
       ) : null}
       </div>

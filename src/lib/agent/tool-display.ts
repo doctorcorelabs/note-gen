@@ -11,7 +11,7 @@ export function withToolDisplayTitle(schema: JsonSchema): JsonSchema {
       [TOOL_DISPLAY_TITLE_KEY]: {
         type: 'string',
         maxLength: 80,
-        description: 'A short user-facing action title in the user\'s language, specific to this call, e.g. 搜索北京近期天气. Describe the action, not an unverified successful outcome. No technical tool names or Markdown.',
+        description: 'A short user-facing action title in the user\'s language, specific to this call, e.g. Search for recent weather in Beijing. Describe the action, not an unverified successful outcome. No technical tool names or Markdown.',
       },
     },
   }

@@ -165,7 +165,7 @@ export function UnsupportedFile({ filePath }: UnsupportedFileProps) {
   title={fullPath || filePath}
   onClick={async () => {
     await navigator.clipboard.writeText(fullPath || filePath)
-    toast({ title: t('pathCopied') || '路径已复制' })
+    toast({ title: t('pathCopied') || 'Path copied' })
   }}
 >
   {fullPath || filePath}

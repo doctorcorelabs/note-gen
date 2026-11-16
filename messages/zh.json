@@ -1532,6 +1532,9 @@
         "reset": "清空自定义指引",
         "saveSuccess": "Agent 自定义指引已保存",
         "resetSuccess": "Agent 自定义指引已清空"
+      },
+      "library": {
+        "writingAssistant": "写作助手"
       }
     },
     "memories": {
@@ -2071,6 +2074,12 @@
           "viewer": "查看者",
           "editor": "编辑者",
           "manager": "管理员"
+        },
+        "remoteCursorLabel": "{label} 的光标",
+        "presenceDeviceMobile": "移动端",
+        "presenceDeviceDesktop": "桌面端",
+        "errors": {
+          "SELF_HOSTED_SYNC_CONFIG_MISSING": "自托管同步配置不存在"
         }
       },
       "connectionTab": "连接设置",
@@ -2754,7 +2763,49 @@
         "nativeLocalSnapshotPending": "服务器已接受本地修改，但本机副本尚未恢复完整，正在等待重试；请保留现有备份。",
         "nativeTagIdentityMissing": "此标签缺少本地同步身份，已暂停相关条目。请重启 NoteGen 完成本地数据初始化后重试。",
         "nativeStorageBudgetExceeded": "实例或账号存储预算已用尽。请联系管理员调整预算或清理保留数据后重试。"
-      }
+      },
+      "giteaSelfHostedUrlMissing": "自建 Gitea 实例的 URL 未配置，请先在设置中填写 Gitea URL",
+      "giteaAccessTokenNotConfigured": "Gitea Access Token 未配置",
+      "giteaUsernameNotConfigured": "Gitea 用户名未配置",
+      "giteaSyncFailed": "同步失败",
+      "giteaUploadError": "上传文件时发生错误",
+      "giteaUpdateFileFailed": "更新文件失败",
+      "giteaUpdateFileError": "更新文件时发生错误",
+      "giteaUsernameMissing": "用户名未配置",
+      "giteaDeleteFileFailed": "删除文件失败",
+      "giteaDeleteFileError": "删除文件时发生错误",
+      "giteaTokenNotConfigured": "访问令牌未配置",
+      "giteaUserInfoFailed": "获取用户信息失败",
+      "giteaUserInfoError": "获取用户信息时发生错误",
+      "giteaCheckRepoStatusFailed": "检查仓库状态失败",
+      "giteaRepoListFailed": "获取仓库列表失败: {status}",
+      "giteaCreateRepoFailed": "创建仓库失败",
+      "giteaCreateRepoError": "创建仓库时发生错误",
+      "githubSyncFailed": "同步失败",
+      "githubDeleteFileFailed": "删除文件失败: {status} {statusText}",
+      "githubUserInfoFailed": "获取用户信息失败",
+      "githubCheckRepoStatusFailed": "检查仓库状态失败: {status}",
+      "githubAccessTokenNotConfigured": "GitHub Access Token 未配置",
+      "githubRepoListFailed": "获取仓库列表失败: {status}",
+      "githubReleaseFailed": "获取 release 失败",
+      "githubReleaseListFailed": "获取 release 列表失败",
+      "gitlabOfficialDescription": "官方国际版 GitLab",
+      "gitlabJihulabName": "极狐GitLab",
+      "gitlabJihulabDescription": "中国版 GitLab",
+      "gitlabSelfHostedDescription": "自建 GitLab 服务器",
+      "s3NotConfigured": "S3 未配置",
+      "webdavNotConfigured": "WebDAV 未配置",
+      "s3DownloadFailed": "S3 下载失败",
+      "webdavDownloadFailed": "WebDAV 下载失败",
+      "cloudFolderDownloadFailed": "云盘文件夹下载失败",
+      "remoteDownloadUnsupported": "当前同步方式不支持远端工作区下载",
+      "s3UploadFailed": "S3 上传失败",
+      "webdavUploadFailed": "WebDAV 上传失败",
+      "cloudFolderUploadFailed": "云盘文件夹上传失败",
+      "remoteUploadUnsupported": "当前同步方式不支持远端工作区上传",
+      "platformUploadFailed": "{effectivePlatform} 上传失败",
+      "cloudFolderNotConfigured": "云盘文件夹未配置",
+      "canvasConflictCopyTitle": "{title}（同步冲突·{origin}副本）"
     },
     "imageHosting": {
       "title": "图片存储",
@@ -3963,7 +4014,8 @@
       },
       "imageGallery": {
         "expand": "展开",
-        "collapse": "收起"
+        "collapse": "收起",
+        "imageGroup": "图片组"
       },
       "text": {
         "title": "记录文本",
@@ -4759,6 +4811,16 @@
               "busy": "任务执行中，完成后可以撤销。"
             },
             "stalePreview": "内容或编辑模式已变化，请取消本次提案后重新生成差异。"
+          },
+          "tools": {
+            "skillArtifact": {
+              "inspectPageTitle": "检查 Skill 产物页面",
+              "readTextTitle": "读取 Skill 文本产物"
+            },
+            "web": {
+              "searchTitle": "搜索互联网",
+              "readPageTitle": "读取网页"
+            }
           }
         },
         "fileLink": {
@@ -5227,7 +5289,8 @@
       "link": "网页链接",
       "todo": "待办事项",
       "group": "分组",
-      "chart": "数据图表"
+      "chart": "数据图表",
+      "noteDefault": "笔记"
     },
     "chart": {
       "createTitle": "创建数据图表",
@@ -5970,7 +6033,22 @@
         "moveFailed": "移动失败",
         "refreshFailed": "刷新文件列表失败，请检查网络和同步配置后重试。"
       },
-      "deleteConfirm": "确认删除此文件吗？"
+      "deleteConfirm": "确认删除此文件吗？",
+      "pdfPreparing": "正在准备 PDF",
+      "pdfSaveHint": "请在系统打印窗口中选择“另存为 PDF”。",
+      "pdfPrintWindowOpened": "已打开 PDF 打印窗口",
+      "exportSuccess": "导出成功",
+      "exportFailed": "导出失败",
+      "exportDialogTitle": "导出",
+      "pdfPageCreateFailed": "无法创建 PDF 打印页面",
+      "pdfExportTimeout": "PDF 导出超时",
+      "pdfPrintWindowTimeout": "PDF 打印窗口启动超时",
+      "nativePdfExportFailed": "原生 PDF 导出失败",
+      "pdfExportingTitle": "{title} - 正在导出 PDF",
+      "pdfPreviewTitle": "{title} - PDF 打印预览",
+      "pdfPrintWindowStartFailed": "PDF 打印窗口启动失败：{payload}",
+      "exportPdfDialogTitle": "导出 PDF",
+      "pdfPrintUnsupported": "当前平台不支持系统 PDF 打印"
     },
     "editor": {
       "copySuccess": "复制成功",
@@ -6215,7 +6293,8 @@
       "builtinDesc": "免费，实时识别",
       "model": "大模型识别",
       "modelDesc": "需配置STT模型，更准确"
-    }
+    },
+    "audioLoading": "加载音频中..."
   },
   "quickRecord": {
     "description": "点击选择记录工具，快速创建记录"
@@ -6414,7 +6493,8 @@
       "generating": "正在生成画布图片…",
       "success": "画布已插入",
       "successDescription": "已生成静态图片：{path}",
-      "failed": "插入画布失败"
+      "failed": "插入画布失败",
+      "readFailed": "无法读取画布或当前 Markdown 文件"
     },
     "image": {
       "insert": "插入图片",
@@ -6559,6 +6639,145 @@
         "placeholder": "输入 AI 指令",
         "submit": "执行"
       }
+    },
+    "scrollbarLabel": "编辑器滚动条",
+    "fileDrop": {
+      "noFilePath": "无法获取文件路径",
+      "noFilePathDescription": "当前拖拽来源没有提供真实文件路径，无法生成可打开的链接。"
+    },
+    "aiGenerate": {
+      "continueFailed": "续写失败",
+      "enterContentFirst": "请先输入一些内容",
+      "noContinuationReturned": "模型未返回续写内容，请检查模型配置后重试",
+      "sectionFailed": "生成章节失败",
+      "summaryFailed": "总结失败",
+      "customFailed": "自定义指令失败",
+      "enterInstruction": "请输入指令",
+      "networkError": "网络错误",
+      "organizing": "AI 整理中"
+    },
+    "markDrop": {
+      "localPathFailed": "无法获取图片记录的本地文件路径",
+      "inserted": "已插入记录",
+      "imageRecord": "图片记录",
+      "recordContent": "记录内容"
+    },
+    "backToTop": "返回顶部",
+    "mathDialog": {
+      "insertInline": "插入行内公式",
+      "insertBlock": "插入块级公式"
+    },
+    "mobile": {
+      "sheet": {
+        "insert": "插入内容",
+        "format": "文本格式",
+        "ai": "AI 处理",
+        "aiWrite": "AI 写作",
+        "aiCustom": "自定义 AI",
+        "mobileMore": "更多写作工具",
+        "imageSrc": "编辑图片地址",
+        "imageAlt": "编辑图片说明",
+        "tableAlign": "表格对齐",
+        "tableMore": "更多表格操作",
+        "moreActions": "更多操作",
+        "bulletList": "无序列表",
+        "orderedList": "有序列表",
+        "taskList": "待办列表",
+        "blockquote": "引用",
+        "codeBlock": "代码块",
+        "horizontalRule": "分割线",
+        "table": "表格",
+        "paragraph": "正文",
+        "heading1": "一级标题",
+        "heading2": "二级标题",
+        "heading3": "三级标题",
+        "bold": "粗体",
+        "italic": "斜体",
+        "highlight": "高亮",
+        "polish": "润色选中文本",
+        "concise": "精简选中文本",
+        "expand": "扩写选中文本",
+        "customInstructionPlaceholder": "输入自定义 AI 指令，例如：整理成会议纪要",
+        "runCustomInstruction": "执行自定义指令",
+        "searchReplace": "搜索替换",
+        "outline": "大纲",
+        "inlineMath": "行内公式",
+        "blockMath": "块级公式",
+        "mermaid": "Mermaid 图表",
+        "imageSrcPlaceholder": "输入图片地址",
+        "saveAddress": "保存地址",
+        "imageAltPlaceholder": "输入图片说明",
+        "saveDescription": "保存说明",
+        "alignLeft": "左对齐",
+        "alignCenter": "居中对齐",
+        "alignRight": "右对齐",
+        "addRowBefore": "在上方插入行",
+        "addRowAfter": "在下方插入行",
+        "addColumnBefore": "在左侧插入列",
+        "addColumnAfter": "在右侧插入列",
+        "deleteRow": "删除当前行",
+        "deleteColumn": "删除当前列",
+        "deleteTable": "删除整个表格",
+        "heading": "标题",
+        "headingDescription": "插入或切换为二级标题",
+        "image": "图片",
+        "imageDescription": "从本地选择图片插入当前光标位置",
+        "continueWriting": "继续写",
+        "continueDescription": "根据光标前后内容续写",
+        "generateSection": "生成章节",
+        "generateSectionDescription": "在当前位置补充一个完整段落",
+        "summarize": "总结全文",
+        "summarizeDescription": "基于当前笔记生成摘要"
+      },
+      "toolbar": {
+        "menuTitle": "标题",
+        "menuList": "列表",
+        "menuBlock": "块级",
+        "menuMath": "数学",
+        "menuDiagram": "图表",
+        "more": "更多",
+        "aiContinue": "续写",
+        "aiGenerateSection": "生成章节",
+        "aiSummarize": "总结全文",
+        "aiCustom": "自定义",
+        "formatParagraph": "正文",
+        "formatHeading1": "一级标题",
+        "formatHeading2": "二级标题",
+        "formatHeading3": "三级标题",
+        "insertBulletList": "无序列表",
+        "insertOrderedList": "有序列表",
+        "insertTaskList": "待办列表",
+        "insertBlockquote": "引用",
+        "insertCodeBlock": "代码块",
+        "insertHorizontalRule": "分割线",
+        "insertImage": "图片",
+        "insertTable": "表格",
+        "insertInlineMath": "行内公式",
+        "insertBlockMath": "块级公式",
+        "mermaidFlowchart": "流程图",
+        "mermaidSequence": "时序图",
+        "mermaidGantt": "甘特图",
+        "mermaidClass": "类图",
+        "mermaidState": "状态图",
+        "mermaidPie": "饼图",
+        "mermaidEr": "ER 图",
+        "mermaidJourney": "用户旅程",
+        "backToRootMenu": "返回一级菜单"
+      }
+    },
+    "syncHistory": {
+      "loadFailed": "加载失败",
+      "loadFailedDescription": "无法加载提交历史",
+      "restored": "已恢复",
+      "restoredDescription": "已从历史版本恢复文件",
+      "restoreFailed": "恢复失败",
+      "restoreFailedDescription": "无法从历史版本恢复文件",
+      "openInRepo": "在仓库中打开",
+      "loading": "加载中...",
+      "noCommits": "暂无提交记录",
+      "restoreThisVersion": "恢复此版本",
+      "restoring": "恢复中...",
+      "restore": "恢复"
     }
   },
   "editorWindow": {

@@ -318,7 +318,7 @@ export function ImageGallery({ marks }: ImageGalleryProps) {
           ) : null}
           <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
             <span className="text-xs font-medium">
-              图片组
+              {t('record.mark.imageGallery.imageGroup')}
             </span>
             <span className="text-xs opacity-70">
               {isMultiSelectMode ? `${selectedImageCount}/${emptyImageMarks.length}` : emptyImageMarks.length}

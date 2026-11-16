@@ -161,8 +161,8 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
     } catch (error) {
       console.error('Failed to load history:', error)
       toast({
-        title: '加载失败',
-        description: '无法加载提交历史',
+        title: 'Failed to load',
+        description: 'Unable to load the commit history',
         variant: 'destructive'
       })
     } finally {
@@ -248,8 +248,8 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
         await updateFileRestoreTime(activeFilePath)
 
         toast({
-          title: '已恢复',
-          description: '已从历史版本恢复文件'
+          title: 'Restored',
+          description: 'The file was restored from a previous version'
         })
 
         setIsOpen(false)
@@ -257,8 +257,8 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
     } catch (error) {
       console.error('Failed to restore version:', error)
       toast({
-        title: '恢复失败',
-        description: '无法从历史版本恢复文件',
+        title: 'Restore failed',
+        description: 'Unable to restore the file from a previous version',
         variant: 'destructive'
       })
     } finally {
@@ -323,7 +323,7 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-            title="在仓库中打开"
+            title="Open in repository"
           >
             <ExternalLink size={10} />
             <span className="truncate max-w-30">{activeFilePath.split('/').pop()}</span>
@@ -333,11 +333,11 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
       <div className="flex-1 overflow-y-auto pr-1">
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
-            加载中...
+            Loading...
           </div>
         ) : history.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">
-            暂无提交记录
+            No commits yet
           </div>
         ) : (
           <ul className="space-y-2">
@@ -374,10 +374,10 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
                       'text-xs text-blue-500 hover:text-blue-600 inline-flex items-center gap-1',
                       restoringSha === commit.sha && 'opacity-50'
                     )}
-                    title="恢复此版本"
+                    title="Restore this version"
                   >
                     <RotateCcw size={12} />
-                    {restoringSha === commit.sha ? '恢复中...' : '恢复'}
+                    {restoringSha === commit.sha ? 'Restoring...' : 'Restore'}
                   </button>
                 </div>
               </li>

@@ -165,13 +165,13 @@ export async function uploadFile(
       const errorData = await response.json();
       throw {
         status: response.status,
-        message: errorData.message || '同步失败'
+        message: errorData.message || 'Sync failed.'
       };
     });
   } catch (error) {
     if (guarded) throw error
     toast({
-      title: '同步失败',
+      title: 'Sync failed.',
       description: (error as GithubError).message,
       variant: 'destructive',
     })
@@ -311,7 +311,7 @@ export async function deleteFile(
         return data;
       }
 
-      throw new Error(`删除文件失败: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to delete the file: ${response.status} ${response.statusText}`);
     });
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (error) {
@@ -405,7 +405,7 @@ export async function getUserInfo(token?: string) {
       return { data } as OctokitResponse<any>;
     }
     
-    throw new Error('获取用户信息失败');
+    throw new Error('Failed to fetch user information.');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (error) {
     return false;
@@ -447,13 +447,13 @@ export async function checkSyncRepoState(name: string) {
 
   if (response.status === 404) return false
 
-  throw new Error(`检查仓库状态失败: ${response.status}`)
+  throw new Error(`Failed to check the repository status: ${response.status}`)
 }
 
 export async function listUserRepositories(): Promise<string[]> {
   const store = await platform.store.load('store.json')
   const accessToken = await store.get<string>('accessToken')
-  if (!accessToken) throw new Error('GitHub Access Token 未配置')
+  if (!accessToken) throw new Error('GitHub Access Token is not configured.')
 
   const proxyUrl = await store.get<string>('proxy')
   const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
@@ -467,7 +467,7 @@ export async function listUserRepositories(): Promise<string[]> {
     { method: 'GET', headers, proxy }
   )
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(`获取仓库列表失败: ${response.status}`)
+    throw new Error(`Failed to fetch the repository list: ${response.status}`)
   }
 
   const repositories = await response.json() as GithubRepoInfo[]
@@ -553,7 +553,7 @@ export async function getRelease(): Promise<GithubRelease | false | undefined> {
       return data;
     }
     
-    throw new Error('获取 release 失败');
+    throw new Error('Failed to fetch the release.');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (error) {
     return false
@@ -609,7 +609,7 @@ export async function getReleases(options: GetReleasesOptions = {}): Promise<Git
       return data;
     }
 
-    throw new Error('获取 release 列表失败');
+    throw new Error('Failed to fetch the release list.');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (error) {
     if (cachedReleases?.releases?.length) {

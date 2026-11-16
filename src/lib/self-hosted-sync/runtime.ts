@@ -805,7 +805,7 @@ async function listBindings(): Promise<Binding[]> {
 async function pushOutbox(binding: Binding, session: SyncSession, pathMovesOnly = false, errors?: Set<string>) {
   const database = await getDb()
   const profile = binding.workspaceType === 'account-data' ? await getProfile(binding.profileId) : null
-  if (binding.workspaceType === 'account-data' && !profile) throw new Error('自托管同步配置不存在')
+  if (binding.workspaceType === 'account-data' && !profile) throw new Error('SELF_HOSTED_SYNC_CONFIG_MISSING')
   const domainToggles = profile?.domainToggles ?? {}
   // Filter before LIMIT so paused domains cannot occupy the whole batch.
   // Materialized payloads must obey the same dependency and deletion rules
@@ -1542,7 +1542,7 @@ async function applyRemoteEventRaw(binding: Binding, event: SyncEvent, beforeStr
   }
   if (binding.workspaceType === 'account-data' && (payload.domain === 'mark' || payload.domain === 'message')) {
     const profile = await getProfile(binding.profileId)
-    if (!profile) throw new Error('自托管同步配置不存在')
+    if (!profile) throw new Error('SELF_HOSTED_SYNC_CONFIG_MISSING')
     await hydratePersonalAssets({
       profileId: binding.profileId,
       workspaceId: binding.workspaceId,
@@ -1585,7 +1585,7 @@ async function shouldApplyPersonalEvent(binding: Binding, event: SyncEvent) {
   if (binding.workspaceType !== 'account-data') return true
   if (event.type === 'conflict.created' || event.type === 'conflict.resolved') return true
   const profile = await getProfile(binding.profileId)
-  if (!profile) throw new Error('自托管同步配置不存在')
+  if (!profile) throw new Error('SELF_HOSTED_SYNC_CONFIG_MISSING')
   let kind = typeof event.metadata.kind === 'string' ? event.metadata.kind : null
   if (!kind && event.objectId) {
     const mappings = await (await getDb()).select<Array<{ kind: string }>>(
@@ -2220,7 +2220,7 @@ async function bootstrapBinding(
 ) {
   const { client } = await authenticatedClient(binding.profileId)
   const profile = await getProfile(binding.profileId)
-  if (!profile) throw new Error('自托管同步配置不存在')
+  if (!profile) throw new Error('SELF_HOSTED_SYNC_CONFIG_MISSING')
   return client.withBootstrapSnapshot(binding.workspaceId, session.syncEpoch, async readPage => {
     let bootstrapId: string | undefined
     let afterObjectId: string | undefined

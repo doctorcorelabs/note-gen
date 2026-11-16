@@ -230,7 +230,7 @@ async function saveTextExport(
 ) {
   if (checkIsTauri()) {
     const selectedPath = await platform.dialog.save({
-      title: '导出',
+      title: 'Export',
       defaultPath: filename,
       filters: [{ name: filterName, extensions: [extension] }],
     })
@@ -496,7 +496,7 @@ function createPrintFrame(html: string) {
   const frameDocument = iframe.contentDocument
   if (!frameDocument) {
     iframe.remove()
-    throw new Error('无法创建 PDF 打印页面')
+    throw new Error('Unable to create the PDF print page')
   }
 
   frameDocument.open()
@@ -522,7 +522,7 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
     let settled = false
     let removeCompletionListener: (() => void) | undefined
     const timeout = window.setTimeout(() => {
-      void finishWithError(new Error(outputPath ? 'PDF 导出超时' : 'PDF 打印窗口启动超时'))
+      void finishWithError(new Error(outputPath ? 'PDF export timed out' : 'The PDF print window timed out while starting'))
     }, outputPath ? DIRECT_PDF_EXPORT_TIMEOUT_MS : PRINT_WINDOW_START_TIMEOUT_MS)
 
     const removeStoredDocument = async () => {
@@ -553,14 +553,14 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
           if (event.payload.success) {
             finish(true)
           } else {
-            void finishWithError(new Error(event.payload.error || '原生 PDF 导出失败'))
+            void finishWithError(new Error(event.payload.error || 'Native PDF export failed.'))
           }
         })
       }
 
       const printWindow = platform.window.createWebviewWindow(windowLabel, {
         url: `/print?key=${encodeURIComponent(documentKey)}`,
-        title: outputPath ? `${title} - 正在导出 PDF` : `${title} - PDF 打印预览`,
+        title: outputPath ? `${title} - Exporting PDF` : `${title} - PDF print preview`,
         width: 900,
         height: 700,
         center: true,
@@ -571,7 +571,7 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
         if (!outputPath) finish(true)
       })
       await printWindow.once<string>('tauri://error', (event) => {
-        void finishWithError(new Error(`PDF 打印窗口启动失败：${event.payload}`))
+        void finishWithError(new Error(`Failed to start the PDF print window: ${event.payload}`))
       })
     })().catch((reason: unknown) => {
       void finishWithError(reason)
@@ -592,7 +592,7 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
 
     if (platform.os.platform() === 'macos') {
       const selectedPath = await platform.dialog.save({
-        title: '导出 PDF',
+        title: 'Export PDF',
         defaultPath: `${fileName}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
       })
@@ -618,7 +618,7 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
     const frameDocument = iframe.contentDocument
     const printWindow = iframe.contentWindow
     if (!frameDocument || !printWindow || typeof printWindow.print !== 'function') {
-      throw new Error('当前平台不支持系统 PDF 打印')
+      throw new Error('The current platform does not support system PDF printing')
     }
 
     await waitForDocumentResources(frameDocument)

@@ -1862,6 +1862,9 @@
         "reset": "Clear custom guidance",
         "saveSuccess": "Custom Agent guidance saved",
         "resetSuccess": "Custom Agent guidance cleared"
+      },
+      "library": {
+        "writingAssistant": "Writing Assistant"
       }
     },
     "sync": {
@@ -2071,6 +2074,12 @@
           "viewer": "Viewer",
           "editor": "Editor",
           "manager": "Manager"
+        },
+        "remoteCursorLabel": "Cursor of {label}",
+        "presenceDeviceMobile": "Mobile",
+        "presenceDeviceDesktop": "Desktop",
+        "errors": {
+          "SELF_HOSTED_SYNC_CONFIG_MISSING": "The self-hosted sync configuration does not exist."
         }
       },
       "connectionTab": "Connection",
@@ -2754,7 +2763,49 @@
         "nativeLocalSnapshotPending": "The server accepted local changes, but the local copy still needs restoration. It will be retried; retain existing backups.",
         "nativeTagIdentityMissing": "This tag has no local sync identity. Restart NoteGen to finish local data initialization, then retry.",
         "nativeStorageBudgetExceeded": "The account or instance storage budget is exhausted. Ask the administrator to adjust it or clear retained data before retrying."
-      }
+      },
+      "giteaSelfHostedUrlMissing": "The self-hosted Gitea instance URL is not configured. Please fill in the Gitea URL in settings first.",
+      "giteaAccessTokenNotConfigured": "Gitea Access Token is not configured.",
+      "giteaUsernameNotConfigured": "The Gitea username is not configured.",
+      "giteaSyncFailed": "Sync failed.",
+      "giteaUploadError": "An error occurred while uploading the file.",
+      "giteaUpdateFileFailed": "Failed to update the file.",
+      "giteaUpdateFileError": "An error occurred while updating the file.",
+      "giteaUsernameMissing": "The username is not configured.",
+      "giteaDeleteFileFailed": "Failed to delete the file.",
+      "giteaDeleteFileError": "An error occurred while deleting the file.",
+      "giteaTokenNotConfigured": "The access token is not configured.",
+      "giteaUserInfoFailed": "Failed to fetch user information.",
+      "giteaUserInfoError": "An error occurred while fetching user information.",
+      "giteaCheckRepoStatusFailed": "Failed to check the repository status.",
+      "giteaRepoListFailed": "Failed to fetch the repository list: {status}",
+      "giteaCreateRepoFailed": "Failed to create the repository.",
+      "giteaCreateRepoError": "An error occurred while creating the repository.",
+      "githubSyncFailed": "Sync failed.",
+      "githubDeleteFileFailed": "Failed to delete the file: {status} {statusText}",
+      "githubUserInfoFailed": "Failed to fetch user information.",
+      "githubCheckRepoStatusFailed": "Failed to check the repository status: {status}",
+      "githubAccessTokenNotConfigured": "GitHub Access Token is not configured.",
+      "githubRepoListFailed": "Failed to fetch the repository list: {status}",
+      "githubReleaseFailed": "Failed to fetch the release.",
+      "githubReleaseListFailed": "Failed to fetch the release list.",
+      "gitlabOfficialDescription": "Official international GitLab",
+      "gitlabJihulabName": "JiHu GitLab",
+      "gitlabJihulabDescription": "Chinese edition of GitLab",
+      "gitlabSelfHostedDescription": "Self-hosted GitLab server",
+      "s3NotConfigured": "S3 is not configured.",
+      "webdavNotConfigured": "WebDAV is not configured.",
+      "s3DownloadFailed": "S3 download failed.",
+      "webdavDownloadFailed": "WebDAV download failed.",
+      "cloudFolderDownloadFailed": "Cloud folder download failed.",
+      "remoteDownloadUnsupported": "The current sync method does not support remote workspace download.",
+      "s3UploadFailed": "S3 upload failed.",
+      "webdavUploadFailed": "WebDAV upload failed.",
+      "cloudFolderUploadFailed": "Cloud folder upload failed.",
+      "remoteUploadUnsupported": "The current sync method does not support remote workspace upload.",
+      "platformUploadFailed": "{effectivePlatform} upload failed.",
+      "cloudFolderNotConfigured": "The cloud folder is not configured.",
+      "canvasConflictCopyTitle": "{title} (Sync conflict, {origin} copy)"
     },
     "imageHosting": {
       "title": "Image Storage",
@@ -3954,7 +4005,8 @@
       },
       "imageGallery": {
         "expand": "Expand",
-        "collapse": "Collapse"
+        "collapse": "Collapse",
+        "imageGroup": "Image group"
       },
       "text": {
         "title": "Record Text",
@@ -4846,6 +4898,16 @@
               "busy": "Wait for the current task to finish before reverting."
             },
             "stalePreview": "The content or editor mode changed. Cancel this proposal and generate a new diff."
+          },
+          "tools": {
+            "skillArtifact": {
+              "inspectPageTitle": "Inspect Skill artifact page",
+              "readTextTitle": "Read Skill text artifact"
+            },
+            "web": {
+              "searchTitle": "Search the internet",
+              "readPageTitle": "Read web page"
+            }
           }
         },
         "fileLink": {
@@ -5227,7 +5289,8 @@
       "link": "Web link",
       "todo": "Todo",
       "group": "Group",
-      "chart": "Data chart"
+      "chart": "Data chart",
+      "noteDefault": "Note"
     },
     "chart": {
       "createTitle": "Create data chart",
@@ -5970,7 +6033,22 @@
         "moveFailed": "Move failed",
         "refreshFailed": "Could not refresh the file list. Check your network and sync settings, then try again."
       },
-      "deleteConfirm": "Are you sure you want to delete this file?"
+      "deleteConfirm": "Are you sure you want to delete this file?",
+      "pdfPreparing": "Preparing PDF",
+      "pdfSaveHint": "In the system print window, choose \"Save as PDF\".",
+      "pdfPrintWindowOpened": "PDF print window opened",
+      "exportSuccess": "Export successful",
+      "exportFailed": "Export failed",
+      "exportDialogTitle": "Export",
+      "pdfPageCreateFailed": "Unable to create the PDF print page",
+      "pdfExportTimeout": "PDF export timed out",
+      "pdfPrintWindowTimeout": "The PDF print window timed out while starting",
+      "nativePdfExportFailed": "Native PDF export failed.",
+      "pdfExportingTitle": "{title} - Exporting PDF",
+      "pdfPreviewTitle": "{title} - PDF print preview",
+      "pdfPrintWindowStartFailed": "Failed to start the PDF print window: {payload}",
+      "exportPdfDialogTitle": "Export PDF",
+      "pdfPrintUnsupported": "The current platform does not support system PDF printing"
     },
     "editor": {
       "copySuccess": "Copy Success",
@@ -6215,7 +6293,8 @@
       "builtinDesc": "Free, real-time recognition",
       "model": "AI Model Recognition",
       "modelDesc": "Requires STT model, more accurate"
-    }
+    },
+    "audioLoading": "Loading audio..."
   },
   "quickRecord": {
     "description": "Click to select a recording tool and quickly create records"
@@ -6414,7 +6493,8 @@
       "generating": "Generating canvas image…",
       "success": "Canvas inserted",
       "successDescription": "Static image created: {path}",
-      "failed": "Could not insert canvas"
+      "failed": "Could not insert canvas",
+      "readFailed": "Unable to read the canvas or the current Markdown file"
     },
     "image": {
       "insert": "Insert Image",
@@ -6559,6 +6639,145 @@
         "placeholder": "Enter AI instruction",
         "submit": "Run"
       }
+    },
+    "scrollbarLabel": "Editor scrollbar",
+    "fileDrop": {
+      "noFilePath": "Unable to get the file path",
+      "noFilePathDescription": "The current drag source did not provide a real file path, so an openable link cannot be generated."
+    },
+    "aiGenerate": {
+      "continueFailed": "Continue writing failed",
+      "enterContentFirst": "Enter some content first",
+      "noContinuationReturned": "The model did not return continuation content. Check the model configuration and try again.",
+      "sectionFailed": "Generate section failed",
+      "summaryFailed": "Summarization failed",
+      "customFailed": "Custom instruction failed",
+      "enterInstruction": "Enter an instruction",
+      "networkError": "Network error",
+      "organizing": "AI is organizing"
+    },
+    "markDrop": {
+      "localPathFailed": "Unable to get the local file path of the image record",
+      "inserted": "Record inserted",
+      "imageRecord": "Image record",
+      "recordContent": "Record content"
+    },
+    "backToTop": "Back to top",
+    "mathDialog": {
+      "insertInline": "Insert inline formula",
+      "insertBlock": "Insert block formula"
+    },
+    "mobile": {
+      "sheet": {
+        "insert": "Insert content",
+        "format": "Text format",
+        "ai": "AI processing",
+        "aiWrite": "AI writing",
+        "aiCustom": "Custom AI",
+        "mobileMore": "More writing tools",
+        "imageSrc": "Edit image URL",
+        "imageAlt": "Edit image description",
+        "tableAlign": "Table alignment",
+        "tableMore": "More table actions",
+        "moreActions": "More actions",
+        "bulletList": "Bulleted list",
+        "orderedList": "Ordered list",
+        "taskList": "Task list",
+        "blockquote": "Quote",
+        "codeBlock": "Code block",
+        "horizontalRule": "Divider",
+        "table": "Table",
+        "paragraph": "Body text",
+        "heading1": "Heading 1",
+        "heading2": "Heading 2",
+        "heading3": "Heading 3",
+        "bold": "Bold",
+        "italic": "Italic",
+        "highlight": "Highlight",
+        "polish": "Polish selected text",
+        "concise": "Condense selected text",
+        "expand": "Expand selected text",
+        "customInstructionPlaceholder": "Enter a custom AI instruction, e.g., organize into meeting notes",
+        "runCustomInstruction": "Run custom instruction",
+        "searchReplace": "Search and replace",
+        "outline": "Outline",
+        "inlineMath": "Inline formula",
+        "blockMath": "Block formula",
+        "mermaid": "Mermaid diagram",
+        "imageSrcPlaceholder": "Enter the image URL",
+        "saveAddress": "Save URL",
+        "imageAltPlaceholder": "Enter the image description",
+        "saveDescription": "Save description",
+        "alignLeft": "Align left",
+        "alignCenter": "Center",
+        "alignRight": "Align right",
+        "addRowBefore": "Insert row above",
+        "addRowAfter": "Insert row below",
+        "addColumnBefore": "Insert column left",
+        "addColumnAfter": "Insert column right",
+        "deleteRow": "Delete current row",
+        "deleteColumn": "Delete current column",
+        "deleteTable": "Delete entire table",
+        "heading": "Heading",
+        "headingDescription": "Insert or switch to a level-2 heading",
+        "image": "Image",
+        "imageDescription": "Choose a local image to insert at the current cursor position",
+        "continueWriting": "Continue writing",
+        "continueDescription": "Continue writing from the content around the cursor",
+        "generateSection": "Generate section",
+        "generateSectionDescription": "Add a complete paragraph at the current position",
+        "summarize": "Summarize document",
+        "summarizeDescription": "Generate a summary from the current note"
+      },
+      "toolbar": {
+        "menuTitle": "Heading",
+        "menuList": "List",
+        "menuBlock": "Block",
+        "menuMath": "Math",
+        "menuDiagram": "Diagram",
+        "more": "More",
+        "aiContinue": "Continue",
+        "aiGenerateSection": "Generate section",
+        "aiSummarize": "Summarize document",
+        "aiCustom": "Custom",
+        "formatParagraph": "Body text",
+        "formatHeading1": "Heading 1",
+        "formatHeading2": "Heading 2",
+        "formatHeading3": "Heading 3",
+        "insertBulletList": "Bulleted list",
+        "insertOrderedList": "Ordered list",
+        "insertTaskList": "Task list",
+        "insertBlockquote": "Quote",
+        "insertCodeBlock": "Code block",
+        "insertHorizontalRule": "Divider",
+        "insertImage": "Image",
+        "insertTable": "Table",
+        "insertInlineMath": "Inline formula",
+        "insertBlockMath": "Block formula",
+        "mermaidFlowchart": "Flowchart",
+        "mermaidSequence": "Sequence diagram",
+        "mermaidGantt": "Gantt chart",
+        "mermaidClass": "Class diagram",
+        "mermaidState": "State diagram",
+        "mermaidPie": "Pie chart",
+        "mermaidEr": "ER diagram",
+        "mermaidJourney": "User journey",
+        "backToRootMenu": "Back to main menu"
+      }
+    },
+    "syncHistory": {
+      "loadFailed": "Failed to load",
+      "loadFailedDescription": "Unable to load the commit history",
+      "restored": "Restored",
+      "restoredDescription": "The file was restored from a previous version",
+      "restoreFailed": "Restore failed",
+      "restoreFailedDescription": "Unable to restore the file from a previous version",
+      "openInRepo": "Open in repository",
+      "loading": "Loading...",
+      "noCommits": "No commits yet",
+      "restoreThisVersion": "Restore this version",
+      "restoring": "Restoring...",
+      "restore": "Restore"
     }
   },
   "editorWindow": {
