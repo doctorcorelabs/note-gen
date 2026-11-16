@@ -152,10 +152,10 @@ export function SyncConfirmDialog() {
                 <DrawerHeader>
                   <DrawerTitle className="flex items-center gap-2">
                     <ArrowDownToLine className="h-5 w-5" />
-                    检测到远程文件更新
+                    Remote file update detected
                   </DrawerTitle>
                   <DrawerDescription>
-                    文件 <span className="font-mono bg-muted px-1 rounded">{fileName}</span> 有远程更新
+                    File <span className="font-mono bg-muted px-1 rounded">{fileName}</span> has a remote update
                   </DrawerDescription>
                 </DrawerHeader>
 
@@ -163,7 +163,7 @@ export function SyncConfirmDialog() {
                   {commitInfo && (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium">最新提交信息</h4>
+                        <h4 className="text-sm font-medium">Latest commit info</h4>
                         <Badge variant="outline" className="text-xs">
                           {commitInfo.sha.slice(0, 7)}
                         </Badge>
@@ -171,7 +171,7 @@ export function SyncConfirmDialog() {
 
                       <div className="flex flex-col gap-3 rounded-lg bg-muted/30 p-4">
                         <div>
-                          <p className="text-sm font-medium mb-1">提交消息</p>
+                          <p className="text-sm font-medium mb-1">Commit message</p>
                           <p className="text-sm">{commitInfo.message}</p>
                         </div>
 
@@ -210,14 +210,14 @@ export function SyncConfirmDialog() {
                 <DrawerFooter className="flex-row gap-2">
                   {onIgnore && (
                     <Button variant="outline" onClick={handleIgnore} className="flex-1">
-                      忽略
+                      Ignore
                     </Button>
                   )}
                   <Button variant="outline" onClick={handleCancel} className="flex-1">
-                    取消
+                    Cancel
                   </Button>
                   <Button onClick={handleConfirm} className="flex-1">
-                    确认拉取
+                    Confirm pull
                   </Button>
                 </DrawerFooter>
               </>
@@ -228,10 +228,10 @@ export function SyncConfirmDialog() {
                 <DrawerHeader>
                   <DrawerTitle className="flex items-center gap-2">
                     <GitMerge className="h-5 w-5" />
-                    文件冲突检测
+                    File conflict detected
                   </DrawerTitle>
                   <DrawerDescription>
-                    文件 <span className="font-mono bg-muted px-1 rounded">{fileName}</span> 存在冲突
+                    File <span className="font-mono bg-muted px-1 rounded">{fileName}</span> has a conflict
                   </DrawerDescription>
                 </DrawerHeader>
 
@@ -239,7 +239,7 @@ export function SyncConfirmDialog() {
                   {commitInfo && (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium">远程版本信息</h4>
+                        <h4 className="text-sm font-medium">Remote version info</h4>
                         <Badge variant="outline" className="text-xs">
                           {commitInfo.sha.slice(0, 7)}
                         </Badge>
@@ -247,7 +247,7 @@ export function SyncConfirmDialog() {
 
                       <div className="flex flex-col gap-2 rounded-lg bg-muted/30 p-4">
                         <div>
-                          <p className="text-sm font-medium mb-1">提交消息</p>
+                          <p className="text-sm font-medium mb-1">Commit message</p>
                           <p className="text-sm">{commitInfo.message}</p>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -266,7 +266,7 @@ export function SyncConfirmDialog() {
 
                   <Alert>
                     <AlertDescription>
-                      请选择如何处理此冲突：保留本地版本、保留远程版本，或取消后手动合并。
+                      Choose how to handle this conflict: keep the local version, keep the remote version, or cancel and merge manually.
                     </AlertDescription>
                   </Alert>
                 </div>
@@ -275,22 +275,22 @@ export function SyncConfirmDialog() {
                   <div className="grid grid-cols-2 gap-2 w-full">
                     <Button variant="outline" onClick={handleKeepLocal} className="gap-2">
                       <ArrowUpFromLine className="h-4 w-4" />
-                      保留本地
+                      Keep local
                     </Button>
                     <Button variant="default" onClick={handleConfirm} className="gap-2">
                       <ArrowDownToLine className="h-4 w-4" />
-                      保留远程
+                      Keep remote
                     </Button>
                   </div>
                   {onMerge && (
                     <Button variant="secondary" onClick={handleMerge} className="w-full gap-2">
                       <GitMerge className="h-4 w-4" />
-                      合并两者
+                      Merge both
                     </Button>
                   )}
                   <Button variant="ghost" onClick={handleCancel} className="w-full gap-2">
                     <X className="h-4 w-4" />
-                    取消
+                    Cancel
                   </Button>
                 </DrawerFooter>
               </>
@@ -301,31 +301,31 @@ export function SyncConfirmDialog() {
                 <DrawerHeader>
                   <DrawerTitle className="flex items-center gap-2">
                     <GitMerge className="h-5 w-5" />
-                    同步冲突检测
+                    Sync conflict detected
                   </DrawerTitle>
                   <DrawerDescription>
-                    文件 <span className="font-mono bg-muted px-1 rounded">{fileName}</span> 推送失败
+                    File <span className="font-mono bg-muted px-1 rounded">{fileName}</span> push failed
                   </DrawerDescription>
                 </DrawerHeader>
 
                 <div className="flex flex-col gap-4 overflow-y-auto px-4">
                   <Alert variant="destructive">
                     <AlertDescription>
-                      远程文件的 SHA 与本地记录不一致，可能已被其他设备修改。
+                      The remote file SHA does not match the local record; it may have been modified by another device.
                     </AlertDescription>
                   </Alert>
 
                   <div className="flex flex-col gap-3">
                     <div className="flex items-start justify-between gap-3 text-sm">
-                      <span className="shrink-0 text-muted-foreground">本地记录 SHA：</span>
+                      <span className="shrink-0 text-muted-foreground">Local record SHA:</span>
                       <code className="min-w-0 break-all bg-muted px-2 py-1 rounded text-right text-xs">
-                        {localSha || '无'}
+                        {localSha || 'None'}
                       </code>
                     </div>
                     <div className="flex items-start justify-between gap-3 text-sm">
-                      <span className="shrink-0 text-muted-foreground">远程文件 SHA：</span>
+                      <span className="shrink-0 text-muted-foreground">Remote file SHA:</span>
                       <code className="min-w-0 break-all bg-muted px-2 py-1 rounded text-right text-xs">
-                        {remoteSha || '无'}
+                        {remoteSha || 'None'}
                       </code>
                     </div>
                   </div>
@@ -333,11 +333,11 @@ export function SyncConfirmDialog() {
 
                 <DrawerFooter className="flex-row gap-2">
                   <Button variant="outline" onClick={handleCancel} className="flex-1">
-                    取消
+                    Cancel
                   </Button>
                   <Button variant="destructive" onClick={handleConfirm} className="flex-1 gap-2">
                     <ArrowUpFromLine className="h-4 w-4" />
-                    强制上传
+                    Force upload
                   </Button>
                 </DrawerFooter>
               </>
@@ -352,10 +352,10 @@ export function SyncConfirmDialog() {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <ArrowDownToLine className="h-5 w-5" />
-                    检测到远程文件更新
+                    Remote file update detected
                   </DialogTitle>
                   <DialogDescription>
-                    文件 <span className="font-mono bg-muted px-1 rounded">{fileName}</span> 有远程更新
+                    File <span className="font-mono bg-muted px-1 rounded">{fileName}</span> has a remote update
                   </DialogDescription>
                 </DialogHeader>
 
@@ -363,7 +363,7 @@ export function SyncConfirmDialog() {
                   {commitInfo && (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium">最新提交信息</h4>
+                        <h4 className="text-sm font-medium">Latest commit info</h4>
                         <Badge variant="outline" className="text-xs">
                           {commitInfo.sha.slice(0, 7)}
                         </Badge>
@@ -371,7 +371,7 @@ export function SyncConfirmDialog() {
 
                       <div className="flex flex-col gap-3 rounded-lg bg-muted/30 p-4">
                         <div>
-                          <p className="text-sm font-medium mb-1">提交消息</p>
+                          <p className="text-sm font-medium mb-1">Commit message</p>
                           <p className="text-sm">{commitInfo.message}</p>
                         </div>
 
@@ -410,14 +410,14 @@ export function SyncConfirmDialog() {
                 <DialogFooter>
                   {onIgnore && (
                     <Button variant="outline" onClick={handleIgnore}>
-                      忽略
+                      Ignore
                     </Button>
                   )}
                   <Button variant="outline" onClick={handleCancel}>
-                    取消
+                    Cancel
                   </Button>
                   <Button onClick={handleConfirm}>
-                    确认拉取
+                    Confirm pull
                   </Button>
                 </DialogFooter>
               </>
@@ -428,10 +428,10 @@ export function SyncConfirmDialog() {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <GitMerge className="h-5 w-5" />
-                    文件冲突检测
+                    File conflict detected
                   </DialogTitle>
                   <DialogDescription>
-                    文件 <span className="font-mono bg-muted px-1 rounded">{fileName}</span> 存在冲突
+                    File <span className="font-mono bg-muted px-1 rounded">{fileName}</span> has a conflict
                   </DialogDescription>
                 </DialogHeader>
 
@@ -439,7 +439,7 @@ export function SyncConfirmDialog() {
                   {commitInfo && (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium">远程版本信息</h4>
+                        <h4 className="text-sm font-medium">Remote version info</h4>
                         <Badge variant="outline" className="text-xs">
                           {commitInfo.sha.slice(0, 7)}
                         </Badge>
@@ -447,7 +447,7 @@ export function SyncConfirmDialog() {
 
                       <div className="flex flex-col gap-2 rounded-lg bg-muted/30 p-4">
                         <div>
-                          <p className="text-sm font-medium mb-1">提交消息</p>
+                          <p className="text-sm font-medium mb-1">Commit message</p>
                           <p className="text-sm">{commitInfo.message}</p>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -466,7 +466,7 @@ export function SyncConfirmDialog() {
 
                   <Alert>
                     <AlertDescription>
-                      请选择如何处理此冲突：保留本地版本、保留远程版本，或取消后手动合并。
+                      Choose how to handle this conflict: keep the local version, keep the remote version, or cancel and merge manually.
                     </AlertDescription>
                   </Alert>
                 </div>
@@ -474,21 +474,21 @@ export function SyncConfirmDialog() {
                 <DialogFooter className="gap-2">
                   <Button variant="outline" onClick={handleKeepLocal} className="gap-2">
                     <ArrowUpFromLine className="h-4 w-4" />
-                    保留本地
+                    Keep local
                   </Button>
                   {onMerge && (
                     <Button variant="secondary" onClick={handleMerge} className="gap-2">
                       <GitMerge className="h-4 w-4" />
-                      合并两者
+                      Merge both
                     </Button>
                   )}
                   <Button variant="default" onClick={handleConfirm} className="gap-2">
                     <ArrowDownToLine className="h-4 w-4" />
-                    保留远程
+                    Keep remote
                   </Button>
                   <Button variant="ghost" onClick={handleCancel} className="gap-2">
                     <X className="h-4 w-4" />
-                    取消
+                    Cancel
                   </Button>
                 </DialogFooter>
               </>
@@ -499,31 +499,31 @@ export function SyncConfirmDialog() {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <GitMerge className="h-5 w-5" />
-                    同步冲突检测
+                    Sync conflict detected
                   </DialogTitle>
                   <DialogDescription>
-                    文件 <span className="font-mono bg-muted px-1 rounded">{fileName}</span> 推送失败
+                    File <span className="font-mono bg-muted px-1 rounded">{fileName}</span> push failed
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-col gap-4 py-4">
                   <Alert variant="destructive">
                     <AlertDescription>
-                      远程文件的 SHA 与本地记录不一致，可能已被其他设备修改。
+                      The remote file SHA does not match the local record; it may have been modified by another device.
                     </AlertDescription>
                   </Alert>
 
                   <div className="flex flex-col gap-3">
                     <div className="flex items-start justify-between gap-3 text-sm">
-                      <span className="shrink-0 text-muted-foreground">本地记录 SHA：</span>
+                      <span className="shrink-0 text-muted-foreground">Local record SHA:</span>
                       <code className="min-w-0 break-all bg-muted px-2 py-1 rounded text-right text-xs">
-                        {localSha || '无'}
+                        {localSha || 'None'}
                       </code>
                     </div>
                     <div className="flex items-start justify-between gap-3 text-sm">
-                      <span className="shrink-0 text-muted-foreground">远程文件 SHA：</span>
+                      <span className="shrink-0 text-muted-foreground">Remote file SHA:</span>
                       <code className="min-w-0 break-all bg-muted px-2 py-1 rounded text-right text-xs">
-                        {remoteSha || '无'}
+                        {remoteSha || 'None'}
                       </code>
                     </div>
                   </div>
@@ -531,11 +531,11 @@ export function SyncConfirmDialog() {
 
                 <DialogFooter>
                   <Button variant="outline" onClick={handleCancel}>
-                    取消
+                    Cancel
                   </Button>
                   <Button variant="destructive" onClick={handleConfirm} className="gap-2">
                     <ArrowUpFromLine className="h-4 w-4" />
-                    强制上传（覆盖远程）
+                    Force upload (overwrite remote)
                   </Button>
                 </DialogFooter>
               </>
