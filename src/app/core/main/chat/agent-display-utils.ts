@@ -60,27 +60,27 @@ export function getAgentToolIcon(name = ''): LucideIcon {
 }
 
 export const agentStatusText: Record<AgentRunStatus, string> = {
-  idle: "空闲",
-  analyzing_images: "正在识别图片",
-  preparing_context: "准备上下文",
-  thinking: "思考中",
-  calling_tool: "执行工具",
-  waiting_approval: "等待确认",
-  waiting_answer: "等待回答",
-  applying_change: "应用修改",
-  recovering: "恢复中",
-  steering: "应用追加信息",
-  completed: "已完成",
-  stopped: "已停止",
-  failed: "失败",
+  idle: "Idle",
+  analyzing_images: "Recognizing images",
+  preparing_context: "Preparing context",
+  thinking: "Thinking",
+  calling_tool: "Running tool",
+  waiting_approval: "Waiting for confirmation",
+  waiting_answer: "Waiting for answer",
+  applying_change: "Applying changes",
+  recovering: "Recovering",
+  steering: "Applying additional info",
+  completed: "Completed",
+  stopped: "Stopped",
+  failed: "Failed",
 }
 
 export function formatAgentToolName(name: string) {
   const attachmentToolNames: Record<string, string> = {
-    web_search: "搜索互联网",
-    web_read_page: "读取网页",
-    attachment_list: "附件 · 查看文件夹",
-    attachment_read: "附件 · 读取文件",
+    web_search: "Search the web",
+    web_read_page: "Read web page",
+    attachment_list: "Attachment · View folder",
+    attachment_read: "Attachment · Read file",
   }
 
   if (attachmentToolNames[name]) {
@@ -88,15 +88,15 @@ export function formatAgentToolName(name: string) {
   }
 
   return name
-    .replace(/^editor_/, "编辑器 · ")
-    .replace(/^note_/, "笔记 · ")
-    .replace(/^folder_/, "文件夹 · ")
-    .replace(/^tag_/, "标签 · ")
-    .replace(/^mark_/, "记录 · ")
-    .replace(/^memory_/, "记忆 · ")
+    .replace(/^editor_/, "Editor · ")
+    .replace(/^note_/, "Note · ")
+    .replace(/^folder_/, "Folder · ")
+    .replace(/^tag_/, "Tag · ")
+    .replace(/^mark_/, "Record · ")
+    .replace(/^memory_/, "Memory · ")
     .replace(/^skill_/, "Skill · ")
     .replace(/^mcp_/, "MCP · ")
-    .replace(/^system_/, "系统 · ")
+    .replace(/^system_/, "System · ")
     .replace(/_/g, " ")
 }
 
@@ -152,7 +152,7 @@ function getToolActivityTarget(event: AgentTraceEvent) {
   for (const key of ["filePaths", "relativePaths", "folderPaths", "ids"]) {
     const value = input?.[key]
     if (Array.isArray(value) && value.length > 0) {
-      return `${value.length} 项`
+      return `${value.length} items`
     }
   }
 
@@ -160,16 +160,16 @@ function getToolActivityTarget(event: AgentTraceEvent) {
 }
 
 export function formatAgentToolActivity(event: AgentTraceEvent) {
-  const action = event.displayTitle || event.title || (event.toolName ? formatAgentToolName(event.toolName) : "执行操作")
+  const action = event.displayTitle || event.title || (event.toolName ? formatAgentToolName(event.toolName) : "Performing action")
   const target = event.displayTitle ? undefined : getToolActivityTarget(event)
   const description = target ? `${action} · ${target}` : action
 
   if (event.status === "running") {
-    return `正在${description}`
+    return `Running ${description}`
   }
 
   if (event.status === "error") {
-    return `${description}失败`
+    return `${description} failed`
   }
 
   return description
