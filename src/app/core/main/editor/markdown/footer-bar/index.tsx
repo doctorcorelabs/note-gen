@@ -5,12 +5,13 @@ import { Editor } from '@tiptap/react'
 import { Code2, Eye, Search } from 'lucide-react'
 import { CopyButton } from './copy-button'
 import { ExportButton } from './export-button'
-import { SyncTools } from '../sync/sync-tools'
+import { SyncTools, DisabledSyncTools } from '../sync/sync-tools'
 import { OutlineToggle } from './outline-toggle'
 import { SyncButton } from '../sync/sync-button'
 import { PullButton } from '../sync/pull-button'
 import { HistorySheet } from '../sync/history-sheet'
 import { isMobileDevice } from '@/lib/check'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { Button } from '@/components/ui/button'
 import useSettingStore from '@/stores/setting'
 import { useTranslations } from 'next-intl'
@@ -49,6 +50,10 @@ export function FooterBar({
   embedded = false,
 }: FooterBarProps) {
   const isMobile = isMobileDevice()
+  // Web fork (Fase 1, V3-24): the mobile footer renders the sync
+  // buttons directly instead of through SyncTools, so it needs
+  // its own copy of the web gate (audit section 4.5).
+  const syncToolsDisabled = isEditorFeatureDisabled('syncTools')
   const primaryBackupMethod = useSettingStore((state) => state.primaryBackupMethod)
   const showEditorStats = useSettingStore((state) => state.showEditorStats)
   const pluginStatisticsVisible = usePluginStore((state) => Object.entries(state.statusBar).some(
@@ -98,17 +103,21 @@ export function FooterBar({
             </>
           ) : null}
           {!readOnly && primaryBackupMethod !== 'selfHosted' && primaryBackupMethod !== 'local' ? (
-            <>
-              <HistorySheet editor={editor} prepareExternalAction={prepareWriteAction} onMarkdownChange={onMarkdownChange} />
-              <SyncButton getMarkdown={getMarkdown} prepareExternalAction={prepareWriteAction} />
-              <PullButton
-                editor={editor}
-                markdown={sourceMarkdown}
-                getMarkdown={getMarkdown}
-                prepareExternalAction={prepareWriteAction}
-                onMarkdownChange={onMarkdownChange}
-              />
-            </>
+            syncToolsDisabled ? (
+              <DisabledSyncTools />
+            ) : (
+              <>
+                <HistorySheet editor={editor} prepareExternalAction={prepareWriteAction} onMarkdownChange={onMarkdownChange} />
+                <SyncButton getMarkdown={getMarkdown} prepareExternalAction={prepareWriteAction} />
+                <PullButton
+                  editor={editor}
+                  markdown={sourceMarkdown}
+                  getMarkdown={getMarkdown}
+                  prepareExternalAction={prepareWriteAction}
+                  onMarkdownChange={onMarkdownChange}
+                />
+              </>
+            )
           ) : null}
         </div>
       </div>

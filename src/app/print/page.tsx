@@ -2,6 +2,8 @@
 
 import { platform } from '@/lib/platform'
 import { useEffect, useState } from 'react'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 
 const IMAGE_LOAD_TIMEOUT_MS = 5000
 const PRINT_EXPORT_STORE = 'print-export.json'
@@ -38,6 +40,12 @@ export default function PrintPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    // Web fork (Fase 1, V3-24): the /print window route is not
+    // used on the web (audit section 6.1). Printing goes through
+    // the browser print dialog from the editor export flow. The
+    // effect must not run in web mode: it replaces the document
+    // body with the print document.
+    if (isEditorFeatureDisabled('printWindow')) return
     const key = new URLSearchParams(window.location.search).get('key')
 
     void (async () => {
@@ -66,6 +74,13 @@ export default function PrintPage() {
       setError(reason instanceof Error ? reason.message : String(reason))
     })
   }, [])
+
+  // Web fork (Fase 1, V3-24): opening this route directly in a
+  // browser shows the honest marker instead of the print-window
+  // loading text. The desktop print window below is unchanged.
+  if (isEditorFeatureDisabled('printWindow')) {
+    return <EditorDisabledNotice feature="printWindow" variant="page" />
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center p-8 text-sm text-muted-foreground">

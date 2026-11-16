@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { listenTauriEvent } from '@/lib/tauri-event-listener'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
 import { cn } from '@/lib/utils'
 
 type RecordState = 'unsaved' | 'pending' | 'saved'
@@ -303,7 +304,9 @@ export default function ScreenshotPinPage() {
     return (
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
-          <Alert className="max-w-lg"><AlertDescription>Pinned screenshots are not available in the web version.</AlertDescription></Alert>
+          {/* Web fork (Fase 1, V3-24): the capability gate stays;
+              only the copy moves to the shared catalog marker. */}
+          <EditorDisabledNotice feature="screenshot" className="w-full max-w-lg" />
         </main>
       </ThemeProvider>
     )

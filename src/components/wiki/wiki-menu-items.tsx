@@ -18,6 +18,7 @@ import { rebuildWikiPage, startWikiCompilation } from '@/lib/wiki/queue'
 import { getWikiPageForFilePath, WIKI_ROOT_FOLDER } from '@/lib/wiki/files'
 import type { WikiPage, WikiScopeKind } from '@/types/wiki'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
+import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { useWikiNavigation } from './use-wiki-navigation'
 import { useWikiActionScope } from './use-wiki-action-scope'
 
@@ -38,6 +39,13 @@ export function WikiMenuItems({ kind, id, label, sourceKey, variant = 'context',
   disabled?: boolean
 }) {
   const t = useTranslations('wiki')
+  // Web fork (Fase 1, V3-24): wiki actions are not available in
+  // the web MVP (audit section 4.3). The menu keeps one wiki entry
+  // that explains itself; no wiki read, scope change, or compile
+  // runs in web mode.
+  const tDisabled = useTranslations('editor.disabled')
+  const wikiDisabled = isEditorFeatureDisabled('wiki')
+  const wikiDisabledKeys = editorDisabledMessageKeys('wiki')
   const errorMessage = useWikiErrorMessage()
   const router = useRouter()
   const { openPage, openFolder } = useWikiNavigation()
@@ -52,6 +60,7 @@ export function WikiMenuItems({ kind, id, label, sourceKey, variant = 'context',
     && (normalizedPath === WIKI_ROOT_FOLDER || normalizedPath.startsWith(`${WIKI_ROOT_FOLDER}/`))
 
   useEffect(() => {
+    if (wikiDisabled) return
     let active = true
     let request = 0
     setMenuState(null)
@@ -92,7 +101,7 @@ export function WikiMenuItems({ kind, id, label, sourceKey, variant = 'context',
       unsubscribeWorkspace()
       window.removeEventListener('wiki-updated', update)
     }
-  }, [id, kind, label, getActionGuard])
+  }, [id, kind, label, getActionGuard, wikiDisabled])
 
   function openSettings() {
     if (window.location.pathname.startsWith('/mobile')) router.push('/mobile/setting/pages/rag')
@@ -189,6 +198,13 @@ export function WikiMenuItems({ kind, id, label, sourceKey, variant = 'context',
 
   const Group = variant === 'dropdown' ? DropdownMenuGroup : ContextMenuGroup
   const MenuItem = variant === 'dropdown' ? DropdownMenuItem : ContextMenuItem
+  if (wikiDisabled) {
+    return <Group>
+      <MenuItem disabled={disabled} onSelect={() => {
+        toast(tDisabled(wikiDisabledKeys.titleKey), { description: tDisabled(wikiDisabledKeys.messageKey) })
+      }}><BookOpen />{tDisabled(wikiDisabledKeys.titleKey)}</MenuItem>
+    </Group>
+  }
   const included = kind === 'article' || kind === 'article-folder' ? pathIncluded : Boolean(scopeKey)
   return <Group>
     {!isWikiPath && !generatedPage ? <MenuItem disabled={disabled || busy || !menu} onSelect={() => void toggle()}>{included ? <X /> : <Sparkles />}{included ? t('removeScope') : t('addToWiki')}</MenuItem> : null}

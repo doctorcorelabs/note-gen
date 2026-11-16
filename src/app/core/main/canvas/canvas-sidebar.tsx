@@ -5,6 +5,7 @@ import { platform } from '@/lib/platform'
 import { ArrowDownAZ, ArrowLeft, BrainCircuit, CalendarDays, CloudAlert, CloudCheck, CloudUpload, Columns3, CopyPlus, DownloadCloud, EllipsisVertical, FileInput, FilePlus2, Grid2X2, LayoutGrid, List, Loader2, Palette, Pencil, Pin, PinOff, RefreshCw, RotateCcw, ShieldQuestion, Timer, Trash2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
+import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -121,6 +122,16 @@ function CanvasSyncIndicator({
 
 export function CanvasActions() {
   const t = useTranslations('canvas')
+  // Web fork (Fase 1, V3-24): creating or importing a canvas in
+  // web mode shows the disabled marker instead of creating a
+  // project that can never be opened (audit section 4.4). Opening
+  // an existing canvas lands on the canvas-tab marker.
+  const tDisabled = useTranslations('editor.disabled')
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
+  const showCanvasDisabledNotice = () => {
+    const { titleKey, messageKey } = editorDisabledMessageKeys('canvas')
+    toast(tDisabled(titleKey), { description: tDisabled(messageKey) })
+  }
   const createProject = useCanvasStore(state => state.createProject)
   const createProjectFromDocument = useCanvasStore(state => state.createProjectFromDocument)
   const viewMode = useSettingStore(state => state.canvasManagerViewMode)
@@ -143,6 +154,7 @@ export function CanvasActions() {
   }, [setTrashMode, trashMode])
 
   const handleCreate = async (canvasType: CanvasProjectType) => {
+    if (canvasDisabled) { showCanvasDisabledNotice(); return }
     const project = await createProject(canvasType, t(`templates.${canvasType}`))
     if (project) await addTab(createCanvasTab(project))
   }
@@ -163,6 +175,7 @@ export function CanvasActions() {
   }
 
   const handleImport = async () => {
+    if (canvasDisabled) { showCanvasDisabledNotice(); return }
     try {
       const path = await platform.dialog.open({
         multiple: false,
@@ -275,6 +288,14 @@ export function CanvasActions() {
 
 export function CanvasSidebar() {
   const t = useTranslations('canvas')
+  // Web fork (Fase 1, V3-24): same canvas gate as CanvasActions
+  // above; see the comment there.
+  const tDisabled = useTranslations('editor.disabled')
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
+  const showCanvasDisabledNotice = () => {
+    const { titleKey, messageKey } = editorDisabledMessageKeys('canvas')
+    toast(tDisabled(titleKey), { description: tDisabled(messageKey) })
+  }
   const projects = useCanvasStore(state => state.projects)
   const deletedProjects = useCanvasStore(state => state.deletedProjects)
   const loadProjects = useCanvasStore(state => state.loadProjects)
@@ -393,11 +414,13 @@ export function CanvasSidebar() {
   }
 
   const handleCreate = async (canvasType: CanvasProjectType = 'blank') => {
+    if (canvasDisabled) { showCanvasDisabledNotice(); return }
     const project = await createProject(canvasType, t(`templates.${canvasType}`))
     if (project) await addTab(createCanvasTab(project))
   }
 
   const handleImport = async () => {
+    if (canvasDisabled) { showCanvasDisabledNotice(); return }
     try {
       const path = await platform.dialog.open({
         multiple: false,
@@ -426,6 +449,7 @@ export function CanvasSidebar() {
   }
 
   const handleDuplicate = async (project: CanvasProject) => {
+    if (canvasDisabled) { showCanvasDisabledNotice(); return }
     const duplicate = await duplicateProject(
       project.id,
       t('duplicateTitle', { title: project.title })

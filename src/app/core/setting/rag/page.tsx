@@ -7,6 +7,8 @@ import { SettingType } from '../components/setting-base'
 import { ModelSetting } from './model-setting'
 import { Settings } from './settings'
 import { WikiSettingsPanel } from '@/components/wiki/wiki-settings-panel'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { WikiKnowledgePreferences } from '@/components/wiki/wiki-knowledge-preferences'
 import { KnowledgeSettingCard } from '@/components/wiki/knowledge-setting-card'
 import { useWikiData } from '@/components/wiki/use-wiki-data'
@@ -38,7 +40,11 @@ export default function KnowledgeSetting() {
   }
 
   return <SettingType id="rag" title={wiki('title')} desc={wiki('description')} icon={<BookOpen />}>
-    <WikiSettingsPanel />
+    {/* Web fork (Fase 1, V3-24): wiki generation is not available
+        in the web MVP (audit section 4.3). The panel is replaced
+        by the honest marker; the semantic search card and the
+        knowledge preferences below are untouched. */}
+    {isEditorFeatureDisabled('wiki') ? <EditorDisabledNotice feature="wiki" /> : <WikiSettingsPanel />}
     <KnowledgeSettingCard title={t('ragTitle')} description={t('ragDescription')} icon={Layers} label={wiki('optionalMode')} enabled={semanticEnabled} actions={<Switch aria-label={t('ragTitle')} checked={semanticEnabled} disabled={busy || !data} onCheckedChange={enabled => void toggleSemantic(enabled)} />}>
       {semanticEnabled ? <>
         <ModelSetting kind="embedding" />

@@ -32,6 +32,8 @@ import {
   type EditorWindowSession,
 } from '@/lib/editor-windows'
 import { prepareActiveEditorDeactivation } from '@/lib/editor-deactivation'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { cn } from '@/lib/utils'
 import { setRuntimeWorkspaceRoot } from '@/lib/workspace'
 import { PluginCommandPalette } from '@/components/plugins/plugin-command-palette'
@@ -203,6 +205,14 @@ export default function EditorWindowPage() {
     await platform.window.getCurrentWindow().setAlwaysOnTop(next)
     setAlwaysOnTop(next)
   }, [alwaysOnTop])
+
+  // Web fork (Fase 1, V3-24): this route is not a standalone web
+  // page (audit section 6.1). Opening its URL directly in a
+  // browser shows the honest marker instead of a blank page or a
+  // half-working editor. The desktop window path below is unchanged.
+  if (isEditorFeatureDisabled('editorWindow')) {
+    return <EditorDisabledNotice feature="editorWindow" variant="page" />
+  }
 
   if (error && !session) {
     return <main className="flex min-h-screen items-center justify-center p-8 text-sm text-destructive">{error}</main>
