@@ -38,7 +38,7 @@ interface ColorScheme {
 
 const presets: ColorScheme[] = [
   {
-    name: '默认白色',
+    name: 'Default White',
     mode: 'light',
     colors: {
       background: '#ffffff',
@@ -60,7 +60,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '海洋蓝',
+    name: 'Ocean Blue',
     mode: 'light',
     colors: {
       background: '#f0f9ff',
@@ -82,7 +82,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '森林绿',
+    name: 'Forest Green',
     mode: 'light',
     colors: {
       background: '#f0fdf4',
@@ -104,7 +104,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '日落红',
+    name: 'Sunset Red',
     mode: 'light',
     colors: {
       background: '#fef2f2',
@@ -126,7 +126,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '薰衣草紫',
+    name: 'Lavender Purple',
     mode: 'light',
     colors: {
       background: '#faf5ff',
@@ -148,7 +148,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '午夜暗',
+    name: 'Midnight Dark',
     mode: 'dark',
     colors: {
       background: '#1a1a2e',
@@ -170,7 +170,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '深海',
+    name: 'Deep Sea',
     mode: 'dark',
     colors: {
       background: '#0f172a',
@@ -192,7 +192,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '暗夜绿',
+    name: 'Dark Forest',
     mode: 'dark',
     colors: {
       background: '#0a1f1a',
@@ -214,7 +214,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '紫罗兰暗',
+    name: 'Dark Violet',
     mode: 'dark',
     colors: {
       background: '#1a0b2e',
@@ -236,7 +236,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '珊瑚暖',
+    name: 'Coral Warm',
     mode: 'light',
     colors: {
       background: '#fff7ed',
@@ -258,7 +258,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '石板灰',
+    name: 'Slate Gray',
     mode: 'light',
     colors: {
       background: '#f8fafc',
@@ -280,7 +280,7 @@ const presets: ColorScheme[] = [
     },
   },
   {
-    name: '暗夜金',
+    name: 'Dark Gold',
     mode: 'dark',
     colors: {
       background: '#1a1915',

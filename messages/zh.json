@@ -593,7 +593,20 @@
       "ragDescription": "可选增强。为原始资料建立向量索引，适合资料较多、需要按语义查找的场景。可独立于 LLM Wiki 使用。",
       "optionalEnhancement": "需要时再启用",
       "disabledDescription": "关闭时无需配置向量模型，LLM Wiki 的整理和阅读仍可使用。",
-      "ragAdvanced": "RAG 高级设置、检索测试与维护"
+      "ragAdvanced": "RAG 高级设置、检索测试与维护",
+      "ragErrorTitle": "RAG 功能错误",
+      "embeddingIncomplete": "Embedding 返回不完整",
+      "processFileFailed": "处理文件 {name} 失败",
+      "processWorkspaceFilesFailed": "处理工作区Markdown文件失败",
+      "fuzzySearchFailed": "模糊搜索失败",
+      "vectorSearchFailed": "向量搜索失败",
+      "bm25SearchFailed": "BM25 搜索失败",
+      "queryContextFailed": "获取查询上下文失败",
+      "folderQueryContextFailed": "获取文件夹查询上下文失败",
+      "updateFileVectorsFailed": "更新文件 {filePath} 的向量失败",
+      "embeddingCheckFailed": "嵌入模型检查失败",
+      "vectorDatabaseUpdateTitle": "向量数据库更新",
+      "unnamedFile": "未命名文件"
     },
     "mcp": {
       "title": "MCP",
@@ -2071,6 +2084,9 @@
           "viewer": "查看者",
           "editor": "编辑者",
           "manager": "管理员"
+        },
+        "errors": {
+          "workspaceKeyUnavailable": "工作区密钥不可用：{workspaceId} v{keyVersion}"
         }
       },
       "connectionTab": "连接设置",
@@ -2277,7 +2293,8 @@
         "selecting": "正在选择",
         "accessFailedTitle": "无法访问文件夹",
         "accessFailedDescription": "请选择可读写的网盘文件夹后重试。",
-        "clear": "清除"
+        "clear": "清除",
+        "saveBeforeSwitchFailed": "无法在切换工作区前保存当前编辑内容"
       },
       "oneDrive": {
         "title": "OneDrive",
@@ -2754,6 +2771,204 @@
         "nativeLocalSnapshotPending": "服务器已接受本地修改，但本机副本尚未恢复完整，正在等待重试；请保留现有备份。",
         "nativeTagIdentityMissing": "此标签缺少本地同步身份，已暂停相关条目。请重启 NoteGen 完成本地数据初始化后重试。",
         "nativeStorageBudgetExceeded": "实例或账号存储预算已用尽。请联系管理员调整预算或清理保留数据后重试。"
+      },
+      "s3ConfigNotFound": "S3 配置未找到",
+      "webdavConfigNotFound": "WebDAV 配置未找到",
+      "pathIsDirectoryCannotPush": "{path} 是目录，无法推送",
+      "folderSync": {
+        "noMarkdownFiles": "当前文件夹下没有 Markdown 文件",
+        "unsupportedPlatform": "不支持的平台: {platform}",
+        "syncSuccess": "成功同步 {count} 个文件",
+        "syncFailed": "同步失败"
+      },
+      "pathMove": {
+        "stage": {
+          "validateRecord": "校验记录",
+          "readFullDirectorySnapshot": "读取完整目录快照",
+          "submitRemoteRename": "提交远端改名",
+          "validateSnapshot": "校验快照",
+          "readRepository": "读取仓库",
+          "readSourceDirectory": "读取源目录",
+          "readSourcePath": "读取源路径",
+          "readFileVersion": "读取文件版本",
+          "validateSourceDirectory": "校验源目录",
+          "validateOriginalFileCommit": "校验原始文件提交",
+          "confirmBranchAfterDisconnect": "确认断线后的分支",
+          "confirmRetryBranch": "确认重试分支",
+          "validateRetryBranch": "校验重试分支",
+          "validateFinalPath": "校验最终路径",
+          "readImmutableBody": "读取不可变正文",
+          "validateBody": "校验正文",
+          "readPostRenameVersion": "读取改名后版本",
+          "readRemoteSnapshot": "读取远端快照",
+          "readGitResponse": "读取 Git 响应",
+          "submitGitRename": "提交 Git 改名",
+          "validateGitObject": "校验 Git 对象",
+          "readGitBranch": "读取 Git 分支",
+          "validateDirectorySnapshot": "校验目录快照",
+          "validateMigrationManifest": "校验迁移清单",
+          "generateDirectory": "生成目录",
+          "readCommitIdentity": "读取提交身份",
+          "validateMigrationRecord": "校验迁移记录",
+          "validateMigrationContext": "校验迁移上下文",
+          "validateFileType": "校验文件类型",
+          "readConfiguration": "读取配置",
+          "confirmEmptyRepository": "确认空仓库",
+          "confirmMigrationResult": "确认迁移结果",
+          "readDefaultBranch": "读取默认分支",
+          "validateDefaultBranch": "校验默认分支",
+          "readBranchVersion": "读取分支版本",
+          "readCommitSnapshot": "读取提交快照",
+          "validateParentDirectory": "校验父目录",
+          "validateSourcePath": "校验源路径",
+          "createMigrationTree": "创建迁移目录",
+          "createMigrationCommit": "创建迁移提交",
+          "applyMigrationCommit": "应用迁移提交",
+          "confirmDefaultBranchAfterDisconnect": "确认断线后的默认分支",
+          "confirmConcurrentBranchUpdate": "确认分支并发更新",
+          "validatePaths": "校验路径",
+          "validateContext": "校验上下文",
+          "verifyMigrationResult": "校验迁移结果",
+          "readDirectorySnapshot": "读取目录快照",
+          "validateTargetPath": "校验目标路径",
+          "validateSourceVersion": "校验源版本",
+          "readResourceInfo": "读取资源信息",
+          "readFileSnapshot": "读取文件快照",
+          "validateTargetParentDirectory": "校验目标父目录",
+          "createTargetParentDirectory": "创建目标父目录",
+          "verifyTargetParentDirectory": "核对目标父目录",
+          "confirmTargetParentDirectory": "确认目标父目录",
+          "remoteRename": "远端重命名",
+          "verifyRenameResult": "核对重命名结果"
+        },
+        "detail": {
+          "sourceDirUnsupportedTypesOriginalKept": "源目录包含链接、子模块或不支持的文件类型，原文件已保留",
+          "sourceUnsupportedTypeOriginalKept": "源路径是链接、子模块或不支持的文件类型，原文件已保留",
+          "sourceMissingTargetExistsUnknown": "源路径不存在但目标已存在，无法确认迁移结果",
+          "workspacePlatformStateChangedRecordKept": "工作区、平台或迁移状态已变化，记录已保留",
+          "sourceLastCommitChanged": "源文件最后提交已变化，未接受新的源版本",
+          "targetSnapshotMismatchRecordKept": "目标与原始快照不一致，迁移记录已保留",
+          "repositoryEmptiedPreviousUnknown": "仓库已清空，无法确认先前迁移结果",
+          "defaultBranchChangedOriginalRecordKept": "默认分支已变化，原迁移记录已保留",
+          "remoteSourceChangedRecordKept": "远端源内容已变化，迁移记录已保留",
+          "remoteBodyVersionMismatch": "远端正文不匹配 Git 对象版本",
+          "remoteTargetExistsOriginalKept": "远端目标已存在，原有内容已保留",
+          "oldPathStillHasFilesRecordKept": "旧路径仍有文件，迁移记录已保留",
+          "responseInvalidRecordKept": "响应格式无效，迁移记录已保留",
+          "parentIsFileRecordKept": "父路径是文件，迁移记录已保留",
+          "sourceListingSnapshotMismatch": "源目录清单与持久快照不一致",
+          "directoryListTruncatedOrInvalid": "目录列表被截断或格式无效",
+          "sourceDirNoMigratableFiles": "源目录没有可迁移普通文件",
+          "fileVersionSnapshotMismatch": "文件版本与目录快照不一致",
+          "pathsOrSnapshotInvalid": "路径或持久迁移快照无效",
+          "directoryEntriesDuplicatedOrInvalid": "包含重复或无效目录条目",
+          "remoteBodyInvalid": "远端正文格式或版本无效",
+          "base64BodyInvalid": "Base64 正文无效",
+          "gitObjectVersionInvalid": "Git 对象版本无效",
+          "remoteObjectInvalid": "远端对象格式无效",
+          "noValidDefaultBranch": "没有有效默认分支",
+          "directoryEntryCountInvalid": "目录条目总数无效",
+          "targetContentChanged": "目标内容发生变化",
+          "syncNotFullyConfigured": "同步未配置完整",
+          "commitMismatch": "提交版本不一致",
+          "directoryListMissingPages": "目录列表缺页",
+          "serverRejectedGitRequestRecordKept": "服务端拒绝 Git 协议请求（HTTP {status}），记录已保留",
+          "requestRejectedHttpRecordKept2": "请求被拒绝（HTTP {status}），记录已保留",
+          "gitBranchChangedOrRejectedOriginalsKept": "Git 分支已变化或服务器拒绝提交，远端原文件和记录已保留",
+          "sourceMissingTargetUnconfirmedRecordKept": "源路径缺失且目标不能确认属于先前迁移，记录已保留",
+          "networkFailedPendingRecordKept": "网络请求失败或超时，结果待确认，迁移记录已保留",
+          "manifestSnapshotMismatchRecordKept": "持久文件清单与不可变目录快照不一致，记录已保留",
+          "gitBranchResponseInvalidRecordKept": "Git 分支响应无效或读取失败，记录已保留",
+          "responseInterruptedPendingRecordKept": "响应中断，结果待确认，迁移记录已保留",
+          "noDefaultBranchRecordKept": "仓库没有有效默认分支，记录已保留",
+          "directoryContentVersionMismatch": "目录内容与 Git 版本不一致",
+          "remoteSourceChangedRecordKept2": "远端源内容已变化，记录已保留",
+          "remoteBranchMissingRecordKept": "远端分支不存在，记录已保留",
+          "serverNoCommitConfirmation": "服务器不支持确认提交结果",
+          "sourceNotFileOrDir": "源路径不是普通文件或目录",
+          "responseInvalidRecordKept2": "响应格式无效，记录已保留",
+          "fileModeTypeMismatch": "文件模式与类型不一致",
+          "directoryEntriesOrModesInvalid": "目录条目或模式无效",
+          "snapshotIncomplete": "目录快照不完整",
+          "parentNotDirectory": "父路径不是目录",
+          "objectVersionInvalid": "对象版本无效",
+          "directoryEntryInvalid": "目录条目无效",
+          "responseNoBody": "响应没有正文",
+          "userIdentityInvalid": "用户身份无效",
+          "responseBodyTooLarge": "响应体过大",
+          "requestRejectedHttpRecordKept": "请求被拒绝（HTTP {status}），迁移记录已保留",
+          "remoteSourceChangedSinceAttemptRecordKept": "远端源文件或目录在上次尝试后发生变化，迁移记录已保留",
+          "pathThroughNonDirectoryOldKept": "路径经过非目录对象，已保留旧文件：{path}",
+          "githubRefusedRefUpdateTaskKept": "GitHub 拒绝更新分支引用，迁移待办已保留",
+          "snapshotBranchMissingRecordKept": "已记录迁移快照的远端分支不存在，迁移记录已保留",
+          "recordedSourceTargetMissing": "已记录的远端源和目标均不存在，无法确认迁移结果",
+          "githubTokenInsufficient": "GitHub 令牌权限不足，无法更新远端分支",
+          "githubRateLimited": "GitHub 请求受到频率限制，请稍后重试",
+          "sourceNotFileOrDirRemoteNotMigrated": "源路径不是普通文件或目录，远端文件未迁移",
+          "workspaceStateChangedRecordKept": "工作区或迁移状态已变化，迁移记录已保留",
+          "responseInvalidOrTimeoutRecordKept": "响应格式无效或读取超时，迁移记录已保留",
+          "branchUpdatedByOtherSyncTaskKept": "远端分支被其他同步更新，迁移待办已保留",
+          "branchUpdateUnconfirmedRecordKept": "无法确认分支更新结果，迁移记录已保留",
+          "pathsInvalidRemoteNotMigrated": "路径无效或互相包含，远端文件未迁移",
+          "networkFailedRecordKept": "网络请求失败或超时，迁移记录已保留",
+          "gitObjectVersionInvalidOldKept": "Git 对象版本无效，已保留旧文件",
+          "gitObjectFormatInvalidOldKept": "Git 对象格式无效，已保留旧文件",
+          "noDefaultBranchOldKept": "仓库没有有效默认分支，已保留旧文件",
+          "remoteTargetExistsContentKept": "远端目标路径已存在，原有内容已保留",
+          "retryLimitReachedRecordKept": "已达到安全重试次数，迁移记录已保留",
+          "branchListInvalidRecordKept": "分支列表格式无效，迁移记录已保留",
+          "defaultBranchNoCommitOldKept": "默认分支未指向提交，已保留旧文件",
+          "branchProtectionRejectedUpdate": "远端分支保护或仓库规则拒绝更新",
+          "defaultBranchChangedRecordKept": "默认分支已变化，迁移记录已保留",
+          "commitMismatchOldKept": "提交版本不一致，已保留旧文件",
+          "snapshotIncompleteOldKept": "目录快照不完整，已保留旧文件",
+          "directoryEntryInvalidOldKept": "目录条目无效，已保留旧文件",
+          "githubSyncNotConfigured": "GitHub 同步未配置",
+          "fileChangedOrRequestFailed": "文件已变化或请求失败（HTTP {status}）",
+          "requestRejectedHttpTodoKept": "请求被拒绝（HTTP {status}），待办已保留",
+          "directoryMemberRequestFailed": "目录成员请求失败（HTTP {resourceStatus}）",
+          "requestRejectedHttp": "请求被拒绝（HTTP {status}）",
+          "recordedPathsMissing": "已记录的远端源路径和目标路径均不存在，无法确认迁移结果",
+          "sourceMissingTargetExistsPreviousUnknown": "源路径不存在但目标已存在，无法确认先前迁移结果",
+          "serverCannotProtectSourceVersionTodoKept": "服务端无法保护重发时的完整源版本，待办已保留",
+          "networkOrRedirectFailedTodoKept": "网络请求失败、重定向无效或超时，待办已保留",
+          "configChangedTodoKept": "同步配置或本地迁移状态已变化，待办已保留",
+          "redirectDifferentPathTodoKept": "服务端返回了不同路径的重定向，待办已保留",
+          "responseMissingResource": "响应缺少请求资源，无法确认路径状态",
+          "pathsChangedTodoKept": "源路径或目标路径已变化，待办已保留",
+          "serverNoMoveTodoKept": "服务端不支持 MOVE，待办已保留",
+          "directoryCreationUnconfirmedTodoKept": "无法确认目录创建结果，待办已保留",
+          "pathsInvalidOrNested": "源路径和目标路径无效或互相包含",
+          "serverRateLimitedTodoKept": "服务端暂时限制请求，待办已保留",
+          "networkFailedTodoKept": "网络请求失败或超时，待办已保留",
+          "resourceTypeMissing": "资源类型缺失，无法确认完整目录",
+          "directoryMemberPathsDuplicatedOrOutOfScope": "目录成员路径重复或超出请求范围",
+          "targetExistsNothingOverwritten": "目标已存在，未覆盖任何远端内容",
+          "partialMembersMigratedTodoKept": "部分目录成员未迁移，待办已保留",
+          "directoryChanged": "目录已变化，无法确认完整内容",
+          "remoteSourceChangedTodoKept": "远端源内容已变化，待办已保留",
+          "webdavResponseInvalid": "WebDAV 响应格式无效",
+          "directoryMembersDuplicatedOrTooMany": "目录成员重复或数量过多",
+          "targetParentNotCreated": "目标父目录未创建成功",
+          "targetParentNotDirectory": "目标父路径不是目录",
+          "directoryMemberMissingPath": "目录成员缺少路径",
+          "directoryMemberUnexpectedOrigin": "目录成员来源异常",
+          "defaultBranchChangedRecordKept2": "默认分支已变化，记录已保留"
+        },
+        "failureTemplate": {
+          "gitPlatform": "{providerName} 路径迁移失败（{source} → {target}，{stage}）：{detail}",
+          "gitee": "Gitee 路径迁移失败（{source} → {target}，{stage}）：{detail}",
+          "github": "GitHub 路径迁移失败（{source} → {target}，{stage}）：{detail}",
+          "webdav": "WebDAV 路径迁移失败（{source} → {target}，{stage}）：{detail}"
+        },
+        "metadata": {
+          "invalidName": "同步元数据无效：{name}",
+          "invalidPath": "同步元数据无效：{path}",
+          "migrationInvalid": "路径迁移元数据无效",
+          "migrationPathInvalid": "路径迁移元数据的路径无效",
+          "syncVersionChanged": "路径迁移期间同步版本发生变化，已保留当前同步元数据",
+          "renameContentInvalid": "远端重命名内容验证无效"
+        }
       }
     },
     "imageHosting": {
@@ -2832,7 +3047,8 @@
         },
         "createNewRepo": "创建新仓库",
         "recheckRepo": "重新检测",
-        "recheckingRepo": "检测中..."
+        "recheckingRepo": "检测中...",
+        "queryFailed": "查询失败"
       },
       "s3": {
         "title": "对象存储",
@@ -3453,7 +3669,8 @@
         "unknownVersion": "未知版本",
         "ready": "可用",
         "unavailable": "不可用",
-        "provider": "当前引擎"
+        "provider": "当前引擎",
+        "timeout": "OCR 识别超时"
       },
       "vlm": {
         "title": "VLM 增强（可选）",
@@ -3916,7 +4133,11 @@
         "tag": "所属标签",
         "discardTitle": "放弃未保存的修改？",
         "discardDescription": "返回后，本次修改将不会保留。",
-        "discard": "放弃修改"
+        "discard": "放弃修改",
+        "statusLabel": "状态",
+        "charLineCount": "{charCount} 字 · {lineCount} 行",
+        "emptyContent": "空内容",
+        "titleLabel": "标题"
       },
       "type": {
         "scan": "截图",
@@ -4529,7 +4750,9 @@
                 "title": "自动修改",
                 "description": "自动修改本地内容；删除、脚本、技能安装等操作仍需批准。"
               }
-            }
+            },
+            "externalModifyDenied": "当前为只读模式，无法执行可能修改外部数据的操作。",
+            "modifyDenied": "当前为只读模式。请切换权限模式后再执行修改操作。"
           },
           "autoFinal": {
             "createNote": "已创建笔记《{name}》。",
@@ -4759,6 +4982,42 @@
               "busy": "任务执行中，完成后可以撤销。"
             },
             "stalePreview": "内容或编辑模式已变化，请取消本次提案后重新生成差异。"
+          },
+          "tools": {
+            "askUser": {
+              "title": "询问用户"
+            },
+            "chat": {
+              "readFound": "找到 {count} 条对话记录",
+              "readFailed": "读取对话记录失败: {error}",
+              "createSuccess": "成功创建对话记录，ID: {lastInsertId}",
+              "createFailed": "创建对话记录失败: {error}",
+              "notFound": "未找到ID为 {id} 的对话记录",
+              "updateSuccess": "成功更新对话记录 ID: {id}",
+              "updateFailed": "更新对话记录失败: {error}",
+              "deleteSuccess": "成功删除对话记录 ID: {id}",
+              "deleteFailed": "删除对话记录失败: {error}",
+              "clearByTagSuccess": "成功清空标签 {tagId} 下的所有对话记录",
+              "clearFailed": "清空对话记录失败: {error}",
+              "searchFound": "找到 {count} 条匹配的对话记录",
+              "searchFailed": "搜索对话记录失败: {error}",
+              "chatsParamRequired": "参数 chats 必须是非空数组",
+              "batchCreateSuccess": "成功批量创建 {count} 条对话记录",
+              "batchCreateFailed": "批量创建对话记录失败: {error}",
+              "batchUpdateSuccess": "成功批量更新 {count} 条对话记录",
+              "batchUpdateFailed": "批量更新对话记录失败: {error}",
+              "idsParamRequired": "参数 ids 必须是非空数组",
+              "batchDeleteSuccess": "成功批量删除 {count} 条对话记录",
+              "batchDeleteFailed": "批量删除对话记录失败: {error}"
+            },
+            "image": {
+              "inspectTitle": "深入识别图片",
+              "notAvailable": "图片不存在或已不在本轮可访问范围内。",
+              "promptRequired": "必须提供明确的图片检查问题。",
+              "noValidContent": "图片重新识别未返回有效内容。",
+              "reinspected": "已重新识别图片 {name}。",
+              "reinspectFailed": "图片重新识别失败：{error}"
+            }
           }
         },
         "fileLink": {
@@ -5101,7 +5360,54 @@
       "timeline": "时间线",
       "quadrant": "四象限",
       "kanban": "看板",
-      "swot": "SWOT 分析"
+      "swot": "SWOT 分析",
+      "content": {
+        "flowchart": {
+          "start": "开始",
+          "process": "处理步骤",
+          "decision": "判断条件",
+          "end": "结束",
+          "decisionEnd": "是"
+        },
+        "mindmap": {
+          "topic": "中心主题",
+          "branchOne": "分支一",
+          "branchTwo": "分支二",
+          "branchThree": "分支三"
+        },
+        "timeline": {
+          "phaseOne": "阶段一",
+          "phaseOneDesc": "目标与准备",
+          "phaseTwo": "阶段二",
+          "phaseTwoDesc": "执行与验证",
+          "phaseThree": "阶段三",
+          "phaseThreeDesc": "复盘与交付"
+        },
+        "quadrant": {
+          "urgentImportant": "重要且紧急",
+          "importantNotUrgent": "重要不紧急",
+          "urgentNotImportant": "紧急不重要",
+          "neitherUrgentNorImportant": "不重要不紧急"
+        },
+        "kanban": {
+          "todoColumn": "待处理",
+          "doingColumn": "进行中",
+          "doneColumn": "已完成",
+          "todoCard": "梳理任务",
+          "doingCard": "推进工作",
+          "doneCard": "完成事项"
+        },
+        "swot": {
+          "strengths": "优势 Strengths",
+          "strengthsDesc": "我们擅长什么？",
+          "weaknesses": "劣势 Weaknesses",
+          "weaknessesDesc": "需要改善什么？",
+          "opportunities": "机会 Opportunities",
+          "opportunitiesDesc": "外部有哪些机会？",
+          "threats": "威胁 Threats",
+          "threatsDesc": "外部有哪些风险？"
+        }
+      }
     },
     "import": {
       "action": "导入画布或 Mermaid",
@@ -5644,7 +5950,8 @@
             "title": "这里可以用 Agent 处理刚生成的笔记",
             "desc": "把示例提示词填进对话框后发送，Agent 会基于当前笔记生成双语版本。"
           }
-        }
+        },
+        "sampleRecord": "这是我在 NoteGen 里的第一条记录。\n\n我可以先把零散想法快速记下来，不用一开始就整理结构。\n后面可以把这些记录整理成一篇正式笔记，再继续编辑。\n如果觉得内容不够通顺，还可以用 AI 帮我润色、改写或补充重点。\n写完之后，笔记会保存在本地 Markdown 文件里，也方便后续查找和管理。"
       }
     },
     "unsupportedFile": {
@@ -6076,7 +6383,8 @@
         "syncing": "推送中",
         "syncFailed": "推送失败",
         "checkNetworkOrToken": "请检查网络连接或令牌是否正确",
-        "quickSync": "快速同步"
+        "quickSync": "快速同步",
+        "clickToPush": "点击推送"
       },
       "history": {
         "loadingHistory": "正在读取历史记录",
@@ -6229,7 +6537,18 @@
     "tableToolbar": {
       "row": "行",
       "column": "列",
-      "alignment": "对齐"
+      "alignment": "对齐",
+      "insertTable": "插入表格",
+      "addColumnBefore": "在左侧插入列",
+      "addColumnAfter": "在右侧插入列",
+      "addRowBefore": "在上方插入行",
+      "addRowAfter": "在下方插入行",
+      "alignLeft": "左对齐",
+      "alignCenter": "居中对齐",
+      "alignRight": "右对齐",
+      "deleteColumn": "删除列",
+      "deleteRow": "删除行",
+      "deleteTable": "删除表格"
     },
     "codeBlockPreview": {
       "findPlugin": "搜索插件",
@@ -6407,7 +6726,10 @@
       "reject": "拒绝",
       "undo": "撤销",
       "generating": "生成中...",
-      "abort": "终止"
+      "abort": "终止",
+      "header": "AI 建议",
+      "selectHint": "↑↓ 选择",
+      "thinking": "正在思考..."
     },
     "canvasDrop": {
       "hint": "松开以插入画布图片",
@@ -6559,6 +6881,51 @@
         "placeholder": "输入 AI 指令",
         "submit": "执行"
       }
+    },
+    "mathEditor": {
+      "title": "插入公式",
+      "formulaLabel": "LaTeX 公式",
+      "placeholder": "输入 LaTeX 公式，例如: \\frac{a}{b}",
+      "previewLabel": "预览",
+      "examplesLabel": "常用公式示例:",
+      "fraction": "分数:",
+      "superscript": "上标:",
+      "subscript": "下标:",
+      "squareRoot": "平方根:",
+      "summation": "求和:",
+      "integral": "积分:",
+      "limit": "极限:",
+      "greekLetters": "希腊字母:",
+      "cancel": "取消",
+      "insert": "插入"
+    },
+    "mobile": {
+      "contextBar": {
+        "undo": "撤销",
+        "redo": "重做",
+        "bold": "粗体",
+        "highlight": "高亮",
+        "more": "更多",
+        "italic": "斜体",
+        "underline": "下划线",
+        "strike": "删除线",
+        "code": "行内代码",
+        "blockquote": "引用块",
+        "bulletList": "无序列表",
+        "orderedList": "有序列表",
+        "taskList": "任务列表",
+        "codeBlock": "代码块",
+        "imageSrc": "地址",
+        "imageAlt": "说明",
+        "deleteImage": "删除",
+        "addRow": "加行",
+        "addColumn": "加列",
+        "align": "对齐"
+      }
+    },
+    "remoteCursor": {
+      "cursorLabel": "{label} 的光标",
+      "otherDevice": "其他设备"
     }
   },
   "editorWindow": {

@@ -71,7 +71,7 @@ export class AgentPermissionEngine {
         return {
           allowed: false,
           requiresApproval: false,
-          reason: '当前为只读模式，无法执行可能修改外部数据的操作。',
+          reason: 'Read-only mode is on, so operations that might modify external data cannot run.',
         }
       }
 
@@ -85,7 +85,7 @@ export class AgentPermissionEngine {
       return {
         allowed: false,
         requiresApproval: false,
-        reason: '当前为只读模式。请切换权限模式后再执行修改操作。',
+        reason: 'Read-only mode is on. Switch permission modes before running modification operations.',
       }
     }
 

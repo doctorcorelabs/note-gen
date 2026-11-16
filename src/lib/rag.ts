@@ -48,7 +48,7 @@ function handleRAGError(error: unknown, context: string, showToast: boolean = tr
 
   if (showToast) {
     toast({
-      title: 'RAG 功能错误',
+      title: 'RAG Error',
       description: `${context}: ${errorMessage}`,
       variant: 'destructive',
     });
@@ -581,7 +581,7 @@ export async function processMarkdownFile(
       await updateKnowledgeSourceIndexState(vectorDocumentKey, {
         status: 'failed',
         indexedHash: null,
-        error: 'Embedding 返回不完整',
+        error: 'Embedding returned incomplete results',
       });
       return false;
     }
@@ -728,7 +728,7 @@ export async function processAllMarkdownFiles(onProgress?: (current: number, tot
           const success = await processMarkdownFile(file.path);
           return { success, paused: false, fileName: file.name, error: null };
         } catch (error) {
-          handleRAGError(error, `处理文件 ${file.name} 失败`, false);
+          handleRAGError(error, `Failed to process file ${file.name}`, false);
           return { success: false, paused: false, fileName: file.name, error: String(error) };
         }
       }),
@@ -770,7 +770,7 @@ export async function processAllMarkdownFiles(onProgress?: (current: number, tot
       failedFiles
     };
   } catch (error) {
-    handleRAGError(error, '处理工作区Markdown文件失败');
+    handleRAGError(error, 'Failed to process workspace Markdown files');
     throw error;
   }
 }
@@ -1075,7 +1075,7 @@ export async function getContextForQuery(
                 }
 
                 const contextSnippet = content.substring(startIdx, endIdx);
-                const filepath = item.id || item.title || '未命名文件';
+                const filepath = item.id || item.title || 'Unnamed file';
                 const resolvedChunk = await resolveSnippetToChunk(filepath, contextSnippet);
 
                 allResults.push({
@@ -1096,7 +1096,7 @@ export async function getContextForQuery(
         }
       }
     } catch (error) {
-      handleRAGError(error, '模糊搜索失败', false);
+      handleRAGError(error, 'Fuzzy search failed', false);
     }
 
     // 2. 使用完整问题进行一次向量搜索，保留查询的完整语义和关系
@@ -1127,7 +1127,7 @@ export async function getContextForQuery(
         }
       }
     } catch (error) {
-      handleRAGError(error, '向量搜索失败', false);
+      handleRAGError(error, 'Vector search failed', false);
     }
 
     // 3. 使用 BM25 搜索找到相关文档
@@ -1156,7 +1156,7 @@ export async function getContextForQuery(
         }
       }
     } catch (error) {
-      handleRAGError(error, 'BM25 搜索失败', false);
+      handleRAGError(error, 'BM25 search failed', false);
     }
 
     // 如果没有找到任何相关上下文，返回空结果
@@ -1167,7 +1167,7 @@ export async function getContextForQuery(
     const windowSize = await store.get<number>('ragWindowSize') ?? 2;
     return await finalizeSearchResults(query, allResults, strategy, resultCount, windowSize);
   } catch (error) {
-    handleRAGError(error, '获取查询上下文失败', false);
+    handleRAGError(error, 'Failed to get query context', false);
     return { context: '', sources: [], sourceDetails: [], diagnostics: [] };
   }
 }
@@ -1449,7 +1449,7 @@ async function finalizeSearchResults(
     filename: getRagDisplayFilename(result.filepath),
     content: result.content
   }));
-  const context = finalResults.map(result => `文件：${normalizeRagPath(result.filepath)}
+  const context = finalResults.map(result => `File: ${normalizeRagPath(result.filepath)}
 ${result.content}
 `).join('\n---\n\n');
 
@@ -1465,7 +1465,7 @@ export async function handleFileUpdate(filePath: string, content: string): Promi
   try {
     await processMarkdownFile(filePath, content);
   } catch (error) {
-    handleRAGError(error, `更新文件 ${filePath} 的向量失败`, false);
+    handleRAGError(error, `Failed to update vectors for file ${filePath}`, false);
   }
 }
 
@@ -1475,10 +1475,10 @@ export async function handleFileUpdate(filePath: string, content: string): Promi
 export async function checkEmbeddingModelAvailable(): Promise<boolean> {
   try {
     // 尝试计算一个简单文本的向量
-    const embedding = await fetchEmbedding('测试嵌入模型');
+    const embedding = await fetchEmbedding('Test embedding model');
     return !!embedding;
   } catch (error) {
-    handleRAGError(error, '嵌入模型检查失败', false);
+    handleRAGError(error, 'Embedding model check failed', false);
     return false;
   }
 }
@@ -1488,7 +1488,7 @@ export async function checkEmbeddingModelAvailable(): Promise<boolean> {
  */
 export function showVectorProcessingToast(message: string) {
   toast({
-    title: '向量数据库更新',
+    title: 'Vector database update',
     description: message,
   });
 }
@@ -1647,7 +1647,7 @@ export async function getContextForQueryInFolder(
                 }
 
                 const contextSnippet = content.substring(startIdx, endIdx);
-                const filepath = item.id || item.title || '未命名文件';
+                const filepath = item.id || item.title || 'Unnamed file';
                 const resolvedChunk = await resolveSnippetToChunk(filepath, contextSnippet);
 
                 allResults.push({
@@ -1668,7 +1668,7 @@ export async function getContextForQueryInFolder(
         }
       }
     } catch (error) {
-      handleRAGError(error, '模糊搜索失败', false);
+      handleRAGError(error, 'Fuzzy search failed', false);
     }
 
     // 2. 使用完整问题执行一次向量搜索，并过滤到文件夹范围
@@ -1698,7 +1698,7 @@ export async function getContextForQueryInFolder(
         }
       }
     } catch (error) {
-      handleRAGError(error, '向量搜索失败', false);
+      handleRAGError(error, 'Vector search failed', false);
     }
 
     // 3. 使用 BM25 搜索找到相关文档（限定到文件夹范围）
@@ -1727,7 +1727,7 @@ export async function getContextForQueryInFolder(
         }
       }
     } catch (error) {
-      handleRAGError(error, 'BM25 搜索失败', false);
+      handleRAGError(error, 'BM25 search failed', false);
     }
 
     // 如果没有找到任何相关上下文，返回空结果
@@ -1738,7 +1738,7 @@ export async function getContextForQueryInFolder(
     const windowSize = await store.get<number>('ragWindowSize') ?? 2;
     return await finalizeSearchResults(query, allResults, strategy, resultCount, windowSize);
   } catch (error) {
-    handleRAGError(error, '获取文件夹查询上下文失败', false);
+    handleRAGError(error, 'Failed to get folder query context', false);
     return { context: '', sources: [], sourceDetails: [], diagnostics: [] };
   }
 }

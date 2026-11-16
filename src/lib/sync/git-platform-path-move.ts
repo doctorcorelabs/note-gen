@@ -134,19 +134,19 @@ export async function moveGitPlatformPath(
   { expected, rememberSource, assertCurrent }: MoveOptions,
 ): Promise<GitPlatformPathMoveResult> {
   const failure = (stage: string, detail: string) => new Error(
-    `${names[provider]} 路径迁移失败（${source} → ${target}，${stage}）：${detail}`,
+    `${names[provider]} path migration failed (${source} -> ${target}, ${stage}): ${detail}`,
   )
   if (!validPath(source) || !validPath(target) || source === target
     || source.startsWith(`${target}/`) || target.startsWith(`${source}/`)
     || (expected !== undefined && (!isGitPlatformPathSnapshot(expected) || expected.provider !== provider))) {
-    throw failure('校验记录', '路径或持久迁移快照无效')
+    throw failure('Validate record', 'Paths or the persisted migration snapshot are invalid')
   }
   const current = async () => {
-    if (!await assertCurrent()) throw failure('校验上下文', '工作区、平台或迁移状态已变化，记录已保留')
+    if (!await assertCurrent()) throw failure('Validate context', 'Workspace, platform, or migration state changed; the record was kept')
   }
   const captured = await config(provider)
   await current()
-  if (!captured?.token) throw failure('读取配置', '同步未配置完整')
+  if (!captured?.token) throw failure('Read configuration', 'Sync is not fully configured')
   if (provider === 'gitee') return moveGiteePath({
     source, target, ...captured, expected, rememberSource, assertCurrent,
   })
@@ -170,14 +170,14 @@ export async function moveGitPlatformPath(
               body: body === undefined ? undefined : JSON.stringify(body),
             })
         } catch (error) {
-          const message = failure(stage, '网络请求失败或超时，迁移记录已保留').message
-          if (method === 'POST' && stage === '提交远端改名'
+          const message = failure(stage, 'Network request failed or timed out; the migration record was kept').message
+          if (method === 'POST' && stage === 'Submit remote rename'
             && (controller.signal.aborted || isRemoteConnectionError(error))) throw new RemoteMutationTransportError(message)
           throw new Error(message)
         }
         if (!response.ok) {
-          const message = failure(stage, `请求被拒绝（HTTP ${response.status}），迁移记录已保留`).message
-          if (method === 'POST' && stage === '提交远端改名') {
+          const message = failure(stage, `Request rejected (HTTP ${response.status}); the migration record was kept`).message
+          if (method === 'POST' && stage === 'Submit remote rename') {
             let reason = ''
             try {
               const data: unknown = await readSyncResponseJson(response, `${provider} / path move rejection`)
@@ -191,33 +191,33 @@ export async function moveGitPlatformPath(
           throw new Error(message)
         }
         try { return await readSyncResponseJson(response, `${provider} / path move / ${stage}`) }
-        catch { throw failure(stage, '响应格式无效，迁移记录已保留') }
+        catch { throw failure(stage, 'Invalid response format; the migration record was kept') }
       } finally { clearTimeout(timeout) }
     }
     const object = (value: unknown): Record<string, unknown> => {
       try { return remoteRecord(value) }
-      catch { throw failure('校验快照', '远端对象格式无效') }
+      catch { throw failure('Validate snapshot', 'Invalid remote object format') }
     }
     const sha = (value: unknown): string => {
-      if (typeof value !== 'string' || !SHA.test(value)) throw failure('校验快照', 'Git 对象版本无效')
+      if (typeof value !== 'string' || !SHA.test(value)) throw failure('Validate snapshot', 'Invalid Git object version')
       return value.toLowerCase()
     }
-    const metadata = object(await request('', '读取仓库'))
+    const metadata = object(await request('', 'Read repository'))
     if (metadata.empty === true || metadata.empty_repo === true) {
-      if (expected) throw failure('读取仓库', '仓库已清空，无法确认先前迁移结果')
+      if (expected) throw failure('Read repository', 'Repository was emptied; cannot confirm the previous migration result')
       return { status: 'missing' }
     }
     if (typeof metadata.default_branch !== 'string' || !metadata.default_branch) {
-      const branches = await request('/branches', '确认空仓库')
+      const branches = await request('/branches', 'Confirm empty repository')
       if (Array.isArray(branches) && branches.length === 0 && !expected) return { status: 'missing' }
-      throw failure('读取默认分支', '没有有效默认分支')
+      throw failure('Read default branch', 'No valid default branch')
     }
     const branch = captured.configuredBranch || metadata.default_branch
-    if (expected && expected.branch !== branch) throw failure('校验默认分支', '默认分支已变化，原迁移记录已保留')
+    if (expected && expected.branch !== branch) throw failure('Validate default branch', 'Default branch changed; the original migration record was kept')
     const encodedBranch = encodeURIComponent(branch)
     const branchResource = provider === 'gitlab' ? `/repository/branches/${encodedBranch}` : `/branches/${encodedBranch}`
     const readHead = async (): Promise<string> => {
-      const data = object(await request(branchResource, '读取分支版本'))
+      const data = object(await request(branchResource, 'Read branch version'))
       return sha(object(data.commit).id ?? object(data.commit).sha)
     }
 
@@ -231,8 +231,8 @@ export async function moveGitPlatformPath(
       const cache = new Map<string, Promise<TreeEntry[]>>()
       let rootSha = head
       if (provider === 'gitea') {
-        const commit = object(await request(`/git/commits/${head}`, '读取提交快照'))
-        if (sha(commit.sha) !== head) throw failure('读取提交快照', '提交版本不一致')
+        const commit = object(await request(`/git/commits/${head}`, 'Read commit snapshot'))
+        if (sha(commit.sha) !== head) throw failure('Read commit snapshot', 'Commit version mismatch')
         rootSha = sha(object(commit.tree).sha)
       }
       const directory = (pathOrSha: string): Promise<TreeEntry[]> => {
@@ -246,10 +246,10 @@ export async function moveGitPlatformPath(
             const query = new URLSearchParams({ ref: head, path: pathOrSha, per_page: '100', page: String(page) })
             const resource = provider === 'gitlab' ? `/repository/tree?${query}`
               : `/git/trees/${encodeURIComponent(pathOrSha)}?page=${page}&per_page=100`
-            const value = await request(resource, '读取完整目录快照')
+            const value = await request(resource, 'Read full directory snapshot')
             const data = provider === 'gitlab' ? null : object(value)
             const list = provider === 'gitlab' ? value : data?.tree
-            if (!Array.isArray(list) || data?.truncated === true) throw failure('读取目录快照', '目录列表被截断或格式无效')
+            if (!Array.isArray(list) || data?.truncated === true) throw failure('Read directory snapshot', 'Directory list truncated or invalid format')
             for (const item of list) {
               const entry = object(item)
               const path = entry.path
@@ -258,16 +258,16 @@ export async function moveGitPlatformPath(
               if (typeof localName !== 'string' || !localName || localName.includes('/')
                 || localName === '.' || localName === '..' || seen.has(localName)
                 || typeof normalized.type !== 'string' || typeof normalized.mode !== 'string') {
-                throw failure('读取目录快照', '包含重复或无效目录条目')
+                throw failure('Read directory snapshot', 'Directory contains duplicate or invalid entries')
               }
               seen.add(localName)
               entries.push({ sha: normalized.sha, type: normalized.type, mode: normalized.mode, path: localName })
             }
             if (provider === 'gitea') {
               if (typeof data?.total_count !== 'number' || !Number.isSafeInteger(data.total_count)
-                || data.total_count < entries.length) throw failure('读取目录快照', '目录条目总数无效')
+                || data.total_count < entries.length) throw failure('Read directory snapshot', 'Invalid total directory entry count')
               if (entries.length === data.total_count) break
-              if (list.length === 0) throw failure('读取目录快照', '目录列表缺页')
+              if (list.length === 0) throw failure('Read directory snapshot', 'Directory list is missing pages')
             } else if (list.length < 100) break
             page += 1
           }
@@ -285,7 +285,7 @@ export async function moveGitPlatformPath(
           const entry = entries.find(item => item.path === parts[index])
           if (!entry) return null
           if (index === parts.length - 1) return entry
-          if (entry.type !== 'tree') throw failure('校验父目录', '父路径是文件，迁移记录已保留')
+          if (entry.type !== 'tree') throw failure('Validate parent directory', 'Parent path is a file; the migration record was kept')
           parent = parent ? `${parent}/${entry.path}` : entry.path
           tree = provider === 'gitlab' ? parent : entry.sha
         }
@@ -299,7 +299,7 @@ export async function moveGitPlatformPath(
             const childPath = relative ? `${relative}/${child.path}` : child.path
             if (child.type === 'tree') await visit(`${directoryPath}/${child.path}`, child.sha, childPath)
             else {
-              if (!validEntry(child)) throw failure('读取源目录', '源目录包含链接、子模块或不支持的文件类型，原文件已保留')
+              if (!validEntry(child)) throw failure('Read source directory', 'Source directory contains links, submodules, or unsupported file types; original files were kept')
               collected.push({ path: childPath, sha: child.sha, mode: child.mode as MoveFile['mode'] })
             }
           }
@@ -321,17 +321,17 @@ export async function moveGitPlatformPath(
       await current()
       if (!snapshot) {
         if (!sourceEntry) {
-          if (targetEntry) throw failure('校验目标路径', '源路径不存在但目标已存在，无法确认迁移结果')
+          if (targetEntry) throw failure('Validate target path', 'Source path does not exist but the target already exists; cannot confirm the migration result')
           return { status: 'missing' }
         }
-        if (targetEntry) throw failure('校验目标路径', '远端目标已存在，原有内容已保留')
-        if (!validEntry(sourceEntry)) throw failure('读取源路径', '源路径是链接、子模块或不支持的文件类型，原文件已保留')
+        if (targetEntry) throw failure('Validate target path', 'Remote target already exists; original content was kept')
+        if (!validEntry(sourceEntry)) throw failure('Read source path', 'Source path is a link, submodule, or unsupported file type; original files were kept')
         const files = await view.files(source, sourceEntry)
-        if (files.length === 0) throw failure('读取源目录', '源目录没有可迁移普通文件')
+        if (files.length === 0) throw failure('Read source directory', 'Source directory has no migratable regular files')
         if (provider === 'gitlab') {
           for (const file of files) {
-            const data = object(await request(`/repository/files/${encodeURIComponent(join(source, file.path))}?ref=${view.head}`, '读取文件版本'))
-            if (sha(data.blob_id) !== file.sha) throw failure('读取文件版本', '文件版本与目录快照不一致')
+            const data = object(await request(`/repository/files/${encodeURIComponent(join(source, file.path))}?ref=${view.head}`, 'Read file version'))
+            if (sha(data.blob_id) !== file.sha) throw failure('Read file version', 'File version does not match the directory snapshot')
             file.lastCommitId = sha(data.last_commit_id)
           }
         }
@@ -343,21 +343,21 @@ export async function moveGitPlatformPath(
       if (!sourceEntry && targetEntry && equalEntry(targetEntry, frozen.root)) {
         return { status: 'moved', files: await versions(view, frozen) }
       }
-      if (!sourceEntry || !equalEntry(sourceEntry, frozen.root)) throw failure('校验源路径', '远端源内容已变化，迁移记录已保留')
-      if (targetEntry) throw failure('校验目标路径', '远端目标已存在，原有内容已保留')
-      if (!sameFiles(await view.files(source, sourceEntry), frozen.files)) throw failure('校验源目录', '源目录清单与持久快照不一致')
+      if (!sourceEntry || !equalEntry(sourceEntry, frozen.root)) throw failure('Validate source path', 'Remote source content changed; the migration record was kept')
+      if (targetEntry) throw failure('Validate target path', 'Remote target already exists; original content was kept')
+      if (!sameFiles(await view.files(source, sourceEntry), frozen.files)) throw failure('Validate source directory', 'Source directory listing does not match the persisted snapshot')
       if (provider === 'gitlab' && (expected !== undefined || attempt > 0)) {
         for (const file of frozen.files) {
-          const data = object(await request(`/repository/files/${encodeURIComponent(join(source, file.path))}?ref=${view.head}`, '校验原始文件提交'))
+          const data = object(await request(`/repository/files/${encodeURIComponent(join(source, file.path))}?ref=${view.head}`, 'Validate original file commit'))
           if (sha(data.blob_id) !== file.sha || sha(data.last_commit_id) !== file.lastCommitId) {
-            throw failure('校验原始文件提交', '源文件最后提交已变化，未接受新的源版本')
+            throw failure('Validate original file commit', 'Last commit of the source file changed; the new source version was not accepted')
           }
         }
       }
       try {
         if (provider === 'gitlab') {
           await current()
-          const result = object(await request('/repository/commits', '提交远端改名', 'POST', {
+          const result = object(await request('/repository/commits', 'Submit remote rename', 'POST', {
             branch, commit_message: `Move ${source} to ${target}`, force: false,
             actions: frozen.files.map(file => ({
               action: 'move', file_path: join(target, file.path), previous_path: join(source, file.path),
@@ -374,14 +374,14 @@ export async function moveGitPlatformPath(
           // Older Gitea versions support from_path with update; the byte snapshot is
           // fetched by immutable blob SHA and checked, never from the local editor.
           await current()
-          await request('/contents', '提交远端改名', 'POST', { branch, message: `Move ${source} to ${target}`, files })
+          await request('/contents', 'Submit remote rename', 'POST', { branch, message: `Move ${source} to ${target}`, files })
         }
       } catch (error) {
         if (error instanceof RemoteMutationTransportError) {
           await current()
-          const repository = object(await request('', '确认断线后的分支'))
+          const repository = object(await request('', 'Confirm branch after disconnect'))
           if ((captured.configuredBranch || repository.default_branch) !== frozen.branch) {
-            throw failure('校验默认分支', '默认分支已变化，迁移记录已保留')
+            throw failure('Validate default branch', 'Default branch changed; the migration record was kept')
           }
           const observed = await reader()
           const oldSource = await observed.find(source)
@@ -397,9 +397,9 @@ export async function moveGitPlatformPath(
           await current()
           const latestHead = await readHead()
           if (latestHead !== view.head) {
-            const repository = object(await request('', '确认重试分支'))
+            const repository = object(await request('', 'Confirm retry branch'))
             if ((captured.configuredBranch || repository.default_branch) !== frozen.branch) {
-              throw failure('校验重试分支', '默认分支已变化，迁移记录已保留')
+              throw failure('Validate retry branch', 'Default branch changed; the migration record was kept')
             }
             continue
           }
@@ -409,24 +409,24 @@ export async function moveGitPlatformPath(
 
       await current()
       view = await reader()
-      if (await view.find(source)) throw failure('校验最终路径', '旧路径仍有文件，迁移记录已保留')
+      if (await view.find(source)) throw failure('Validate final path', 'Old path still has files; the migration record was kept')
       const finalEntry = await view.find(target)
       if (!finalEntry || !equalEntry(finalEntry, frozen.root)
         || !sameFiles(await view.files(target, finalEntry), frozen.files)) {
-        throw failure('校验迁移结果', '目标与原始快照不一致，迁移记录已保留')
+        throw failure('Verify migration result', 'Target does not match the original snapshot; the migration record was kept')
       }
       return { status: 'moved', files: await versions(view, frozen) }
     }
-    throw failure('提交远端改名', '已达到安全重试次数，迁移记录已保留')
+    throw failure('Submit remote rename', 'Safe retry limit reached; the migration record was kept')
 
     async function blob(version: string): Promise<string> {
-      const data = object(await request(`/git/blobs/${version}`, '读取不可变正文'))
+      const data = object(await request(`/git/blobs/${version}`, 'Read immutable body'))
       if (sha(data.sha) !== version || typeof data.content !== 'string'
-        || (data.encoding !== undefined && data.encoding !== 'base64')) throw failure('读取不可变正文', '远端正文格式或版本无效')
+        || (data.encoding !== undefined && data.encoding !== 'base64')) throw failure('Read immutable body', 'Invalid remote body format or version')
       let bytes: Uint8Array
       try { bytes = decodeBase64ToBytes(data.content) }
-      catch { throw failure('校验正文', 'Base64 正文无效') }
-      if (await gitBlobVersion(bytes, version.length) !== version) throw failure('校验正文', '远端正文不匹配 Git 对象版本')
+      catch { throw failure('Validate body', 'Invalid Base64 body') }
+      if (await gitBlobVersion(bytes, version.length) !== version) throw failure('Validate body', 'Remote body does not match the Git object version')
       return encodeRemoteFileContent(bytes)
     }
     async function versions(latest: SnapshotReader, identity: GitPlatformPathSnapshot) {
@@ -434,8 +434,8 @@ export async function moveGitPlatformPath(
       for (const file of identity.files) {
         const path = join(target, file.path)
         if (provider === 'gitlab') {
-          const data = object(await request(`/repository/files/${encodeURIComponent(path)}?ref=${latest.head}`, '读取改名后版本'))
-          if (sha(data.blob_id) !== file.sha) throw failure('读取改名后版本', '目标内容发生变化')
+          const data = object(await request(`/repository/files/${encodeURIComponent(path)}?ref=${latest.head}`, 'Read post-rename version'))
+          if (sha(data.blob_id) !== file.sha) throw failure('Read post-rename version', 'Target content changed')
         }
         files.push({ path, version: file.sha })
       }

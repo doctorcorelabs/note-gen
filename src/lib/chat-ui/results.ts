@@ -107,7 +107,7 @@ export function getResultNoteOperation(change: AgentChange, evidence: ResultEvid
     note_rename_file: 'renamed', note_move_file: 'moved', note_copy_file: 'copied',
   }
   if (source && Object.hasOwn(operations, source.toolName)) return operations[source.toolName]
-  if (change.summary?.startsWith('删除文件 ')) return 'deleted'
+  if (change.summary?.startsWith('删除文件 ') || change.summary?.startsWith('Delete file ')) return 'deleted'
   if (change.type === 'editor') return 'updated'
   if (change.after === undefined && change.before !== undefined) return 'deleted'
   if (change.before === undefined && change.after !== undefined) return 'created'
