@@ -46,7 +46,7 @@ function fakeResponse(status: number, body: string): Response {
   const response = {
     status,
     headers: {
-      get(_name: string): string | null {
+      get(): string | null {
         return null;
       },
     },
