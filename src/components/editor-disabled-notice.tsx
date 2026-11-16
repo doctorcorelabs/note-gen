@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// This file is part of the NoteGen web fork. See LICENSE and FORK.md.
+
 'use client'
 
 import { useTranslations } from 'next-intl'

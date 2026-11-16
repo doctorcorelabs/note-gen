@@ -4893,6 +4893,17 @@ export function TipTapEditor({
       updateMobileContext()
     }
 
+    // Web fork (Fase 1, V3-24): the mobile writing toolbar and the
+    // mobile more-sheet reach the AI actions through this dispatcher,
+    // not through the slash menu or the shortcuts. In web mode every
+    // AI action shows the disabled marker instead of opening an AI
+    // sheet or dispatching an AI event (audit section 4.2).
+    if (aiDisabled && (action === 'open-ai-write' || action === 'open-ai-custom' || action === 'ai-continue' || action === 'ai-generate-section' || action === 'ai-generate-summary' || action === 'ai-generate-custom')) {
+      closeSheet()
+      showAiDisabledNotice()
+      return
+    }
+
     const colorAction = /^(text-color|highlight-color):(.+)$/.exec(action)
     if (colorAction) {
       const mark = colorAction[1] === 'text-color' ? 'textColor' : 'highlight'
@@ -5052,9 +5063,11 @@ export function TipTapEditor({
         return
     }
   }, [
+    aiDisabled,
     customAiInstruction,
     editor,
     openSearchReplace,
+    showAiDisabledNotice,
     updateMobileContext,
   ])
 
@@ -5079,6 +5092,15 @@ export function TipTapEditor({
 
   const runMobileEditorAction = useCallback((action: string) => {
     if (!editor) return
+
+    // Web fork (Fase 1, V3-24): the 'ai' action opens an AI sheet
+    // ('ai-write' or 'ai'). In web mode it shows the disabled marker
+    // instead (audit section 4.2). The other AI actions delegate to
+    // runMobileWritingAction or to the gated AI handlers.
+    if (aiDisabled && action === 'ai') {
+      showAiDisabledNotice()
+      return
+    }
 
     if (!mobileContext) {
       switch (action) {
@@ -5248,10 +5270,12 @@ export function TipTapEditor({
         return
     }
   }, [
+    aiDisabled,
     editor,
     mobileContext,
     runMobileWritingAction,
     restoreMobileContextSelection,
+    showAiDisabledNotice,
     updateMobileContext,
   ])
 
