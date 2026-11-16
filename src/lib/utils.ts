@@ -1,9 +1,11 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { platform } from "@/lib/platform";
+import { isTauri, platform } from "@/lib/platform";
 import { getWorkspacePath } from "./workspace";
+import { toWorkspaceMediaRelativePath } from "./markdown-image-path";
 
 const RESOLVED_IMAGE_SRC_RE = /^(?:https?:|data:|blob:|asset:|tauri:|file:)/i
+const WORKSPACE_MEDIA_URL_RE = /^\/api\/workspace\/media(?:\/|$)/
 const HTTP_URL_RE = /^https?:\/\//i
 let appDataDirPromise: Promise<string> | null = null
 const convertedImageSrcCache = new Map<string, string>()
@@ -26,8 +28,12 @@ function getCachedAppDataDir() {
   return appDataDirPromise
 }
 
+function isAlreadyResolvedImageSrc(path: string) {
+  return RESOLVED_IMAGE_SRC_RE.test(path) || WORKSPACE_MEDIA_URL_RE.test(path)
+}
+
 export async function convertImage(path: string) {
-  if (RESOLVED_IMAGE_SRC_RE.test(path)) {
+  if (isAlreadyResolvedImageSrc(path)) {
     return path
   }
 
@@ -37,14 +43,31 @@ export async function convertImage(path: string) {
     return cachedSrc
   }
 
-  const appDataDirPath = await getCachedAppDataDir()
-  const imagePath = appDataDirPath + normalizedPath
-  const src = platform.assetUrl.convertFileSrc(imagePath)
+  let src: string
+  if (!isTauri()) {
+    // Web mode has no app-data directory. Treat the app-data-relative
+    // path as a workspace-relative media path so editor images that
+    // live in the workspace resolve through the authenticated media
+    // endpoint. Record assets served by the record-asset endpoint
+    // (V3-31/V3-32) are not rerouted here; they keep their own
+    // resolver and a media 404 stays visible instead of throwing.
+    src = platform.assetUrl.convertFileSrc(
+      toWorkspaceMediaRelativePath(normalizedPath, false),
+    )
+  } else {
+    const appDataDirPath = await getCachedAppDataDir()
+    const imagePath = appDataDirPath + normalizedPath
+    src = platform.assetUrl.convertFileSrc(imagePath)
+  }
   convertedImageSrcCache.set(normalizedPath, src)
   return src
 }
 
 export async function convertImageByWorkspace(path: string) {
+  if (isAlreadyResolvedImageSrc(path)) {
+    return path
+  }
+
   const workspace = await getWorkspacePath()
   const cacheKey = `${workspace.isCustom ? workspace.path : 'app-data'}:${path}`
   const cachedSrc = convertedWorkspaceImageSrcCache.get(cacheKey)
@@ -52,13 +75,26 @@ export async function convertImageByWorkspace(path: string) {
     return cachedSrc
   }
 
-  let fullPath: string
-  if (workspace.isCustom) {
-    fullPath = `${workspace.path}/${path}`
+  let src: string
+  if (!isTauri()) {
+    // Web mode: the asset adapter only accepts workspace-relative
+    // paths and builds an authenticated `/api/workspace/media/...`
+    // URL from them. Joining the workspace root or the virtual
+    // app-data prefix here made the adapter reject every workspace
+    // image, so the relative path is passed through unchanged apart
+    // from the lexical cleanup in toWorkspaceMediaRelativePath.
+    src = platform.assetUrl.convertFileSrc(
+      toWorkspaceMediaRelativePath(path, workspace.isCustom),
+    )
   } else {
-    fullPath = `${await getCachedAppDataDir()}/article/${path}`
+    let fullPath: string
+    if (workspace.isCustom) {
+      fullPath = `${workspace.path}/${path}`
+    } else {
+      fullPath = `${await getCachedAppDataDir()}/article/${path}`
+    }
+    src = platform.assetUrl.convertFileSrc(fullPath)
   }
-  const src = platform.assetUrl.convertFileSrc(fullPath)
   convertedWorkspaceImageSrcCache.set(cacheKey, src)
   return src
 }

@@ -36,7 +36,7 @@ import { handleImageUpload } from '@/lib/image-handler'
 import useArticleStore from '@/stores/article'
 import { toast } from '@/hooks/use-toast'
 import { getWorkspacePath, isAbsoluteFsPath } from '@/lib/workspace'
-import { isMobileDevice } from '@/lib/check'
+import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { pickImagesFromPhotoLibrary } from '@/lib/image-picker'
 
 export interface SlashCommandItem {
@@ -605,6 +605,22 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
 
           if (isMobileDevice()) {
             fileObj = (await pickImagesFromPhotoLibrary())[0] || null
+          } else if (!checkIsTauri()) {
+            // Web mode has no OS paths: the content-shaped picker
+            // returns the picked File directly. Path-shaped open()
+            // rejects here.
+            const picked = await platform.dialog.openFiles({
+              multiple: false,
+              filters: [
+                {
+                  name: 'Images',
+                  extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
+                },
+              ],
+            })
+
+            const firstPicked = Array.isArray(picked) ? picked[0] : picked
+            fileObj = firstPicked?.file ?? null
           } else {
             const file = await platform.dialog.open({
               multiple: false,

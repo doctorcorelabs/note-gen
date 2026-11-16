@@ -1,4 +1,4 @@
-import { platform } from '@/lib/platform'
+import { isTauri, platform } from '@/lib/platform'
 import { v4 as uuidv4 } from 'uuid'
 import { isImageHostingReady, uploadImage } from './imageHosting'
 import { getFilePathOptions, isAbsoluteFsPath, toWorkspaceRelativePath } from './workspace'
@@ -29,11 +29,15 @@ export async function saveImageToWorkspace(
   file: File,
   activeFilePath: string
 ): Promise<ImageUploadResult> {
-  const syncSource = captureStaticAssetSyncSource()
   const { imageRelativePath, markdownRelativePath } = await saveImageLocally(file, activeFilePath)
   const articleStore = useArticleStore.getState()
 
-  if (articleStore.syncStaticAssets) {
+  // Static-asset sync is desktop-only in the web MVP: under AD-11 the
+  // server is the single source of truth, the file above is already
+  // persisted on the server through the media endpoint, and no sync
+  // protocol runs in web mode. The queue code stays for desktop.
+  if (isTauri() && articleStore.syncStaticAssets) {
+    const syncSource = captureStaticAssetSyncSource()
     enqueueStaticAssetSync(imageRelativePath, syncSource)
     try {
       await uploadStaticAssetNow(imageRelativePath, syncSource)

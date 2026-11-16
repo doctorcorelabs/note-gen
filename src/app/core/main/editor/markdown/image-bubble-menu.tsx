@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { PluginEditorToolbar } from '@/components/plugins/plugin-editor-toolbar'
+import { stripDisplayImageUrlPrefix } from './image-src'
 
 interface ImageBubbleMenuProps {
   editor: Editor
@@ -128,7 +129,7 @@ export function ImageBubbleMenu({ editor, pluginsEnabled = false }: ImageBubbleM
         pos,
       })
       setAltText(node.attrs.alt || '')
-      setSrcText(node.attrs.relativeSrc || node.attrs.src?.replace(/^(tauri|asset|http):\/\/localhost\//, '') || '')
+      setSrcText(node.attrs.relativeSrc || stripDisplayImageUrlPrefix(node.attrs.src))
       const imageBounds = image.getBoundingClientRect()
       const width = parseImageDimension(node.attrs.width) ?? Math.round(imageBounds.width)
       const height = parseImageDimension(node.attrs.height) ?? Math.round(imageBounds.height)

@@ -24,6 +24,32 @@ export function normalizeLocale(locale?: string | null): SupportedLocale {
   return DEFAULT_LOCALE;
 }
 
+/**
+ * Map an active locale to a safe BCP 47 value for an HTML `lang`
+ * attribute (decision D-6: export templates follow the active
+ * locale). The fork locale `zh` maps to `zh-CN`, matching the
+ * plugin localization mapping. Bare language tags pass through
+ * lowercased; language-region tags pass through with the region
+ * uppercased. Anything else (display names, empty values, or
+ * strings that cannot be a language tag) falls back to `en`, so
+ * the result is always safe to interpolate into an attribute.
+ */
+export function toHtmlLangTag(locale?: string | null): string {
+  const trimmed = locale?.trim() ?? '';
+  if (trimmed === 'zh' || trimmed.toLowerCase() === 'zh-cn') {
+    return 'zh-CN';
+  }
+  const bareLanguage = /^[a-z]{2,3}$/i.exec(trimmed);
+  if (bareLanguage) {
+    return bareLanguage[0].toLowerCase();
+  }
+  const languageRegion = /^([a-z]{2,3})-([a-z]{2}|[0-9]{3})$/i.exec(trimmed);
+  if (languageRegion) {
+    return `${languageRegion[1].toLowerCase()}-${languageRegion[2].toUpperCase()}`;
+  }
+  return DEFAULT_LOCALE;
+}
+
 function isMessageObject(value: unknown): value is AbstractIntlMessages {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
