@@ -103,8 +103,8 @@ function switchErrorContext(state: PlatformSwitchState, fallback: SyncStaleDetai
     path: state.progress?.path, source: state.progress?.source,
   }
 }
-async function targetFingerprint(platform: SyncPlatform) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(await targetIdentity(platform)))
+async function targetFingerprint(targetPlatform: SyncPlatform) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(await targetIdentity(targetPlatform)))
   return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('')
 }
 const commitProgress = (step: 'preparing' | 'saving' | 'starting' | 'reconciling') => {
@@ -245,9 +245,9 @@ export function resolvePlatformSwitchConflict(id: string, resolution: SwitchReso
   usePlatformSwitchStore.setState({ resolutions: { ...state.resolutions, [id]: resolution } })
 }
 export function confirmPlatformSwitch() {
-  const { step, strategy, selected, resolutions, plan, platform, review } = usePlatformSwitchStore.getState()
+  const { step, strategy, selected, resolutions, plan, platform: currentPlatform, review } = usePlatformSwitchStore.getState()
   if (step !== 'confirm' || !strategy || !selected.length) return
-  if (platform === 'selfHosted' && !review?.selfHostedPreview) return
+  if (currentPlatform === 'selfHosted' && !review?.selfHostedPreview) return
   if (strategy === 'merge' && plan?.conflicts.some(item => selected.includes(item.module) && !resolutions[item.id])) return
   const decide = reviewDecision
   if (!decide) return
@@ -285,12 +285,12 @@ async function clearCancelledPlatformSwitch(store: StoreHandle, recovery: Platfo
     noMutations = true
   }
   if (!noMutations) {
-    const platform = state.platform ?? recovery?.platform
-    if (!platform) throw new Error('SYNC_SWITCH_INTERRUPTED')
+    const currentPlatform = state.platform ?? recovery?.platform
+    if (!currentPlatform) throw new Error('SYNC_SWITCH_INTERRUPTED')
     // The local workspace may already contain the destination's data. Keep
     // every sender paused until a rescan or an explicit backup restoration;
     // restarting the original provider here would upload that mixed state.
-    await store.set('platformSwitchRecovery', { ...recovery, platform, mutated: true,
+    await store.set('platformSwitchRecovery', { ...recovery, platform: currentPlatform, mutated: true,
       originalPlatform: recovery?.originalPlatform ?? useSettingStore.getState().primaryBackupMethod,
       backupPath: state.backupPath ?? recovery?.backupPath,
       selfHostedBackupPath: state.selfHostedBackupPath ?? recovery?.selfHostedBackupPath,
@@ -731,15 +731,15 @@ export async function skipPlatformSwitchError() {
 }
 
 export async function retryPlatformSwitch() {
-  const { platform, step } = usePlatformSwitchStore.getState()
-  if (!platform || (!['error', 'cancelled'].includes(step) && !(step === 'completed' && usePlatformSwitchStore.getState().skipped)) || running || cancelling || dismissing) return
-  if (platform === 'selfHosted') {
+  const { platform: currentPlatform, step } = usePlatformSwitchStore.getState()
+  if (!currentPlatform || (!['error', 'cancelled'].includes(step) && !(step === 'completed' && usePlatformSwitchStore.getState().skipped)) || running || cancelling || dismissing) return
+  if (currentPlatform === 'selfHosted') {
     const { retrySecureStorageAccess } = await import('@/lib/self-hosted-sync/profile')
     await retrySecureStorageAccess()
   }
   if (usePlatformSwitchStore.getState().selfHostedSafetyBackupPath) return recoverSelfHostedSwitchBackup()
   // Always rescan a partially completed operation; never silently repeat a destructive decision.
-  await switchSyncPlatform(platform, true)
+  await switchSyncPlatform(currentPlatform, true)
 }
 
 export async function continueSelfHostedSwitchWithoutSettings() {
