@@ -27,7 +27,7 @@
 // - Desktop (Tauri) behavior is unchanged: every flag below is off
 //   only in web mode.
 
-import { getPlatformMode, type PlatformMode } from "@/lib/platform/detect";
+import { getPlatformMode, type PlatformMode } from "./platform/detect";
 
 /** Catalog namespace for the disabled-surface copy (en + zh). */
 export const EDITOR_DISABLED_CATALOG_NAMESPACE = "editor.disabled";
