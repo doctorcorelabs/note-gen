@@ -949,16 +949,16 @@ async function s3MovePathRaw(
 ): Promise<S3PathMoveResult> {
   config = { ...config }
   const failure = (stage: string, detail: string) => new Error(
-    `S3 路径迁移失败（${source} → ${target}，${stage}）：${detail}`,
+    `S3 path migration failed (${source} -> ${target}, ${stage}): ${detail}`,
   )
   const validPath = (path: string) => Boolean(path) && !path.includes('\\') && !/^[a-z]:/i.test(path)
     && path.split('/').every(part => part && part !== '.' && part !== '..')
   if (!validPath(source) || !validPath(target) || source === target
     || source.startsWith(`${target}/`) || target.startsWith(`${source}/`)) {
-    throw failure('校验路径', '源路径和目标路径无效或互相包含')
+    throw failure('Validating paths', 'Source and target paths are invalid or contain each other')
   }
   const current = async () => {
-    if (!await assertCurrent()) throw failure('校验上下文', '同步配置或本地迁移状态已变化，待办已保留')
+    if (!await assertCurrent()) throw failure('Validating context', 'Sync config or local migration state changed; pending task kept')
   }
   const strongEtag = (value: string | null) => value && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(value) ? value : null
   const hash = async (bytes: Uint8Array) => {
@@ -1009,9 +1009,9 @@ async function s3MovePathRaw(
         return { status: response.status, headers: response.headers, bytes: body }
       } catch (error) {
         if (isRemoteConnectionError(error)) {
-          throw new RemoteMutationTransportError(failure('请求远端', '网络请求失败或超时，待办已保留').message)
+          throw new RemoteMutationTransportError(failure('Requesting remote', 'Network request failed or timed out; pending task kept').message)
         }
-        throw failure('请求远端', '网络请求失败或超时，待办已保留')
+        throw failure('Requesting remote', 'Network request failed or timed out; pending task kept')
       }
     } finally { clearTimeout(timeout) }
   }
@@ -1020,7 +1020,7 @@ async function s3MovePathRaw(
     if (response.status === 404) return null
     const version = strongEtag(response.headers.get('etag'))
     if (response.status !== 200 || !version || (etag && version !== etag)) {
-      throw failure('读取文件快照', `文件已变化或请求被拒绝（HTTP ${response.status}）`)
+      throw failure('Reading file snapshot', `File changed or request rejected (HTTP ${response.status})`)
     }
     return { ...response, etag: version, digest: await hash(response.bytes) }
   }
@@ -1036,13 +1036,13 @@ async function s3MovePathRaw(
       url.searchParams.set('prefix', `${fullPrefix}/`)
       if (token) url.searchParams.set('continuation-token', token)
       const response = await request('', 'GET', {}, undefined, url.toString())
-      if (response.status !== 200) throw failure('读取目录快照', `请求被拒绝（HTTP ${response.status}）`)
+      if (response.status !== 200) throw failure('Reading directory snapshot', `Request rejected (HTTP ${response.status})`)
       const page = parseListObjectsResponse(new TextDecoder().decode(response.bytes), configPrefix)
       files.push(...page.objects)
-      if (files.length > 100_000) throw failure('读取目录快照', '目录成员数量过多')
+      if (files.length > 100_000) throw failure('Reading directory snapshot', 'Too many directory members')
       token = page.nextToken
       if (token) {
-        if (tokens.has(token)) throw failure('读取目录快照', '服务端重复返回同一分页')
+        if (tokens.has(token)) throw failure('Reading directory snapshot', 'Server returned the same page repeatedly')
         tokens.add(token)
       }
     } while (token)
@@ -1050,18 +1050,18 @@ async function s3MovePathRaw(
     for (const file of files) {
       if (!file.key.startsWith(`${root}/`) || seen.has(file.key)
         || (file.key !== `${root}/` && !validPath(file.key.replace(/\/$/, '')))) {
-        throw failure('读取目录快照', '目录成员重复或超出请求范围')
+        throw failure('Reading directory snapshot', 'Directory members duplicated or out of requested scope')
       }
       seen.add(file.key)
     }
     for (const key of seen) {
       if (key.endsWith('/') && seen.has(key.slice(0, -1))) {
-        throw failure('读取目录快照', '目录中同时存在同名对象和目录标记，无法安全重命名')
+        throw failure('Reading directory snapshot', 'Directory contains both a same-named object and a directory marker; cannot rename safely')
       }
       const parts = key.replace(/\/$/, '').split('/')
       for (let index = 1; index < parts.length; index++) {
         if (seen.has(parts.slice(0, index).join('/'))) {
-          throw failure('读取目录快照', '目录中同时存在同名对象和子目录，无法安全重命名')
+          throw failure('Reading directory snapshot', 'Directory contains both a same-named object and a subdirectory; cannot rename safely')
         }
       }
     }
@@ -1070,10 +1070,10 @@ async function s3MovePathRaw(
   const kind = async (root: string) => {
     const exact = await request(root, 'HEAD')
     if (exact.status !== 200 && exact.status !== 404) {
-      throw failure('读取资源信息', `请求被拒绝（HTTP ${exact.status}）`)
+      throw failure('Reading resource info', `Request rejected (HTTP ${exact.status})`)
     }
     const children = await list(root)
-    if (exact.status === 200 && children.length) throw failure('读取资源信息', '同一路径同时存在对象和子目录，无法安全重命名')
+    if (exact.status === 200 && children.length) throw failure('Reading resource info', 'Same path contains both an object and a subdirectory; cannot rename safely')
     return { type: exact.status === 200 ? 'file' as const : children.length ? 'directory' as const : null, children }
   }
   const keyOf = (root: string, entry: S3PathIdentity, path: string) => entry.type === 'file' ? root : `${root}/${path}`
@@ -1092,19 +1092,19 @@ async function s3MovePathRaw(
         || (file.targetEtag !== undefined && (!strongEtag(file.targetEtag) || !file.copyStarted))
         || (file.deleted && !file.targetEtag))
       || new Set(expected.files.map(file => file.path)).size !== expected.files.length) {
-      throw failure('校验待办', '迁移版本记录无效')
+      throw failure('Validating pending task', 'Migration version record is invalid')
     }
     identity = structuredClone(expected)
   } else {
     const from = await kind(source)
     const to = await kind(target)
-    if (to.type) throw failure('校验目标路径', '目标已存在，未覆盖任何远端内容')
+    if (to.type) throw failure('Validating target path', 'Target already exists; no remote content overwritten')
     if (!from.type) return { status: 'missing' }
     const files: S3PathIdentity['files'] = []
     const keys = from.type === 'file' ? [source] : from.children.map(file => file.key)
     for (const key of keys) {
       const file = await read(key)
-      if (!file) throw failure('读取源快照', '源对象已变化，待办已保留')
+      if (!file) throw failure('Reading source snapshot', 'Source object changed; pending task kept')
       files.push({
         path: from.type === 'file' ? '' : key.slice(source.length + 1), digest: file.digest,
         etag: file.etag, contentType: file.headers.get('content-type') || 'application/octet-stream',
@@ -1125,7 +1125,7 @@ async function s3MovePathRaw(
   const verifyTarget = async (file: S3PathIdentity['files'][number]) => {
     const remote = await read(keyOf(target, identity, file.path), file.targetEtag)
     if (!remote || remote.digest !== file.digest || remote.headers.get(marker) !== identity.operationId) {
-      throw failure('确认目标内容', '目标对象已变化或不属于本次迁移，源对象已保留')
+      throw failure('Confirming target content', 'Target object changed or does not belong to this migration; source object kept')
     }
     return remote
   }
@@ -1135,11 +1135,11 @@ async function s3MovePathRaw(
     const sourceKind = await kind(source)
     const targetKind = await kind(target)
     for (const [root, state] of [[source, sourceKind], [target, targetKind]] as const) {
-      if (state.type && state.type !== identity.type) throw failure('校验目录快照', '源路径或目标路径类型已变化')
+      if (state.type && state.type !== identity.type) throw failure('Validating directory snapshot', 'Source or target path type changed')
       if (identity.type !== 'directory') continue
       const allowed = new Set(identity.files.map(file => keyOf(root, identity, file.path)))
       if (state.children.some(file => !allowed.has(file.key))) {
-        throw failure('校验目录快照', '目录中出现新的远端对象，待办已保留')
+        throw failure('Validating directory snapshot', 'New remote object appeared in directory; pending task kept')
       }
     }
   }
@@ -1148,7 +1148,7 @@ async function s3MovePathRaw(
   for (let index = 1; index < targetParts.length; index++) {
     const parent = await request(targetParts.slice(0, index).join('/'), 'HEAD')
     if (parent.status !== 404) {
-      throw failure('校验目标父路径', parent.status === 200 ? '目标父路径已经是一个对象' : `请求被拒绝（HTTP ${parent.status}）`)
+      throw failure('Validating target parent path', parent.status === 200 ? 'Target parent path is already an object' : `Request rejected (HTTP ${parent.status})`)
     }
   }
   // Some compatible services silently ignore conditional headers. Probe only
@@ -1159,13 +1159,13 @@ async function s3MovePathRaw(
   try {
     const probe = new TextEncoder().encode(crypto.randomUUID())
     const created = await request(probeKey, 'PUT', { 'If-None-Match': '*', 'Content-Type': 'application/octet-stream' }, probe)
-    if (created.status !== 200 && created.status !== 204) throw failure('校验条件写入', `探针创建失败（HTTP ${created.status}）`)
+    if (created.status !== 200 && created.status !== 204) throw failure('Validating conditional write', `Probe creation failed (HTTP ${created.status})`)
     probeCreated = true
     probeVersion = strongEtag(created.headers.get('etag'))
     const overwrite = await request(probeKey, 'PUT', { 'If-None-Match': '*', 'Content-Type': 'application/octet-stream' }, probe)
-    if (overwrite.status !== 412) throw failure('校验条件写入', '服务端不支持创建时的条件保护，未迁移用户对象')
+    if (overwrite.status !== 412) throw failure('Validating conditional write', 'Server does not support conditional protection on creation; no user objects migrated')
     const remove = await request(probeKey, 'DELETE', { 'If-Match': `"notegen-mismatch-${crypto.randomUUID()}"` })
-    if (remove.status !== 412) throw failure('校验条件删除', '服务端不支持删除时的版本保护，未迁移用户对象')
+    if (remove.status !== 412) throw failure('Validating conditional delete', 'Server does not support version protection on delete; no user objects migrated')
   } finally {
     if (probeCreated && probeVersion) {
       try { await request(probeKey, 'DELETE', { 'If-Match': probeVersion }) } catch { /* An orphan probe contains no user data. */ }
@@ -1175,14 +1175,14 @@ async function s3MovePathRaw(
     const targetKey = keyOf(target, identity, file.path)
     const existing = await read(targetKey)
     if (existing) {
-      if (!file.copyStarted) throw failure('校验目标路径', '目标已存在，未覆盖任何远端内容')
+      if (!file.copyStarted) throw failure('Validating target path', 'Target already exists; no remote content overwritten')
       const verified = await verifyTarget(file)
       if (!file.targetEtag) { file.targetEtag = verified.etag; await persist() }
       continue
     }
-    if (file.targetEtag || file.deleted) throw failure('校验迁移结果', '已复制的目标对象不存在，源对象已保留')
+    if (file.targetEtag || file.deleted) throw failure('Validating migration result', 'Copied target object does not exist; source object kept')
     const remote = await read(keyOf(source, identity, file.path), file.etag)
-    if (!remote || remote.digest !== file.digest) throw failure('校验源版本', '源对象已变化，未使用本地内容覆盖')
+    if (!remote || remote.digest !== file.digest) throw failure('Validating source version', 'Source object changed; local content was not used to overwrite')
     file.copyStarted = true
     await persist()
     const headers: Record<string, string> = {
@@ -1199,16 +1199,16 @@ async function s3MovePathRaw(
       const destination = await recoverRemoteRead(() => read(targetKey))
       if (destination) {
         if (destination.digest !== file.digest || destination.headers.get(marker) !== identity.operationId) {
-          throw failure('核对复制结果', '目标对象不属于本次迁移，源对象已保留')
+          throw failure('Verifying copy result', 'Target object does not belong to this migration; source object kept')
         }
         return { state: 'applied', value: new Response(null, { status: 200, headers: destination.headers }) }
       }
       const unchanged = await recoverRemoteRead(() => read(keyOf(source, identity, file.path), file.etag))
-      if (!unchanged || unchanged.digest !== file.digest) throw failure('核对源版本', '源对象已变化，待办已保留')
+      if (!unchanged || unchanged.digest !== file.digest) throw failure('Verifying source version', 'Source object changed; pending task kept')
       return { state: 'unchanged' }
     })
     if (copied.status !== 200 && copied.status !== 204) {
-      throw failure('创建目标对象', `请求被拒绝（HTTP ${copied.status}），源对象已保留`)
+      throw failure('Creating target object', `Request rejected (HTTP ${copied.status}); source object kept`)
     }
     const verified = await verifyTarget(file)
     file.targetEtag = verified.etag
@@ -1222,28 +1222,28 @@ async function s3MovePathRaw(
     const sourceKey = keyOf(source, identity, file.path)
     const remote = await read(sourceKey, file.etag)
     if (!remote) {
-      if (!file.copyStarted || !file.targetEtag) throw failure('校验源版本', '未复制的源对象不存在')
+      if (!file.copyStarted || !file.targetEtag) throw failure('Validating source version', 'Uncopied source object does not exist')
       await verifyTarget(file)
       if (!file.deleted) { file.deleted = true; await persist() }
       continue
     }
-    if (file.deleted || remote.digest !== file.digest) throw failure('校验源版本', '源对象被重新创建，未删除新内容')
+    if (file.deleted || remote.digest !== file.digest) throw failure('Validating source version', 'Source object was recreated; new content was not deleted')
     await verifyTarget(file)
     await current()
     const deleted = await request(sourceKey, 'DELETE', { 'If-Match': file.etag }, undefined, undefined, async () => {
       const remaining = await recoverRemoteRead(() => read(sourceKey, file.etag))
       await recoverRemoteRead(() => verifyTarget(file))
       if (!remaining) return { state: 'applied', value: new Response(null, { status: 204 }) }
-      if (remaining.digest !== file.digest) throw failure('核对源版本', '源对象已变化，待办已保留')
+      if (remaining.digest !== file.digest) throw failure('Verifying source version', 'Source object changed; pending task kept')
       return { state: 'unchanged' }
     })
     if (deleted.status !== 200 && deleted.status !== 204 && deleted.status !== 404) {
-      throw failure('删除旧对象', `版本已变化或请求被拒绝（HTTP ${deleted.status}），待办已保留`)
+      throw failure('Deleting old object', `Version changed or request rejected (HTTP ${deleted.status}); pending task kept`)
     }
     file.deleted = true
     await persist()
   }
-  if ((await kind(source)).type) throw failure('确认迁移结果', '源路径出现新的远端内容，未继续删除')
+  if ((await kind(source)).type) throw failure('Confirming migration result', 'New remote content appeared at source path; deletion not continued')
   await verifyMembers()
   for (const file of identity.files) await verifyTarget(file)
   return {
