@@ -6221,6 +6221,37 @@
     "description": "Click to select a recording tool and quickly create records"
   },
   "editor": {
+    "revisionConflict": {
+      "title": "Save conflict",
+      "description": "This file changed outside the editor. Your edits are still in the editor and nothing was overwritten. Choose how to resolve the conflict for {path}.",
+      "serverHeading": "Server version",
+      "modifiedAt": "Modified",
+      "size": "Size",
+      "previewEmpty": "No preview available.",
+      "previewTruncated": "Preview truncated.",
+      "reloadChoice": "Reload from server",
+      "reloadHint": "Discard your edits in the editor and load the server version.",
+      "copyChoice": "Save as a copy",
+      "copyHint": "Keep your edits in a new file, then load the server version here.",
+      "copyNameLabel": "Copy name",
+      "copyNameTaken": "That name is already taken. Try the suggested name.",
+      "forceChoice": "Overwrite server version",
+      "forceHint": "Replace the server version with your edits.",
+      "forceWarning": "Warning: the server version will be lost. This cannot be undone.",
+      "decideLater": "Decide later",
+      "working": "Working...",
+      "errorLabel": "Could not resolve the conflict. Nothing was overwritten.",
+      "unknownDate": "Unknown",
+      "heldTitle": "Save conflict unresolved",
+      "heldDescription": "Your edits are held in the editor. Resolve the conflict to save again.",
+      "resolveButton": "Resolve conflict"
+    },
+    "externalChange": {
+      "title": "File changed outside the editor",
+      "description": "This file was changed elsewhere. Reload to see the latest version, or keep editing and resolve the conflict when you save.",
+      "reloadButton": "Reload",
+      "dismissButton": "Dismiss"
+    },
     "headingFolding": {
       "expand": "Expand section",
       "collapse": "Collapse section"

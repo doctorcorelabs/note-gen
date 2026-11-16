@@ -13,8 +13,6 @@ import { describe, expect, it } from "vitest";
 import type {
   FileInfo,
   FsTextFileResult,
-  ReadFileOptions,
-  StatOptions,
   WriteFileOptions,
 } from "@/lib/platform";
 import type { FsConflictPayload } from "@/lib/platform/fs/errors";
@@ -99,7 +97,6 @@ class FakeFs implements RevisionConflictFs {
 
   async readTextFileDetailed(
     path: string | URL,
-    _options?: ReadFileOptions,
   ): Promise<FsTextFileResult> {
     const key = String(path);
     const current = this.files.get(key);
@@ -164,10 +161,7 @@ class FakeFs implements RevisionConflictFs {
     });
   }
 
-  async stat(
-    path: string | URL,
-    _options?: StatOptions,
-  ): Promise<FileInfo> {
+  async stat(path: string | URL): Promise<FileInfo> {
     const current = this.files.get(String(path));
     if (!current) {
       throw {
