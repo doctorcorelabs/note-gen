@@ -1,7 +1,7 @@
-"// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: GPL-3.0-only
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
-"use client""
+"use client"
 
 // Confirmation dialog for removing an asset reference (Fase 1,
 // V3-32). The dialog renders the removal plan honestly: it names
