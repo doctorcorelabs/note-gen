@@ -133,7 +133,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
 
       try {
         if (!await prepareWorkspaceSwitch()) {
-          throw new Error('无法在回滚工作区前保存当前编辑内容')
+          throw new Error('Unable to save the current editor content before rolling back the workspace')
         }
         if (isIOS) await setIOSWorkspaceFolderAccess(previousIOSAccess)
         await setWorkspacePath(previousWorkspacePath)

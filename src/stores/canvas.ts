@@ -147,7 +147,7 @@ const useCanvasStore = create<CanvasState>((set, get) => ({
     })()
   },
 
-  createProject: async (canvasType = 'blank', title = '未命名画布') => {
+  createProject: async (canvasType = 'blank', title = 'Untitled canvas') => {
     const id = crypto.randomUUID()
     const project = await insertCanvasProject({
       id,
@@ -169,7 +169,7 @@ const useCanvasStore = create<CanvasState>((set, get) => ({
   createProjectFromDocument: async (document, title, canvasType = 'blank') => {
     const project = await insertCanvasProject({
       id: crypto.randomUUID(),
-      title: title.trim() || '未命名画布',
+      title: title.trim() || 'Untitled canvas',
       canvasType,
       document: structuredClone(document),
     })
