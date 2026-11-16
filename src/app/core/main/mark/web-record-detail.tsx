@@ -2,7 +2,7 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
 // Record detail dialog for the web inbox (Fase 1, V3-26). Reads and
-// writes through RecordsApi only: content edits carry the optimistic
+// writes through RecordsApiPort only: content edits carry the optimistic
 // version guard, tag edits carry the tag-set guard, and conflicts
 // reload the record instead of overwriting silently. Records whose
 // content would come from an enrichment job show the V1-14 section
@@ -46,7 +46,7 @@ import {
   apiErrorWireCode,
   type ApiRecord,
   type ApiTag,
-  type RecordsApi,
+  type RecordsApiPort,
 } from "@/lib/web/records-client";
 import {
   RecordTypeBadge,
@@ -55,7 +55,7 @@ import {
 } from "./web-inbox-shared";
 
 export interface WebRecordDetailProps {
-  api: RecordsApi;
+  api: RecordsApiPort;
   record: ApiRecord | null;
   tags: ApiTag[];
   open: boolean;

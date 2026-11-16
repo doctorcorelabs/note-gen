@@ -101,6 +101,7 @@ const VITEST_SPECS = [
   "src/lib/web/csrf.spec.ts",
   "src/lib/web/record-inputs.spec.ts",
   "src/lib/web/records-client.spec.ts",
+  "src/lib/web/records-kind-client.spec.ts",
 ];
 
 const NODE_TEST_SPECS = [...ADAPTER_SPECS, ...WEB_NODE_SPECS];

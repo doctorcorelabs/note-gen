@@ -2,7 +2,7 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
 // Shared presentational pieces for the web inbox (Fase 1, V3-26).
-// No data fetching here: parents own the RecordsApi calls.
+// No data fetching here: parents own the RecordsApiPort calls.
 
 "use client";
 

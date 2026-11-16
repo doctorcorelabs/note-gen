@@ -3,7 +3,7 @@
 //
 // Tag sidebar for the web inbox (Fase 1, V3-26). View switching
 // (records/trash), tag filtering, and tag create/rename/delete through
-// RecordsApi only. Deleting a tag never deletes records (contract 3.6,
+// RecordsApiPort only. Deleting a tag never deletes records (contract 3.6,
 // D-03); a tag still in use requires a reassign target. Locked tags
 // offer no rename or delete control.
 
@@ -34,13 +34,13 @@ import {
 import {
   apiErrorWireCode,
   type ApiTag,
-  type RecordsApi,
+  type RecordsApiPort,
 } from "@/lib/web/records-client";
 
 export type InboxView = "active" | "trash";
 
 export interface WebTagSidebarProps {
-  api: RecordsApi;
+  api: RecordsApiPort;
   tags: ApiTag[];
   view: InboxView;
   selectedTagId: number | "all";

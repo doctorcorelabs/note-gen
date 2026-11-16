@@ -2,7 +2,7 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
 // Inbox record list for the web inbox (Fase 1, V3-26). Presentational:
-// the parent owns loading, filters, and all RecordsApi calls. Selection
+// the parent owns loading, filters, and all RecordsApiPort calls. Selection
 // actions are reported to the parent, which runs the per-record
 // sequential helpers (contract 3.8: no bulk endpoint) and reloads.
 

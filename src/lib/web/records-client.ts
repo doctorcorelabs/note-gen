@@ -183,7 +183,44 @@ export interface RecordsApiOptions {
   seam?: WebApiAuthSeam;
 }
 
-export class RecordsApi {
+/**
+ * The inbox data surface shared by the REST client (RecordsApi) and
+ * the kind-backed client (KindRecordsApi). UI components and the
+ * sequential multi-select helpers depend on this interface, never
+ * on one transport, so the live path can change when the REST
+ * routes land (D-3D-1) without touching the components. Both
+ * implementations throw ApiError with canonical wire codes; callers
+ * branch on apiErrorWireCode, never on message text.
+ */
+export interface RecordsApiPort {
+  listRecords(
+    filters?: InboxListFilters,
+    cursor?: string,
+  ): Promise<RecordListPage>;
+  listAllRecords(filters?: InboxListFilters): Promise<ApiRecord[]>;
+  getRecord(markId: number): Promise<ApiRecord>;
+  createRecord(body: CreateRecordBody): Promise<ApiRecord>;
+  updateRecord(markId: number, body: PatchRecordBody): Promise<ApiRecord>;
+  updateRecordTags(
+    markId: number,
+    body: UpdateRecordTagsBody,
+  ): Promise<ApiRecord>;
+  softDeleteRecord(markId: number): Promise<ApiRecord>;
+  restoreRecord(markId: number): Promise<ApiRecord>;
+  deleteRecordPermanent(markId: number): Promise<PermanentDeleteResult>;
+  emptyTrash(): Promise<EmptyTrashResult>;
+  listTags(): Promise<TagList>;
+  getTag(tagId: number): Promise<ApiTag>;
+  createTag(name: string): Promise<ApiTag>;
+  updateTag(
+    tagId: number,
+    body: { name?: string; pinned?: boolean },
+  ): Promise<ApiTag>;
+  deleteTag(tagId: number, reassignTo?: number): Promise<DeleteTagResult>;
+  uploadAsset(file: Blob, fileName?: string): Promise<UploadedAsset>;
+}
+
+export class RecordsApi implements RecordsApiPort {
   private readonly client: ApiClient;
   private readonly seam: WebApiAuthSeam | undefined;
 
@@ -434,7 +471,7 @@ async function runSequential(
  * failure, never continuing silently.
  */
 export function moveRecordsTagsSequential(
-  api: RecordsApi,
+  api: RecordsApiPort,
   items: Array<{ id: number; tagIds: number[]; expectedTagIds: number[] }>,
 ): Promise<SequentialResult> {
   return runSequential(
@@ -452,7 +489,7 @@ export function moveRecordsTagsSequential(
 
 /** Soft delete several records, in order, stop-and-report. */
 export function softDeleteRecordsSequential(
-  api: RecordsApi,
+  api: RecordsApiPort,
   ids: number[],
 ): Promise<SequentialResult> {
   return runSequential(ids, (id) => api.softDeleteRecord(id), true);
@@ -460,7 +497,7 @@ export function softDeleteRecordsSequential(
 
 /** Restore several records, in order, stop-and-report. */
 export function restoreRecordsSequential(
-  api: RecordsApi,
+  api: RecordsApiPort,
   ids: number[],
 ): Promise<SequentialResult> {
   return runSequential(ids, (id) => api.restoreRecord(id), true);
@@ -468,7 +505,7 @@ export function restoreRecordsSequential(
 
 /** Permanently delete several records, in order, stop-and-report. */
 export function deleteRecordsPermanentSequential(
-  api: RecordsApi,
+  api: RecordsApiPort,
   ids: number[],
 ): Promise<SequentialResult> {
   return runSequential(ids, (id) => api.deleteRecordPermanent(id), true);

@@ -43,7 +43,7 @@ import {
   apiErrorWireCode,
   type ApiRecord,
   type ApiTag,
-  type RecordsApi,
+  type RecordsApiPort,
 } from "@/lib/web/records-client";
 import { TagChecklist } from "./web-inbox-shared";
 
@@ -58,7 +58,7 @@ const FLOW_TITLES: Record<CreateFlow, "textTitle" | "linkTitle" | "imageTitle" |
 };
 
 export interface WebRecordCreateProps {
-  api: RecordsApi;
+  api: RecordsApiPort;
   tags: ApiTag[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
