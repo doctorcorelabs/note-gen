@@ -1,4 +1,4 @@
-import { platform } from '@/lib/platform'
+import { platform, isTauri } from '@/lib/platform'
 
 export interface AgentDebugEntry {
   timestamp: string
@@ -31,7 +31,7 @@ export function isAgentDebugEnabled() {
 }
 
 function scheduleDebugLogSave() {
-  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window) || persistTimer) return
+  if (typeof window === 'undefined' || !isTauri() || persistTimer) return
   persistTimer = setTimeout(() => {
     persistTimer = undefined
     const entries = [...(window.__NOTEGEN_AGENT_DEBUG_LOGS__ || [])]

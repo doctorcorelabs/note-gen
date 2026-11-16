@@ -11,6 +11,10 @@ interface CallbackRegistry {
 // Tauri 2.11 can resolve listen() before its listener-table script executes.
 // Keep the callback ID so disposal does not read that still-missing table entry.
 export async function listenTauriEvent<T>(event: EventName, handler: EventCallback<T>, target: EventTarget = { kind: 'Any' }): Promise<UnlistenFn> {
+  // AD-89 registered remainder: functional use of the Tauri internals
+  // registry (unregisterCallback has no public @tauri-apps/api export),
+  // not a detection check. It closes only when a detect.ts seam or a
+  // registry surface for listenTauriEvent lands (3D/manual, AD-91).
   const registry = (window as unknown as { __TAURI_INTERNALS__: CallbackRegistry }).__TAURI_INTERNALS__
   let disposed = false
   const callbackId = platform.invoke.transformCallback<Event<T>>(message => {
