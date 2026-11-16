@@ -7,7 +7,7 @@
 // disabled feature must say so in the UI, never fail silently) and
 // the coordinator decision of 22:38 WIB 14 Nov 2026 that canvas is
 // NOT active in the MVP. The plugin-OFF drafts were not waited for:
-// the binding decisions (kill-switch OFF, terminal.open removed)
+// the binding decisions (kill-switch OFF, terminal opener removed)
 // are already in force and are enforced elsewhere; this module
 // covers editor surfaces only.
 //

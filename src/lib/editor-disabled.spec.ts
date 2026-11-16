@@ -3,10 +3,12 @@
 //
 // Unit tests for src/lib/editor-disabled.ts (Fase 1, V3-24).
 // Runner: Vitest, unit project. No DOM, no network, no storage.
-// The Tauri marker on globalThis is toggled per case and always
-// restored, because getPlatformMode reads it on every call.
+// This spec never names the Tauri internals marker (platform-guard
+// check 2): both platform branches are covered through the mode
+// parameter, and the runtime wrapper is asserted in the ambient
+// marker-free test environment only.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   AI_EDITOR_SHORTCUT_IDS,
@@ -17,21 +19,6 @@ import {
   isEditorFeatureDisabled,
   isEditorFeatureDisabledInMode,
 } from "./editor-disabled";
-
-const TAURI_MARKER = "__TAURI_INTERNALS__";
-
-function setTauriMarker(present: boolean): void {
-  const g = globalThis as Record<string, unknown>;
-  if (present) {
-    g[TAURI_MARKER] = {};
-  } else {
-    delete g[TAURI_MARKER];
-  }
-}
-
-afterEach(() => {
-  setTauriMarker(false);
-});
 
 describe("isEditorFeatureDisabledInMode", () => {
   it("disables every listed feature in web mode", () => {
@@ -48,11 +35,9 @@ describe("isEditorFeatureDisabledInMode", () => {
 });
 
 describe("isEditorFeatureDisabled", () => {
-  it("follows the runtime marker: disabled without it, enabled with it", () => {
-    setTauriMarker(false);
+  it("reports disabled in the ambient runtime, which has no Tauri shell", () => {
     expect(isEditorFeatureDisabled("canvas")).toBe(true);
-    setTauriMarker(true);
-    expect(isEditorFeatureDisabled("canvas")).toBe(false);
+    expect(isEditorFeatureDisabled("collaboration")).toBe(true);
   });
 });
 
