@@ -1,4 +1,4 @@
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { fetch } from "@tauri-apps/plugin-http";
 
 const BASE_URL = 'https://s.ee/api/v1/file'
@@ -8,7 +8,7 @@ export interface SMMSImageHostingSetting {
 }
 
 export async function uploadImageBySmms(file: File) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const config = await store.get<SMMSImageHostingSetting>('smms')
   if (!config) return
   const token = config.token
@@ -36,7 +36,7 @@ export async function uploadImageBySmms(file: File) {
 
 // 使用 S.EE 文件域名接口校验 Token 是否可用
 export async function getUserInfo() {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const config = await store.get<SMMSImageHostingSetting>('smms')
   if (!config) return
   const token = config.token

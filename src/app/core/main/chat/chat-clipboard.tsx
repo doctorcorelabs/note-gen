@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react';
-import { BaseDirectory, copyFile, exists, mkdir, readFile } from '@tauri-apps/plugin-fs';
+import { platform, BaseDirectory } from '@/lib/platform';
 import useTagStore from "@/stores/tag";
 import useSettingStore from "@/stores/setting";
 import useMarkStore from "@/stores/mark";
@@ -66,14 +66,14 @@ export function ChatClipboard({chat}: { chat: Chat }) {
     const queueId = uuid()
     // 获取文件后缀
     addQueue({ queueId, tagId: currentTagId!, progress: t('record.mark.progress.saveImage'), type: 'image', startTime: Date.now() })
-    const isImageFolderExists = await exists('image', { baseDir: BaseDirectory.AppData})
+    const isImageFolderExists = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData})
     if (!isImageFolderExists) {
-      await mkdir('image', { baseDir: BaseDirectory.AppData})
+      await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData})
     }
     if (!chat.image) return
     const fromPath = chat.image.slice(1)
     const toPath = `image/${queueId}.png`
-    await copyFile(fromPath, toPath, { fromPathBaseDir: BaseDirectory.AppData, toPathBaseDir: BaseDirectory.AppData})
+    await platform.fs.copyFile(fromPath, toPath, { fromPathBaseDir: BaseDirectory.AppData, toPathBaseDir: BaseDirectory.AppData})
     let content = ''
     let desc = ''
     
@@ -83,7 +83,7 @@ export function ChatClipboard({chat}: { chat: Chat }) {
       content = ''
       desc = ''
     } else {
-      const file = await readFile(toPath, { baseDir: BaseDirectory.AppData })
+      const file = await platform.fs.readFile(toPath, { baseDir: BaseDirectory.AppData })
       const result = await recognizeImageWithFallback({
         imagePath: toPath,
         base64: `data:image/png;base64,${Buffer.from(file).toString('base64')}`,
@@ -105,7 +105,7 @@ export function ChatClipboard({chat}: { chat: Chat }) {
       desc,
     }
     setQueue(queueId, { progress: t('record.mark.progress.uploadImage') });
-    const fileData = await readFile(toPath, { baseDir: BaseDirectory.AppData  })
+    const fileData = await platform.fs.readFile(toPath, { baseDir: BaseDirectory.AppData  })
     const blob = new Blob([new Uint8Array(fileData)], { type: 'image/png' })
     const file = new File([blob], `${queueId}.png`, { type: 'image/png' })
     // 上传图片

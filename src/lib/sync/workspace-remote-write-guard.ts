@@ -1,5 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
 import type { SyncPlatform } from '@/types/sync'
 import { isFileDeletionPending } from '@/stores/file-deletion'
@@ -19,13 +18,13 @@ async function contentDigest(bytes: Uint8Array): Promise<string> {
 }
 
 async function localDigest(path: string, baseDir?: Awaited<ReturnType<typeof getFilePathOptions>>['baseDir']): Promise<string> {
-  return contentDigest(await readFile(path, { baseDir }))
+  return contentDigest(await platform.fs.readFile(path, { baseDir }))
 }
 
 /** Capture before queuing a transport write, then check again inside its lock.
  * The journal read below deliberately does not acquire the journal mutex. */
 export async function captureWorkspaceRemoteWriteGuard(
-  path: string, platform: SyncPlatform, includeLocalVersion = true, content?: string | Uint8Array,
+  path: string, expectedPlatform: SyncPlatform, includeLocalVersion = true, content?: string | Uint8Array,
 ): Promise<(() => Promise<void>) | undefined> {
   const validatedPath = includeLocalVersion ? path : path.replace(/\/+$/, '')
   if (!validatedPath || validatedPath.split('/').some(part => !part || part.startsWith('.'))) return undefined
@@ -36,8 +35,8 @@ export async function captureWorkspaceRemoteWriteGuard(
     }
   }
   ensureNotDeleting()
-  const store = await Store.load('store.json')
-  if ((await store.get<string>('primaryBackupMethod') || 'github') !== platform) {
+  const store = await platform.store.load('store.json')
+  if ((await store.get<string>('primaryBackupMethod') || 'github') !== expectedPlatform) {
     throw syncStaleError({ stage: 'apply', path, check: 'configuration' })
   }
   const context = await getWorkspacePathMoveContext()
@@ -47,7 +46,7 @@ export async function captureWorkspaceRemoteWriteGuard(
     : await contentDigest(typeof content === 'string' ? new TextEncoder().encode(content) : content)
   return async () => {
     ensureNotDeleting()
-    if ((await store.get<string>('primaryBackupMethod') || 'github') !== platform
+    if ((await store.get<string>('primaryBackupMethod') || 'github') !== expectedPlatform
       || await getWorkspacePathMoveContext() !== context || await store.get('platformSwitchRecovery')) {
       throw syncStaleError({ stage: 'apply', path, check: 'configuration' })
     }

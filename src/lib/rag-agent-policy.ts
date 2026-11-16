@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 export type RagAgentStrategy = 'fast' | 'balanced' | 'deep'
 
@@ -28,7 +28,7 @@ export function getRagAgentSearchRoundLimit(strategy: RagAgentStrategy): number 
 }
 
 export async function getRagAgentPolicy(): Promise<RagAgentPolicy> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storedAutomaticSearchEnabled = await store.get<boolean>('ragAutomaticSearchEnabled')
   const legacyRagEnabled = await store.get<boolean>('isRagEnabled')
   const automaticSearchEnabled = storedAutomaticSearchEnabled

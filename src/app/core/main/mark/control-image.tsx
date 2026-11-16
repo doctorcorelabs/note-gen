@@ -3,7 +3,7 @@ import { insertMark, Mark } from "@/db/marks"
 import { useTranslations } from 'next-intl'
 import { recognizeImageWithFallback } from "@/lib/image-recognition"
 import useMarkStore from "@/stores/mark"
-import { BaseDirectory, exists, mkdir, readFile, writeFile } from "@tauri-apps/plugin-fs"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { ImagePlus } from "lucide-react"
 import useSettingStore from "@/stores/setting"
 import { v4 as uuid } from 'uuid'
@@ -222,12 +222,12 @@ export function ControlImage() {
       const filename = `${queueId}.${ext}`
       const cachedFile = new File([fileData], filename, { type: getImageMimeType(ext) })
       
-      const isImageFolderExists = await exists('image', { baseDir: BaseDirectory.AppData})
+      const isImageFolderExists = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData})
       if (!isImageFolderExists) {
-        await mkdir('image', { baseDir: BaseDirectory.AppData})
+        await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData})
       }
       
-      await writeFile(`image/${filename}`, fileData, { baseDir: BaseDirectory.AppData })
+      await platform.fs.writeFile(`image/${filename}`, fileData, { baseDir: BaseDirectory.AppData })
       
       let content = ''
       let desc = ''
@@ -296,14 +296,14 @@ export function ControlImage() {
     const tagId = await getDefaultRecordSaveTagId()
     try {
       addQueue({ queueId, tagId, progress: t('record.mark.progress.cacheImage'), type: 'image', startTime: Date.now() })
-      const isImageFolderExists = await exists('image', { baseDir: BaseDirectory.AppData})
+      const isImageFolderExists = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData})
       if (!isImageFolderExists) {
-        await mkdir('image', { baseDir: BaseDirectory.AppData})
+        await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData})
       }
-      const fileData = await readFile(path)
+      const fileData = await platform.fs.readFile(path)
       const ext = getImageExtension(path, fileData)
       const filename = `${queueId}.${ext}`
-      await writeFile(`image/${filename}`, fileData, { baseDir: BaseDirectory.AppData })
+      await platform.fs.writeFile(`image/${filename}`, fileData, { baseDir: BaseDirectory.AppData })
       let content = ''
       let desc = ''
       

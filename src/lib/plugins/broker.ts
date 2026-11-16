@@ -6,7 +6,7 @@ import { createRecordsApi } from './records'
 import { setPluginChatDraft } from './chat-bridge'
 import { setRuntimeFileIcons, clearRuntimeFileIcons } from './resources'
 import type { PluginFileIconRule } from '@notegen/plugin-api'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import {
   PLUGIN_API_VERSION,
   isPluginError,
@@ -601,7 +601,7 @@ async function getCurrentWorkspaceSnapshot(): Promise<CurrentWorkspaceSnapshot> 
   if (store.currentWorkspaceKey !== workspaceKey) {
     throw new PluginError('WorkspaceChanged', 'The active workspace is still changing')
   }
-  const root = workspace.isCustom ? workspace.path : await join(await appDataDir(), 'article')
+  const root = workspace.isCustom ? workspace.path : await platform.path.join(await platform.path.appDataDir(), 'article')
   const currentStore = usePluginStore.getState()
   if (currentStore.currentWorkspaceId !== workspaceId || currentStore.currentWorkspaceKey !== workspaceKey) {
     throw new PluginError('WorkspaceChanged', 'The active workspace changed while it was being resolved')

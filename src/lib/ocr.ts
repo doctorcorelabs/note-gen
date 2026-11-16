@@ -1,4 +1,4 @@
-import { BaseDirectory, exists, mkdir, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 import {
   getActiveOcrProvider,
@@ -26,8 +26,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 async function ensureOcrTempDir(): Promise<void> {
-  if (!(await exists(OCR_TEMP_DIR, { baseDir: BaseDirectory.AppData }))) {
-    await mkdir(OCR_TEMP_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
+  if (!(await platform.fs.exists(OCR_TEMP_DIR, { baseDir: BaseDirectory.AppData }))) {
+    await platform.fs.mkdir(OCR_TEMP_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
   }
 }
 
@@ -53,12 +53,12 @@ export async function recognizeImageBlob(
 
   const filePath = `${OCR_TEMP_DIR}/${crypto.randomUUID()}.png`
   const bytes = new Uint8Array(await blob.arrayBuffer())
-  await writeFile(filePath, bytes, { baseDir: BaseDirectory.AppData })
+  await platform.fs.writeFile(filePath, bytes, { baseDir: BaseDirectory.AppData })
 
   try {
     return await recognizeImagePath(filePath, timeoutMs)
   } finally {
-    await remove(filePath, { baseDir: BaseDirectory.AppData }).catch(() => undefined)
+    await platform.fs.remove(filePath, { baseDir: BaseDirectory.AppData }).catch(() => undefined)
   }
 }
 

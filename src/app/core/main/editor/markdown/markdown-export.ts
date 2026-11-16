@@ -1,7 +1,7 @@
 'use client'
 
 import { save } from '@tauri-apps/plugin-dialog'
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import type { JSONContent } from '@tiptap/core'
 import TaskItem from '@tiptap/extension-task-item'
 import TaskList from '@tiptap/extension-task-list'
@@ -240,7 +240,7 @@ async function saveTextExport(
       return false
     }
 
-    await writeTextFile(ensureExtension(selectedPath, extension), content)
+    await platform.fs.writeTextFile(ensureExtension(selectedPath, extension), content)
     return true
   }
 
@@ -508,15 +508,14 @@ function createPrintFrame(html: string) {
 }
 
 async function openTauriPrintWindow(html: string, title: string, outputPath?: string) {
-  const [{ once }, { WebviewWindow }, { Store }] = await Promise.all([
+  const [{ once }, { WebviewWindow }] = await Promise.all([
     import('@tauri-apps/api/event'),
     import('@tauri-apps/api/webviewWindow'),
-    import('@tauri-apps/plugin-store'),
   ])
   const documentKey = `document-${crypto.randomUUID()}`
   const windowLabel = `pdf-print-${crypto.randomUUID()}`
   const completionEvent = outputPath ? `pdf-export-result-${crypto.randomUUID()}` : undefined
-  const store = await Store.load(PRINT_EXPORT_STORE)
+  const store = await platform.store.load(PRINT_EXPORT_STORE)
   await store.set(documentKey, {
     html,
     outputPath,
@@ -701,8 +700,8 @@ export async function exportMarkdownFile(
   const pathOptions = await getFilePathOptions(filePath)
   const readMarkdown = () => (
     pathOptions.baseDir
-      ? readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : readTextFile(pathOptions.path)
+      ? platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : platform.fs.readTextFile(pathOptions.path)
   )
 
   return await exportMarkdownSource(format, {

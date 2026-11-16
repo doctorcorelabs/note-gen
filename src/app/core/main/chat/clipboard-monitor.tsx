@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl'
 import { Clipboard, ClipboardX } from 'lucide-react'
 import { TooltipButton } from '@/components/tooltip-button'
 import { useState, useEffect, useId } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { Switch } from '@/components/ui/switch'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 
@@ -21,7 +21,7 @@ export function ClipboardMonitor({ display = 'icon' }: ClipboardMonitorProps) {
   useEffect(() => {
     const syncWithStore = async () => {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const storedValue = await store.get<boolean>('clipboardMonitor')
 
         // Only update if the stored value exists and is different from the current state
@@ -39,7 +39,7 @@ export function ClipboardMonitor({ display = 'icon' }: ClipboardMonitorProps) {
   const toggleClipboardMonitor = async () => {
     const newState = !isEnabled
     setIsEnabled(newState)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('clipboardMonitor', newState)
   }
 

@@ -1,7 +1,7 @@
 import { Tool, ToolResult } from '../types'
 import emitter from '@/lib/emitter'
 import useArticleStore from '@/stores/article'
-import { exists, readTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
 import type { AgentEditorStateSnapshot } from '../types'
 import { agentDebugLog, agentDebugText } from '../debug-log'
@@ -123,16 +123,16 @@ async function hydrateStoreBackedEditorContent(expectedFilePath?: string) {
     if (!targetFilePath) return getStoreBackedEditorContent()
     const pathOptions = await getFilePathOptions(targetFilePath)
     const fileExists = pathOptions.baseDir
-      ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : await exists(pathOptions.path)
+      ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : await platform.fs.exists(pathOptions.path)
 
     if (!fileExists) {
       return getStoreBackedEditorContent()
     }
 
     const content = pathOptions.baseDir
-      ? await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : await readTextFile(pathOptions.path)
+      ? await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : await platform.fs.readTextFile(pathOptions.path)
 
     if (expectedFilePath && !isCurrentEditorTarget(expectedFilePath)) {
       return null

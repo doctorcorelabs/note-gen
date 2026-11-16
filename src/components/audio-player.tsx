@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Play, Pause } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 interface AudioPlayerProps {
   audioPath: string
@@ -27,7 +27,7 @@ export function AudioPlayer({ audioPath, compact = false }: AudioPlayerProps) {
     const loadAudio = async () => {
       try {
         // 读取音频文件
-        const fileData = await readFile(audioPath, { baseDir: BaseDirectory.AppData })
+        const fileData = await platform.fs.readFile(audioPath, { baseDir: BaseDirectory.AppData })
         
         // 根据文件扩展名确定 MIME 类型
         const extension = audioPath.split('.').pop()?.toLowerCase()

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useEffect, useState } from "react"
 import { AiConfig, ModelConfig } from "../../setting/config"
-import { Store } from "@tauri-apps/plugin-store"
+import { platform } from "@/lib/platform"
 import useSettingStore from "@/stores/setting"
 import { ChevronsUpDown, X } from "lucide-react"
 import {
@@ -132,7 +132,7 @@ export function ModelSelect({
   }
 
   async function initModelList() {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const aiConfigs = await store.get<AiConfig[]>('aiModelList')
     if (!aiConfigs) return
     const models: GroupedModel[] = []
@@ -194,7 +194,7 @@ export function ModelSelect({
       return
     }
     setPrimaryModelHandler(e)
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const storeKey = getStoreKey(modelKey)
     store.set(storeKey, e)
     await store.save()
@@ -207,7 +207,7 @@ export function ModelSelect({
       if (value === undefined) setModel('')
       return
     }
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const storeKey = getStoreKey(modelKey)
     store.set(storeKey, '')
     await store.save()

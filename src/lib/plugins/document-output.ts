@@ -20,11 +20,11 @@ import {
 } from '@notegen/plugin-api'
 import { writeHtml, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { save } from '@tauri-apps/plugin-dialog'
-import { writeFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 import { buildPluginHtmlFile, getPluginDocument, limitDocumentText, sanitizeDocumentHtml } from './documents'
 import { requirePluginUserAction } from './user-actions'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { buildAdvancedHtmlDocument } from '@/lib/markdown/export-document'
 import { buildAdvancedRichText } from '@/lib/markdown/export-rich-text'
 
@@ -76,7 +76,7 @@ async function outputPluginHtml(
   output: 'file' | 'source' | 'rich-text',
 ) {
   requirePluginUserAction(pluginId)
-  if (!checkIsTauri() || ['ios', 'android'].includes(platform())) {
+  if (!checkIsTauri() || ['ios', 'android'].includes(getRuntimePlatform())) {
     throw new PluginError('UnavailableOnPlatform', 'HTML output requires the desktop app')
   }
   if (htmlExports.has(owner) || exportDialogs.has(owner)) {
@@ -168,7 +168,7 @@ async function outputPluginHtml(
     await services.guard(permission)
     requirePluginUserAction(pluginId)
     try {
-      if (output === 'file' && selectedPath) await writeFile(/\.html$/i.test(selectedPath) ? selectedPath : `${selectedPath}.html`, bytes)
+      if (output === 'file' && selectedPath) await platform.fs.writeFile(/\.html$/i.test(selectedPath) ? selectedPath : `${selectedPath}.html`, bytes)
       else if (rich) await writeHtml(rich.html, rich.text)
       else await writeText(generated.html)
     } catch (error) {
@@ -196,7 +196,7 @@ export async function writePluginClipboard(pluginId: string, owner: AbortSignal,
   await guard()
   requirePluginUserAction(pluginId)
   if (checkIsTauri()) {
-    if (html !== undefined && ['ios', 'android'].includes(platform())) throw new PluginError('UnavailableOnPlatform', 'Rich-text clipboard is only supported on desktop')
+    if (html !== undefined && ['ios', 'android'].includes(getRuntimePlatform())) throw new PluginError('UnavailableOnPlatform', 'Rich-text clipboard is only supported on desktop')
     await guard()
     if (html === undefined) await writeText(resolved.text)
     else await writeHtml(html, resolved.text)
@@ -227,7 +227,7 @@ export async function exportPluginFile(pluginId: string, owner: AbortSignal, opt
   await guard()
   requirePluginUserAction(pluginId)
   if (checkIsTauri()) {
-    if (['ios', 'android'].includes(platform())) throw new PluginError('UnavailableOnPlatform', 'File export currently requires desktop')
+    if (['ios', 'android'].includes(getRuntimePlatform())) throw new PluginError('UnavailableOnPlatform', 'File export currently requires desktop')
     if (exportDialogs.has(owner) || htmlExports.has(owner)) throw new PluginError('QuotaExceeded', 'Only one export dialog per plugin may be open')
     exportDialogs.add(owner)
     let path: string | null
@@ -237,7 +237,7 @@ export async function exportPluginFile(pluginId: string, owner: AbortSignal, opt
     // Recheck authorization after the save dialog; switching workspace, stopping
     // the plugin or revoking its grant must prevent the pending write.
     await guard()
-    await writeFile(path, bytes)
+    await platform.fs.writeFile(path, bytes)
     return { saved: true }
   }
   throw new PluginError('UnavailableOnPlatform', 'File export requires a native save dialog')

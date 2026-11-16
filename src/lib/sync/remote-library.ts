@@ -1,8 +1,6 @@
 import type { RemoteWriteCondition } from './write-condition'
 import { mutateFileConditionally as mutateGitlabFileConditionally } from './gitlab'
-import { exists, mkdir, readDir, readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { dirname } from '@tauri-apps/api/path'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, type StoreHandle } from '@/lib/platform'
 import { deleteFile as deleteGithubFile, getDirectoryFiles as getGithubDirectoryFiles, getFiles as getGithubFiles, uploadFile as uploadGithubFile } from './github'
 import { deleteFile as deleteGiteeFile, getDirectoryFiles as getGiteeDirectoryFiles, getFiles as getGiteeFiles, uploadFile as uploadGiteeFile } from './gitee'
 import { deleteFile as deleteGitlabFile, getFileContent as getGitlabFileContent, getDirectoryFiles as getGitlabDirectoryFiles, uploadFile as uploadGitlabFile } from './gitlab'
@@ -133,12 +131,12 @@ export type UploadAllResult = {
   failed: Array<{ path: string; message: string }>
 }
 
-async function getPlatform(store: Store): Promise<SyncPlatform> {
+async function getPlatform(store: StoreHandle): Promise<SyncPlatform> {
   return await store.get<SyncPlatform>('primaryBackupMethod') || 'github'
 }
 
 async function getFileTransferConcurrency(): Promise<number> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await getPlatform(store) !== 'cloudFolder') return 1
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
   return config?.provider === 'oneDrive' ? ONE_DRIVE_FILE_TRANSFER_CONCURRENCY : 1
@@ -228,7 +226,7 @@ async function listGitRemoteFiles(
 }
 
 async function listObjectStorageFiles(
-  store: Store,
+  store: StoreHandle,
   platform: 's3' | 'webdav',
   options: RemoteLibraryOptions
 ): Promise<RemoteLibraryFile[]> {
@@ -283,10 +281,10 @@ async function listObjectStorageFiles(
 }
 
 async function listRemoteLibraryFilesRaw(options: RemoteLibraryOptions): Promise<RemoteLibraryFile[]> {
-  const store = await Store.load('store.json')
-  const platform = options.platform ?? await getPlatform(store)
-  if (platform === 'selfHosted' || platform === 'local') return []
-  if (platform === 'cloudFolder') {
+  const store = await platform.store.load('store.json')
+  const effectivePlatform = options.platform ?? await getPlatform(store)
+  if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') return []
+  if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     if (!config?.path) throw new Error('Cloud folder is not configured')
     if (options.scope !== 'data' && !supportsCloudFolderWorkspace(config)) return []
@@ -300,9 +298,9 @@ async function listRemoteLibraryFilesRaw(options: RemoteLibraryOptions): Promise
       }))
       .sort((left, right) => left.path.localeCompare(right.path))
   }
-  const files = platform === 's3' || platform === 'webdav'
-    ? await listObjectStorageFiles(store, platform, options)
-    : await listGitRemoteFiles(platform, options)
+  const files = effectivePlatform === 's3' || effectivePlatform === 'webdav'
+    ? await listObjectStorageFiles(store, effectivePlatform, options)
+    : await listGitRemoteFiles(effectivePlatform, options)
 
   return files.sort((left, right) => left.path.localeCompare(right.path))
 }
@@ -322,8 +320,8 @@ export async function listRemoteLibraryFiles(options: RemoteLibraryOptions = {})
 export async function isLocalLibraryFile(path: string): Promise<boolean> {
   const pathOptions = await getFilePathOptions(path)
   return pathOptions.baseDir
-    ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-    : await exists(pathOptions.path)
+    ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+    : await platform.fs.exists(pathOptions.path)
 }
 
 export async function ensureLocalLibraryFile(path: string): Promise<boolean> {
@@ -471,8 +469,8 @@ export async function uploadLocalLibraryFile(path: string): Promise<string> {
     await prepareWorkspacePathUpload(path)
     const pathOptions = await getFilePathOptions(path)
     const content = pathOptions.baseDir
-      ? await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : await readFile(pathOptions.path)
+      ? await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : await platform.fs.readFile(pathOptions.path)
     const marker = await createStaticAssetSyncMarker(path, content, operationKey)
 
     const sha = await uploadRemoteBytes(path, content, `Upload file: ${path}`, getRemoteContentType(path))
@@ -528,8 +526,8 @@ async function collectLocalLibraryFiles(
   const files: Array<{ path: string; name: string }> = []
   const pathOptions = await getFilePathOptions(folderPath)
   const entries = pathOptions.baseDir
-    ? await readDir(pathOptions.path, { baseDir: pathOptions.baseDir })
-    : await readDir(pathOptions.path)
+    ? await platform.fs.readDir(pathOptions.path, { baseDir: pathOptions.baseDir })
+    : await platform.fs.readDir(pathOptions.path)
 
   for (const entry of entries) {
     if (entry.name === '.DS_Store' || entry.name.startsWith('.') || entry.isSymlink) {
@@ -574,19 +572,19 @@ export async function saveLocalBytes(
     const pathOptions = resolvedPathOptions ?? await getFilePathOptions(path)
     const marker = await createStaticAssetSyncMarker(path, content, operationKey, options.platform)
     if (resolvedPathOptions) {
-      const parentPath = await dirname(pathOptions.path)
+      const parentPath = await platform.path.dirname(pathOptions.path)
       if (pathOptions.baseDir) {
-        await mkdir(parentPath, { baseDir: pathOptions.baseDir, recursive: true })
+        await platform.fs.mkdir(parentPath, { baseDir: pathOptions.baseDir, recursive: true })
       } else {
-        await mkdir(parentPath, { recursive: true })
+        await platform.fs.mkdir(parentPath, { recursive: true })
       }
     }
     options.beforeWrite?.()
     if (isFileDeletionPending(path)) throw new Error('The file is being deleted')
     if (pathOptions.baseDir) {
-      await writeFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+      await platform.fs.writeFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
     } else {
-      await writeFile(pathOptions.path, content)
+      await platform.fs.writeFile(pathOptions.path, content)
     }
     rememberStaticAssetSyncMarker(marker)
     return true
@@ -599,10 +597,10 @@ async function downloadRemoteBytesRaw(
   target?: SyncPlatform,
   onVersion?: (version: string) => void,
 ): Promise<Uint8Array> {
-  const store = await Store.load('store.json')
-  const platform = target ?? await getPlatform(store)
+  const store = await platform.store.load('store.json')
+  const effectivePlatform = target ?? await getPlatform(store)
 
-  if (platform === 's3') {
+  if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     const file = config ? await s3DownloadBytes(config, path) : null
     if (!file) throw new Error('S3 下载失败')
@@ -610,7 +608,7 @@ async function downloadRemoteBytesRaw(
     return file.content
   }
 
-  if (platform === 'webdav') {
+  if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     const file = config ? await webdavDownloadBytes(config, path) : null
     if (!file) throw new Error('WebDAV 下载失败')
@@ -618,7 +616,7 @@ async function downloadRemoteBytesRaw(
     return file.content
   }
 
-  if (platform === 'cloudFolder') {
+  if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     const file = config?.path
       ? scope === 'workspace' && supportsCloudFolderWorkspace(config)
@@ -632,13 +630,13 @@ async function downloadRemoteBytesRaw(
     return file.content
   }
 
-  if (platform === 'selfHosted' || platform === 'local') {
+  if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') {
     throw new Error('当前同步方式不支持远端工作区下载')
   }
 
-  const repo = await getGitRepository(platform, scope)
+  const repo = await getGitRepository(effectivePlatform, scope)
   let file: unknown
-  switch (platform) {
+  switch (effectivePlatform) {
     case 'github':
       file = await getGithubFiles({ path, repo })
       break
@@ -742,34 +740,34 @@ async function uploadRemoteContentRaw(
   target?: SyncPlatform,
   suppliedBeforeWrite?: () => Promise<void>,
 ): Promise<string> {
-  const store = await Store.load('store.json')
-  const platform = target ?? await getPlatform(store)
+  const store = await platform.store.load('store.json')
+  const effectivePlatform = target ?? await getPlatform(store)
   // Platform-switch recovery owns its explicit target and version checks.
   const switchingTarget = target !== undefined && Boolean(await store.get('platformSwitchRecovery'))
   // A manual editor push supplies its own canonical-content guard; that
   // snapshot may legitimately precede the debounced disk save.
   const capturedGuard = scope === 'workspace' && !switchingTarget
-    ? await captureWorkspaceRemoteWriteGuard(path, platform, true, suppliedBeforeWrite ? undefined : content) : undefined
+    ? await captureWorkspaceRemoteWriteGuard(path, effectivePlatform, true, suppliedBeforeWrite ? undefined : content) : undefined
   const beforeWrite = capturedGuard || suppliedBeforeWrite ? async () => {
     await capturedGuard?.()
     await suppliedBeforeWrite?.()
   } : undefined
 
-  if (platform === 's3') {
+  if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     const result = config ? await s3Upload(config, path, content, undefined, contentType, condition, beforeWrite) : null
     if (!result) throw new Error('S3 上传失败')
     return result.etag || `uploaded:${path}`
   }
 
-  if (platform === 'webdav') {
+  if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     const result = config ? await webdavUpload(config, path, content, undefined, contentType, condition, beforeWrite) : null
     if (!result) throw new Error('WebDAV 上传失败')
     return result.etag || `uploaded:${path}`
   }
 
-  if (platform === 'cloudFolder') {
+  if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     if (condition && config?.provider !== 'oneDrive') throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
     const result = config?.path
@@ -783,16 +781,16 @@ async function uploadRemoteContentRaw(
     return result.etag
   }
 
-  if (platform === 'selfHosted' || platform === 'local') {
+  if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') {
     throw new Error('当前同步方式不支持远端工作区上传')
   }
 
-  const repo = await getGitRepository(platform, scope)
-  const sha = condition ? condition.version || undefined : await getExistingRemoteSha(platform, path, repo)
+  const repo = await getGitRepository(effectivePlatform, scope)
+  const sha = condition ? condition.version || undefined : await getExistingRemoteSha(effectivePlatform, path, repo)
   const filename = path.split('/').pop() || path
   let response: unknown
 
-  switch (platform) {
+  switch (effectivePlatform) {
     case 'github':
       response = await uploadGithubFile({ file: content, filename, path, repo, sha, message, guarded: Boolean(condition), beforeWrite })
       break
@@ -811,7 +809,7 @@ async function uploadRemoteContentRaw(
       break
   }
 
-  if (!response) throw new Error(`${platform} 上传失败`)
+  if (!response) throw new Error(`${effectivePlatform} 上传失败`)
   return getUploadedRemoteVersion(response) || sha || `uploaded:${path}`
 }
 
@@ -845,7 +843,7 @@ export async function uploadRemoteText(path: string, content: string, message: s
 
 /** Keep attachment existence checks create-only when backed by OneDrive. */
 export async function getOneDriveCreateOnlyCondition(): Promise<RemoteWriteCondition | undefined> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await getPlatform(store) !== 'cloudFolder') return undefined
   return (await store.get<CloudFolderConfig>('cloudFolderSyncConfig'))?.provider === 'oneDrive' ? { version: null } : undefined
 }
@@ -871,20 +869,20 @@ async function remoteFileExistsRaw(
   path: string,
   scope: RemoteRepositoryScope = 'workspace',
 ): Promise<boolean> {
-  const store = await Store.load('store.json')
-  const platform = await getPlatform(store)
+  const store = await platform.store.load('store.json')
+  const effectivePlatform = await getPlatform(store)
 
-  if (platform === 's3') {
+  if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     return config ? Boolean(await s3HeadObject(config, path)) : false
   }
 
-  if (platform === 'webdav') {
+  if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     return config ? Boolean(await webdavHeadObject(config, path)) : false
   }
 
-  if (platform === 'cloudFolder') {
+  if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     if (!config?.path) return false
     if (scope === 'workspace' && supportsCloudFolderWorkspace(config)) {
@@ -893,10 +891,10 @@ async function remoteFileExistsRaw(
     return scope === 'data' ? Boolean(await cloudFolderHeadObject(config, path)) : false
   }
 
-  if (platform === 'selfHosted' || platform === 'local') return false
+  if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') return false
 
-  const repo = await getGitRepository(platform, scope)
-  return Boolean(await getExistingRemoteSha(platform, path, repo))
+  const repo = await getGitRepository(effectivePlatform, scope)
+  return Boolean(await getExistingRemoteSha(effectivePlatform, path, repo))
 }
 
 export async function remoteFileExists(
@@ -918,21 +916,21 @@ export async function remoteFileExists(
 export async function getRemoteFileMetadata(
   path: string, scope: RemoteRepositoryScope = 'workspace', target?: SyncPlatform,
 ): Promise<{ version: string; size?: number } | null> {
-  const store = await Store.load('store.json')
-  const platform = target ?? await getPlatform(store)
-  if (platform === 's3') {
+  const store = await platform.store.load('store.json')
+  const effectivePlatform = target ?? await getPlatform(store)
+  if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     if (!config) throw new Error('S3 未配置')
     const file = await s3HeadObject(config, path)
     return file ? { version: file.etag } : null
   }
-  if (platform === 'webdav') {
+  if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     if (!config) throw new Error('WebDAV 未配置')
     const file = await webdavHeadObject(config, path)
     return file ? { version: file.etag } : null
   }
-  if (platform === 'cloudFolder') {
+  if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     if (!config?.path) throw new Error('云盘文件夹未配置')
     const file = scope === 'workspace' && supportsCloudFolderWorkspace(config)
@@ -940,9 +938,9 @@ export async function getRemoteFileMetadata(
       : await cloudFolderHeadObject(config, path)
     return file ? { version: file.etag, size: file.size } : null
   }
-  if (platform === 'local' || platform === 'selfHosted') return null
-  const repo = await getGitRepository(platform, scope)
-  return getGitRemoteFileMetadata(platform, path, repo)
+  if (effectivePlatform === 'local' || effectivePlatform === 'selfHosted') return null
+  const repo = await getGitRepository(effectivePlatform, scope)
+  return getGitRemoteFileMetadata(effectivePlatform, path, repo)
 }
 
 export async function deleteRemoteFile(
@@ -953,30 +951,30 @@ export async function deleteRemoteFile(
   beforeDelete?: () => Promise<void>,
 ): Promise<boolean> {
   await beforeDelete?.()
-  const store = await Store.load('store.json')
-  const platform = target ?? await getPlatform(store)
+  const store = await platform.store.load('store.json')
+  const effectivePlatform = target ?? await getPlatform(store)
   const switchingTarget = target !== undefined && Boolean(await store.get('platformSwitchRecovery'))
   const capturedGuard = scope === 'workspace' && !switchingTarget
-    ? await captureWorkspaceRemoteWriteGuard(path, platform, false) : undefined
+    ? await captureWorkspaceRemoteWriteGuard(path, effectivePlatform, false) : undefined
   const beforeWrite = beforeDelete || capturedGuard
     ? async () => { await beforeDelete?.(); await capturedGuard?.() }
     : undefined
 
-  if (platform === 's3') {
+  if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     if (!config) return false
     if (!condition && !await s3HeadObject(config, path)) return true
     return s3Delete(config, path, undefined, condition, beforeWrite)
   }
 
-  if (platform === 'webdav') {
+  if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     if (!config) return false
     if (!condition && !await webdavHeadObject(config, path)) return true
     return webdavDelete(config, path, undefined, condition, beforeWrite)
   }
 
-  if (platform === 'cloudFolder') {
+  if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     if (condition && config?.provider !== 'oneDrive') throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
     if (!config?.path) return false
@@ -987,13 +985,13 @@ export async function deleteRemoteFile(
     return false
   }
 
-  if (platform === 'selfHosted' || platform === 'local') return false
+  if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') return false
 
-  const repo = await getGitRepository(platform, scope)
-  const sha = condition ? condition.version || undefined : await getExistingRemoteSha(platform, path, repo)
+  const repo = await getGitRepository(effectivePlatform, scope)
+  const sha = condition ? condition.version || undefined : await getExistingRemoteSha(effectivePlatform, path, repo)
   if (!sha) { if (condition) throw new Error('SYNC_SWITCH_STALE'); return true }
 
-  switch (platform) {
+  switch (effectivePlatform) {
     case 'github':
       return Boolean(await deleteGithubFile({ path, sha, repo, guarded: Boolean(condition), beforeWrite }))
     case 'gitee':

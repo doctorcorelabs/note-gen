@@ -1,4 +1,5 @@
-import { readTextFile, readDir, BaseDirectory, DirEntry } from "@tauri-apps/plugin-fs";
+import type { DirEntry, StoreHandle } from "@/lib/platform";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { fetchEmbedding, fetchEmbeddings, rerankDocuments } from "./ai";
 import {
   deleteVectorDocumentsByFilename,
@@ -25,8 +26,6 @@ export { initVectorDb };
 import { getFilePathOptions, getWorkspacePath } from "./workspace";
 import { DirTree } from "@/stores/article";
 import { toast } from "@/hooks/use-toast";
-import { join } from "@tauri-apps/api/path";
-import { Store } from "@tauri-apps/plugin-store";
 import { createHash } from 'crypto';
 import { getIdentifierTerms, getLexicalTerms, replaceLexicalTerm } from './lexical-tokenizer';
 import { isSkillsFolder } from './skills/utils';
@@ -74,7 +73,7 @@ const QUERY_EMBEDDING_CACHE_TTL = 5 * 60 * 1000;
 const QUERY_EMBEDDING_CACHE_LIMIT = 50;
 
 async function getQueryEmbedding(query: string): Promise<number[] | null> {
-  const settingsStore = await Store.load('store.json');
+  const settingsStore = await platform.store.load('store.json');
   if (await settingsStore.get<boolean>('wikiSemanticSearchEnabled') === false) return null;
   const cacheKey = query.normalize('NFKC').trim();
   const cached = queryEmbeddingCache.get(cacheKey);
@@ -95,12 +94,12 @@ async function getQueryEmbedding(query: string): Promise<number[] | null> {
   return embedding;
 }
 
-async function getConfiguredExcludedPaths(store?: Store): Promise<string[]> {
-  const targetStore = store || await Store.load('store.json');
+async function getConfiguredExcludedPaths(store?: StoreHandle): Promise<string[]> {
+  const targetStore = store || await platform.store.load('store.json');
   return await targetStore.get<string[]>('ragExcludedPaths') ?? DEFAULT_EXCLUDED_RAG_PATHS;
 }
 
-async function resolveRetrievalScope(scope: RetrievalScope = {}, store?: Store): Promise<RetrievalScope> {
+async function resolveRetrievalScope(scope: RetrievalScope = {}, store?: StoreHandle): Promise<RetrievalScope> {
   const configuredExcludedPaths = await getConfiguredExcludedPaths(store);
   return {
     includedPaths: scope.includedPaths,
@@ -302,7 +301,7 @@ export async function initBM25Search(): Promise<void> {
       ...await collectRecordKnowledgeDocuments(),
       ...await collectCanvasKnowledgeDocuments(),
     ];
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const chunkSize = await store.get<number>('ragChunkSize');
     const chunkOverlap = await store.get<number>('ragChunkOverlap');
     const documents: BM25Document[] = items.flatMap(item => {
@@ -499,10 +498,10 @@ export async function processMarkdownFile(
     const workspace = await getWorkspacePath()
     let content = ''
     if (workspace.isCustom) {
-      content = fileContent || await readTextFile(filePath)
+      content = fileContent || await platform.fs.readTextFile(filePath)
     } else {
       const { path, baseDir } = await getFilePathOptions(filePath)
-      content = fileContent || await readTextFile(path, { baseDir })
+      content = fileContent || await platform.fs.readTextFile(path, { baseDir })
     }
     const articlePath = getVectorDocumentKey(filePath);
     const vectorDocumentKey = createKnowledgeSourceKey('article', articlePath);
@@ -518,7 +517,7 @@ export async function processMarkdownFile(
       return true;
     }
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const chunkSize = await store.get<number>('ragChunkSize');
     const chunkOverlap = await store.get<number>('ragChunkOverlap');
     const chunks = chunkText(content, chunkSize, chunkOverlap).filter(chunk => chunk.trim().length > 0);
@@ -638,9 +637,9 @@ async function getWorkspaceFiles(): Promise<DirTree[]> {
     let entries: DirEntry[];
     
     if (useCustomPath) {
-      entries = await readDir(dirPath);
+      entries = await platform.fs.readDir(dirPath);
     } else {
-      entries = await readDir(dirPath, { baseDir: BaseDirectory.AppData });
+      entries = await platform.fs.readDir(dirPath, { baseDir: BaseDirectory.AppData });
     }
     
     const result: DirTree[] = [];
@@ -662,7 +661,7 @@ async function getWorkspaceFiles(): Promise<DirTree[]> {
       
       // 如果是目录，递归读取子目录
       if (entry.isDirectory) {
-        const childPath = await join(dirPath, entry.name);
+        const childPath = await platform.path.join(dirPath, entry.name);
         // 递归处理子目录
         item.children = await processDirectory(childPath, useCustomPath);
         
@@ -723,7 +722,7 @@ export async function processAllMarkdownFiles(onProgress?: (current: number, tot
     const results = await runWithConcurrencyLimit(
       filesToProcess.map(file => async () => {
         try {
-          const taskStore = await Store.load('store.json');
+          const taskStore = await platform.store.load('store.json');
           if (await taskStore.get<boolean>('ragKnowledgeIndexPaused') ?? false) {
             return { success: false, paused: true, fileName: file.name, error: null };
           }
@@ -793,7 +792,7 @@ async function getFilePath(item: DirTree): Promise<string> {
   
   // 转换为完整路径
   if (workspace.isCustom) {
-    return await join(workspace.path, path);
+    return await platform.path.join(workspace.path, path);
   } else {
     return path; // 返回相对于AppData/article的路径
   }
@@ -854,10 +853,10 @@ async function collectMarkdownContents(scope: RetrievalScope = {}): Promise<Sear
             let content = '';
             const workspace = await getWorkspacePath();
             if (workspace.isCustom) {
-              content = await readTextFile(filePath);
+              content = await platform.fs.readTextFile(filePath);
             } else {
               const { path, baseDir } = await getFilePathOptions(filePath);
-              content = await readTextFile(path, { baseDir });
+              content = await platform.fs.readTextFile(path, { baseDir });
             }
             
             // 创建搜索项
@@ -1007,7 +1006,7 @@ export async function getContextForQuery(
   scope: RetrievalScope = {}
 ): Promise<RagSearchResponse> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const resultCount = await store.get<number>('ragResultCount') ?? 5;
     const similarityThreshold = await store.get<number>('ragSimilarityThreshold') ?? 0.25;
     const rerankThreshold = await store.get<number>('ragRerankThreshold') ?? 0.1;
@@ -1392,7 +1391,7 @@ async function finalizeSearchResults(
     content: result.content,
     similarity: result.normalizedScore
   }));
-  const semanticEnabled = await (await Store.load('store.json')).get<boolean>('wikiSemanticSearchEnabled') !== false;
+  const semanticEnabled = await (await platform.store.load('store.json')).get<boolean>('wikiSemanticSearchEnabled') !== false;
   const rerankedDocuments = semanticEnabled ? await rerankDocuments(
     query,
     rerankDocumentsInput,
@@ -1510,7 +1509,7 @@ async function collectMarkdownContentsInFolder(
     // 构建文件夹完整路径
     let fullFolderPath: string;
     if (workspace.isCustom) {
-      fullFolderPath = await join(workspace.path, folderPath);
+      fullFolderPath = await platform.path.join(workspace.path, folderPath);
     } else {
       fullFolderPath = folderPath;
     }
@@ -1520,22 +1519,22 @@ async function collectMarkdownContentsInFolder(
       let currentEntries: DirEntry[];
 
       if (workspace.isCustom) {
-        currentEntries = await readDir(dirPath);
+        currentEntries = await platform.fs.readDir(dirPath);
       } else {
         const { path, baseDir } = await getFilePathOptions(relativePath);
-        currentEntries = await readDir(path, { baseDir });
+        currentEntries = await platform.fs.readDir(path, { baseDir });
       }
 
       for (const entry of currentEntries) {
         if (entry.name.startsWith('.')) continue;
 
         const entryRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-        const ragPath = workspace.isCustom ? await join(dirPath, entry.name) : entryRelativePath;
+        const ragPath = workspace.isCustom ? await platform.path.join(dirPath, entry.name) : entryRelativePath;
         if (!isPathAllowedForRag(ragPath, resolvedScope)) continue;
 
         if (entry.isDirectory) {
           const entryFullPath = workspace.isCustom
-            ? await join(dirPath, entry.name)
+            ? await platform.path.join(dirPath, entry.name)
             : entryRelativePath;
           await processTree(entryFullPath, entryRelativePath);
         } else if (entry.name.endsWith('.md')) {
@@ -1543,14 +1542,14 @@ async function collectMarkdownContentsInFolder(
           try {
             let content = '';
             const entryFullPath = workspace.isCustom
-              ? await join(dirPath, entry.name)
+              ? await platform.path.join(dirPath, entry.name)
               : entryRelativePath;
 
             if (workspace.isCustom) {
-              content = await readTextFile(entryFullPath);
+              content = await platform.fs.readTextFile(entryFullPath);
             } else {
               const { path, baseDir } = await getFilePathOptions(entryRelativePath);
-              content = await readTextFile(path, { baseDir });
+              content = await platform.fs.readTextFile(path, { baseDir });
             }
 
             items.push({
@@ -1585,7 +1584,7 @@ export async function getContextForQueryInFolder(
   folderPath: string
 ): Promise<RagSearchResponse> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const resultCount = await store.get<number>('ragResultCount') ?? 5;
     const similarityThreshold = await store.get<number>('ragSimilarityThreshold') ?? 0.25;
     const rerankThreshold = await store.get<number>('ragRerankThreshold') ?? 0.1;

@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 import { getOptionalSyncRepoName } from './repo-utils'
 import type { CloudFolderConfig } from '@/types/sync'
@@ -15,7 +15,7 @@ function isGitSyncProvider(provider: string): provider is GitSyncProvider {
 }
 
 export async function getCurrentSyncContext(target?: string) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const workspacePath = normalizeWorkspacePath(await store.get<string>('workspacePath') || '')
   const provider = target ?? (await store.get<string>('primaryBackupMethod') || 'github')
   const repo = isGitSyncProvider(provider)

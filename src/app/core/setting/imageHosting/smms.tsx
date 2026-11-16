@@ -2,7 +2,7 @@
 
 import { Eye, EyeOff, LoaderCircle, CheckCircle, XCircle } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { type SMMSImageHostingSetting } from "@/lib/imageHosting/smms";
 import useImageStore from "@/stores/imageHosting";
 import { getUserInfo } from "@/lib/imageHosting/smms";
@@ -33,7 +33,7 @@ export default function SMMSImageHosting() {
     const request = ++requestRef.current
     const isCurrent = () => scopeActive() && requestRef.current === request
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const saved = await store.get<SMMSImageHostingSetting>('smms')
       if (!isCurrent()) return
       if (!saved?.token?.trim()) {
@@ -56,7 +56,7 @@ export default function SMMSImageHosting() {
     const revision = ++saveRevisionRef.current
     requestRef.current++
     setToken(token)
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('smms', { token })
     await store.save()
     if (scopeActive() && saveRevisionRef.current === revision) {
@@ -67,7 +67,7 @@ export default function SMMSImageHosting() {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const saved = await store.get<SMMSImageHostingSetting>('smms')
       if (cancelled) return
       if (saved) setToken(saved.token)

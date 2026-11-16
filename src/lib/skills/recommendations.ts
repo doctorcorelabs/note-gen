@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 
 import builtinRecommendations from '../../../config/recommended-skills.json'
 import { fetchConfigCenterConfig } from '@/lib/config-center/client'
@@ -95,10 +96,10 @@ export function getRecommendedSkillText(text: Record<string, string>, locale: st
 }
 
 async function fetchRecommendations(): Promise<RecommendedSkill[]> {
-  let store: Store | null = null
+  let store: StoreHandle | null = null
   let cached: RecommendedSkillsCache | null = null
   try {
-    store = await Store.load('store.json')
+    store = await platform.store.load('store.json')
     cached = normalizeCache(await store.get<unknown>(RECOMMENDED_SKILLS_CACHE_KEY))
   } catch (error) {
     console.error('[skills] Failed to read recommendations cache:', error)

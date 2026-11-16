@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { emitTo } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getTags } from '@/db/tags'
 import { insertExternalMark } from '@/db/marks'
 import useSettingStore from '@/stores/setting'
@@ -58,7 +58,7 @@ export default async function initQuickRecordText() {
       const tags = await getTags()
       const settings = useSettingStore.getState()
       if (request.action === 'prepare') {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await respond({
           context: {
             tags,

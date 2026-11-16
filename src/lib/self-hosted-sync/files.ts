@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
 import { enqueueAssetSnapshot, enqueueFileSnapshot, enqueueFolderSnapshot } from './outbox'
@@ -24,7 +24,7 @@ function workspaceRelativePath(path: string, workspaceRoot: string) {
 }
 
 export async function moveSelfHostedWorkspacePath(sourceRelativePath: string, targetRelativePath: string) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get<string>('primaryBackupMethod') !== 'selfHosted') return false
   const workspace = await getWorkspacePath()
   const workspaceRoot = workspace.isCustom ? workspace.path : await getDefaultArticleAbsolutePath('')
@@ -132,7 +132,7 @@ function escapeLike(value: string) {
 }
 
 async function activeBinding() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get<string>('primaryBackupMethod') !== 'selfHosted') return null
   const workspace = await getWorkspacePath()
   const workspaceRoot = workspace.isCustom ? workspace.path : await getDefaultArticleAbsolutePath('')

@@ -3,7 +3,7 @@
 import { useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { ask } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { cloneDeep } from 'lodash-es'
 
 import { toast } from '@/hooks/use-toast'
@@ -63,27 +63,27 @@ export function useFileDeletion() {
     const deletedPaths: string[] = []
 
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const workspaceRoot = await getCurrentEditorWorkspaceRoot()
       const storedPlatform = await store.get<SyncPlatform>('primaryBackupMethod') || 'github'
       // Deletion must use an existing binding, never create a remote library as a preflight side effect.
       const configuration = storedPlatform === 'selfHosted'
         ? { platform: storedPlatform, configured: true }
         : await getSyncConfiguration()
-      const platform = configuration.platform
+      const activePlatform = configuration.platform
       const context = await getWorkspacePathMoveContext()
       const syncContext = await getCurrentSyncContext()
-      const cloudFolder = platform === 'cloudFolder'
+      const cloudFolder = activePlatform === 'cloudFolder'
         ? await store.get<CloudFolderConfig>('cloudFolderSyncConfig') : null
       // Files in a native cloud folder are propagated by that folder's own sync client.
-      const nativeCloudFolder = platform === 'cloudFolder'
+      const nativeCloudFolder = activePlatform === 'cloudFolder'
         && Boolean(cloudFolder && !supportsCloudFolderWorkspace(cloudFolder))
-      const hasRemote = platform !== 'local' && (configuration.configured
+      const hasRemote = activePlatform !== 'local' && (configuration.configured
         || getRemoteDeletionEntries(entries).length > 0)
       const assertContext = async () => {
         if ((useSettingStore.getState().workspacePath || '') !== workspacePath
           || await getCurrentEditorWorkspaceRoot() !== workspaceRoot
-          || (await store.get<string>('primaryBackupMethod') || 'github') !== platform
+          || (await store.get<string>('primaryBackupMethod') || 'github') !== activePlatform
           || await getWorkspacePathMoveContext() !== context
           || await store.get('platformSwitchRecovery')) {
           throw new Error('The workspace or sync configuration changed during deletion')
@@ -162,7 +162,7 @@ export function useFileDeletion() {
         let remoteCompleted = !hasRemote || nativeCloudFolder
         try {
           await assertContext()
-          if (platform === 'selfHosted') {
+          if (activePlatform === 'selfHosted') {
             await runEditorPathWriteTransaction(entry.path, async () => {
               await assertContext()
               if (await deleteSelfHostedWorkspacePath(entry.path, entry.isDirectory ? 'folder' : 'file')) {
@@ -178,17 +178,17 @@ export function useFileDeletion() {
           } else {
             if (hasRemote && !nativeCloudFolder) {
               if (entry.isDirectory) {
-                const result = await deleteRemoteFolder(entry.item, false, platform, assertContext)
+                const result = await deleteRemoteFolder(entry.item, false, activePlatform, assertContext)
                 if (!result.attempted || result.failedPaths.length > 0) {
                   throw new Error('Remote folder deletion is incomplete')
                 }
               } else {
-                const metadata = await getRemoteFileMetadata(entry.path, 'workspace', platform)
+                const metadata = await getRemoteFileMetadata(entry.path, 'workspace', activePlatform)
                 if (metadata) {
                   await assertContext()
-                  const condition = platform === 'cloudFolder' && cloudFolder?.provider !== 'oneDrive'
+                  const condition = activePlatform === 'cloudFolder' && cloudFolder?.provider !== 'oneDrive'
                     ? undefined : { version: metadata.version }
-                  if (!await deleteRemoteFile(entry.path, 'workspace', condition, platform, assertContext)) {
+                  if (!await deleteRemoteFile(entry.path, 'workspace', condition, activePlatform, assertContext)) {
                     throw new Error('Remote file deletion failed')
                   }
                 }
@@ -228,7 +228,7 @@ export function useFileDeletion() {
           }
         } catch (error) {
           failedEntries.push(entry)
-          remoteFailed ||= platform !== 'selfHosted' && !remoteCompleted
+          remoteFailed ||= activePlatform !== 'selfHosted' && !remoteCompleted
           console.error(`Delete entry failed: ${entry.path}`, error)
         } finally {
           useFileDeletionStore.getState().advance()
@@ -255,8 +255,8 @@ export function useFileDeletion() {
           await store.save()
           for (const path of affectedPaths) {
             if (!deletedPaths.some(root => activeEditorPathIsAffected(path, root, workspaceRoot))) continue
-            if (platform === 's3') useSyncStore.getState().removeS3FileEtag(path)
-            if (platform === 'webdav') useSyncStore.getState().removeWebDAVFileEtag(path)
+            if (activePlatform === 's3') useSyncStore.getState().removeS3FileEtag(path)
+            if (activePlatform === 'webdav') useSyncStore.getState().removeWebDAVFileEtag(path)
           }
         }
       } catch (error) {

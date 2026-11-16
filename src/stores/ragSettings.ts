@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { toast } from '@/hooks/use-toast';
 import { DEFAULT_EXCLUDED_RAG_PATHS } from '@/lib/rag-retrieval-policy';
 import {
@@ -70,7 +70,7 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
   // 初始化设置
   initSettings: async () => {
     try {
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       
       // 从存储中读取各个设置项，如果不存在则使用默认值
       const storedAutomaticSearchEnabled = await store.get<boolean>('ragAutomaticSearchEnabled');
@@ -127,7 +127,7 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
       set({ [key]: resolvedValue } as Pick<RagSettings, K>);
       
       // 保存到存储
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const storageKey = key === 'indexPaused'
         ? 'ragKnowledgeIndexPaused'
         : `rag${key.charAt(0).toUpperCase() + key.slice(1)}`;
@@ -161,7 +161,7 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
       recall: { resultCount: 8, similarityThreshold: 0.1, rerankThreshold: 0.05 }
     };
     const values = presets[preset];
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     set(values);
     await Promise.all([
       store.set('ragResultCount', values.resultCount),
@@ -172,13 +172,13 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
 
   markIndexDirty: async () => {
     set({ indexNeedsRebuild: true });
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('ragIndexNeedsRebuild', true);
   },
 
   markIndexClean: async () => {
     set({ indexNeedsRebuild: false });
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('ragIndexNeedsRebuild', false);
   },
 
@@ -189,7 +189,7 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
       set({ ...DEFAULT_RAG_SETTINGS, indexNeedsRebuild: true });
       
       // 保存到存储
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       await store.set('ragChunkSize', DEFAULT_RAG_SETTINGS.chunkSize);
       await store.set('ragAutomaticSearchEnabled', DEFAULT_RAG_SETTINGS.automaticSearchEnabled);
       await store.set('ragAgentStrategy', DEFAULT_RAG_SETTINGS.agentStrategy);

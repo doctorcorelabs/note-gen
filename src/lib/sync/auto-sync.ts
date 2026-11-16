@@ -1,6 +1,5 @@
 import { retryWorkspacePathMoves } from './workspace-path-moves'
 import { normalizeRemoteVersion } from './remote-content-cache'
-import { Store } from '@tauri-apps/plugin-store'
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
 import { getFiles as getGithubFiles, getFileCommits as getGithubFileCommits } from '@/lib/sync/github'
 import { getFiles as getGiteeFiles, getFileCommits as getGiteeFileCommits } from '@/lib/sync/gitee'
@@ -19,7 +18,7 @@ import {
 import { getSyncRepoName } from '@/lib/sync/repo-utils'
 import { getCurrentSyncContext, getSyncMetadataKey } from '@/lib/sync/sync-context'
 import { toast } from '@/hooks/use-toast'
-import { readFile, writeTextFile, stat, mkdir, exists, remove } from '@tauri-apps/plugin-fs'
+import { platform, type StoreHandle } from '@/lib/platform'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 import {
   checkFileLock,
@@ -43,14 +42,14 @@ import {
 } from '@/lib/editor-deactivation'
 
 // Store 实例缓存
-let storeInstance: Store | null = null
+let storeInstance: StoreHandle | null = null
 
 /**
  * 获取 Store 实例
  */
-async function getStore(): Promise<Store> {
+async function getStore(): Promise<StoreHandle> {
   if (!storeInstance) {
-    storeInstance = await Store.load('store.json')
+    storeInstance = await platform.store.load('store.json')
   }
   return storeInstance
 }
@@ -142,14 +141,14 @@ export async function getLocalFileMetadata(path: string): Promise<FileMetadata> 
   try {
     let fileStat
     if (workspace.isCustom) {
-      fileStat = await stat(pathOptions.path)
+      fileStat = await platform.fs.stat(pathOptions.path)
     } else {
-      fileStat = await stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+      fileStat = await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
     }
 
     const content = pathOptions.baseDir
-      ? await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : await readFile(pathOptions.path)
+      ? await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : await platform.fs.readFile(pathOptions.path)
 
     return {
       path,
@@ -180,7 +179,7 @@ export async function getLocalFileMetadata(path: string): Promise<FileMetadata> 
  * 获取远程文件信息
  */
 export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; lastModified?: number }> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
 
   try {
@@ -458,7 +457,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
  */
 export async function pullRemoteFile(path: string): Promise<string> {
   if (isBinaryFilePath(path)) throw new Error('Binary files must be pulled through the byte-preserving sync API')
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
 
   try {
@@ -569,17 +568,17 @@ export async function ensureDirectoryExists(filePath: string): Promise<void> {
   try {
     let dirExists = false
     if (workspace.isCustom) {
-      dirExists = await exists(pathOptions.path)
+      dirExists = await platform.fs.exists(pathOptions.path)
     } else {
-      dirExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+      dirExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
     }
     
     if (!dirExists) {
       // 递归创建目录
       if (workspace.isCustom) {
-        await mkdir(pathOptions.path, { recursive: true })
+        await platform.fs.mkdir(pathOptions.path, { recursive: true })
       } else {
-        await mkdir(pathOptions.path, { baseDir: pathOptions.baseDir, recursive: true })
+        await platform.fs.mkdir(pathOptions.path, { baseDir: pathOptions.baseDir, recursive: true })
       }
     }
   } catch (error) {
@@ -608,9 +607,9 @@ export async function saveLocalFile(path: string, content: string): Promise<void
 
   try {
     if (workspace.isCustom) {
-      await writeTextFile(pathOptions.path, content)
+      await platform.fs.writeTextFile(pathOptions.path, content)
     } else {
-      await writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+      await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
     }
   } catch (error) {
     throw error
@@ -629,7 +628,7 @@ export async function getRemoteCommitInfo(path: string): Promise<{
   deletions?: number
 } | null> {
   try {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
     if (primaryBackupMethod === 'selfHosted' || primaryBackupMethod === 'local') return null
     const repo = await getSyncRepoName(primaryBackupMethod as 'github' | 'gitee' | 'gitlab' | 'gitea')
@@ -796,13 +795,13 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
       const workspace = await getWorkspacePath()
       const pathOptions = await getFilePathOptions(actualPath)
       const fileExists = workspace.isCustom
-        ? await exists(pathOptions.path)
-        : await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        ? await platform.fs.exists(pathOptions.path)
+        : await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
       if (!fileExists) return { exists: false, content: '' }
 
       const bytes = pathOptions.baseDir
-        ? await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-        : await readFile(pathOptions.path)
+        ? await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        : await platform.fs.readFile(pathOptions.path)
       const content = requireSyncText(actualPath, bytes)
       return { exists: true, content }
     }
@@ -815,13 +814,13 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
       const workspace = await getWorkspacePath()
       const pathOptions = await getFilePathOptions(actualPath)
       const fileExists = workspace.isCustom
-        ? await exists(pathOptions.path)
-        : await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        ? await platform.fs.exists(pathOptions.path)
+        : await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
       if (!fileExists) return
       if (workspace.isCustom) {
-        await remove(pathOptions.path)
+        await platform.fs.remove(pathOptions.path)
       } else {
-        await remove(pathOptions.path, { baseDir: pathOptions.baseDir })
+        await platform.fs.remove(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
     }
     const snapshotsMatch = (left: LocalFileSnapshot, right: LocalFileSnapshot) => (
@@ -973,7 +972,7 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
  */
 export async function hasNetworkConnection(): Promise<boolean> {
   try {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
 
     // 真正的网络检测：尝试发送请求到 API 端点

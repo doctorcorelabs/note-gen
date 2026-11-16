@@ -11,8 +11,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/enhanced-context-menu"
 import useArticleStore, { DirTree } from "@/stores/article"
-import { writeTextFile, writeFile } from "@tauri-apps/plugin-fs"
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from "@/lib/platform"
 import { FileItem } from './file-item'
 import { FileTreeExpansionMenu } from './file-tree-expansion-menu'
 import { FolderItem } from "./folder-item"
@@ -487,7 +486,7 @@ export function FileManager({
             const sanitizedFileName = await writeDroppedFileToRoot({
               fileName: file.name,
               getFilePathOptions,
-              writeTextFile,
+              writeTextFile: platform.fs.writeTextFile,
             }, {
               kind: 'text',
               content: text,
@@ -509,7 +508,7 @@ export function FileManager({
             const sanitizedImageFileName = await writeDroppedFileToRoot({
               fileName: file.name,
               getFilePathOptions,
-              writeFile,
+              writeFile: platform.fs.writeFile,
             }, {
               kind: 'binary',
               content: uint8Array,
@@ -627,7 +626,7 @@ export function FileManager({
     remoteSearchRootLoadedRef.current = false
     remoteSearchLoadedPathsRef.current.clear()
 
-    void Store.load('store.json').then(async store => {
+    void platform.store.load('store.json').then(async store => {
       const scrollTop = await store.get<number>(key) ?? 0
       if (!disposed && !hasPendingReveal && !useArticleStore.getState().pendingFileRevealPath && containerRef.current) {
         containerRef.current.scrollTop = scrollTop
@@ -676,7 +675,7 @@ export function FileManager({
     scrollSaveTimerRef.current = window.setTimeout(() => {
       const scrollTop = containerRef.current?.scrollTop ?? 0
       const key = `fileTreeScrollTop:${workspacePath || '__default__'}`
-      void Store.load('store.json').then(async store => {
+      void platform.store.load('store.json').then(async store => {
         await store.set(key, scrollTop)
         await store.save()
       })

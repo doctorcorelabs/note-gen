@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sidebar"
 import { usePathname, useRouter } from 'next/navigation'
 import AppStatus from "./app-status"
-import { Store } from "@tauri-apps/plugin-store"
+import { platform } from "@/lib/platform"
 import { PinToggle } from "./pin-toggle"
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from "react"
@@ -43,7 +43,7 @@ export function AppSidebar() {
   ])
 
   async function initGithubImageHosting() {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const githubImageUsername = await store.get<string>('githubImageUsername')
     const githubImageAccessToken = await store.get<string>('githubImageAccessToken')
     if (githubImageUsername && githubImageAccessToken && !items.find(item => item.url === '/core/image')) {
@@ -65,7 +65,7 @@ export function AppSidebar() {
 
     // 直接跳转到对应页面
     router.push(item.url)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     store.set('currentPage', item.url)
   }
 

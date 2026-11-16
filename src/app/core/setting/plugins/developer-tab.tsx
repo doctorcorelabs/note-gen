@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { platform } from '@/lib/platform'
 import { useLocale, useTranslations } from 'next-intl'
 import { Code2, Download, FileCode2, FolderOpen, Terminal, Trash2, TriangleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -77,10 +78,9 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
     setError(null)
     try {
       const { save } = await import('@tauri-apps/plugin-dialog')
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
       const path = await save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
       if (!path) return
-      await writeTextFile(path, JSON.stringify({
+      await platform.fs.writeTextFile(path, JSON.stringify({
         appVersion: useSettingStore.getState().version,
         createdAt: new Date().toISOString(),
         plugins: installed.filter(plugin => filter === '@all' || plugin.manifest.id === filter).map(plugin => ({

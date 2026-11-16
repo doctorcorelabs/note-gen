@@ -1,7 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { exists, readTextFile } from '@tauri-apps/plugin-fs'
-import { join } from '@tauri-apps/api/path'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { filterSyncData } from '@/config/sync-exclusions'
 import { normalizeTagBoolean } from '@/lib/tag-sync'
@@ -77,7 +75,7 @@ async function fileSnapshotMatchesMapping(
   const current = rows[0]
   if (!current) return false
   try {
-    const content = await readTextFile(await join(current.localRoot, relativePath))
+    const content = await platform.fs.readTextFile(await platform.path.join(current.localRoot, relativePath))
     const hash = await invoke<string>('self_hosted_sha256', { value: content })
     return hash === current.contentHash
   } catch {
@@ -299,7 +297,7 @@ export async function resolveStructuredObjectId(workspaceId: string, domain: str
       [workspaceId, candidate],
     )
     if (!owners[0] || owners[0].localIdentity === localIdentity) return candidate
-    deviceId ??= await (await Store.load('store.json')).get<string>('selfHostedDeviceId')
+    deviceId ??= await (await platform.store.load('store.json')).get<string>('selfHostedDeviceId')
     if (!deviceId) throw new Error('自托管设备身份不可用，请重新授权')
     candidate = await structuredObjectId(workspaceId, domain, JSON.stringify({ localKey: identityKey, deviceId, attempt }))
   }
@@ -395,7 +393,7 @@ async function materializeOutboxRaw(
   )
   const workspaceKey = await loadWorkspaceKey(workspaceId, keyVersion)
   const pendingPathMoves = workspaceType === 'library'
-    && (await (await Store.load('store.json')).get<string>('primaryBackupMethod')) === 'selfHosted'
+    && (await (await platform.store.load('store.json')).get<string>('primaryBackupMethod')) === 'selfHosted'
     && workspaceId === await activeLibraryWorkspaceId()
     ? await (await import('@/lib/sync/workspace-path-moves')).getPendingWorkspacePathMoves()
     : []
@@ -780,9 +778,9 @@ async function recoverOrphanedQueuedChanges(
 }
 
 async function filePayload(localRoot: string, relativePath: string) {
-  const absolutePath = await join(localRoot, relativePath)
+  const absolutePath = await platform.path.join(localRoot, relativePath)
   try {
-    return { version: 1, domain: 'file', relativePath, content: await readTextFile(absolutePath) }
+    return { version: 1, domain: 'file', relativePath, content: await platform.fs.readTextFile(absolutePath) }
   } catch (error) {
     if (!isMissingPathError(error)) throw error
     return null
@@ -791,7 +789,7 @@ async function filePayload(localRoot: string, relativePath: string) {
 
 async function librarySourceExists(localRoot: string, relativePath: string) {
   try {
-    return await exists(await join(localRoot, relativePath))
+    return await platform.fs.exists(await platform.path.join(localRoot, relativePath))
   } catch (error) {
     if (isMissingPathError(error)) return false
     throw error
@@ -810,7 +808,7 @@ export async function structuredPayload(
   readOnly = false,
 ): Promise<Record<string, unknown> | null> {
   if (domain === 'setting') {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const entries = Object.fromEntries(await store.entries()) as Record<string, unknown>
     const excludeSensitiveConfig = await store.get<boolean>('excludeSensitiveConfig') !== false
     const { getMemoryPolicy } = await import('@/db/memory-policy')

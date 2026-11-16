@@ -16,8 +16,7 @@ import { Label } from "@/components/ui/label"
 import { extractTitle } from "@/lib/markdown"
 import { getFilePathOptions, getWorkspacePath, getGenericPathOptions } from "@/lib/workspace"
 import useTagStore from "@/stores/tag"
-import { BaseDirectory, readDir, writeTextFile } from "@tauri-apps/plugin-fs"
-import { Store } from "@tauri-apps/plugin-store"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { SquarePen, TriangleAlert } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useRouter } from 'next/navigation'
@@ -49,13 +48,13 @@ export function NoteOutput({chat}: {chat: Chat}) {
     // Use workspace functions instead of directly using BaseDirectory.AppData
     const pathOptions = await getFilePathOptions(writePath)
     if (pathOptions.baseDir) {
-      await writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+      await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
     } else {
       // Handle custom workspace (direct path, no baseDir)
-      await writeTextFile(pathOptions.path, content)
+      await platform.fs.writeTextFile(pathOptions.path, content)
     }
     
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('activeFilePath', title)
     if (isRemove) {
       deleteTag(currentTagId)
@@ -71,10 +70,10 @@ export function NoteOutput({chat}: {chat: Chat}) {
     
     if (workspace.isCustom) {
       const pathOptions = await getGenericPathOptions('', '')
-      const dirs = (await readDir(pathOptions.path)).filter(dir => dir.isDirectory).map(dir => `/${dir.name}`)
+      const dirs = (await platform.fs.readDir(pathOptions.path)).filter(dir => dir.isDirectory).map(dir => `/${dir.name}`)
       folders = dirs
     } else {
-      const dirs = (await readDir('article', { baseDir: BaseDirectory.AppData })).filter(dir => dir.isDirectory).map(dir => `/${dir.name}`)
+      const dirs = (await platform.fs.readDir('article', { baseDir: BaseDirectory.AppData })).filter(dir => dir.isDirectory).map(dir => `/${dir.name}`)
       folders = dirs
     }
     

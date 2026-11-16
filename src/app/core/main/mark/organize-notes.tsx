@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { useCallback, useEffect, useMemo, useImperativeHandle, forwardRef, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
-import { Store } from "@tauri-apps/plugin-store"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { Label } from "@/components/ui/label"
 import { useSidebarStore } from "@/stores/sidebar"
 import { useRouter } from "next/navigation"
@@ -25,7 +25,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { useTranslations } from "next-intl"
-import { BaseDirectory, writeTextFile, exists, readFile } from "@tauri-apps/plugin-fs"
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
 import { joinRelativePath } from "@/lib/path"
 import { toast } from "@/hooks/use-toast"
@@ -124,7 +123,7 @@ async function getAvailableOutputPath(folder: string, rawTitle: string, isCustom
   let pathOptions = await getFilePathOptions(filePath)
   let counter = 1
 
-  while (await exists(pathOptions.path, isCustomWorkspace ? undefined : { baseDir: pathOptions.baseDir })) {
+  while (await platform.fs.exists(pathOptions.path, isCustomWorkspace ? undefined : { baseDir: pathOptions.baseDir })) {
     fileName = `${sanitizedTitle}(${counter}).md`
     filePath = buildOutputPath(folder, fileName)
     pathOptions = await getFilePathOptions(filePath)
@@ -137,14 +136,14 @@ async function getAvailableOutputPath(folder: string, rawTitle: string, isCustom
 async function readLocalRecordImage(mark: Mark, localAssetPath: string) {
   try {
     return {
-      bytes: await readFile(localAssetPath, { baseDir: BaseDirectory.AppData }),
+      bytes: await platform.fs.readFile(localAssetPath, { baseDir: BaseDirectory.AppData }),
       fileName: localAssetPath.split('/').pop() || mark.url,
     }
   } catch (initialError) {
     try {
       await downloadRecordAssets([mark])
       return {
-        bytes: await readFile(localAssetPath, { baseDir: BaseDirectory.AppData }),
+        bytes: await platform.fs.readFile(localAssetPath, { baseDir: BaseDirectory.AppData }),
         fileName: localAssetPath.split('/').pop() || mark.url,
       }
     } catch {
@@ -155,7 +154,7 @@ async function readLocalRecordImage(mark: Mark, localAssetPath: string) {
     if (thumbnailPath) {
       const normalizedThumbnailPath = thumbnailPath.replace(/^\/+/, '')
       return {
-        bytes: await readFile(normalizedThumbnailPath, { baseDir: BaseDirectory.AppData }),
+        bytes: await platform.fs.readFile(normalizedThumbnailPath, { baseDir: BaseDirectory.AppData }),
         fileName: normalizedThumbnailPath.split('/').pop() || 'record-image.webp',
       }
     }
@@ -197,7 +196,7 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
   const tMark = useTranslations('record.mark')
 
   async function initGenTemplates() {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const storedTemplates = await store.get<GenTemplate[]>('templateList')
     const template = storedTemplates ?? useSettingStore.getState().templateList
     const enabledTemplates = template.filter(item => item.status !== false)
@@ -215,7 +214,7 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
   }
 
   const persistLastTemplateId = useCallback(async (templateId: string) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('lastOrganizeTemplateId', templateId)
   }, [])
 
@@ -534,9 +533,9 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
       const pathOptions = await getFilePathOptions(filePath)
 
       if (workspace.isCustom) {
-        await writeTextFile(pathOptions.path, '')
+        await platform.fs.writeTextFile(pathOptions.path, '')
       } else {
-        await writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+        await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
       }
 
       await loadFileTree()
@@ -631,7 +630,7 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
       ) : categorizedMarks.imageMarks
       const embeddableImageCount = processedImageMarks.filter(item => Boolean(item.url)).length
 
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const locale = await store.get<string>('locale') || 'en'
 
       const request_content = `
@@ -724,9 +723,9 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
         const written = await runEditorPathWriteTransaction(filePath, async () => {
           markEditorPathMutation(filePath)
           if (workspace.isCustom) {
-            await writeTextFile(pathOptions.path, content)
+            await platform.fs.writeTextFile(pathOptions.path, content)
           } else {
-            await writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+            await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
           }
           markEditorPathMutation(filePath)
           return true
@@ -840,18 +839,17 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
 
         // Write to new file
         if (workspace.isCustom) {
-          await writeTextFile(newPathOptions.path, cleanedContent)
+          await platform.fs.writeTextFile(newPathOptions.path, cleanedContent)
         } else {
-          await writeTextFile(newPathOptions.path, cleanedContent, { baseDir: newPathOptions.baseDir })
+          await platform.fs.writeTextFile(newPathOptions.path, cleanedContent, { baseDir: newPathOptions.baseDir })
         }
 
         // Delete old file
-        const { remove } = await import('@tauri-apps/plugin-fs')
         if (pathChanged) {
           if (workspace.isCustom) {
-            await remove(pathOptions.path)
+            await platform.fs.remove(pathOptions.path)
           } else {
-            await remove(pathOptions.path, { baseDir: pathOptions.baseDir })
+            await platform.fs.remove(pathOptions.path, { baseDir: pathOptions.baseDir })
           }
           await useArticleStore.getState().syncOpenTabsForPathChange(filePath, newFilePath)
         }
@@ -875,9 +873,9 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
       } else {
         // No title found, just save the cleaned content
         if (workspace.isCustom) {
-          await writeTextFile(pathOptions.path, cleanedContent)
+          await platform.fs.writeTextFile(pathOptions.path, cleanedContent)
         } else {
-          await writeTextFile(pathOptions.path, cleanedContent, { baseDir: pathOptions.baseDir })
+          await platform.fs.writeTextFile(pathOptions.path, cleanedContent, { baseDir: pathOptions.baseDir })
         }
         if (useArticleStore.getState().activeFilePath === filePath) {
           await readArticle(filePath, '', shouldAutoSyncOnInitialRead())

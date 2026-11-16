@@ -24,6 +24,12 @@
 # instead of trusting the allowlist wave column. At G4 the delegation
 # ends: api/core must have 0 lines, including isTauri.
 #
+# plugin-sql is special: the SQL funnel src/db/index.ts keeps its
+# plugin-sql import until V3-14 migrates it to typed operations
+# (AD-90 funnel exception, self-expiring at V3-14). In wave mode this
+# layer allows exactly 1 plugin-sql line, only in src/db/index.ts;
+# any other file or count fails.
+#
 # Usage (from the repo root):
 #   sh scripts/gates/layer1-grep-allowlist.sh [--wave G1|G2|G3|G4|G5|all]
 #       [--baseline <path>] [--recount-only]
@@ -188,6 +194,18 @@ if [ -n "$WAVE" ]; then
           fi
         else
           echo "layer1: FAIL: api/core $WAVE remainder check failed (see output above)"
+          failures=$((failures + 1))
+        fi
+        continue
+      fi
+      if [ "$spec" = "@tauri-apps/plugin-sql" ]; then
+        echo "layer1: plugin-sql: funnel exception AD-90 applies (exactly 1 line in src/db/index.ts until V3-14)"
+        sql_files=$(grep -rln --include='*.ts' --include='*.tsx' "$spec" src --exclude-dir=platform 2>/dev/null || true)
+        sql_count=$(grep -rn --include='*.ts' --include='*.tsx' "$spec" src --exclude-dir=platform 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$sql_count" = "1" ] && [ "$sql_files" = "src/db/index.ts" ]; then
+          echo "layer1: PASS: plugin-sql funnel-only (1 line in src/db/index.ts, AD-90)"
+        else
+          echo "layer1: FAIL: plugin-sql has $sql_count line(s) in: $sql_files (AD-90 allows exactly 1 line in src/db/index.ts)"
           failures=$((failures + 1))
         fi
         continue

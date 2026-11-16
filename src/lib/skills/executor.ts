@@ -10,6 +10,7 @@ import type {
   SkillExecutionResult,
   SkillExecutionRecord,
 } from './types'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 // ============================================================================
 // SkillExecutor 类
@@ -235,18 +236,17 @@ export class SkillExecutor {
     }
 
     try {
-      const { readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
       const { getFilePathOptions } = await import('@/lib/workspace')
 
       let content: string
       if (skill.metadata.scope === 'global') {
-        content = await readTextFile(reference.path, { baseDir: BaseDirectory.AppData })
+        content = await platform.fs.readTextFile(reference.path, { baseDir: BaseDirectory.AppData })
       } else {
         const options = await getFilePathOptions(reference.path)
         if (options.baseDir) {
-          content = await readTextFile(options.path, { baseDir: options.baseDir })
+          content = await platform.fs.readTextFile(options.path, { baseDir: options.baseDir })
         } else {
-          content = await readTextFile(options.path)
+          content = await platform.fs.readTextFile(options.path)
         }
       }
 
@@ -274,18 +274,17 @@ export class SkillExecutor {
     }
 
     try {
-      const { readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
       const { getFilePathOptions } = await import('@/lib/workspace')
 
       let content: string
       if (skill.metadata.scope === 'global') {
-        content = await readTextFile(asset.path, { baseDir: BaseDirectory.AppData })
+        content = await platform.fs.readTextFile(asset.path, { baseDir: BaseDirectory.AppData })
       } else {
         const options = await getFilePathOptions(asset.path)
         if (options.baseDir) {
-          content = await readTextFile(options.path, { baseDir: options.baseDir })
+          content = await platform.fs.readTextFile(options.path, { baseDir: options.baseDir })
         } else {
-          content = await readTextFile(options.path)
+          content = await platform.fs.readTextFile(options.path)
         }
       }
 

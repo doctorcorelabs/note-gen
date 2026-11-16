@@ -1,4 +1,4 @@
-import { readTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import useChatStore from '@/stores/chat'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 import { isLinkedFolder, type LinkedResource, type MarkdownFile } from '@/lib/files'
@@ -140,9 +140,9 @@ export async function buildMentionedContext(input: {
     try {
       const workspace = await getWorkspacePath()
       const content = workspace.isCustom
-        ? await readTextFile(file.path)
+        ? await platform.fs.readTextFile(file.path)
         : await getFilePathOptions(file.path).then(({ path, baseDir }) =>
-            readTextFile(path, { baseDir })
+            platform.fs.readTextFile(path, { baseDir })
           )
       context += ['## 用户通过 @ 关联的文件', `文件：${file.relativePath}`, '', content, ''].join('\n')
     } catch (error) {
@@ -179,8 +179,8 @@ export async function buildAgentSteeringContext(request: AgentRequestSnapshot, i
       const workspace = await getWorkspacePath()
       const pathOptions = workspace.isCustom ? null : await getFilePathOptions(request.linkedResource.path)
       const linkedFileContent = workspace.isCustom
-        ? await readTextFile(request.linkedResource.path)
-        : await readTextFile(pathOptions!.path, { baseDir: pathOptions!.baseDir })
+        ? await platform.fs.readTextFile(request.linkedResource.path)
+        : await platform.fs.readTextFile(pathOptions!.path, { baseDir: pathOptions!.baseDir })
       context += `${request.linkedResourcePreview ? `${request.linkedResourcePreview}\n` : ''}## 关联文件完整内容\n${request.linkedResource.relativePath}\n\n${linkedFileContent}\n\n`
     } catch (error) {
       console.error('Failed to read linked file for steering:', error)

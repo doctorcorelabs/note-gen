@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { readDir, readFile } from '@tauri-apps/plugin-fs'
-import { join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
 import { ensureWorkspaceDirectory } from '@/lib/managed-workspace'
@@ -183,11 +182,11 @@ export async function inspectSelfHostedSwitch(
   let scannedLocalEntries = 0
   async function scan(directory: string, scope: string, prefix = '') {
     if (!prefix) await ensureWorkspaceDirectory(directory)
-    for (const entry of await readDir(directory)) {
+    for (const entry of await platform.fs.readDir(directory)) {
       assertActive()
       if (entry.isSymlink || entry.name === '.notegen' || entry.name === '.DS_Store' || entry.name.endsWith('.tmp')) continue
       const path = prefix ? `${prefix}/${entry.name}` : entry.name
-      const absolute = await join(directory, entry.name)
+      const absolute = await platform.path.join(directory, entry.name)
       if (!entry.isDirectory && !entry.isFile) continue
       const moduleId = entry.isDirectory ? undefined : path.toLowerCase().endsWith('.md') ? 'notes' : 'assets'
       report({ source: 'local', module: moduleId, path: absolute, current: scannedLocalEntries, total: 0 })
@@ -208,7 +207,7 @@ export async function inspectSelfHostedSwitch(
         await scan(absolute, scope, path)
       } else if (entry.isFile) {
         const domain = path.toLowerCase().endsWith('.md') ? 'file' : 'asset'
-        const hash = await hashBytes(await readFile(absolute))
+        const hash = await hashBytes(await platform.fs.readFile(absolute))
         local.push({ id: `library:${scope}:${normalized}`, module: domain === 'file' ? 'notes' : 'assets', label: path, hash })
         localObjects.push({ workspaceId: scope === 'new' ? null : scope, localRoot: libraries.find(item => (item.workspaceId ?? 'new') === scope)!.localRoot,
           domain, localKey: path, objectId: null, payload: { version: 1, domain, relativePath: path }, hash })

@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { getPathMoveConfiguration, type PathMoveProvider } from './path-move-configuration'
 export { getWebDAVPathMoveIdentity } from './path-move-configuration'
 
@@ -133,7 +134,7 @@ function validateMetadata(metadata: PathMoveMetadata): void {
   }
 }
 
-async function assertContext(store: Store, metadata: PathMoveMetadata): Promise<void> {
+async function assertContext(store: StoreHandle, metadata: PathMoveMetadata): Promise<void> {
   const current = await getCurrentSyncContext()
   const context = metadata.context
   const provider = context.provider || 'github'
@@ -154,7 +155,7 @@ export async function capturePathMoveMetadata(source: string, target: string): P
   if (!validPath(source) || !validPath(target) || includesPath(source, target) || includesPath(target, source)) {
     throw new Error('路径迁移元数据的路径无效')
   }
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const current = await getCurrentSyncContext()
   const configuration = await getPathMoveConfiguration()
   if (!configuration) throw syncStaleError({ stage: 'apply', check: 'configuration' })
@@ -181,7 +182,7 @@ export async function capturePathMoveMetadata(source: string, target: string): P
   return metadata
 }
 
-async function updateProviderCache(store: Store, metadata: PathMoveMetadata, accepted: Record<string, MetadataValue>): Promise<void> {
+async function updateProviderCache(store: StoreHandle, metadata: PathMoveMetadata, accepted: Record<string, MetadataValue>): Promise<void> {
   const { default: useSyncStore } = await import('@/stores/sync')
   await assertContext(store, metadata)
   const state = useSyncStore.getState()
@@ -199,7 +200,7 @@ async function updateProviderCache(store: Store, metadata: PathMoveMetadata, acc
 /** Apply after local success, before uploads. Old GitHub v1 journals remain valid. */
 export async function applyPathMoveMetadata(metadata: PathMoveMetadata): Promise<void> {
   validateMetadata(metadata)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await assertContext(store, metadata)
   const baselines = readValues(await store.get('syncedFileShas'), 'syncedFileShas')
   const snapshot = metadata.stores.syncedFileShas
@@ -245,7 +246,7 @@ export async function rebindPathMoveMetadata(
 ): Promise<void> {
   validateMetadata(metadata)
   if (!validPath(finalTarget)) throw new Error('路径迁移元数据无效')
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await assertContext(store, metadata)
   const values = readValues(await store.get('syncedFileShas'), 'syncedFileShas')
   const changes: Record<string, string> = Object.create(null)

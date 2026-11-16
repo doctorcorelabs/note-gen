@@ -1,8 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { ensureWorkspaceDirectory } from '@/lib/managed-workspace'
-import { appDataDir, dirname, join } from '@tauri-apps/api/path'
-import { BaseDirectory, exists, mkdir, readDir, readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { shouldExcludeFromSync } from '@/config/sync-exclusions'
 import type { SwitchOperationProgress } from '@/lib/sync/platform-switch-plan'
@@ -44,8 +42,8 @@ const record = (value: unknown): value is Record<string, unknown> => Boolean(val
 async function localPersonalAssets(assertActive: () => void) {
   const assets: Array<{ path: string; hash: string }> = []
   async function scan(path: string) {
-    if (!await exists(path, options)) return
-    for (const entry of await readDir(path, options)) {
+    if (!await platform.fs.exists(path, options)) return
+    for (const entry of await platform.fs.readDir(path, options)) {
       assertActive()
       if (entry.isSymlink || excluded(entry.name)) continue
       const relative = `${path}/${entry.name}`
@@ -76,38 +74,38 @@ export async function captureSelfHostedSwitchBackup(input: {
   personalAssets?: Array<{ path: string; hash: string }>
 }) {
   const path = `self-hosted-switch-backups/${Date.now()}-${crypto.randomUUID()}`
-  const absolute = (await join(await appDataDir(), path)).replaceAll('\\', '/').toLowerCase()
+  const absolute = (await platform.path.join(await platform.path.appDataDir(), path)).replaceAll('\\', '/').toLowerCase()
   for (const library of input.libraries) {
     const root = library.localRoot.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase()
     if (absolute === root || absolute.startsWith(`${root}/`)) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   }
-  await mkdir(`${path}/files`, { ...options, recursive: true })
+  await platform.fs.mkdir(`${path}/files`, { ...options, recursive: true })
   const files: BackupManifest['files'] = []
   const directories: BackupManifest['directories'] = []
   async function copy(root: string, library: number, prefix = '') {
     if (!prefix) await ensureWorkspaceDirectory(root)
-    for (const entry of await readDir(root)) {
+    for (const entry of await platform.fs.readDir(root)) {
       input.assertActive()
       if (entry.isSymlink || excluded(entry.name)) continue
       const relative = await portable(prefix ? `${prefix}/${entry.name}` : entry.name)
-      const source = await join(root, entry.name)
+      const source = await platform.path.join(root, entry.name)
       const destination = `${path}/files/${library}/${relative}`
       if (entry.isDirectory) {
         directories.push({ library, path: relative })
-        await mkdir(destination, { ...options, recursive: true })
+        await platform.fs.mkdir(destination, { ...options, recursive: true })
         await copy(source, library, relative)
       } else if (entry.isFile) {
-        const bytes = await readFile(source)
-        await writeFile(destination, bytes, options)
+        const bytes = await platform.fs.readFile(source)
+        await platform.fs.writeFile(destination, bytes, options)
         const hash = await hashBytes(bytes)
-        if (await hashBytes(await readFile(destination, options)) !== hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
+        if (await hashBytes(await platform.fs.readFile(destination, options)) !== hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
         files.push({ library, path: relative, hash })
         input.onProgress({ phase: 'backup', source: 'local', kind: 'file', path: relative, current: files.length, total: 0 })
       }
     }
   }
   for (const [index, library] of input.libraries.entries()) {
-    await mkdir(`${path}/files/${index}`, { ...options, recursive: true })
+    await platform.fs.mkdir(`${path}/files/${index}`, { ...options, recursive: true })
     await copy(library.localRoot, index)
   }
   const database = await getDb()
@@ -118,15 +116,15 @@ export async function captureSelfHostedSwitchBackup(input: {
     input.assertActive()
     if (existing.has(table)) personal.tables[table] = await database.select<Row[]>(`select * from ${table}`)
   }
-  const settingsStore = await Store.load('store.json')
+  const settingsStore = await platform.store.load('store.json')
   const excludeSensitiveConfig = await settingsStore.get<boolean>('excludeSensitiveConfig') !== false
   for (const [key, value] of await settingsStore.entries()) {
     if (!shouldExcludeFromSync(key, { excludeSensitiveConfig })) personal.settings[key] = value
   }
   const bytes = encoder.encode(JSON.stringify(personal))
-  await writeFile(`${path}/personal-data.json`, bytes, options)
+  await platform.fs.writeFile(`${path}/personal-data.json`, bytes, options)
   const personalHash = await hashBytes(bytes)
-  if (await hashBytes(await readFile(`${path}/personal-data.json`, options)) !== personalHash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
+  if (await hashBytes(await platform.fs.readFile(`${path}/personal-data.json`, options)) !== personalHash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   const personalAssets = await localPersonalAssets(input.assertActive)
   if (input.personalAssets?.some(expected => !personalAssets.some(asset => asset.path === expected.path && asset.hash === expected.hash))) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   for (const asset of personalAssets) {
@@ -134,16 +132,16 @@ export async function captureSelfHostedSwitchBackup(input: {
     const contents = await readPersonalAsset(asset.path)
     if (!contents || await hashBytes(contents) !== asset.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
     const destination = `${path}/personal-assets/${asset.path}`
-    await mkdir(destination.slice(0, destination.lastIndexOf('/')), { ...options, recursive: true })
-    await writeFile(destination, contents, options)
-    if (await hashBytes(await readFile(destination, options)) !== asset.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
+    await platform.fs.mkdir(destination.slice(0, destination.lastIndexOf('/')), { ...options, recursive: true })
+    await platform.fs.writeFile(destination, contents, options)
+    if (await hashBytes(await platform.fs.readFile(destination, options)) !== asset.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   }
   await input.validate?.()
   const manifest: BackupManifest = { version: 2, profileId: input.profileId, serverUrl: input.serverUrl,
     fingerprint: input.fingerprint, libraries: input.libraries, files, directories, personalHash,
     personalAssets, excludeSensitiveConfig }
   input.assertActive()
-  await writeFile(`${path}/manifest.json`, encoder.encode(JSON.stringify(manifest)), options)
+  await platform.fs.writeFile(`${path}/manifest.json`, encoder.encode(JSON.stringify(manifest)), options)
   await invoke('self_hosted_flush_switch_data', { relativePath: path })
   input.assertActive()
   return path
@@ -153,7 +151,7 @@ export async function captureSelfHostedSwitchBackup(input: {
  * into fresh directories, so the workspace present at failure is kept intact. */
 export async function readSelfHostedSwitchBackup(path: string) {
   assertBackupPath(path)
-  const value: unknown = JSON.parse(new TextDecoder().decode(await readFile(`${path}/manifest.json`, options)))
+  const value: unknown = JSON.parse(new TextDecoder().decode(await platform.fs.readFile(`${path}/manifest.json`, options)))
   if (record(value) && value.version === 1) throw new Error('SELF_HOSTED_BACKUP_LEGACY')
   if (!record(value) || value.version !== 2 || typeof value.profileId !== 'string'
     || typeof value.serverUrl !== 'string' || typeof value.personalHash !== 'string'
@@ -177,9 +175,9 @@ export async function readSelfHostedSwitchBackup(path: string) {
     const identity = `${file.library}:${file.path.normalize('NFC').toLowerCase()}`
     if (identities.has(identity)) throw new Error('SELF_HOSTED_BACKUP_INVALID')
     identities.add(identity)
-    if (await hashBytes(await readFile(`${path}/files/${file.library}/${file.path}`, options)) !== file.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
+    if (await hashBytes(await platform.fs.readFile(`${path}/files/${file.library}/${file.path}`, options)) !== file.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   }
-  const bytes = await readFile(`${path}/personal-data.json`, options)
+  const bytes = await platform.fs.readFile(`${path}/personal-data.json`, options)
   if (await hashBytes(bytes) !== manifest.personalHash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   const personal: unknown = JSON.parse(new TextDecoder().decode(bytes))
   if (!record(personal) || !record(personal.tables) || !record(personal.settings)) throw new Error('SELF_HOSTED_BACKUP_INVALID')
@@ -190,7 +188,7 @@ export async function readSelfHostedSwitchBackup(path: string) {
     if (!record(asset) || typeof asset.path !== 'string' || !isManagedPersonalAssetPath(asset.path)
       || assetPaths.has(asset.path) || typeof asset.hash !== 'string') throw new Error('SELF_HOSTED_BACKUP_INVALID')
     assetPaths.add(asset.path)
-    if (await hashBytes(await readFile(`${path}/personal-assets/${asset.path}`, options)) !== asset.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
+    if (await hashBytes(await platform.fs.readFile(`${path}/personal-assets/${asset.path}`, options)) !== asset.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
   }
   for (const table of Object.keys(personal.tables)) {
     const rows = personal.tables[table]
@@ -232,8 +230,8 @@ export async function restoreSelfHostedSwitchBackup(
   const { manifest, personal } = await readSelfHostedSwitchBackup(path)
   const { personal: currentSnapshot } = await readSelfHostedSwitchBackup(safetyPath)
   const restoredRelative = `restored-workspaces/self-hosted-${Date.now()}-${crypto.randomUUID()}`
-  const restoredRoot = await join(await appDataDir(), restoredRelative)
-  const roots = await Promise.all(manifest.libraries.map((_, index) => join(restoredRoot, String(index))))
+  const restoredRoot = await platform.path.join(await platform.path.appDataDir(), restoredRelative)
+  const roots = await Promise.all(manifest.libraries.map((_, index) => platform.path.join(restoredRoot, String(index))))
   const database = await getDb()
   const statements: RecordStatement[] = []
   const deletions: RecordStatement[] = []
@@ -270,31 +268,31 @@ export async function restoreSelfHostedSwitchBackup(
     }
   }
   statements.push({ sql: 'update self_hosted_sync_context set suppress_triggers = max(0, suppress_triggers - 1) where id = 1', values: [] })
-  for (const root of roots) await mkdir(root, { recursive: true })
-  for (const directory of manifest.directories) await mkdir(await join(roots[directory.library], directory.path), { recursive: true })
+  for (const root of roots) await platform.fs.mkdir(root, { recursive: true })
+  for (const directory of manifest.directories) await platform.fs.mkdir(await platform.path.join(roots[directory.library], directory.path), { recursive: true })
   for (const [index, file] of manifest.files.entries()) {
     assertActive()
-    const destination = await join(roots[file.library], file.path)
-    const parent = file.path.includes('/') ? await join(roots[file.library], file.path.slice(0, file.path.lastIndexOf('/'))) : roots[file.library]
-    await mkdir(parent, { recursive: true })
-    const bytes = await readFile(`${path}/files/${file.library}/${file.path}`, options)
+    const destination = await platform.path.join(roots[file.library], file.path)
+    const parent = file.path.includes('/') ? await platform.path.join(roots[file.library], file.path.slice(0, file.path.lastIndexOf('/'))) : roots[file.library]
+    await platform.fs.mkdir(parent, { recursive: true })
+    const bytes = await platform.fs.readFile(`${path}/files/${file.library}/${file.path}`, options)
     if (await hashBytes(bytes) !== file.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
-    await writeFile(destination, bytes)
-    if (await hashBytes(await readFile(destination)) !== file.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
+    await platform.fs.writeFile(destination, bytes)
+    if (await hashBytes(await platform.fs.readFile(destination)) !== file.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
     onProgress({ phase: 'apply', source: 'local', kind: 'file', path: file.path, current: index + 1, total: manifest.files.length })
   }
   for (const asset of manifest.personalAssets ?? []) {
     assertActive()
-    const bytes = await readFile(`${path}/personal-assets/${asset.path}`, options)
+    const bytes = await platform.fs.readFile(`${path}/personal-assets/${asset.path}`, options)
     if (await hashBytes(bytes) !== asset.hash) throw new Error('SELF_HOSTED_BACKUP_INVALID')
     const current = await readPersonalAsset(asset.path)
     if (current && await hashBytes(current) !== asset.hash) {
-      const retained = await join(restoredRoot, 'current-personal-assets', asset.path)
-      await mkdir(await dirname(retained), { recursive: true })
-      await writeFile(retained, current)
+      const retained = await platform.path.join(restoredRoot, 'current-personal-assets', asset.path)
+      await platform.fs.mkdir(await platform.path.dirname(retained), { recursive: true })
+      await platform.fs.writeFile(retained, current)
     }
     await invoke('self_hosted_atomic_write', { workspaceId: manifest.libraries[0].workspaceId ?? manifest.profileId,
-      workspaceRoot: await appDataDir(), relativePath: asset.path, contents: bytesToBase64Url(bytes), expectedHash: asset.hash })
+      workspaceRoot: await platform.path.appDataDir(), relativePath: asset.path, contents: bytesToBase64Url(bytes), expectedHash: asset.hash })
   }
   assertActive()
   await invoke('self_hosted_flush_switch_data', { relativePath: restoredRelative })
@@ -308,7 +306,7 @@ export async function restoreSelfHostedSwitchBackup(
     if (message.includes('Record tags changed. Reopen the tag editor and try again.')) throw new Error('SYNC_SWITCH_RECOVERY_CHANGED')
     throw error
   }
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const excludeSensitiveConfig = manifest.excludeSensitiveConfig !== false
     || (await store.get<boolean>('excludeSensitiveConfig')) !== false
   for (const [key] of await store.entries()) {

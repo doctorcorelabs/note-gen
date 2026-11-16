@@ -1,6 +1,4 @@
-import { BaseDirectory } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { resolveManagedWorkspacePath } from '@/lib/managed-workspace'
 
 function normalizeFsPath(path: string): string {
@@ -39,7 +37,7 @@ export async function getWorkspacePath(): Promise<{ path: string, isCustom: bool
   }
 
   // 查询本地存储
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const workspacePath = await store.get<string>('workspacePath')
 
   // 如果设置了自定义工作区路径，则使用自定义路径
@@ -71,7 +69,7 @@ export async function getFilePathOptions(relativePath: string): Promise<{ path: 
 
   if (workspace.isCustom) {
     // 对于自定义工作区，返回绝对路径，不设置baseDir
-    const fullPath = await join(workspace.path, relativePath)
+    const fullPath = await platform.path.join(workspace.path, relativePath)
     return { path: fullPath }
   } else {
     // 对于默认工作区，使用AppData作为baseDir
@@ -94,8 +92,8 @@ export async function getDefaultArticleAbsolutePath(relativePath: string): Promi
     .replace(/^\.?\//, '')
     .replace(/^article\//, '')
 
-  const appDataPath = await appDataDir()
-  return await join(appDataPath, 'article', normalized)
+  const appDataPath = await platform.path.appDataDir()
+  return await platform.path.join(appDataPath, 'article', normalized)
 }
 
 /**
@@ -114,9 +112,9 @@ export async function getGenericPathOptions(path: string, prefix?: string): Prom
     
     // 如果指定了prefix，且path不以prefix开头，则添加prefix
     if (prefix && !path.startsWith(`${prefix}/`) && !path.startsWith(prefix)) {
-      fullPath = await join(fullPath, prefix || '', path)
+      fullPath = await platform.path.join(fullPath, prefix || '', path)
     } else {
-      fullPath = await join(fullPath, path)
+      fullPath = await platform.path.join(fullPath, path)
     }
     
     return { path: fullPath }

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { v4 as uuid } from 'uuid'
 import { getWorkspacePath } from '@/lib/workspace'
 import type { SkillScope } from './types'
@@ -68,7 +68,7 @@ const REMOTE_SKILL_SEARCH_CACHE_KEY = 'remoteSkills.searchCache'
 const REMOTE_SKILL_SEARCH_CACHE_LIMIT = 20
 
 async function loadRemoteCredentials(): Promise<RemoteCredentials> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const [githubToken, gitlabToken, giteeToken, proxyUrl] = await Promise.all([
     store.get<string>('accessToken'),
     store.get<string>('gitlabAccessToken'),
@@ -87,7 +87,7 @@ export async function searchRemoteSkills(
   query: string,
   limit = 8,
 ): Promise<RemoteSkillSearchResult[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const credentials = await loadRemoteCredentials()
   const normalizedKey = `${query.trim().toLocaleLowerCase()}:${limit}`
   const cache = await store.get<Record<string, RemoteSkillSearchCacheEntry>>(

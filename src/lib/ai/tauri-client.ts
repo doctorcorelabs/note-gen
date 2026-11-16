@@ -1,7 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core'
 import type OpenAI from 'openai'
 import type { ModelsPage } from 'openai/resources/models'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { AiConfig, ReasoningEffort } from '@/app/core/setting/config'
 import { createSponsoredUsageRecorder, reserveSponsoredRequest } from './sponsored-model-limits'
 
@@ -303,7 +303,7 @@ export async function resolveAiRequestConfig(aiConfig?: AiConfig): Promise<AiReq
   let proxy: AiProxyConfig = { mode: 'direct' }
 
   if (proxyMode === 'inherit') {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const globalProxyURL = (await store.get<string>('proxy'))?.trim()
     if ((await store.get<boolean>('systemProxy')) === true) {
       proxy = { mode: 'system' }

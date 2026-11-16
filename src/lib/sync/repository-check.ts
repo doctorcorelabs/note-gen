@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type useSettingStore from '@/stores/setting'
 
 import { RepoNames, SyncStateEnum, type GithubRepoInfo, type UserInfo } from './github.types'
@@ -96,20 +96,20 @@ function notifyRepositoryChecks() {
   listeners.forEach(listener => listener())
 }
 
-async function getCheckContext(platform: SyncRepoPlatform): Promise<CheckContext> {
-  const store = await Store.load('store.json')
+async function getCheckContext(repoPlatform: SyncRepoPlatform): Promise<CheckContext> {
+  const store = await platform.store.load('store.json')
   const [token, instanceType, customUrl] = await Promise.all([
-    store.get<string>(TOKEN_KEYS[platform]),
-    platform === 'gitlab' || platform === 'gitea' ? store.get<string>(`${platform}InstanceType`) : undefined,
-    platform === 'gitlab' || platform === 'gitea' ? store.get<string>(`${platform}CustomUrl`) : undefined,
+    store.get<string>(TOKEN_KEYS[repoPlatform]),
+    repoPlatform === 'gitlab' || repoPlatform === 'gitea' ? store.get<string>(`${repoPlatform}InstanceType`) : undefined,
+    repoPlatform === 'gitlab' || repoPlatform === 'gitea' ? store.get<string>(`${repoPlatform}CustomUrl`) : undefined,
   ])
   return {
-    platform,
+    platform: repoPlatform,
     token: token?.trim() || '',
     key: JSON.stringify([
-      platform,
+      repoPlatform,
       token?.trim() || '',
-      instanceType || (platform === 'gitlab' ? GitlabInstanceType.OFFICIAL : platform === 'gitea' ? GiteaInstanceType.OFFICIAL : ''),
+      instanceType || (repoPlatform === 'gitlab' ? GitlabInstanceType.OFFICIAL : repoPlatform === 'gitea' ? GiteaInstanceType.OFFICIAL : ''),
       customUrl?.trim() || '',
     ]),
   }
@@ -272,22 +272,22 @@ function requestRepositoryCheck(context: CheckContext, repo: string, force = fal
 /** Warm only the selected platform and workspace; the request caches deduplicate it. */
 export async function warmupRepositoryChecks(): Promise<void> {
   try {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod')
       || (await import('@/stores/setting')).default.getState().primaryBackupMethod
-    const platform = SYNC_REPO_PLATFORMS.find(candidate => candidate === primaryBackupMethod)
-    if (!platform) return
+    const selectedPlatform = SYNC_REPO_PLATFORMS.find(candidate => candidate === primaryBackupMethod)
+    if (!selectedPlatform) return
     const [workspacePath, repo, context, { default: useSettingStore }] = await Promise.all([
       store.get<string>('workspacePath'),
-      getOptionalSyncRepoName(platform),
-      getCheckContext(platform),
+      getOptionalSyncRepoName(selectedPlatform),
+      getCheckContext(selectedPlatform),
       import('@/stores/setting'),
     ])
     const target = { workspacePath: workspacePath || '', repo, context }
     const isActive = () => {
       const settings = useSettingStore.getState()
-      return settings.primaryBackupMethod === platform
-        && getProviderTargetKey(getSettingsProviderTarget(platform, settings)) === getProviderTargetKey(target)
+      return settings.primaryBackupMethod === selectedPlatform
+        && getProviderTargetKey(getSettingsProviderTarget(selectedPlatform, settings)) === getProviderTargetKey(target)
     }
     if (!isActive()) return
     if (repo) await requestRepositoryCheck(context, repo, false, isActive)
@@ -449,15 +449,15 @@ export async function createRepository(platform: SyncRepoPlatform, repo: string)
   }
 }
 export async function listRepositories(
-  platform: SyncRepoPlatform,
+  repoPlatform: SyncRepoPlatform,
 ): Promise<RepositoryListResult> {
-  const store = await Store.load('store.json')
-  const token = await store.get<string>(TOKEN_KEYS[platform])
+  const store = await platform.store.load('store.json')
+  const token = await store.get<string>(TOKEN_KEYS[repoPlatform])
   if (!token?.trim()) return { status: 'missing-token', repositories: [] }
 
   try {
     let repositories: string[] = []
-    switch (platform) {
+    switch (repoPlatform) {
       case 'github': {
         const { listUserRepositories } = await import('./github')
         repositories = await listUserRepositories()
@@ -485,7 +485,7 @@ export async function listRepositories(
       repositories: Array.from(new Set(repositories.map(repo => repo.trim()).filter(Boolean))),
     }
   } catch (error) {
-    console.error(`Failed to list ${platform} repositories:`, error)
+    console.error(`Failed to list ${repoPlatform} repositories:`, error)
     return { status: 'error', repositories: [] }
   }
 }

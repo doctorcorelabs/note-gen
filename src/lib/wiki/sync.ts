@@ -1,6 +1,5 @@
 import { emitWikiUpdated, getWikiMeta, getWikiSourceState, markWikiSynced, setWikiMeta } from '@/db/wiki'
-import { Store } from '@tauri-apps/plugin-store'
-import { exists, readFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import emitter from '@/lib/emitter'
 import { getEditorPathMutationRevision } from '@/lib/editor-deactivation'
 import { getWorkspacePath, getDefaultArticleAbsolutePath, getFilePathOptions } from '@/lib/workspace'
@@ -58,10 +57,10 @@ export async function isWikiSourceCurrent(source: WikiSourceReference): Promise<
 
 async function automaticPullAllowed(): Promise<boolean> {
   if (!foreground() || (typeof navigator !== 'undefined' && !navigator.onLine)) return false
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get('platformSwitchRecovery') || await store.get<string>('autoSync') === 'disabled'
     || await store.get<boolean>('autoPullOnOpen') === false) return false
-  const config = await (await Store.load('sync_config.json')).get<{ autoSync?: boolean; autoPullOnOpen?: boolean }>('config')
+  const config = await (await platform.store.load('sync_config.json')).get<{ autoSync?: boolean; autoPullOnOpen?: boolean }>('config')
   return config?.autoSync !== false && config?.autoPullOnOpen !== false
 }
 
@@ -117,7 +116,7 @@ async function pullRemoteWikiFiles(context: WikiContext): Promise<void> {
       if (isFileDeletionPending(path) || deletedPaths.some(deleted => path === deleted || path.startsWith(`${deleted}/`))) return
       const initialRevision = getEditorPathMutationRevision(path)
       const options = await getFilePathOptions(path)
-      const localExists = await exists(options.path, { baseDir: options.baseDir })
+      const localExists = await platform.fs.exists(options.path, { baseDir: options.baseDir })
       let expectedLocalHash: string | undefined
       if (!localExists && knownPaths.has(path)) return
       if (localExists) {
@@ -126,7 +125,7 @@ async function pullRemoteWikiFiles(context: WikiContext): Promise<void> {
         const proof = await getWikiMeta<RemoteFileProof>(context.id, `markdown-remote-file:${path}`)
         const proofKey = await getFileSyncProofKey(path, context.provider as SyncPlatform).catch(() => null)
         const receipt = proofKey ? await getFileSyncProof(proofKey) : null
-        const bytes = await readFile(options.path, { baseDir: options.baseDir })
+        const bytes = await platform.fs.readFile(options.path, { baseDir: options.baseDir })
         const hash = await fileSyncContentHash(bytes)
         expectedLocalHash = hash
         const accepted = receipt?.hash === hash ? receipt

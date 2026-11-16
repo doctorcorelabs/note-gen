@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirm } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform as registry } from '@/lib/platform'
 import {
   Cloud,
   Database,
@@ -210,7 +210,7 @@ export default function SyncPage() {
     async function loadPrimaryBackupMethod() {
       try {
         await restorePlatformSwitchRecovery()
-        const store = await Store.load('store.json')
+        const store = await registry.store.load('store.json')
         const savedMethod = await store.get<SyncPlatform>('primaryBackupMethod')
         if (savedMethod) {
           setPlatform(usePlatformSwitchStore.getState().platform || savedMethod)

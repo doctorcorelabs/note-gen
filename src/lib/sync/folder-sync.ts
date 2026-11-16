@@ -1,6 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
-import { readTextFile } from '@tauri-apps/plugin-fs'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 import { collectMarkdownFiles } from '@/lib/files'
 import { RepoNames } from './github.types'
@@ -50,7 +49,7 @@ export class FolderSync {
    * 初始化平台配置（在每次同步前调用以获取最新配置）
    */
   private async init() {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     this.platform = await store.get<string>('primaryBackupMethod') || 'github'
   }
 
@@ -83,9 +82,9 @@ export class FolderSync {
         let content = ''
 
         if (workspace.isCustom) {
-          content = await readTextFile(pathOptions.path)
+          content = await platform.fs.readTextFile(pathOptions.path)
         } else {
-          content = await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+          content = await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
         }
 
         const beforeWrite = await captureWorkspaceRemoteWriteGuard(file.path, this.platform as SyncPlatform, true, content)
@@ -188,7 +187,7 @@ export class FolderSync {
     repo: string,
     path: string
   ): Promise<Record<string, { sha: string; type: string }>> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const accessToken = await store.get<string>('accessToken')
     const githubUsername = await store.get<string>('githubUsername')
     const proxyUrl = await store.get<string>('proxy')
@@ -227,7 +226,7 @@ export class FolderSync {
     files: FolderUploadFile[],
     message: string
   ): Promise<boolean> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const accessToken = await store.get<string>('accessToken')
     const githubUsername = await store.get<string>('githubUsername')
     const proxyUrl = await store.get<string>('proxy')
@@ -298,7 +297,7 @@ export class FolderSync {
    * 获取 Gitee 仓库中所有文件的 SHA（递归获取子目录）
    */
   async _getGiteeFiles(repo: string, path: string = ''): Promise<Record<string, { sha: string }>> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const giteeAccessToken = await store.get<string>('giteeAccessToken')
     const giteeUsername = await store.get<string>('giteeUsername')
     const proxyUrl = await store.get<string>('proxy')
@@ -344,7 +343,7 @@ export class FolderSync {
    * 获取 Gitea 仓库中所有文件的 SHA（递归获取子目录）
    */
   async _getGiteaFiles(repo: string, path: string = ''): Promise<Record<string, { sha: string }>> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const giteaAccessToken = await store.get<string>('giteaAccessToken')
     const giteaUsername = await store.get<string>('giteaUsername')
     const proxyUrl = await store.get<string>('proxy')
@@ -438,7 +437,7 @@ export class FolderSync {
     files: FolderUploadFile[],
     message: string
   ): Promise<boolean> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const gitlabAccessToken = await store.get<string>('gitlabAccessToken')
     const configuredBranch = (await store.get<string>('gitlabBranch') || '').trim()
     const gitlabProjectId = await store.get<string>(`gitlab_${repo}_project_id`)
@@ -566,7 +565,7 @@ export class FolderSync {
   async _s3BatchUpload(
     files: Array<{ path: string; content: string }>
   ): Promise<boolean> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const s3Config = await store.get<S3Config>('s3SyncConfig')
     const proxyUrl = await store.get<string>('proxy')
     const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
@@ -597,7 +596,7 @@ export class FolderSync {
   async _webdavBatchUpload(
     files: Array<{ path: string; content: string }>
   ): Promise<boolean> {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
     const proxyUrl = await store.get<string>('proxy')
     const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined

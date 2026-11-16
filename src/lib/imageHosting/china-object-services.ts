@@ -1,12 +1,12 @@
 import CryptoJS from 'crypto-js'
 import { fetch, type Proxy } from '@tauri-apps/plugin-http'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { v4 as uuid } from 'uuid'
 
 import type { QiniuConfig, UpyunConfig } from './types'
 
 async function getProxy(): Promise<Proxy | undefined> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const proxyUrl = await store.get<string>('proxy')
   return proxyUrl ? { all: proxyUrl } : undefined
 }
@@ -75,7 +75,7 @@ async function createQiniuUploadToken(config: QiniuConfig, key: string) {
 }
 
 export async function uploadImageByQiniu(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<QiniuConfig>('qiniuImageConfig')
   if (!config || !isQiniuConfigComplete(config)) return undefined
 
@@ -146,7 +146,7 @@ export async function testUpyunConnection(config: UpyunConfig) {
 }
 
 export async function uploadImageByUpyun(file: File) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const config = await store.get<UpyunConfig>('upyunImageConfig')
   if (!config || !isUpyunConfigComplete(config)) return undefined
 

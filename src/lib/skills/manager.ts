@@ -26,10 +26,9 @@ import {
 } from './types'
 import { parseSkillFile, generateSkillId, detectScriptType } from './parser'
 import { validateSkillYamlMetadata } from './validator'
-import { readFile, readDir, lstat, open, BaseDirectory, DirEntry } from '@tauri-apps/plugin-fs'
+import type { DirEntry } from '@/lib/platform'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
-import { exists } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
 
 const MAX_SKILL_RESOURCE_DEPTH = 10
 const MAX_SKILL_RESOURCES = 1000
@@ -82,12 +81,12 @@ class SkillManager {
 
   private async hashFile(filePath: string, scope: SkillScope): Promise<string> {
     const bytes = scope === 'global'
-      ? await readFile(filePath, { baseDir: BaseDirectory.AppData })
+      ? await platform.fs.readFile(filePath, { baseDir: BaseDirectory.AppData })
       : await (async () => {
           const options = await getFilePathOptions(filePath)
           return options.baseDir
-            ? await readFile(options.path, { baseDir: options.baseDir })
-            : await readFile(options.path)
+            ? await platform.fs.readFile(options.path, { baseDir: options.baseDir })
+            : await platform.fs.readFile(options.path)
         })()
     const digest = await crypto.subtle.digest('SHA-256', bytes)
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
@@ -106,7 +105,7 @@ class SkillManager {
       return
     }
 
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     this.enabledOverrides = await store.get<Record<string, boolean>>('skills.enabledSkills') || {}
     await this.discoverSkills()
     this.initialized = true
@@ -426,7 +425,7 @@ class SkillManager {
 
   private async readDirectoryEntries(path: string, scope: SkillScope): Promise<DirEntry[]> {
     const options = await this.ensureRegularResourcePath(path, scope, true)
-    return readDir(options.path, options.baseDir ? { baseDir: options.baseDir } : undefined)
+    return platform.fs.readDir(options.path, options.baseDir ? { baseDir: options.baseDir } : undefined)
   }
 
   /** Index package resources, keeping only scripts/ entries executable. */
@@ -506,7 +505,7 @@ class SkillManager {
       paths.push(currentPath)
     }
     for (let index = 0; index < paths.length; index += 1) {
-      const info = await lstat(paths[index], options.baseDir ? { baseDir: options.baseDir } : undefined)
+      const info = await platform.fs.lstat(paths[index], options.baseDir ? { baseDir: options.baseDir } : undefined)
       const expectsDirectory = directory || index < paths.length - 1
       if (info.isSymlink || (expectsDirectory ? !info.isDirectory : !info.isFile)) {
         throw new Error('Skill resources must be regular files without symbolic links')
@@ -517,7 +516,7 @@ class SkillManager {
 
   private async readResourceText(path: string, scope: SkillScope): Promise<string> {
     const options = await this.ensureRegularResourcePath(path, scope)
-    const handle = await open(options.path, { read: true, baseDir: options.baseDir })
+    const handle = await platform.fs.open(options.path, { read: true, baseDir: options.baseDir })
     try {
       const info = await handle.stat()
       if (!info.isFile || info.size > MAX_SKILL_RESOURCE_BYTES) {
@@ -824,13 +823,13 @@ class SkillManager {
   ): Promise<boolean> {
     try {
       if (scope === 'global') {
-        return await exists(path, { baseDir: BaseDirectory.AppData })
+        return await platform.fs.exists(path, { baseDir: BaseDirectory.AppData })
       } else {
         const options = await getFilePathOptions(path)
         if (options.baseDir) {
-          return await exists(options.path, { baseDir: options.baseDir })
+          return await platform.fs.exists(options.path, { baseDir: options.baseDir })
         }
-        return await exists(options.path)
+        return await platform.fs.exists(options.path)
       }
     } catch {
       return false
@@ -860,13 +859,13 @@ class SkillManager {
       let entries: DirEntry[]
 
       if (scope === 'global') {
-        entries = await readDir(baseDir, { baseDir: BaseDirectory.AppData })
+        entries = await platform.fs.readDir(baseDir, { baseDir: BaseDirectory.AppData })
       } else {
         const options = await getFilePathOptions(baseDir)
         if (options.baseDir) {
-          entries = await readDir(options.path, { baseDir: options.baseDir })
+          entries = await platform.fs.readDir(options.path, { baseDir: options.baseDir })
         } else {
-          entries = await readDir(options.path)
+          entries = await platform.fs.readDir(options.path)
         }
       }
 

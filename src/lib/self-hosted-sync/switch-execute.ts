@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { join } from '@tauri-apps/api/path'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { syncStaleError } from '@/lib/sync/sync-stale-error'
 import { stableSyncValue, type SwitchOperationProgress, type SwitchStrategy } from '@/lib/sync/platform-switch-plan'
@@ -242,7 +241,7 @@ async function replaceRemoteSnapshot(
         personalStagingIds = prepared.stagingIds
       }
       if (local.localRoot && local.domain !== 'folder') {
-        const bytes = await readFile(await join(local.localRoot, local.localKey))
+        const bytes = await platform.fs.readFile(await platform.path.join(local.localRoot, local.localKey))
         if (await hashBytes(bytes) !== local.hash) throw stale()
         if (local.domain === 'file') {
           const content = new TextDecoder().decode(bytes)

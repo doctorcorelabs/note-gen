@@ -25,7 +25,7 @@ import initShowWindow from "@/lib/shortcut/show-window"
 import { initMcp } from "@/lib/mcp/init"
 import { reportAppStart } from "@/lib/event-report"
 import { TopAppBar, WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import { TextSizeProvider } from "@/contexts/text-size-context"
@@ -194,7 +194,7 @@ export default function RootLayout({
     let unlistenOpenSettings: (() => void) | undefined
 
     const navigateToMain = async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('currentPage', '/core/main')
       await store.save()
 
@@ -214,7 +214,7 @@ export default function RootLayout({
     }
 
     const togglePin = async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const currentPin = await store.get<boolean>('pin')
       const nextPin = !currentPin
 
@@ -332,7 +332,7 @@ export default function RootLayout({
   useEffect(() => {
     async function redirectOldPaths() {
       if (pathname === '/core/article' || pathname === '/core/record') {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await store.set('currentPage', '/core/main')
         await store.save()
         router.replace('/core/main')

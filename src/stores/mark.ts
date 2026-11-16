@@ -14,7 +14,7 @@ import { cloudFolderDownload, cloudFolderUpload } from '@/lib/sync/cloud-folder'
 import { CloudFolderConfig, WebDAVConfig } from '@/types/sync'
 import { getDataSyncRepoName } from '@/lib/sync/repo-utils';
 import { getRemoteFileContent, isMissingRemoteFileError, parseSyncJson, syncDataError } from '@/lib/sync/remote-file';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { create } from 'zustand'
 import { S3Config } from '@/types/sync'
 import { normalizeRecordFilters } from '@/app/core/main/mark/mark-filters'
@@ -55,7 +55,7 @@ const DEFAULT_RECORD_FILTERS: RecordFilters = {
 }
 
 async function persistRecordFilters(recordFilters: RecordFilters) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set('recordFilters', recordFilters)
   await store.save()
 }
@@ -72,7 +72,7 @@ async function fetchVisibleMarks(trashState: boolean) {
     })).filter((item) => item.deleted === 1)
   }
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const currentTagId = await store.get<number>('currentTagId')
   if (!currentTagId) {
     return []
@@ -207,7 +207,7 @@ const useMarkStore = create<MarkState>((set, get) => ({
   },
   fetchMarkPreviews: async (allTags = false) => {
     const request = ++recordListRequest
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const currentTagId = await store.get<number>('currentTagId')
     if (!currentTagId) {
       if (request === recordListRequest) set({ marks: [] })
@@ -386,7 +386,7 @@ const useMarkStore = create<MarkState>((set, get) => ({
   recordTagFiltersAdjusted: false,
   reconcileRecordTagFilters: async (tags) => {
     await get().initRecordFilters()
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const savedTags = await store.get<Tag[]>('recordFilterTags')
     const previous = Array.isArray(savedTags) ? savedTags.filter(tag => tag && typeof tag.name === 'string' && Number.isSafeInteger(tag.id)) : []
     const filters = get().recordFilters
@@ -414,7 +414,7 @@ const useMarkStore = create<MarkState>((set, get) => ({
   },
   initRecordFilters: async () => {
     recordFiltersInitialization ??= (async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const savedFilters = await store.get<RecordFilters>('recordFilters')
       set({ recordFilters: normalizeRecordFilters(savedFilters) })
     })().catch(error => { recordFiltersInitialization = undefined; throw error })
@@ -435,7 +435,7 @@ const useMarkStore = create<MarkState>((set, get) => ({
     const path = '.data'
     const filename = 'marks.json'
     const marks = marksOverride ?? await getAllMarks()
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github';
     let result = false
     let files: any;
@@ -569,7 +569,7 @@ const useMarkStore = create<MarkState>((set, get) => ({
   downloadMarks: async (options: RecordDataDownloadOptions = {}) => {
     const path = '.data'
     const filename = 'marks.json'
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github';
     let result: Mark[] = []
     let hasRemoteData = false

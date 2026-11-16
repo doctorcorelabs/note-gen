@@ -4,8 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { Store } from '@tauri-apps/plugin-store'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 
 import { ActivityHeatmap } from '@/components/activity/activity-heatmap'
 import { Button } from '@/components/ui/button'
@@ -157,7 +157,7 @@ export function MobileMePage({
       && useSettingStore.getState().workspacePath === workspacePath
 
     async function loadSyncProfile() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       if (!isCurrent()) return
       const syncState = useSyncStore.getState()
       const settingState = useSettingStore.getState()
@@ -466,7 +466,7 @@ export function MobileMePage({
       return tMe('sync.localOnly')
     }
 
-    const cloudFolderName = platform() === 'ios' && cloudFolderProvider !== 'oneDrive'
+    const cloudFolderName = getRuntimePlatform() === 'ios' && cloudFolderProvider !== 'oneDrive'
       ? tSync('iCloud.title')
       : tSync('oneDrive.title')
     return getBackupProviderName(

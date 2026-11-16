@@ -1,4 +1,4 @@
-import { lstat } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { z } from 'zod'
 import { getFilePathOptions, getWorkspacePath, normalizeWorkspaceRelativePath } from '@/lib/workspace'
 import { getSkillWorkspaceIdentity } from '@/lib/skills/runtime'
@@ -78,7 +78,7 @@ export async function verifyResponseNote(path: string): Promise<string> {
   const parts = normalized.split('/')
   for (let index = 0; index <= parts.length; index += 1) {
     const options = await getFilePathOptions(parts.slice(0, index).join('/'))
-    const info = await lstat(options.path, options.baseDir ? { baseDir: options.baseDir } : undefined)
+    const info = await platform.fs.lstat(options.path, options.baseDir ? { baseDir: options.baseDir } : undefined)
     if (info.isSymlink || (index === parts.length ? !info.isFile : !info.isDirectory)) throw new Error('RESPONSE_NOTE_UNAVAILABLE')
   }
   return normalized

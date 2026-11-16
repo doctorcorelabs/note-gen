@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Redo2, Undo2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 import { MobileCanvasPage } from '@/app/mobile/canvas/page'
 import { Button } from '@/components/ui/button'
@@ -58,7 +58,7 @@ export function MobileCanvasEditorScreen({ canvasId }: MobileCanvasEditorScreenP
     setSelectionContext(null)
     useChatStore.getState().setMobileActiveContexts({ canvasId: null })
     router.push('/mobile/canvas')
-    void Store.load('store.json').then(store => store.set('currentPage', '/mobile/canvas'))
+    void platform.store.load('store.json').then(store => store.set('currentPage', '/mobile/canvas'))
   }, [router, setActiveCanvasId, setSelectionContext])
 
   const queryCanUndoRedo = useCallback(() => {

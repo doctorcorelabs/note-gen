@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getNoteGenLimitedUsage, NOTEGEN_LIMITED_STORE, NOTEGEN_LIMITED_USAGE_KEY } from '@/lib/ai/sponsored-model-limits'
 import { getNoteGenModelPolicy, loadNoteGenModelPolicy, NOTEGEN_POLICY_CHANGED } from '@/lib/ai/notegen-model-policy'
 import { useTranslations } from 'next-intl'
@@ -25,7 +25,7 @@ export function useNoteGenLimitedUsage() {
         console.error('Failed to read NoteGen Limited usage:', error)
       }
     }
-    void Store.load(NOTEGEN_LIMITED_STORE, { autoSave: false }).then(async store => {
+    void platform.store.load(NOTEGEN_LIMITED_STORE, { autoSave: false }).then(async store => {
       const stop = await store.onKeyChange(NOTEGEN_LIMITED_USAGE_KEY, () => void refresh())
       if (disposed) stop()
       else unlisten = stop

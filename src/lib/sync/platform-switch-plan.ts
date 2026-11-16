@@ -5,8 +5,7 @@ import type { RemoteWriteCondition } from './write-condition'
 import { openRemoteContentCache, normalizeRemoteVersion, gitBlobVersion } from './remote-content-cache'
 import { parseSyncJson, syncDataError } from './remote-file'
 import { syncStaleError, withSyncStaleContext, type SyncStaleDetails } from './sync-stale-error'
-import { BaseDirectory, exists, mkdir, readFile, writeFile, remove } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import emitter from '@/lib/emitter'
 import { markEditorPathMutation, prepareActiveEditorPathMutationDurably } from '@/lib/editor-deactivation'
 import { filterSyncData, shouldExcludeFromSync } from '@/config/sync-exclusions'
@@ -227,7 +226,7 @@ async function mapSwitchEntries<T, R>(
 
 export async function disposePlatformSwitchPlan(plan: Pick<PlatformSwitchPlan, 'scanCachePath'>) {
   if (!/^sync-platform-scans\/[a-f0-9-]+$/.test(plan.scanCachePath)) return
-  try { await remove(plan.scanCachePath, { baseDir: BaseDirectory.AppData, recursive: true }) }
+  try { await platform.fs.remove(plan.scanCachePath, { baseDir: BaseDirectory.AppData, recursive: true }) }
   catch (error) { console.warn('Failed to remove temporary sync scan cache', error) }
 }
 const blank = (): Snapshot => ({
@@ -342,53 +341,53 @@ async function fileEntry(file: NonNullable<SnapshotEntry['file']>, platform?: Sy
   const bytes = await readEntry(entry, platform)
   return { ...entry, hash: await hash(bytes), size: bytes.length }
 }
-async function readEntry(entry: SnapshotEntry, platform?: SyncPlatform) {
-  if (entry.backup) return readFile(entry.backup, { baseDir: BaseDirectory.AppData })
+async function readEntry(entry: SnapshotEntry, targetPlatform?: SyncPlatform) {
+  if (entry.backup) return platform.fs.readFile(entry.backup, { baseDir: BaseDirectory.AppData })
   if (!entry.file) return encoder.encode(JSON.stringify(entry.value))
-  if (entry.cachedContent && entry.file.source === 'remote') return readFile(entry.cachedContent, { baseDir: BaseDirectory.AppData })
+  if (entry.cachedContent && entry.file.source === 'remote') return platform.fs.readFile(entry.cachedContent, { baseDir: BaseDirectory.AppData })
   const file = entry.file
-  if (file.source === 'remote') return downloadRemoteBytes(file.path, file.scope, platform)
-  if (file.source === 'appData') return readFile(file.localPath || file.path, { baseDir: BaseDirectory.AppData })
+  if (file.source === 'remote') return downloadRemoteBytes(file.path, file.scope, targetPlatform)
+  if (file.source === 'appData') return platform.fs.readFile(file.localPath || file.path, { baseDir: BaseDirectory.AppData })
   const options = await getFilePathOptions(file.path)
-  return options.baseDir ? readFile(options.path, { baseDir: options.baseDir }) : readFile(options.path)
+  return options.baseDir ? platform.fs.readFile(options.path, { baseDir: options.baseDir }) : platform.fs.readFile(options.path)
 }
-export async function targetIdentity(platform: SyncPlatform) {
-  const store = await Store.load('store.json')
-  if (platform === 'selfHosted') {
+export async function targetIdentity(targetPlatform: SyncPlatform) {
+  const store = await platform.store.load('store.json')
+  if (targetPlatform === 'selfHosted') {
     const database = await import('@/db').then(module => module.getDb())
     const profiles = await database.select<Array<{ id: string; serverUrl: string; instanceId: string | null; accountId: string | null }>>(
       'select id, server_url as serverUrl, instance_id as instanceId, account_id as accountId from self_hosted_sync_profiles order by id',
     )
-    return JSON.stringify([platform, profiles])
+    return JSON.stringify([targetPlatform, profiles])
   }
-  if (['github', 'gitee', 'gitlab', 'gitea'].includes(platform)) {
+  if (['github', 'gitee', 'gitlab', 'gitea'].includes(targetPlatform)) {
     const { getDataSyncRepoName, getSyncRepoName } = await import('./repo-utils')
-    const git = platform as 'github' | 'gitee' | 'gitlab' | 'gitea'
+    const git = targetPlatform as 'github' | 'gitee' | 'gitlab' | 'gitea'
     const workspaceRepo = await getSyncRepoName(git)
     const dataRepo = await getDataSyncRepoName(git)
-    return JSON.stringify([platform, await store.get(`${platform}Username`), workspaceRepo, dataRepo,
-      await store.get(`${platform}CustomUrl`), await store.get(`${platform}InstanceType`),
-      await store.get(`${platform}Branch`), await store.get(`gitlab_${workspaceRepo}_project_id`), await store.get(`gitlab_${dataRepo}_project_id`),
+    return JSON.stringify([targetPlatform, await store.get(`${targetPlatform}Username`), workspaceRepo, dataRepo,
+      await store.get(`${targetPlatform}CustomUrl`), await store.get(`${targetPlatform}InstanceType`),
+      await store.get(`${targetPlatform}Branch`), await store.get(`gitlab_${workspaceRepo}_project_id`), await store.get(`gitlab_${dataRepo}_project_id`),
     ])
   }
   // Include credentials only in the in-memory guard, never in the backup manifest or UI.
-  return JSON.stringify([platform, await store.get(`${platform}SyncConfig`)])
+  return JSON.stringify([targetPlatform, await store.get(`${targetPlatform}SyncConfig`)])
 }
-async function targetLabel(platform: SyncPlatform) {
-  const store = await Store.load('store.json')
-  if (['github', 'gitee', 'gitlab', 'gitea'].includes(platform)) {
+async function targetLabel(targetPlatform: SyncPlatform) {
+  const store = await platform.store.load('store.json')
+  if (['github', 'gitee', 'gitlab', 'gitea'].includes(targetPlatform)) {
     const { getSyncRepoName, getDataSyncRepoName } = await import('./repo-utils')
-    const git = platform as 'github' | 'gitee' | 'gitlab' | 'gitea'
-    return `${await store.get<string>(`${platform}Username`) || ''}/${await getSyncRepoName(git)} · .data: ${await getDataSyncRepoName(git)}`
+    const git = targetPlatform as 'github' | 'gitee' | 'gitlab' | 'gitea'
+    return `${await store.get<string>(`${targetPlatform}Username`) || ''}/${await getSyncRepoName(git)} · .data: ${await getDataSyncRepoName(git)}`
   }
-  const config = await store.get<Record<string, unknown>>(`${platform}SyncConfig`) || {}
+  const config = await store.get<Record<string, unknown>>(`${targetPlatform}SyncConfig`) || {}
   let address = String(config.url || config.endpoint || config.path || '')
   if (/^https?:\/\//i.test(address)) { const url = new URL(address); address = `${url.origin}${url.pathname}` }
   return [address, config.bucket, config.pathPrefix].filter(Boolean).join(' / ')
 }
 async function collectLocal(onProgress: OnProgress, includeFiles = true, requested?: SwitchModule[], excludeSensitiveConfig = true): Promise<Snapshot> {
   const result = blank()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const files = includeFiles ? await listLocalLibraryFiles({ includeStaticAssets: true }) : []
   const entries = await mapSwitchEntries(files, file => ({ source: 'local', module: /\.md$/i.test(file.path) ? 'notes' : 'assets', path: file.path }),
     file => fileEntry({ path: file.path, scope: 'workspace', source: 'workspace' }), onProgress)
@@ -428,11 +427,11 @@ async function collectLocal(onProgress: OnProgress, includeFiles = true, request
   return result
 }
 
-async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, scanCachePath: string, identity: string, local: Snapshot, reuse?: PlatformSwitchPlan, excludeSensitiveConfig = true) {
+async function collectRemote(targetPlatform: SyncPlatform, onProgress: OnProgress, scanCachePath: string, identity: string, local: Snapshot, reuse?: PlatformSwitchPlan, excludeSensitiveConfig = true) {
   const result = blank()
   let remoteTagIdMap: Record<string, number> = {}
-  const workspaceFiles = await withSwitchStaleContext(() => listRemoteLibraryFiles({ platform, includeStaticAssets: true, onListProgress: (path, files) => onProgress({ phase: 'list', source: 'remote', kind: 'directory', path, current: files, total: 0 }) }), { stage: 'scan', source: 'remote', path: 'workspace', check: 'inventory' })
-  const dataFiles = await withSwitchStaleContext(() => listRemoteLibraryFiles({ platform, scope: 'data', onListProgress: (path, files) => onProgress({ phase: 'list', source: 'remote', kind: 'directory', path, current: files, total: 0 }) }), { stage: 'scan', source: 'remote', path: 'data', check: 'inventory' })
+  const workspaceFiles = await withSwitchStaleContext(() => listRemoteLibraryFiles({ platform: targetPlatform, includeStaticAssets: true, onListProgress: (path, files) => onProgress({ phase: 'list', source: 'remote', kind: 'directory', path, current: files, total: 0 }) }), { stage: 'scan', source: 'remote', path: 'workspace', check: 'inventory' })
+  const dataFiles = await withSwitchStaleContext(() => listRemoteLibraryFiles({ platform: targetPlatform, scope: 'data', onListProgress: (path, files) => onProgress({ phase: 'list', source: 'remote', kind: 'directory', path, current: files, total: 0 }) }), { stage: 'scan', source: 'remote', path: 'data', check: 'inventory' })
   const contentCache = await openRemoteContentCache(identity)
   contentCache.reconcileInventory('workspace', workspaceFiles)
   contentCache.reconcileInventory('data', dataFiles)
@@ -444,7 +443,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
   const report: OnProgress = value => onProgress({ ...value, cachedFiles, downloadedFiles })
   const readRemote = async (file: RemoteLibraryFile, scope: RemoteRepositoryScope) => {
     const result = await withSwitchStaleContext(() => contentCache.read(scope, safePath(file.path), file.sha, file.size,
-      () => downloadVersionedSnapshot(file, scope, platform)), {
+      () => downloadVersionedSnapshot(file, scope, targetPlatform)), {
       stage: 'scan', source: 'remote', path: scopedStalePath(file.path, scope),
       expected: { sha: diagnosticVersion(file.sha), size: file.size, exists: true },
     })
@@ -461,7 +460,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       const loaded = await readRemote(file, scope)
       const bytes = loaded.bytes
       const cachedContent = `${scanCachePath}/${await hash(encoder.encode(`${scope}:${file.path}`))}.bin`
-      await writeFile(cachedContent, bytes, { baseDir: BaseDirectory.AppData })
+      await platform.fs.writeFile(cachedContent, bytes, { baseDir: BaseDirectory.AppData })
       return { id: file.path, label: file.path, hash: loaded.hash, size: bytes.length, file: { path: file.path, scope, source: 'remote' as const }, remoteVersion: loaded.version, cachedContent }
     }
     const rawFiles = new Map<string, SnapshotEntry>()
@@ -489,7 +488,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       const loaded = await readRemote(byPath.get(path)!, 'data')
       const bytes = loaded.bytes
       const cachedContent = `${scanCachePath}/${await hash(encoder.encode(`data:${path}`))}.bin`
-      await writeFile(cachedContent, bytes, { baseDir: BaseDirectory.AppData })
+      await platform.fs.writeFile(cachedContent, bytes, { baseDir: BaseDirectory.AppData })
       const snapshot: SnapshotEntry = { cachedContent, id: path, label: path, hash: loaded.hash, size: bytes.length, remoteVersion: loaded.version, file: { path, scope: 'data', source: 'remote' } }
       rawFiles.set(path, snapshot)
       if (notify) report({ phase: 'scan', source: 'remote', kind: 'file', path, current: rawFiles.size, total: dataFiles.length })
@@ -499,7 +498,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       // GitLab trees omit sizes. A matching Git blob ID still proves these
       // bytes are a genuine empty file, rather than a truncated response.
       const verifiedEmpty = bytes.length === 0 && (listed.size === 0
-        || (listed.size === undefined && ['github', 'gitee', 'gitlab', 'gitea'].includes(platform)
+        || (listed.size === undefined && ['github', 'gitee', 'gitlab', 'gitea'].includes(targetPlatform)
           && normalizeRemoteVersion(listed.sha) === await gitBlobVersion(bytes, listed.sha.length === 64 ? 64 : 40)))
       if (verifiedEmpty && (path === '.data/marks.json' || path === '.data/tags.json')) {
         emptyRemoteFiles.push(path)
@@ -509,8 +508,8 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       }
       const text = decoder.decode(bytes).replace(/^\uFEFF/, '')
       const array = path === '.data/marks.json' || path === '.data/tags.json' || path === LEGACY_CANVAS_SYNC_PATH || path === LEGACY_CHATS_SYNC_PATH
-      const value = parseSyncJson<unknown>(text, `${platform} / ${path}`, array ? 'array' : 'object')
-      if (path === '.data/meta.json' && !parseAutoDataSyncMeta(text)) throw syncDataError('INVALID_SCHEMA', `${platform} / ${path}`)
+      const value = parseSyncJson<unknown>(text, `${targetPlatform} / ${path}`, array ? 'array' : 'object')
+      if (path === '.data/meta.json' && !parseAutoDataSyncMeta(text)) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / ${path}`)
       rawFiles.set(path, { ...snapshot, value })
       jsonValues.set(path, value)
       return value
@@ -560,13 +559,13 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       try { tags = normalizeTagSnapshot(await json('.data/tags.json') || []) }
       catch (error) {
         if (error instanceof Error && error.message.startsWith('SYNC_DATA_')) throw error
-        throw syncDataError('INVALID_SCHEMA', `${platform} / .data/tags.json`)
+        throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / .data/tags.json`)
       }
       // SQLite keeps this device's default tags immutable. Translate remote
       // IDs and all their references together instead of requiring providers
       // to have allocated identical numeric IDs for those defaults.
       const localTags = local.tags.map(entry => entry.value) as Tag[]
-      const reconciled = remapRemoteProtectedTags(tags, localTags, reuse?.remoteTagIdMap || await getConversationSyncTagIds(platform), await getConversationSyncTagIdentity(platform))
+      const reconciled = remapRemoteProtectedTags(tags, localTags, reuse?.remoteTagIdMap || await getConversationSyncTagIds(targetPlatform), await getConversationSyncTagIdentity(targetPlatform))
       remoteTagIdMap = reconciled.ids
       // Conversation-only imports add dependencies without deleting labels used
       // by local records outside the selected synchronization scope.
@@ -578,7 +577,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
     if (state.autoRecordSyncEnabled) {
       const marks = await json('.data/marks.json') || []
       try { validateRecordSnapshot(marks) }
-      catch { throw syncDataError('INVALID_SCHEMA', `${platform} / .data/marks.json`) }
+      catch { throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / .data/marks.json`) }
       if (marks.some(mark => recordTagIds(mark).some(id => remoteTagIdMap[String(id)] === undefined))) throw new Error('SYNC_SWITCH_MISSING_REFERENCE')
       result.records = await Promise.all(marks.map(mark => markEntry({ ...mark,
         tagId: remoteTagIdMap[String(mark.tagId)] ?? mark.tagId,
@@ -586,7 +585,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       })))
       const indexValue = await json(CANVAS_SYNC_PATH)
       const index = indexValue ? parseCanvasSyncIndex(JSON.stringify(indexValue)) : null
-      if (indexValue && !index) throw syncDataError('INVALID_SCHEMA', `${platform} / ${CANVAS_SYNC_PATH}`)
+      if (indexValue && !index) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / ${CANVAS_SYNC_PATH}`)
       const legacy = index ? [] : await json(LEGACY_CANVAS_SYNC_PATH) || []
       if (!Array.isArray(legacy)) throw new Error('Invalid legacy canvases')
       const projects: CanvasProject[] = []
@@ -597,13 +596,13 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
         return data
       }, report) : legacy) {
         const project = normalizeRemoteCanvasProject(value)
-        if (!project) throw syncDataError('INVALID_SCHEMA', `${platform} / ${CANVAS_SYNC_PATH}`)
+        if (!project) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / ${CANVAS_SYNC_PATH}`)
         projects.push(project)
       }
       result.canvases = await Promise.all(projects.map(project => valueEntry(project.id, project.title, projectToSyncValue(project))))
       await collectUnindexedItems('canvases', '.data/canvases/items', new Set(index?.purged.map(entry => entry.id)), async (value, path, id) => {
         const project = normalizeRemoteCanvasProject(value)
-        if (!project || project.id !== id) throw syncDataError('INVALID_SCHEMA', `${platform} / ${path}`)
+        if (!project || project.id !== id) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / ${path}`)
         return valueEntry(project.id, project.title, projectToSyncValue(project))
       })
     }
@@ -611,7 +610,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       result.settings = await settingsEntries(record(await json('.data/settings.json') || {}), excludeSensitiveConfig)
       const value = await json('.data/memories.json')
       const data = value ? parseMemorySyncData(JSON.stringify(value)) : null
-      if (value && !data) throw syncDataError('INVALID_SCHEMA', `${platform} / .data/memories.json`)
+      if (value && !data) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / .data/memories.json`)
       if (data) {
         result.memories = await Promise.all(data.memories.map(memory => valueEntry(memory.id, memory.content.slice(0, 80), memory)))
       }
@@ -620,7 +619,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
     }
     const indexValue = state.autoConversationSyncEnabled ? await json(CONVERSATION_SYNC_INDEX_PATH) : null
     const index = indexValue ? parseConversationSyncIndex(JSON.stringify(indexValue)) : null
-    if (indexValue && !index) throw syncDataError('INVALID_SCHEMA', `${platform} / ${CONVERSATION_SYNC_INDEX_PATH}`)
+    if (indexValue && !index) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / ${CONVERSATION_SYNC_INDEX_PATH}`)
     if (state.autoConversationSyncEnabled) {
       const items = index ? await mapSwitchEntries(index.conversations, entry => ({ source: 'remote', module: 'conversations', path: entry.path, fileSize: byPath.get(entry.path)?.size }), async entry => {
         if (!entry.path.startsWith('.data/conversations/items/')) throw new Error('Invalid conversation item path')
@@ -631,7 +630,7 @@ async function collectRemote(platform: SyncPlatform, onProgress: OnProgress, sca
       result.conversations = await Promise.all(items.map(conversationEntry))
       await collectUnindexedItems('conversations', '.data/conversations/items', new Set(index?.deleted.filter(entry => entry.entityType === 'conversation').map(entry => entry.syncId)), async (value, path, id) => {
         const item = parseConversationSyncItem(JSON.stringify(value))
-        if (!item || item.syncId !== id) throw syncDataError('INVALID_SCHEMA', `${platform} / ${path}`)
+        if (!item || item.syncId !== id) throw syncDataError('INVALID_SCHEMA', `${targetPlatform} / ${path}`)
         return conversationEntry(item)
       })
       result.conversations = await Promise.all(result.conversations.map(async entry => {
@@ -682,19 +681,19 @@ async function preview(entry: SnapshotEntry, platform: SyncPlatform) {
   }
   return `${entry.unindexedPath ? `${entry.unindexedPath}\n\n` : ''}${JSON.stringify(entry.value, null, 2)}`
 }
-export async function inspectPlatformSwitchPlan(platform: SyncPlatform, onProgress: OnProgress, reuse?: PlatformSwitchPlan): Promise<PlatformSwitchPlan> {
+export async function inspectPlatformSwitchPlan(targetPlatform: SyncPlatform, onProgress: OnProgress, reuse?: PlatformSwitchPlan): Promise<PlatformSwitchPlan> {
   const chat = (await import('@/stores/chat')).default.getState()
   if (chat.loading || chat.agentState.isRunning) throw new Error('SYNC_SWITCH_CHAT_BUSY')
-  const store = await Store.load('store.json')
-  const target = await targetIdentity(platform)
-  const label = await targetLabel(platform)
+  const store = await platform.store.load('store.json')
+  const target = await targetIdentity(targetPlatform)
+  const label = await targetLabel(targetPlatform)
   const workspace = await store.get<string>('workspacePath') || ''
   const excludeSensitiveConfig = await store.get<boolean>('excludeSensitiveConfig') !== false
   const scanCachePath = reuse?.scanCachePath || `sync-platform-scans/${crypto.randomUUID()}`
-  await mkdir(scanCachePath, { baseDir: BaseDirectory.AppData, recursive: true })
+  await platform.fs.mkdir(scanCachePath, { baseDir: BaseDirectory.AppData, recursive: true })
   try {
     const local = await collectLocal(onProgress, true, undefined, excludeSensitiveConfig)
-    const remote = await collectRemote(platform, onProgress, scanCachePath, JSON.stringify([target, workspace]), local, reuse, excludeSensitiveConfig)
+    const remote = await collectRemote(targetPlatform, onProgress, scanCachePath, JSON.stringify([target, workspace]), local, reuse, excludeSensitiveConfig)
     const localConversationTombstones = await import('@/db/conversation-sync-state').then(module => module.getConversationSyncTombstones())
     // Deletions are compared explicitly, rather than resurrecting deleted objects as "unique" content.
     for (const tombstone of remote.tombstones.filter(item => item.entityType === 'conversation')) {
@@ -708,7 +707,7 @@ export async function inspectPlatformSwitchPlan(platform: SyncPlatform, onProgre
     }
     const state = (await import('@/stores/setting')).default.getState()
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-    const workspaceSupported = platform !== 'cloudFolder' || Boolean(config && supportsCloudFolderWorkspace(config))
+    const workspaceSupported = targetPlatform !== 'cloudFolder' || Boolean(config && supportsCloudFolderWorkspace(config))
     const available: SwitchModule[] = workspaceSupported ? ['notes', 'assets'] : []
     if (state.autoRecordSyncEnabled || state.autoConversationSyncEnabled) available.push('tags')
     if (state.autoRecordSyncEnabled) available.push('records', 'canvases')
@@ -730,10 +729,10 @@ export async function inspectPlatformSwitchPlan(platform: SyncPlatform, onProgre
       const right = new Map(remote.snapshot[moduleId].map(entry => [entry.id, entry]))
       for (const entry of local[moduleId]) {
         const other = right.get(entry.id)
-        if (other && other.hash !== entry.hash) conflicts.push({ id: `${moduleId}:${entry.id}`, module: moduleId, label: entry.label, local: await preview(entry, platform), remote: await preview(other, platform), allowBoth: !entry.deleted && !other.deleted && (moduleId === 'notes' || moduleId === 'canvases' || moduleId === 'conversations') })
+        if (other && other.hash !== entry.hash) conflicts.push({ id: `${moduleId}:${entry.id}`, module: moduleId, label: entry.label, local: await preview(entry, targetPlatform), remote: await preview(other, targetPlatform), allowBoth: !entry.deleted && !other.deleted && (moduleId === 'notes' || moduleId === 'canvases' || moduleId === 'conversations') })
       }
     }
-    return { platform, target, targetLabel: label, workspace, scanCachePath, local, remote: remote.snapshot,
+    return { platform: targetPlatform, target, targetLabel: label, workspace, scanCachePath, local, remote: remote.snapshot,
       modules: available.map(id => summary(local[id], remote.snapshot[id], id)), conflicts, available,
       remoteEmpty: remote.files === 0, remoteFiles: remote.files, remoteInventory: remote.inventory, readSummary: remote.readSummary, remoteDataFiles: remote.rawFiles,
       emptyRemoteFiles: remote.emptyRemoteFiles, unavailableModules: remote.unavailableModules,
@@ -839,7 +838,7 @@ export async function backupPlatformSwitchPlan(plan: PlatformSwitchPlan, onProgr
   // including the window before the new path appears in the recovery marker.
   const release = await acquireActiveSwitchBackup(path)
   try {
-    await mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true })
+    await platform.fs.mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true })
     const files = [...moduleIds.flatMap(id => plan.local[id]), ...moduleIds.flatMap(id => plan.remote[id]), ...plan.remoteDataFiles].filter(entry => entry.file)
     const groups = new Map<string, SnapshotEntry[]>()
     for (const entry of files) groups.set(entry.hash, [...(groups.get(entry.hash) || []), entry])
@@ -853,17 +852,17 @@ export async function backupPlatformSwitchPlan(plan: PlatformSwitchPlan, onProgr
         actual: { sha: actualHash, size: bytes.length, exists: true },
       })
       const backup = `${path}/${index}.bin`
-      await writeFile(backup, bytes, { baseDir: BaseDirectory.AppData })
+      await platform.fs.writeFile(backup, bytes, { baseDir: BaseDirectory.AppData })
       for (const entry of entries) { entry.backup = backup; delete entry.cachedContent }
     }, onProgress, 'backup')
     const { target: _target, scanCachePath: _scanCachePath, ...manifest } = plan
     void _target; void _scanCachePath
-    await writeFile(`${path}/manifest.json`, encoder.encode(JSON.stringify({ ...manifest, backupPath: path, version: 1 })), { baseDir: BaseDirectory.AppData })
+    await platform.fs.writeFile(`${path}/manifest.json`, encoder.encode(JSON.stringify({ ...manifest, backupPath: path, version: 1 })), { baseDir: BaseDirectory.AppData })
     await openSwitchJournal(path, plan.workspace)
     plan.backupPath = path
     return release
   } catch (error) {
-    try { await remove(path, { baseDir: BaseDirectory.AppData, recursive: true }) }
+    try { await platform.fs.remove(path, { baseDir: BaseDirectory.AppData, recursive: true }) }
     catch (cleanupError) { console.warn('Failed to clean incomplete sync backup', cleanupError) }
     await release()
     throw error
@@ -906,7 +905,7 @@ async function applyLocalData(snapshot: Snapshot, selected: SwitchModule[], tomb
     await import('@/db/canvases').then(module => module.replaceAllCanvasProjects(projects.filter((project): project is CanvasProject => project !== null)))
   }
   if (selected.includes('conversations')) await replacePlatformSwitchConversations(snapshot.conversations.map(entry => entry.value) as ConversationSyncItem[], tombstones)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (selected.includes('settings')) {
     const all = Object.fromEntries(await store.entries())
     const values = filterSyncData(Object.fromEntries(snapshot.settings.map(entry => [entry.id, entry.value])), { excludeSensitiveConfig })
@@ -1081,7 +1080,7 @@ export async function preparePlatformSwitchDecision(plan: PlatformSwitchPlan, st
       if (old) touched.push(old); else creates = true
     }
     if (creates || touched.length) {
-      if (plan.platform === 'cloudFolder' && (await (await Store.load('store.json')).get<CloudFolderConfig>('cloudFolderSyncConfig'))?.provider !== 'oneDrive') throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
+      if (plan.platform === 'cloudFolder' && (await (await platform.store.load('store.json')).get<CloudFolderConfig>('cloudFolderSyncConfig'))?.provider !== 'oneDrive') throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
       const meta = plan.remoteDataFiles.find(entry => entry.id === '.data/meta.json')
       if (meta) touched.push(meta)
       if (touched.some(entry => !normalizeRemoteVersion(entry.remoteVersion))) throw new Error('SYNC_SWITCH_CONDITIONAL_UNSUPPORTED')
@@ -1173,7 +1172,7 @@ export async function executePlatformSwitchPlan(plan: PlatformSwitchPlan, strate
         }
         if (!original) {
           const options = await getFilePathOptions(entry.id)
-          if (options.baseDir ? await exists(options.path, { baseDir: options.baseDir }) : await exists(options.path)) throw syncStaleError({
+          if (options.baseDir ? await platform.fs.exists(options.path, { baseDir: options.baseDir }) : await platform.fs.exists(options.path)) throw syncStaleError({
             stage: 'apply', source: 'local', path: scopedStalePath(entry.id, scope), check: 'inventory', expected: { exists: false }, actual: { exists: true },
           })
         }
@@ -1185,9 +1184,9 @@ export async function executePlatformSwitchPlan(plan: PlatformSwitchPlan, strate
       else {
         const path = entry.file!.localPath || (entry.id.startsWith('.data/assets/records/') ? entry.id.slice('.data/assets/records/'.length) : `conversation-assets/${entry.id.split('/').pop()}`)
         safePath(path)
-        if (await exists(path, { baseDir: BaseDirectory.AppData })) {
+        if (await platform.fs.exists(path, { baseDir: BaseDirectory.AppData })) {
           const old = plan.local.dataAssets.find(item => item.id === entry.id)
-          const currentBytes = await readFile(path, { baseDir: BaseDirectory.AppData })
+          const currentBytes = await platform.fs.readFile(path, { baseDir: BaseDirectory.AppData })
           const currentHash = await hash(currentBytes)
           if (currentHash !== (old?.hash || entry.hash)) throw syncStaleError({
             stage: 'apply', source: 'local', path: scopedStalePath(path, scope), check: 'content',
@@ -1195,9 +1194,9 @@ export async function executePlatformSwitchPlan(plan: PlatformSwitchPlan, strate
             actual: { sha: currentHash, size: currentBytes.length, exists: true },
           })
         }
-        await mkdir(path.split('/').slice(0, -1).join('/'), { baseDir: BaseDirectory.AppData, recursive: true })
+        await platform.fs.mkdir(path.split('/').slice(0, -1).join('/'), { baseDir: BaseDirectory.AppData, recursive: true })
         const old = plan.local.dataAssets.find(item => item.id === entry.id)
-        await applyMutation({ side: 'local', action: 'write', path, scope, before: old?.hash, after: entry.hash }, () => writeFile(path, bytes, { baseDir: BaseDirectory.AppData }))
+        await applyMutation({ side: 'local', action: 'write', path, scope, before: old?.hash, after: entry.hash }, () => platform.fs.writeFile(path, bytes, { baseDir: BaseDirectory.AppData }))
       }
     }
   }
@@ -1255,7 +1254,7 @@ export async function executePlatformSwitchPlan(plan: PlatformSwitchPlan, strate
         const options = await getFilePathOptions(entry.id)
         markEditorPathMutation(entry.id)
         await applyMutation({ side: 'local', action: 'delete', path: entry.id, scope: 'workspace', before: entry.hash }, async () => {
-          if (options.baseDir) await remove(options.path, { baseDir: options.baseDir }); else await remove(options.path)
+          if (options.baseDir) await platform.fs.remove(options.path, { baseDir: options.baseDir }); else await platform.fs.remove(options.path)
         })
         await article.cleanTabsByDeletedFile(entry.id)
       }
@@ -1445,7 +1444,7 @@ export async function restorePlatformSwitchBackup(path: string, onProgress: OnPr
   const journalData = await readSwitchJournal(path)
   const workspace = (await import('@/stores/setting')).default.getState().workspacePath
   if (journalData.workspace !== workspace) throw syncStaleError({ stage: 'restore', source: 'local', path: 'workspace', check: 'configuration' })
-  const manifest = JSON.parse(decoder.decode(await readFile(`${path}/manifest.json`, { baseDir: BaseDirectory.AppData }))) as PlatformSwitchPlan & { version: number }
+  const manifest = JSON.parse(decoder.decode(await platform.fs.readFile(`${path}/manifest.json`, { baseDir: BaseDirectory.AppData }))) as PlatformSwitchPlan & { version: number }
   if (manifest.version !== 1 || manifest.workspace !== workspace || !manifest.local
     || moduleIds.some(id => !Array.isArray(manifest.local[id]))) throw new Error('Invalid sync recovery manifest')
   if (journalData.status === 'restored') return
@@ -1456,8 +1455,8 @@ export async function restorePlatformSwitchBackup(path: string, onProgress: OnPr
   const fileHash = async (op: typeof operations[number]) => {
     safePath(op.path)
     const options = op.scope === 'data' ? { path: op.path, baseDir: BaseDirectory.AppData } : await getFilePathOptions(op.path)
-    if (!(options.baseDir ? await exists(options.path, { baseDir: options.baseDir }) : await exists(options.path))) return undefined
-    return hash(options.baseDir ? await readFile(options.path, { baseDir: options.baseDir }) : await readFile(options.path))
+    if (!(options.baseDir ? await platform.fs.exists(options.path, { baseDir: options.baseDir }) : await platform.fs.exists(options.path))) return undefined
+    return hash(options.baseDir ? await platform.fs.readFile(options.path, { baseDir: options.baseDir }) : await platform.fs.readFile(options.path))
   }
   const domainFingerprint = (snapshot: Snapshot, module: SwitchModule) => {
     const group: SwitchModule[] = module === 'records' ? ['records', 'tags'] : [module]
@@ -1539,11 +1538,11 @@ export async function restorePlatformSwitchBackup(path: string, onProgress: OnPr
           markEditorPathMutation(op.path)
           await withSwitchStaleContext(() => saveLocalBytes(op.path, bytes), recoveryContext(op))
           if (/\.md$/i.test(op.path)) emitter.emit('sync-content-updated', { path: op.path, content: decoder.decode(bytes) })
-        } else await writeFile(op.path, bytes, { baseDir: BaseDirectory.AppData })
+        } else await platform.fs.writeFile(op.path, bytes, { baseDir: BaseDirectory.AppData })
       } else {
         const options = op.scope === 'data' ? { path: op.path, baseDir: BaseDirectory.AppData } : await getFilePathOptions(op.path)
         markEditorPathMutation(op.path)
-        if (options.baseDir) await remove(options.path, { baseDir: options.baseDir }); else await remove(options.path)
+        if (options.baseDir) await platform.fs.remove(options.path, { baseDir: options.baseDir }); else await platform.fs.remove(options.path)
         if (op.scope === 'workspace') await (await import('@/stores/article')).default.getState().cleanTabsByDeletedFile(op.path)
       }
     }

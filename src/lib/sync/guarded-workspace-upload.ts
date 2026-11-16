@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import type { SyncPlatform } from '@/types/sync'
 import { downloadRemoteBytesWithVersion, uploadRemoteBytes, getRemoteContentType, getRemoteFileMetadata } from './remote-library'
 import { gitBlobVersion, normalizeRemoteVersion } from './remote-content-cache'
@@ -44,22 +44,22 @@ export async function readVersionedWorkspaceFile(path: string, platform: Workspa
 /** Normal writes use the last accepted version; explicit overwrites pass a
  * freshly captured version. Transport retries must keep that same condition. */
 export async function uploadGuardedWorkspaceFile(
-  path: string, content: string | Uint8Array, platform: WorkspaceRemotePlatform,
+  path: string, content: string | Uint8Array, remotePlatform: WorkspaceRemotePlatform,
   expectedVersion: string | null, message: string, expectedMetadataKey?: string,
   beforeWrite?: () => Promise<void>,
 ): Promise<string> {
   await beforeWrite?.()
   await prepareWorkspacePathUpload(path)
-  const store = await Store.load('store.json')
-  if (await store.get('primaryBackupMethod') !== platform || await store.get('platformSwitchRecovery')
-    || (expectedMetadataKey && await getSyncMetadataKey(path, platform) !== expectedMetadataKey)) {
+  const store = await platform.store.load('store.json')
+  if (await store.get('primaryBackupMethod') !== remotePlatform || await store.get('platformSwitchRecovery')
+    || (expectedMetadataKey && await getSyncMetadataKey(path, remotePlatform) !== expectedMetadataKey)) {
     throw syncStaleError({ stage: 'apply', path, check: 'configuration' })
   }
   if (expectedVersion === 'uploaded' || expectedVersion?.startsWith('uploaded:')) throw syncStaleError({ stage: 'apply', path, source: 'remote', check: 'version', expected: { sha: expectedVersion } })
   const assertBeforeWrite = async () => {
     await beforeWrite?.()
-    if (await store.get('primaryBackupMethod') !== platform || await store.get('platformSwitchRecovery')
-      || (expectedMetadataKey && await getSyncMetadataKey(path, platform) !== expectedMetadataKey)) {
+    if (await store.get('primaryBackupMethod') !== remotePlatform || await store.get('platformSwitchRecovery')
+      || (expectedMetadataKey && await getSyncMetadataKey(path, remotePlatform) !== expectedMetadataKey)) {
       throw syncStaleError({ stage: 'apply', path, check: 'configuration' })
     }
     await beforeWrite?.()
@@ -67,19 +67,19 @@ export async function uploadGuardedWorkspaceFile(
   await assertBeforeWrite()
   const bytes = syncContentBytes(content)
   let uploadedVersion: string
-  try { uploadedVersion = await uploadRemoteBytes(path, bytes, message, getRemoteContentType(path), 'workspace', { version: expectedVersion }, platform, beforeWrite ? assertBeforeWrite : undefined) }
+  try { uploadedVersion = await uploadRemoteBytes(path, bytes, message, getRemoteContentType(path), 'workspace', { version: expectedVersion }, remotePlatform, beforeWrite ? assertBeforeWrite : undefined) }
   catch (error) { throw withSyncStaleContext(error, { stage: 'apply', path, source: 'remote', check: 'version', expected: { sha: expectedVersion, exists: expectedVersion !== null } }) }
   // A version returned by the conditional write is already bound to our bytes.
   // Keep it even if another writer advances the remote immediately afterwards.
   if (normalizeRemoteVersion(uploadedVersion) && uploadedVersion !== 'uploaded'
     && uploadedVersion !== expectedVersion) {
-    if (await store.get('primaryBackupMethod') !== platform
-      || (expectedMetadataKey && await getSyncMetadataKey(path, platform) !== expectedMetadataKey)) throw syncStaleError({ stage: 'apply', path, check: 'configuration' })
+    if (await store.get('primaryBackupMethod') !== remotePlatform
+      || (expectedMetadataKey && await getSyncMetadataKey(path, remotePlatform) !== expectedMetadataKey)) throw syncStaleError({ stage: 'apply', path, check: 'configuration' })
     return uploadedVersion
   }
   // Some WebDAV servers omit ETag on PUT. Verify the bytes and bind their GET
   // version instead of recording a placeholder or accepting another writer's HEAD.
-  const accepted = await readVersionedWorkspaceFile(path, platform, 'verify')
+  const accepted = await readVersionedWorkspaceFile(path, remotePlatform, 'verify')
   if (accepted.content.length !== bytes.length || accepted.content.some((value, index) => value !== bytes[index])) {
     throw syncStaleError({
       stage: 'verify', path, source: 'remote', check: 'content',
@@ -87,7 +87,7 @@ export async function uploadGuardedWorkspaceFile(
       actual: { sha: await gitBlobVersion(accepted.content), size: accepted.content.length },
     })
   }
-  if (await store.get('primaryBackupMethod') !== platform
-    || (expectedMetadataKey && await getSyncMetadataKey(path, platform) !== expectedMetadataKey)) throw syncStaleError({ stage: 'verify', path, check: 'configuration' })
+  if (await store.get('primaryBackupMethod') !== remotePlatform
+    || (expectedMetadataKey && await getSyncMetadataKey(path, remotePlatform) !== expectedMetadataKey)) throw syncStaleError({ stage: 'verify', path, check: 'configuration' })
   return accepted.version
 }

@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readTextFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { ArrowDownAZ, ArrowLeft, BrainCircuit, CalendarDays, CloudAlert, CloudCheck, CloudUpload, Columns3, CopyPlus, DownloadCloud, EllipsisVertical, FileInput, FilePlus2, Grid2X2, LayoutGrid, List, Loader2, Palette, Pencil, Pin, PinOff, RefreshCw, RotateCcw, ShieldQuestion, Timer, Trash2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
@@ -171,7 +170,7 @@ export function CanvasActions() {
         filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
       })
       if (!path || Array.isArray(path)) return
-      const source = await readTextFile(path)
+      const source = await platform.fs.readTextFile(path)
       const fileName = path.split(/[\\/]/).pop()?.replace(/\.(canvas\.)?json$|\.(mmd|mermaid)$/i, '') || t('import.defaultTitle')
       const imported = /\.(mmd|mermaid)$/i.test(path)
         ? { title: fileName, canvasType: 'flowchart' as const, document: mermaidToCanvasDocument(source) }
@@ -315,7 +314,7 @@ export function CanvasSidebar() {
   useEffect(() => {
     let active = true
     const refreshSyncedVersions = async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const versions = await store.get<Record<string, number>>('canvasSyncVersions') || {}
       if (active) setSyncedVersions(versions)
     }
@@ -363,7 +362,7 @@ export function CanvasSidebar() {
   }
 
   const refreshSyncedVersions = async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     setSyncedVersions(await store.get<Record<string, number>>('canvasSyncVersions') || {})
   }
 
@@ -406,7 +405,7 @@ export function CanvasSidebar() {
         filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
       })
       if (!path || Array.isArray(path)) return
-      const source = await readTextFile(path)
+      const source = await platform.fs.readTextFile(path)
       const fileName = path.split(/[\\/]/).pop()?.replace(/\.(canvas\.)?json$|\.(mmd|mermaid)$/i, '') || t('import.defaultTitle')
       const imported = /\.(mmd|mermaid)$/i.test(path)
         ? { title: fileName, canvasType: 'flowchart' as const, document: mermaidToCanvasDocument(source) }

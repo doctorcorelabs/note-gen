@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
+import { platform as registry } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
   AlertTriangle, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight,
@@ -501,8 +502,8 @@ export function PlatformSwitchProgress() {
             {state.recovered && <p>{p('nativeRecoveredLocation', { path: useSettingStore.getState().workspacePath })}</p>}
             <Button type="button" variant="outline" size="sm" onClick={() => void (async () => {
               if (!/^self-hosted-switch-backups\/\d+-[a-f0-9-]+$/.test(state.selfHostedBackupPath!)) throw new Error('SELF_HOSTED_BACKUP_INVALID')
-              const [{ appDataDir, join }, { openPath }] = await Promise.all([import('@tauri-apps/api/path'), import('@tauri-apps/plugin-opener')])
-              await openPath(await join(await appDataDir(), state.selfHostedBackupPath!))
+              const { openPath } = await import('@tauri-apps/plugin-opener')
+              await openPath(await registry.path.join(await registry.path.appDataDir(), state.selfHostedBackupPath!))
             })().catch(failure => toast({ title: p('failed'), description: String(failure), variant: 'destructive' }))}><FolderOpen data-icon="inline-start" />{p('nativeOpenBackup')}</Button>
           </AlertDescription></Alert>}
         {step === 'confirm' && <FieldGroup>

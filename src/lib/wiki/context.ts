@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { getWorkspacePath, getDefaultArticleAbsolutePath } from '@/lib/workspace'
 import { getOptionalSyncRepoName, getDataSyncRepoName } from '@/lib/sync/repo-utils'
@@ -57,7 +57,7 @@ let deviceIdentity: Promise<string> | null = null
 /** Device identity is used for concurrent edits to the shared Wiki settings. */
 export function getWikiDeviceId(): Promise<string> {
   if (!deviceIdentity) deviceIdentity = (async () => {
-    const [store, database] = await Promise.all([Store.load('store.json'), getDb()])
+    const [store, database] = await Promise.all([platform.store.load('store.json'), getDb()])
     const seed = await store.get<string>('wikiDeviceId') || crypto.randomUUID()
     await database.execute('create table if not exists wiki_sync_identity(id text primary key,value text not null)')
     await database.execute("insert or ignore into wiki_sync_identity(id,value) values('device',$1)", [seed])
@@ -77,7 +77,7 @@ function workspaceIdentity(workspace: { path: string; isCustom: boolean }) {
 
 /** Wiki files belong to their note workspace, independent of the sync provider. */
 export async function getWikiContext(): Promise<WikiContext> {
-  const [store, workspace] = await Promise.all([Store.load('store.json'), getWorkspacePath()])
+  const [store, workspace] = await Promise.all([platform.store.load('store.json'), getWorkspacePath()])
   const provider = await store.get<SyncPlatform>('primaryBackupMethod') || 'local'
   const workspaceKey = workspaceIdentity(workspace)
   return { id: await wikiHash(JSON.stringify(['wiki-markdown', workspaceKey])), workspaceKey, provider, remoteKey: '' }
@@ -85,7 +85,7 @@ export async function getWikiContext(): Promise<WikiContext> {
 
 /** Previous provider-bound identity, used only to recover the first Wiki version's local cache. */
 export async function getLegacyWikiContextId(): Promise<string> {
-  const [store, workspace] = await Promise.all([Store.load('store.json'), getWorkspacePath()])
+  const [store, workspace] = await Promise.all([platform.store.load('store.json'), getWorkspacePath()])
   const provider = await store.get<SyncPlatform>('primaryBackupMethod') || 'local'
   let target: unknown = [provider]
   if (provider === 'github' || provider === 'gitee' || provider === 'gitlab' || provider === 'gitea') {

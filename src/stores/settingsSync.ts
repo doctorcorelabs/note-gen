@@ -1,5 +1,5 @@
 import type { RemoteWriteCondition } from '@/lib/sync/write-condition'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { create } from 'zustand'
 import { filterSyncData, mergeSyncData, shouldExcludeFromSync } from '@/config/sync-exclusions'
 import { uploadFile as uploadGithubFile, getFiles as githubGetFiles, decodeBase64ToString } from '@/lib/sync/github'
@@ -74,7 +74,7 @@ const useSettingsSyncStore = create<SettingsSyncState>((set) => ({
    */
   uploadSettings: async (condition) => {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const primaryBackupMethod = await store.get<SettingsSyncProvider>('primaryBackupMethod') || 'github'
       if (primaryBackupMethod === 'local') return false
       if (primaryBackupMethod === 'selfHosted') {
@@ -226,7 +226,7 @@ const useSettingsSyncStore = create<SettingsSyncState>((set) => ({
    */
   downloadSettings: async (options: SettingsDownloadOptions = {}) => {
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const primaryBackupMethod = await store.get<SettingsSyncProvider>('primaryBackupMethod') || 'github'
       if (primaryBackupMethod === 'local') return false
       if (primaryBackupMethod === 'selfHosted') {

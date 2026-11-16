@@ -1,5 +1,4 @@
-import { BaseDirectory, exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import emitter from '@/lib/emitter'
 import { recordSyncTiming } from './sync-timing'
 import {
@@ -70,8 +69,8 @@ function getRemoteAssetPath(localPath: string): string {
 
 async function ensureLocalAssetDirectory(localPath: string) {
   const directory = localPath.split('/').slice(0, -1).join('/')
-  if (directory && !await exists(directory, { baseDir: BaseDirectory.AppData })) {
-    await mkdir(directory, { baseDir: BaseDirectory.AppData, recursive: true })
+  if (directory && !await platform.fs.exists(directory, { baseDir: BaseDirectory.AppData })) {
+    await platform.fs.mkdir(directory, { baseDir: BaseDirectory.AppData, recursive: true })
   }
 }
 
@@ -81,14 +80,14 @@ export async function queueRecordAssetRemoteDeletions(marks: RecordAssetMark[]) 
     .map(getRemoteAssetPath)
   if (paths.length === 0) return
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const pending = await store.get<string[]>(PENDING_RECORD_ASSET_DELETIONS_KEY) || []
   await store.set(PENDING_RECORD_ASSET_DELETIONS_KEY, Array.from(new Set([...pending, ...paths])))
   await store.save()
 }
 
 async function flushPendingRecordAssetRemoteDeletions() {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const pending = await store.get<string[]>(PENDING_RECORD_ASSET_DELETIONS_KEY) || []
   if (pending.length === 0) return
 
@@ -113,14 +112,14 @@ export async function uploadRecordAssets(marks: RecordAssetMark[]) {
   let uploaded = 0
   let skipped = 0
   for (const localPath of localPaths) {
-    if (!await exists(localPath, { baseDir: BaseDirectory.AppData })) continue
+    if (!await platform.fs.exists(localPath, { baseDir: BaseDirectory.AppData })) continue
     const remotePath = getRemoteAssetPath(localPath)
     if (await remoteFileExists(remotePath, 'data')) {
       skipped += 1
       continue
     }
 
-    const content = await readFile(localPath, { baseDir: BaseDirectory.AppData })
+    const content = await platform.fs.readFile(localPath, { baseDir: BaseDirectory.AppData })
     await uploadRemoteBytes(
       remotePath,
       content,
@@ -147,13 +146,13 @@ export async function downloadRecordAssets(marks: RecordAssetMark[]) {
   const downloadedPaths: string[] = []
 
   for (const localPath of localPaths) {
-    if (await exists(localPath, { baseDir: BaseDirectory.AppData })) continue
+    if (await platform.fs.exists(localPath, { baseDir: BaseDirectory.AppData })) continue
     const remotePath = getRemoteAssetPath(localPath)
     if (!await remoteFileExists(remotePath, 'data')) continue
 
     const content = await downloadRemoteBytes(remotePath, 'data')
     await ensureLocalAssetDirectory(localPath)
-    await writeFile(localPath, content, { baseDir: BaseDirectory.AppData })
+    await platform.fs.writeFile(localPath, content, { baseDir: BaseDirectory.AppData })
     downloadedPaths.push(localPath)
   }
 

@@ -1,5 +1,4 @@
-import { BaseDirectory, exists, lstat, readDir, readFile, remove } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 import { assertSwitchBackupPath, readSwitchJournal } from './platform-switch-journal'
 import { withPrimaryPlatformLock } from './platform-switch-recovery'
@@ -82,21 +81,21 @@ function protectRecoveryBackupPaths(recovery: unknown, protectedPaths: Set<strin
 
 async function protectedBackupPaths(): Promise<Set<string>> {
   const protectedPaths = new Set(activeBackups.keys())
-  // Store.load() can silently initialize an empty cache after a disk read or
+  // Loading the store can silently initialize an empty cache after a disk read or
   // JSON parse failure. Validate the durable marker independently before any
   // deletion, and protect both versions while a save is still in progress.
-  const info = await lstat('store.json', options)
+  const info = await platform.fs.lstat('store.json', options)
   if (info.isSymlink || !info.isFile) throw new Error('Sync settings are not a regular file')
-  const disk: unknown = JSON.parse(new TextDecoder().decode(await readFile('store.json', options)))
+  const disk: unknown = JSON.parse(new TextDecoder().decode(await platform.fs.readFile('store.json', options)))
   if (!disk || typeof disk !== 'object' || Array.isArray(disk)) throw new Error('Invalid sync settings file')
   protectRecoveryBackupPaths((disk as Record<string, unknown>).platformSwitchRecovery, protectedPaths)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   protectRecoveryBackupPaths(await store.get<unknown>('platformSwitchRecovery'), protectedPaths)
   return protectedPaths
 }
 
 async function assertBackupRoot(): Promise<void> {
-  const info = await lstat(BACKUP_ROOT, options)
+  const info = await platform.fs.lstat(BACKUP_ROOT, options)
   if (info.isSymlink || !info.isDirectory) throw new Error('Sync backup root is not a regular directory')
 }
 
@@ -106,7 +105,7 @@ function assertEntryName(name: string): void {
 
 /** Never follows links or paths taken from a manifest's workspace/file entries. */
 async function directoryBytes(path: string): Promise<number> {
-  const info = await lstat(path, options)
+  const info = await platform.fs.lstat(path, options)
   if (info.isSymlink) throw new Error('Sync backup contains a symbolic link')
   if (info.isFile) {
     if (!Number.isSafeInteger(info.size) || info.size < 0) throw new Error('Invalid sync backup file size')
@@ -114,7 +113,7 @@ async function directoryBytes(path: string): Promise<number> {
   }
   if (!info.isDirectory) throw new Error('Sync backup contains an unsupported file type')
   let bytes = 0
-  for (const entry of await readDir(path, options)) {
+  for (const entry of await platform.fs.readDir(path, options)) {
     assertEntryName(entry.name)
     if (entry.isSymlink) throw new Error('Sync backup contains a symbolic link')
     bytes += await directoryBytes(`${path}/${entry.name}`)
@@ -125,16 +124,16 @@ async function directoryBytes(path: string): Promise<number> {
 
 async function hasValidManifest(path: string): Promise<boolean> {
   // Reject a manifest link as well as links seen in the size inspection.
-  const info = await lstat(`${path}/manifest.json`, options)
+  const info = await platform.fs.lstat(`${path}/manifest.json`, options)
   if (info.isSymlink || !info.isFile) return false
-  const manifest: unknown = JSON.parse(new TextDecoder().decode(await readFile(`${path}/manifest.json`, options)))
+  const manifest: unknown = JSON.parse(new TextDecoder().decode(await platform.fs.readFile(`${path}/manifest.json`, options)))
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return false
   const value = manifest as Record<string, unknown>
   return value.version === 1 && value.backupPath === path
 }
 
 async function recoveryStillPending(path: string): Promise<boolean> {
-  const info = await lstat(`${path}/journal.json`, options)
+  const info = await platform.fs.lstat(`${path}/journal.json`, options)
   if (info.isSymlink || !info.isFile) throw new Error('Sync backup journal is not a regular file')
   const journal = await readSwitchJournal(path)
   if (journal.recoveryPending !== undefined) return journal.recoveryPending
@@ -167,10 +166,10 @@ function removals(backups: BackupDirectory[], protectedPaths: Set<string>): Set<
 async function pruneBackups(): Promise<void> {
   // An unreadable recovery marker must never be treated as an empty marker.
   await protectedBackupPaths()
-  if (!await exists(BACKUP_ROOT, options)) return
+  if (!await platform.fs.exists(BACKUP_ROOT, options)) return
   await assertBackupRoot()
   const backups: BackupDirectory[] = []
-  for (const entry of await readDir(BACKUP_ROOT, options)) {
+  for (const entry of await platform.fs.readDir(BACKUP_ROOT, options)) {
     const path = `${BACKUP_ROOT}/${entry.name}`
     try {
       assertRetentionPath(path)
@@ -178,7 +177,7 @@ async function pruneBackups(): Promise<void> {
       continue
     }
     // Only directories matching our own generated backup path may be pruned.
-    const info = await lstat(path, options)
+    const info = await platform.fs.lstat(path, options)
     if (info.isSymlink || !info.isDirectory || entry.isSymlink) continue
     const timestamp = Number(entry.name.slice(0, entry.name.indexOf('-')))
     if (!Number.isSafeInteger(timestamp) || timestamp < 0) continue
@@ -202,7 +201,7 @@ async function pruneBackups(): Promise<void> {
       try {
         await assertBackupRoot()
         assertRetentionPath(backup.path)
-        const info = await lstat(backup.path, options)
+        const info = await platform.fs.lstat(backup.path, options)
         if (info.isSymlink || !info.isDirectory) throw new Error('Sync backup is no longer a regular directory')
         backup.bytes = await directoryBytes(backup.path)
         if (!await hasValidManifest(backup.path)) throw new Error('Sync backup manifest changed')
@@ -217,7 +216,7 @@ async function pruneBackups(): Promise<void> {
       protectedPaths = await protectedBackupPaths()
       if (!removals(backups, protectedPaths).has(backup.path)) return
       try {
-        await remove(backup.path, { ...options, recursive: true })
+        await platform.fs.remove(backup.path, { ...options, recursive: true })
         backups.splice(backups.indexOf(backup), 1)
       } catch (error) {
         backup.removable = false

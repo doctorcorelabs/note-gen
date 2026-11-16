@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { appDataDir } from '@tauri-apps/api/path';
+import { platform } from '@/lib/platform';
 import { getWorkspacePath } from "./workspace";
 
 const RESOLVED_IMAGE_SRC_RE = /^(?:https?:|data:|blob:|asset:|tauri:|file:)/i
@@ -23,7 +23,7 @@ function normalizeAppDataAssetPath(path: string) {
 }
 
 function getCachedAppDataDir() {
-  appDataDirPromise ||= appDataDir()
+  appDataDirPromise ||= platform.path.appDataDir()
   return appDataDirPromise
 }
 

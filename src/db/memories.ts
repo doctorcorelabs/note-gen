@@ -2,7 +2,7 @@ import { normalizeMemorySyncRecord } from '@/lib/memory/sync-record'
 import { fetchEmbedding, getEmbeddingModelDescriptor } from '@/lib/ai/embedding'
 import { invalidateMemoryCache } from '@/lib/memory/cache-version'
 import { enqueueAutoDataSync } from '@/lib/sync/auto-data-sync-queue'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb } from './index'
 import { getMemoryPolicy, initMemoryPolicyDb, type MemoryPolicy } from './memory-policy'
 
@@ -246,7 +246,7 @@ export async function initMemoriesDb() {
 
   await initMemoryPolicyDb()
 
-  const syncStore = await Store.load('store.json')
+  const syncStore = await platform.store.load('store.json')
   const syncInitialized = await syncStore.get<boolean>('memorySyncInitialized')
   if (!syncInitialized) {
     await syncStore.set('memorySyncInitialized', true)

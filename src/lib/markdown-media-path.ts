@@ -1,4 +1,4 @@
-import { readDir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 import emitter from '@/lib/emitter'
 import {
@@ -317,8 +317,8 @@ export function rewriteMarkdownMediaPaths(
 async function listWorkspaceMarkdownFiles(directory = ''): Promise<string[]> {
   const pathOptions = await getFilePathOptions(directory)
   const entries = pathOptions.baseDir
-    ? await readDir(pathOptions.path, { baseDir: pathOptions.baseDir })
-    : await readDir(pathOptions.path)
+    ? await platform.fs.readDir(pathOptions.path, { baseDir: pathOptions.baseDir })
+    : await platform.fs.readDir(pathOptions.path)
   const markdownFiles: string[] = []
 
   for (const entry of entries) {
@@ -336,16 +336,16 @@ async function listWorkspaceMarkdownFiles(directory = ''): Promise<string[]> {
 async function readMarkdownFile(path: string): Promise<string> {
   const pathOptions = await getFilePathOptions(path)
   return pathOptions.baseDir
-    ? await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-    : await readTextFile(pathOptions.path)
+    ? await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+    : await platform.fs.readTextFile(pathOptions.path)
 }
 
 async function writeMarkdownFile(path: string, content: string): Promise<void> {
   const pathOptions = await getFilePathOptions(path)
   if (pathOptions.baseDir) {
-    await writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+    await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
   } else {
-    await writeTextFile(pathOptions.path, content)
+    await platform.fs.writeTextFile(pathOptions.path, content)
   }
 }
 

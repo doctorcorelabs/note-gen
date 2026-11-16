@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getKnowledgeSource, getKnowledgeSources } from '@/db/knowledge'
 import { getSimilarDocuments } from '@/db/vector'
 import { fetchEmbedding, rerankDocuments } from '@/lib/ai'
@@ -156,7 +156,7 @@ async function searchOriginalKnowledge(
   const lexicalQuery = normalizedQuery.normalize('NFKC').toLowerCase()
   const exactIdentifier = getIdentifierTerms(normalizedQuery).includes(lexicalQuery)
     ? lexicalQuery : undefined
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const resultCount = options.limit ?? await store.get<number>('ragResultCount') ?? 5
   const similarityThreshold = await store.get<number>('ragSimilarityThreshold') ?? 0.25
   const settings = await getKnowledgeSettings()
@@ -351,7 +351,7 @@ export async function searchKnowledgeWithWiki(
   }
   const settings = await getWikiSettings(context.id)
   await assertCurrent()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const limit = options.limit ?? await store.get<number>('ragResultCount') ?? 5
   const hinted = options.sourceTypes?.length ? options.sourceTypes : inferSourceHints(query)
   const wikiOptions = { ...options, limit,

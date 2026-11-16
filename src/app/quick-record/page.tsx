@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { hasText, readText } from 'tauri-plugin-clipboard-api'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -227,7 +227,7 @@ export default function QuickRecordPage() {
                   const value = checked === true
                   setAutoRead(value)
                   try {
-                    const store = await Store.load('store.json')
+                    const store = await platform.store.load('store.json')
                     await store.set('autoReadClipboard', value)
                     await store.save()
                     if (value) await readClipboard()

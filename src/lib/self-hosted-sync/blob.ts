@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { readFile } from '@tauri-apps/plugin-fs'
-import { join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { getDb } from '@/db'
 import { authenticatedClient } from './profile'
 import { loadWorkspaceKey } from './crypto'
@@ -25,9 +24,9 @@ interface AssetUploadInput {
 
 export function uploadAsset(input: AssetUploadInput) {
   return withSelfHostedRequestScope(async signal => {
-    const absolutePath = await join(input.localRoot, input.relativePath)
+    const absolutePath = await platform.path.join(input.localRoot, input.relativePath)
     signal.throwIfAborted()
-    const plaintext = await readFile(absolutePath)
+    const plaintext = await platform.fs.readFile(absolutePath)
     signal.throwIfAborted()
     return uploadAssetBytes({ ...input, plaintext, signal })
   }, input.signal)

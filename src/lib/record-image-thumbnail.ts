@@ -1,4 +1,4 @@
-import { BaseDirectory, exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 
 const THUMBNAIL_DIR = 'thumbnail/records'
 const DEFAULT_THUMBNAIL_MAX_SIZE = 360
@@ -70,12 +70,12 @@ function getThumbnailPath(path: string, maxSize: number, extension: 'webp' | 'pn
 
 async function findExistingThumbnailPath(imagePath: string, maxSize: number) {
   const webpPath = getThumbnailPath(imagePath, maxSize, 'webp')
-  if (await exists(webpPath, { baseDir: BaseDirectory.AppData })) {
+  if (await platform.fs.exists(webpPath, { baseDir: BaseDirectory.AppData })) {
     return `/${webpPath}`
   }
 
   const pngPath = getThumbnailPath(imagePath, maxSize, 'png')
-  if (await exists(pngPath, { baseDir: BaseDirectory.AppData })) {
+  if (await platform.fs.exists(pngPath, { baseDir: BaseDirectory.AppData })) {
     return `/${pngPath}`
   }
 
@@ -83,11 +83,11 @@ async function findExistingThumbnailPath(imagePath: string, maxSize: number) {
 }
 
 async function ensureThumbnailDir() {
-  if (await exists(THUMBNAIL_DIR, { baseDir: BaseDirectory.AppData })) {
+  if (await platform.fs.exists(THUMBNAIL_DIR, { baseDir: BaseDirectory.AppData })) {
     return
   }
 
-  await mkdir(THUMBNAIL_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
+  await platform.fs.mkdir(THUMBNAIL_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
 }
 
 async function loadImage(blob: Blob) {
@@ -166,7 +166,7 @@ async function generateRecordImageThumbnail(imagePath: string, maxSize: number) 
 
   await ensureThumbnailDir()
 
-  const bytes = await readFile(imagePath, { baseDir: BaseDirectory.AppData })
+  const bytes = await platform.fs.readFile(imagePath, { baseDir: BaseDirectory.AppData })
   const blob = new Blob([bytes], { type: getMimeType(imagePath) })
   const { image, objectUrl } = await loadImage(blob)
 
@@ -178,7 +178,7 @@ async function generateRecordImageThumbnail(imagePath: string, maxSize: number) 
 
     const thumbnailPath = getThumbnailPath(imagePath, maxSize, thumbnail.extension)
     const arrayBuffer = await thumbnail.blob.arrayBuffer()
-    await writeFile(thumbnailPath, new Uint8Array(arrayBuffer), { baseDir: BaseDirectory.AppData })
+    await platform.fs.writeFile(thumbnailPath, new Uint8Array(arrayBuffer), { baseDir: BaseDirectory.AppData })
 
     return `/${thumbnailPath}`
   } finally {

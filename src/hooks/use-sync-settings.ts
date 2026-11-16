@@ -1,18 +1,19 @@
 'use client'
 
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { SyncPlatform } from '@/types/sync'
 
 // 缓存 Store 实例
-let storeInstance: Store | null = null
-let storePromise: Promise<Store> | null = null
+let storeInstance: StoreHandle | null = null
+let storePromise: Promise<StoreHandle> | null = null
 
-async function getStore(): Promise<Store> {
+async function getStore(): Promise<StoreHandle> {
   if (storeInstance) return storeInstance
   if (storePromise) return storePromise
 
-  storePromise = Store.load('store.json')
+  storePromise = platform.store.load('store.json')
   storeInstance = await storePromise
   return storeInstance
 }

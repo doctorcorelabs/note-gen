@@ -1,7 +1,6 @@
 import * as Y from 'yjs'
 import { invoke } from '@tauri-apps/api/core'
-import { BaseDirectory, exists, mkdir, readTextFile, writeFile } from '@tauri-apps/plugin-fs'
-import { join } from '@tauri-apps/api/path'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import emitter from '@/lib/emitter'
 import {
@@ -204,8 +203,8 @@ export async function loadSelfHostedNoteConflict(id: string): Promise<SelfHosted
   if (!row || !workspaceRootsReferToSameLocation(await getCurrentEditorWorkspaceRoot(), row.localRoot)) throw new Error(UNAVAILABLE)
   const portable = await invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: row.relativePath })
   if (portable.normalized !== row.relativePath) throw new Error(UNAVAILABLE)
-  const absolutePath = await join(row.localRoot, row.relativePath)
-  const localFileContent = await exists(absolutePath) ? await readTextFile(absolutePath) : null
+  const absolutePath = await platform.path.join(row.localRoot, row.relativePath)
+  const localFileContent = await platform.fs.exists(absolutePath) ? await platform.fs.readTextFile(absolutePath) : null
   const localMutationRevision = getEditorPathMutationRevision(row.relativePath, row.localRoot)
   let localContent = row.localSnapshot
   let rejectedContent: string | null = null
@@ -310,8 +309,8 @@ export async function resolveSelfHostedNoteConflict(
           [preview.workspaceId, preview.objectId, preview.id.startsWith('revision-conflict:') ? preview.id.slice('revision-conflict:'.length) : ''],
         )
         const backupPath = `self-hosted-conflict-backups/${crypto.randomUUID()}.json`
-        await mkdir('self-hosted-conflict-backups', { baseDir: BaseDirectory.AppData, recursive: true })
-        await writeFile(backupPath, new TextEncoder().encode(JSON.stringify({
+        await platform.fs.mkdir('self-hosted-conflict-backups', { baseDir: BaseDirectory.AppData, recursive: true })
+        await platform.fs.writeFile(backupPath, new TextEncoder().encode(JSON.stringify({
           version: 1, conflictId: preview.id, workspaceId: preview.workspaceId,
           relativePath: preview.relativePath, localContent: preview.localContent,
           localFileContent: preview.localFileContent, remoteContent: preview.remoteContent,

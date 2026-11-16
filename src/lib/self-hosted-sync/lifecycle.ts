@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getDb, initAllDatabases } from '@/db'
@@ -54,7 +54,7 @@ export async function refreshSelfHostedSyncRuntime(
   }
   if (target === 'selfHosted') report('workspace')
   useSyncStore.getState().setSelfHostedRuntimeReady(false)
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   // An explicit target is allowed only for the controlled switch attempt. On
   // startup, an interrupted attempt must keep every sync engine paused.
   const interrupted = target === undefined && Boolean(await store.get('platformSwitchRecovery'))

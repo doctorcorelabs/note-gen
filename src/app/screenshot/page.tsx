@@ -6,7 +6,7 @@ import { Image as TauriImage } from '@tauri-apps/api/image'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { save } from '@tauri-apps/plugin-dialog'
-import { writeFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { ArrowUpRight, Check, Circle, Copy, Download, MousePointer2, Pencil, Pin, Redo2, ScanLine, Square, Type, Undo2, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -220,7 +220,7 @@ export default function ScreenshotPage() {
           await invoke('set_desktop_screenshot_dialog_mode', { sessionId: context.sessionId, active: false })
         }
         if (path) {
-          await writeFile(path, png)
+          await platform.fs.writeFile(path, png)
           await invoke('cancel_desktop_screenshot', { sessionId: context.sessionId })
           completed = true
         }

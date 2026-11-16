@@ -5,7 +5,7 @@ import { ChartScatter, ListOrdered } from "lucide-react";
 import { Badge } from '@/components/ui/badge';
 import useVectorStore from '@/stores/vector';
 import useRagSettingsStore from '@/stores/ragSettings';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { useEffect, useState } from 'react';
 
 export function ModelSetting({ kind }: { kind?: 'embedding' | 'reranking' } = {}) {
@@ -16,7 +16,7 @@ export function ModelSetting({ kind }: { kind?: 'embedding' | 'reranking' } = {}
   const [configuredModels, setConfiguredModels] = useState({ embedding: false, reranking: false });
 
   useEffect(() => {
-    Store.load('store.json').then(async store => {
+    platform.store.load('store.json').then(async store => {
       const [embedding, reranking] = await Promise.all([
         store.get<string>('embeddingModel'),
         store.get<string>('rerankingModel')

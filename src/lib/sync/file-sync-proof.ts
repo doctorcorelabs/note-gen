@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import useSettingStore from '@/stores/setting'
 import type { SyncPlatform } from '@/types/sync'
 import { syncContentBytes } from './file-content'
@@ -42,7 +42,7 @@ export async function getFileSyncProofKey(path: string, platform: SyncPlatform):
 }
 
 export async function getFileSyncProof(key: string): Promise<FileSyncProof | null> {
-  const store = await Store.load('sync_file_proofs.json')
+  const store = await platform.store.load('sync_file_proofs.json')
   const proof = await store.get<FileSyncProof>(key)
     ?? (await store.get<Record<string, FileSyncProof>>('entries'))?.[key]
   return proof && /^[a-f0-9]{64}$/.test(proof.hash) && Number.isFinite(proof.updatedAt) ? proof : null
@@ -56,7 +56,7 @@ export async function recordFileSyncProof(
   const hash = await fileSyncContentHash(content)
   const operation = writes.then(async () => {
     if (!isCurrent()) return
-    const store = await Store.load('sync_file_proofs.json')
+    const store = await platform.store.load('sync_file_proofs.json')
     if (!isCurrent()) return
     await store.set(key, { hash, version, updatedAt: Date.now() } satisfies FileSyncProof)
     await store.save()

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, type DragEvent, type ReactNode } from 'react'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { motion } from 'framer-motion'
 import { create } from 'zustand'
 
@@ -89,7 +89,7 @@ export const useStatusBarOrder = create<StatusBarOrderState>((set, get) => ({
     if (loadPromise) return loadPromise
     loadPromise = (async () => {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const saved = await store.get<string[]>(ORDER_KEY)
         if (Array.isArray(saved)) {
           set({ savedOrder: saved.filter(id => typeof id === 'string') })
@@ -120,7 +120,7 @@ export const useStatusBarOrder = create<StatusBarOrderState>((set, get) => ({
     if (!savedOrder) { state.end(); return }
     set({ savedOrder, dragging: null, over: null, previewOrder: null })
     savePromise = savePromise.catch(() => {}).then(async () => {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set(ORDER_KEY, savedOrder)
       await store.save()
     })

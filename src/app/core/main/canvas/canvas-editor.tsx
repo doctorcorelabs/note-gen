@@ -23,7 +23,7 @@ import {
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js'
 import { toPng, toSvg } from 'html-to-image'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { BaseDirectory, exists, mkdir, readFile, readTextFile, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -1215,19 +1215,19 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         })
         if (!sourcePath || Array.isArray(sourcePath)) return
         imageName = sourcePath.split(/[\\/]/).pop() || t('nodes.image')
-        imageData = await readFile(sourcePath)
+        imageData = await platform.fs.readFile(sourcePath)
       }
 
       const sourceExtension = imageName.split('.').pop()?.toLowerCase()
       const extension = sourceExtension === 'jpeg' ? 'jpg' : sourceExtension || 'png'
       const relativePath = `画布资源/${crypto.randomUUID()}.${extension}`
       const directoryOptions = await getFilePathOptions('画布资源')
-      await mkdir(
+      await platform.fs.mkdir(
         directoryOptions.path,
         directoryOptions.baseDir ? { baseDir: directoryOptions.baseDir, recursive: true } : { recursive: true }
       )
       const targetOptions = await getFilePathOptions(relativePath)
-      await writeFile(
+      await platform.fs.writeFile(
         targetOptions.path,
         imageData,
         targetOptions.baseDir ? { baseDir: targetOptions.baseDir } : undefined
@@ -1316,8 +1316,8 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         try {
           const options = await getFilePathOptions(filePath)
           const content = options.baseDir
-            ? await readTextFile(options.path, { baseDir: options.baseDir })
-            : await readTextFile(options.path)
+            ? await platform.fs.readTextFile(options.path, { baseDir: options.baseDir })
+            : await platform.fs.readTextFile(options.path)
           return {
             name: filePath.split('/').pop() || filePath,
             content,
@@ -1425,12 +1425,12 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         const extension = image.type.split('/')[1]?.replace('svg+xml', 'svg') || 'png'
         const relativePath = `画布资源/${crypto.randomUUID()}.${extension}`
         const directoryOptions = await getFilePathOptions('画布资源')
-        await mkdir(
+        await platform.fs.mkdir(
           directoryOptions.path,
           directoryOptions.baseDir ? { baseDir: directoryOptions.baseDir, recursive: true } : { recursive: true }
         )
         const targetOptions = await getFilePathOptions(relativePath)
-        await writeFile(
+        await platform.fs.writeFile(
           targetOptions.path,
           new Uint8Array(await image.arrayBuffer()),
           targetOptions.baseDir ? { baseDir: targetOptions.baseDir } : undefined
@@ -1932,7 +1932,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         defaultPath: `${safeTitle}.${extension}`,
       })
       if (!path) return
-      await writeFile(path, bytes)
+      await platform.fs.writeFile(path, bytes)
       toast.success(t('exportSuccess'))
     } catch (error) {
       console.error('Failed to export canvas:', error)
@@ -1947,10 +1947,10 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
     try {
       const bytes = await renderCanvasImage('png', 2)
       const fileName = `canvas-${crypto.randomUUID()}.png`
-      if (!await exists('image', { baseDir: BaseDirectory.AppData })) {
-        await mkdir('image', { baseDir: BaseDirectory.AppData, recursive: true })
+      if (!await platform.fs.exists('image', { baseDir: BaseDirectory.AppData })) {
+        await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData, recursive: true })
       }
-      await writeFile(`image/${fileName}`, bytes, { baseDir: BaseDirectory.AppData })
+      await platform.fs.writeFile(`image/${fileName}`, bytes, { baseDir: BaseDirectory.AppData })
       const projectTitle = projects.find(project => project.id === canvasId)?.title || t('untitled')
       const tagId = await getDefaultRecordSaveTagId()
       await insertMark({
@@ -2004,7 +2004,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       const content = format === 'canvas'
         ? serializeCanvasProject({ title, canvasType: project?.canvasType || 'blank', document: currentDocument })
         : canvasDocumentToMermaid(currentDocument)
-      await writeTextFile(path, content)
+      await platform.fs.writeTextFile(path, content)
       toast.success(t('exportSuccess'))
     } catch (error) {
       console.error('Failed to export canvas source:', error)
@@ -2032,7 +2032,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
       })
       if (!path || Array.isArray(path)) return
-      applyImportedContent(await readTextFile(path))
+      applyImportedContent(await platform.fs.readTextFile(path))
     } catch (error) {
       console.error('Failed to import canvas:', error)
       toast.error(t('import.error'))

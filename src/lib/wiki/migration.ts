@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getWikiMeta, setWikiMeta } from '@/db/wiki'
 import type { WikiContext, WikiSettings } from '@/types/wiki'
 import { getLegacyWikiContextId, getWikiContext } from './context'
@@ -13,7 +13,7 @@ export async function ensureWikiContextMigration(): Promise<void> {
   const pending = migrations.get(context.workspaceKey)
   if (pending) return pending
   const operation = (async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const contexts = await store.get<Record<string, WikiContext>>(LAST_CONTEXTS) || {}
     const previous = contexts[context.workspaceKey]
     if (previous?.id === context.id && await getWikiMeta<boolean>(context.id, 'markdown-context-migrated')) return

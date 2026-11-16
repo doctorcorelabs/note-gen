@@ -18,7 +18,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { AiConfig } from "../config";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import emitter from "@/lib/emitter";
 import { useTranslations } from "next-intl";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -41,7 +41,7 @@ export default function ModelSelect(
   }
 
   async function initModelList() {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     let model: AiConfig | undefined
     
     if (aiConfig) {
@@ -65,7 +65,7 @@ export default function ModelSelect(
     
     // 如果没有传入aiConfig，则从store中设置model值
     if (!aiConfig && setModel) {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const aiModelList = await store.get<AiConfig[]>('aiModelList')
       const modelConfig = aiModelList?.find((item: AiConfig) => item.key === currentAi)
       if (modelConfig) {

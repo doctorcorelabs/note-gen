@@ -3,7 +3,7 @@ import { clear, hasImage, hasText, readImageBase64, readText } from "tauri-plugi
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { BaseDirectory, copyFile, exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { platform, BaseDirectory } from '@/lib/platform';
 import useSettingStore from "@/stores/setting";
 import useMarkStore from "@/stores/mark";
 import { v4 as uuid } from 'uuid'
@@ -44,7 +44,7 @@ export function Clipboard() {
   async function handleImage() {
     const image = await readImageBase64()
     const uint8Array = Uint8Array.from(atob(image), c => c.charCodeAt(0))
-    await writeFile('clipboard.png', uint8Array, { baseDir: BaseDirectory.AppData })
+    await platform.fs.writeFile('clipboard.png', uint8Array, { baseDir: BaseDirectory.AppData })
     setFileSize(convertBytesToSize(uint8Array.length))
     setImage(`data:image/png;base64, ${image}`)
   }
@@ -61,11 +61,11 @@ export function Clipboard() {
     const tagId = await getDefaultRecordSaveTagId()
     // 获取文件后缀
     addQueue({ queueId, tagId, progress: t('record.mark.progress.saveImage'), type: 'image', startTime: Date.now() })
-    const isImageFolderExists = await exists('image', { baseDir: BaseDirectory.AppData})
+    const isImageFolderExists = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData})
     if (!isImageFolderExists) {
-      await mkdir('image', { baseDir: BaseDirectory.AppData})
+      await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData})
     }
-    await copyFile('clipboard.png', `image/${queueId}.png`, { fromPathBaseDir: BaseDirectory.AppData, toPathBaseDir: BaseDirectory.AppData})
+    await platform.fs.copyFile('clipboard.png', `image/${queueId}.png`, { fromPathBaseDir: BaseDirectory.AppData, toPathBaseDir: BaseDirectory.AppData})
     let content = ''
     let desc = ''
     
@@ -75,7 +75,7 @@ export function Clipboard() {
       content = ''
       desc = ''
     } else {
-      const file = await readFile(`image/${queueId}.png`, { baseDir: BaseDirectory.AppData })
+      const file = await platform.fs.readFile(`image/${queueId}.png`, { baseDir: BaseDirectory.AppData })
       const result = await recognizeImageWithFallback({
         imagePath: `image/${queueId}.png`,
         base64: `data:image/png;base64,${Buffer.from(file).toString('base64')}`,
@@ -96,7 +96,7 @@ export function Clipboard() {
       url: `${queueId}.png`,
       desc,
     }
-    const file = await readFile(`image/${queueId}.png`, { baseDir: BaseDirectory.AppData  })
+    const file = await platform.fs.readFile(`image/${queueId}.png`, { baseDir: BaseDirectory.AppData  })
     if (githubUsername) {
       setQueue(queueId, { progress: t('record.mark.progress.uploadImage') });
       const res = await uploadFile({

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
-import { stat } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { FileImage, HardDrive, Ruler } from 'lucide-react'
 import { StatusBarItem } from '../../status-bar-order'
@@ -31,9 +31,9 @@ export function ImageFooter({ filePath, imageWidth, imageHeight, embedded = fals
       
       let fileStat
       if (workspace.isCustom) {
-        fileStat = await stat(pathOptions.path)
+        fileStat = await platform.fs.stat(pathOptions.path)
       } else {
-        fileStat = await stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+        fileStat = await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
 
       // 格式化文件大小

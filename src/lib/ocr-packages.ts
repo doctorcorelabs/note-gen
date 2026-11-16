@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 const ACTIVE_OCR_PROVIDER_STORE_KEY = 'activeOcrProviderId'
 
@@ -16,7 +16,7 @@ function isString(value: unknown): value is string {
 }
 
 async function getStore() {
-  return Store.load('store.json')
+  return platform.store.load('store.json')
 }
 
 export async function getInstalledOcrProviders(): Promise<OcrProviderPackage[]> {

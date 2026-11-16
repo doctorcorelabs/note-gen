@@ -22,7 +22,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { useRef } from "react";
 import { ScreenshotImage } from "note-gen/screenshot"
-import { BaseDirectory, exists, mkdir, writeFile } from "@tauri-apps/plugin-fs"
+import { platform, BaseDirectory } from "@/lib/platform"
 import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 import './crop.css'
@@ -383,13 +383,13 @@ export function ControlScan() {
       const queueId = uuid()
       const filename = `${queueId}.png`
       const bytes = await getCroppedPngBytes(cropperRef.current)
-      const isScreenshotFolderExists = await exists(SCREENSHOT_DIR, { baseDir: BaseDirectory.AppData})
+      const isScreenshotFolderExists = await platform.fs.exists(SCREENSHOT_DIR, { baseDir: BaseDirectory.AppData})
 
       if (!isScreenshotFolderExists) {
-        await mkdir(SCREENSHOT_DIR, { baseDir: BaseDirectory.AppData})
+        await platform.fs.mkdir(SCREENSHOT_DIR, { baseDir: BaseDirectory.AppData})
       }
 
-      await writeFile(`${SCREENSHOT_DIR}/${filename}`, bytes, {
+      await platform.fs.writeFile(`${SCREENSHOT_DIR}/${filename}`, bytes, {
         baseDir: BaseDirectory.AppData
       })
 

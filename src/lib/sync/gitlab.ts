@@ -4,7 +4,7 @@ import { fetchRemoteRead, recoverRemoteRead, recoverRemoteMutation } from './rem
 import { gitBlobVersion } from './remote-content-cache'
 import { syncStaleError } from './sync-stale-error'
 import { toast } from '@/hooks/use-toast';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { v4 as uuid } from 'uuid';
 import { fetch, Proxy } from '@tauri-apps/plugin-http';
 import { fetch as encodeFetch } from './encode-fetch'
@@ -51,7 +51,7 @@ export async function getDefaultBranch(repo: string) {
 }
 
 export async function getGitlabApiBaseUrl(): Promise<string> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const instanceType = await store.get<GitlabInstanceType>('gitlabInstanceType') || GitlabInstanceType.OFFICIAL;
 
   if (instanceType === GitlabInstanceType.SELF_HOSTED) {
@@ -78,7 +78,7 @@ export async function getGitlabApiBaseUrl(): Promise<string> {
 
 // 获取通用请求头
 async function getCommonHeaders(): Promise<any> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('gitlabAccessToken');
 
   if (!accessToken) {
@@ -95,7 +95,7 @@ async function getCommonHeaders(): Promise<any> {
 
 // 获取代理配置
 async function getProxyConfig(): Promise<Proxy | undefined> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const proxyUrl = await store.get<string>('proxy');
   return proxyUrl ? { all: proxyUrl } : undefined;
 }
@@ -185,7 +185,7 @@ export async function uploadFile({
   beforeWrite?: () => Promise<void>;
 }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const gitlabUsername = await store.get<string>('gitlabUsername');
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
     
@@ -251,7 +251,7 @@ export async function uploadFile({
  * @param params 查询参数
  */
 export async function getDirectoryFiles({ path, repo }: { path: string; repo: string }): Promise<RemoteDirectoryEntry[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const projectId = await store.get<string>(`gitlab_${repo}_project_id`)
   if (!projectId) throw new Error('GitLab sync is not configured')
   const branch = await getDefaultBranch(repo)
@@ -293,7 +293,7 @@ export async function getDirectoryFiles({ path, repo }: { path: string; repo: st
 
 export async function getFiles({ path, repo }: { path: string; repo: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
 
     if (!projectId) {
@@ -387,7 +387,7 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
  */
 export async function deleteFile({ path, sha, repo, beforeWrite }: { path: string; sha?: string; repo: string; beforeWrite?: () => Promise<void> }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
     if (!projectId) throw new Error('项目 ID 未配置');
     const baseUrl = await getGitlabApiBaseUrl();
@@ -420,7 +420,7 @@ export async function deleteFile({ path, sha, repo, beforeWrite }: { path: strin
  */
 export async function getFileCommits({ path, repo }: { path: string; repo: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
     
     if (!projectId) {
@@ -462,7 +462,7 @@ export async function getFileCommits({ path, repo }: { path: string; repo: strin
  */
 export async function getFileContent({ path, ref, repo }: { path: string; ref?: string; repo: string }) {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
     
     if (!projectId) {
@@ -508,7 +508,7 @@ export async function getFileContent({ path, ref, repo }: { path: string; ref?: 
  */
 export async function getUserInfo(token?: string): Promise<GitlabUserInfo> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const accessToken = token || await store.get<string>('gitlabAccessToken');
     
     if (!accessToken) {
@@ -560,7 +560,7 @@ export async function getUserInfo(token?: string): Promise<GitlabUserInfo> {
  */
 export async function checkSyncProjectState(name: string): Promise<GitlabProjectInfo | null> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const gitlabUsername = await store.get<string>('gitlabUsername');
     
     if (!gitlabUsername) {
@@ -607,7 +607,7 @@ export async function checkSyncProjectState(name: string): Promise<GitlabProject
 }
 
 export async function listUserRepositories(): Promise<string[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const username = await store.get<string>('gitlabUsername')
   const baseUrl = await getGitlabApiBaseUrl()
   const headers = await getCommonHeaders()
@@ -658,7 +658,7 @@ export async function createSyncProject(name: string, isPrivate: boolean = true)
       const project = await response.json() as GitlabProjectInfo;
       
       // 保存项目 ID
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       await store.set(`gitlab_${name}_project_id`, project.id.toString());
       await store.save();
       
@@ -686,7 +686,7 @@ export async function createSyncProject(name: string, isPrivate: boolean = true)
 export async function mutateFileConditionally(path: string, repo: string, condition: RemoteWriteCondition, content?: Uint8Array, beforeWrite?: () => Promise<void>) {
   if (content) content = Uint8Array.from(content)
   condition = { ...condition }
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const projectId = await store.get<string>(`gitlab_${repo}_project_id`)
   if (!projectId) throw new Error('GitLab sync is not configured')
   const base = await getGitlabApiBaseUrl()

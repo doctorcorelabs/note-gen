@@ -1,5 +1,6 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { assertWikiContextCurrent, captureWikiWorkspaceGuard, getWikiContext, getWikiDeviceId } from './context'
 import { emitWikiUpdated, setWikiMeta } from '@/db/wiki'
 import { WIKI_ROOT_FOLDER, type WikiScope, type WikiScopeKind, type WikiSettings, type WikiSourceReference, type WikiSharedSettings } from '@/types/wiki'
@@ -10,7 +11,7 @@ const SETTINGS_KEY = 'wikiSettingsByContext'
 let initialization: Promise<void> | null = null
 let mutationQueue: Promise<void> = Promise.resolve()
 
-async function migrateWorkspaceModels(store: Store) {
+async function migrateWorkspaceModels(store: StoreHandle) {
   if (await store.get<boolean>('wikiWorkspaceModelsInitialized')) return
   const modelId = await store.get<string>('wikiModel') || null
   const contexts = await store.get<Record<string, Partial<WikiSettings>>>(SETTINGS_KEY) || {}
@@ -28,7 +29,7 @@ async function migrateWorkspaceModels(store: Store) {
 /** Run before the legacy vector runtime starts, preserving existing users' choices. */
 export function initializeWikiPreferences(): Promise<void> {
   if (!initialization) initialization = (async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await migrateWorkspaceModels(store)
     if (await store.get<boolean>('wikiPreferencesInitialized')) {
       if (await store.get<boolean>('wikiSemanticSearchEnabled') === undefined) {
@@ -55,7 +56,7 @@ export function initializeWikiPreferences(): Promise<void> {
 
 export async function getWikiSettings(contextId?: string): Promise<WikiSettings> {
   await initializeWikiPreferences()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const id = contextId ?? (await getWikiContext()).id
   const contexts = await store.get<Record<string, Partial<WikiSettings>>>(SETTINGS_KEY) || {}
   const stored = contexts[id] || {}
@@ -93,7 +94,7 @@ async function currentMutation(contextId?: string) {
 
 async function writeSettings(patch: Partial<WikiSettings>, contextId: string, sync: boolean, assertCurrent: () => Promise<void>) {
   await assertCurrent()
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const contexts = await store.get<Record<string, Partial<WikiSettings>>>(SETTINGS_KEY) || {}
   if (patch.language !== undefined && patch.languageClock === undefined) {
     const device = await getWikiDeviceId()
@@ -188,7 +189,7 @@ export async function addWikiScope(
       clock: { ...previous?.clock, [device]: (previous?.clock[device] ?? 0) + 1 } }
     await writeSettings({ scopes: [...settings.scopes.filter(item => item.key !== key), scope] }, id, true, assertCurrent)
     if (input.kind === 'article' && input.effect !== 'exclude') {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const generated = await store.get<Record<string, string[]>>('wikiGeneratedNotes') || {}
       await assertCurrent()
       await store.set('wikiGeneratedNotes', { ...generated, [id]: (generated[id] || []).filter(path => path !== scopeId) })
@@ -322,14 +323,14 @@ export async function mergeWikiSyncedSettings(contextId: string, incoming: WikiS
 
 export async function getWikiGeneratedNotes(contextId?: string): Promise<string[]> {
   const id = contextId ?? (await getWikiContext()).id
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   return (await store.get<Record<string, string[]>>('wikiGeneratedNotes'))?.[id] ?? []
 }
 
 export async function excludeWikiGeneratedNote(path: string, contextId?: string) {
   const { id, assertCurrent } = await currentMutation(contextId)
   await serializeMutation(async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const notes = await store.get<Record<string, string[]>>('wikiGeneratedNotes') || {}
     await assertCurrent()
     await store.set('wikiGeneratedNotes', { ...notes, [id]: [...new Set([...(notes[id] || []), normalizeWikiScopeId(path)])] })

@@ -4,7 +4,7 @@ import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from 'next-intl';
 import useSettingStore from "@/stores/setting";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OpenBroswer } from "@/components/open-broswer";
 import dayjs from "dayjs";
@@ -85,7 +85,7 @@ export function GithubImageHosting() {
     const request = ++requestRef.current
     const isCurrent = () => scopeActive() && requestRef.current === request
     try {
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const accessToken = await store.get<string>('githubImageAccessToken')
       if (!isCurrent()) return
       if (!accessToken?.trim()) {
@@ -152,7 +152,7 @@ export function GithubImageHosting() {
   useEffect(() => {
     let cancelled = false
     async function init() {
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const token = await store.get<string>('githubImageAccessToken')
       if (cancelled) return
       if (token) {

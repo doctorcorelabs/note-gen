@@ -1,7 +1,7 @@
 'use client'
 
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useEffect, useState } from 'react'
 
 const IMAGE_LOAD_TIMEOUT_MS = 5000
@@ -46,7 +46,7 @@ export default function PrintPage() {
         throw new Error('打印内容不存在或已经过期')
       }
 
-      const store = await Store.load(PRINT_EXPORT_STORE)
+      const store = await platform.store.load(PRINT_EXPORT_STORE)
       const printDocument = await store.get<TauriPrintDocument>(key)
       await store.delete(key)
       await store.save()

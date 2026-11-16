@@ -1,4 +1,4 @@
-import { BaseDirectory, readTextFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { createHash } from 'crypto'
 import { getDb } from '@/db'
 import { getAllMarks, getMarkById, type Mark } from '@/db/marks'
@@ -10,7 +10,6 @@ import { parseKnowledgeSourceKey } from '@/types/knowledge'
 import { getFilePathOptions } from '@/lib/workspace'
 import { recordMatchesTag, recordTagIds } from '@/lib/record-tags'
 import { enqueueAutoDataSync } from '@/lib/sync/auto-data-sync-queue'
-import { Store } from '@tauri-apps/plugin-store'
 import { getWikiGeneratedNotes, getWikiSettings, isWikiArticlePathSelected, normalizeWikiScopeId } from './settings'
 import { DEFAULT_EXCLUDED_RAG_PATHS, isPathAllowedForRag } from '@/lib/rag-retrieval-policy'
 import { getKnowledgeSettings } from '@/lib/knowledge-settings'
@@ -126,8 +125,8 @@ export async function getWikiSourceDocument(sourceKey: string): Promise<WikiSour
   try {
     const options = await getFilePathOptions(path)
     const content = normalizeSourceContent(options.baseDir === undefined
-      ? await readTextFile(options.path)
-      : await readTextFile(options.path, { baseDir: options.baseDir || BaseDirectory.AppData }))
+      ? await platform.fs.readTextFile(options.path)
+      : await platform.fs.readTextFile(options.path, { baseDir: options.baseDir || BaseDirectory.AppData }))
     return {
       source: {
         sourceKey: `article:${path}`,
@@ -189,7 +188,7 @@ export async function resolveWikiSourceReference(reference: WikiSourceReference)
 /** Shared by source discovery and folder statistics, including derived-document exclusions. */
 export async function collectWikiArticleSourceDocuments(paths: string[], contextId?: string): Promise<WikiSourceDocument[]> {
   const [generated, store, settings, knowledge] = await Promise.all([
-    getWikiGeneratedNotes(contextId), Store.load('store.json'), getWikiSettings(contextId), getKnowledgeSettings(),
+    getWikiGeneratedNotes(contextId), platform.store.load('store.json'), getWikiSettings(contextId), getKnowledgeSettings(),
   ])
   if (!knowledge.enabledSourceTypes.includes('article')) return []
   const excludedPaths = await store.get<string[]>('ragExcludedPaths') ?? DEFAULT_EXCLUDED_RAG_PATHS
@@ -229,7 +228,7 @@ export async function isWikiSourceDocumentAllowed(document: WikiSourceDocument, 
   if (document.source.sourceType !== 'article') return true
   const path = document.source.locator.filePath || document.source.sourceKey.replace(/^article:/, '')
   if (document.derived || path === WIKI_ROOT_FOLDER || path.startsWith(`${WIKI_ROOT_FOLDER}/`)) return false
-  const [store, generated, settings] = await Promise.all([Store.load('store.json'), getWikiGeneratedNotes(contextId), getWikiSettings(contextId)])
+  const [store, generated, settings] = await Promise.all([platform.store.load('store.json'), getWikiGeneratedNotes(contextId), getWikiSettings(contextId)])
   const excludedPaths = await store.get<string[]>('ragExcludedPaths') ?? DEFAULT_EXCLUDED_RAG_PATHS
   const excludedFiles = await store.get<string[]>('vectorExcludedFiles') ?? []
   const explicitlySelected = settings.scopes.some(scope => scope.enabled && scope.effect !== 'exclude' && scope.kind === 'article' && scope.id === normalizeWikiScopeId(path))

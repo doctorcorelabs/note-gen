@@ -1,6 +1,5 @@
-import { exists, lstat } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
-import { Store } from '@tauri-apps/plugin-store'
 import emitter from '@/lib/emitter'
 import { getFilePathOptions } from '@/lib/workspace'
 import type { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
@@ -65,7 +64,7 @@ function readMoves(value: unknown): PathMove[] {
 
 /** Keep pending operations bound to the original workspace and remote account. */
 async function getMoveContext(): Promise<MoveContext | null> {
-  const settings = await Store.load('store.json')
+  const settings = await platform.store.load('store.json')
   const configuration = await getPathMoveConfiguration()
   if (!configuration) return null
   const { provider } = configuration
@@ -99,7 +98,7 @@ export async function getWorkspacePathMoveContext(): Promise<string | null> {
 }
 
 async function assertContext(context: MoveContext): Promise<void> {
-  const settings = await Store.load('store.json')
+  const settings = await platform.store.load('store.json')
   if (context.key !== await getWorkspacePathMoveContext() || await settings.get('platformSwitchRecovery')) {
     throw syncStaleError({ stage: 'apply', check: 'configuration' })
   }
@@ -107,7 +106,7 @@ async function assertContext(context: MoveContext): Promise<void> {
 
 async function localExists(path: string): Promise<boolean> {
   const options = await getFilePathOptions(path)
-  return exists(options.path, { baseDir: options.baseDir })
+  return platform.fs.exists(options.path, { baseDir: options.baseDir })
 }
 
 function destination(entry: PathMove, later: PathMove[]): string {
@@ -121,7 +120,7 @@ function pathAfterMoves(path: string, later: PathMove[]): string {
 
 async function reportMove(context: MoveContext, path: string, error?: unknown): Promise<void> {
   if (context.key !== await getWorkspacePathMoveContext()) return
-  const settings = await Store.load('store.json')
+  const settings = await platform.store.load('store.json')
   const workspacePath = (await settings.get<string>('workspacePath') || '').trim().replace(/\\/g, '/').replace(/\/+$/, '')
   emitter.emit('sync-directory-completed', {
     path, workspacePath, provider: context.provider, success: error === undefined,
@@ -140,7 +139,7 @@ export async function withWorkspacePathMoves<T>(
     const context = await getMoveContext()
     if (!context) return { value: await move(), context: null }
     await assertContext(context)
-    const journal = await Store.load(context.journalName)
+    const journal = await platform.store.load(context.journalName)
     const previous = readMoves(await journal.get(context.key))
     const additions: PathMove[] = []
     for (const { source, target } of moves) {
@@ -152,7 +151,7 @@ export async function withWorkspacePathMoves<T>(
         await invoke('self_hosted_portable_path', { relativePath: target })
       }
       const options = await getFilePathOptions(source)
-      const info = await lstat(options.path, { baseDir: options.baseDir })
+      const info = await platform.fs.lstat(options.path, { baseDir: options.baseDir })
       if (info.isSymlink || !(info.isFile || info.isDirectory)) continue
       additions.push({
         id: crypto.randomUUID(), source, target, ready: false,
@@ -216,7 +215,7 @@ export function retryWorkspacePathMoves(): Promise<void> {
     const context = await getMoveContext()
     if (!context) return
     await assertContext(context)
-    const journal = await Store.load(context.journalName)
+    const journal = await platform.store.load(context.journalName)
     const entries = readMoves(await journal.get(context.key))
     const hadMoves = entries.length > 0
     while (entries.length) {
@@ -342,13 +341,13 @@ export function resumeWorkspacePathMoves(): void {
 export async function getPendingWorkspacePathMoves(): Promise<Array<{ source: string; target: string }>> {
   const context = await getMoveContext()
   if (!context) return []
-  const journal = await Store.load(context.journalName)
+  const journal = await platform.store.load(context.journalName)
   return readMoves(await journal.get(context.key)).map(({ source, target }) => ({ source, target }))
 }
 
 /** Inspect the destination's dormant journal before an authoritative switch. */
 export async function hasPendingSelfHostedWorkspacePathMoves(workspaceIds: string[], profileId: string) {
-  const journal = await Store.load('workspace_path_moves.json')
+  const journal = await platform.store.load('workspace_path_moves.json')
   for (const [key, value] of await journal.entries()) {
     let context: unknown
     try { context = JSON.parse(key) as unknown } catch { continue }

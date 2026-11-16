@@ -14,9 +14,8 @@ import { isSyncTextPath } from '@/lib/sync/file-content'
 import { sanitizeFilePath, hasInvalidFileNameChars } from '@/lib/sync/filename-utils'
 import { getCurrentFolder, computedParentPath } from '@/lib/path'
 import useVectorStore from './vector'
-import { join, appDataDir } from '@tauri-apps/api/path'
-import { BaseDirectory, DirEntry, exists, mkdir, readDir, readTextFile, writeTextFile, stat } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import type { DirEntry, StoreHandle } from '@/lib/platform'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { cloneDeep, uniq } from 'lodash-es'
 import { create } from 'zustand'
 import {
@@ -68,7 +67,7 @@ type ArticleSyncListenerGlobal = typeof globalThis & {
 }
 
 // 缓存 Store 实例，避免每次都重新加载
-let storeInstance: Store | null = null
+let storeInstance: StoreHandle | null = null
 type PendingArticleSave = {
   timer: ReturnType<typeof setTimeout> | null
   content: string
@@ -257,9 +256,9 @@ async function withRemoteTimeout<T>(promise: Promise<T>, path: string): Promise<
   }
 }
 
-async function getStore(): Promise<Store> {
+async function getStore(): Promise<StoreHandle> {
   if (!storeInstance) {
-    storeInstance = await Store.load('store.json')
+    storeInstance = await platform.store.load('store.json')
   }
   return storeInstance
 }
@@ -2364,17 +2363,17 @@ const useArticleStore = create<NoteState>((set, get) => ({
     for (const entry of tree) {
       // 跳过非本地文件（远程同步文件）
       if (entry.isFile && entry.isLocale) {
-        const filePath = await join(basePath, entry.name)
+        const filePath = await platform.path.join(basePath, entry.name)
         try {
           let fileStat
           if (workspace.isCustom) {
             // 自定义工作区，使用绝对路径
-            fileStat = await stat(filePath)
+            fileStat = await platform.fs.stat(filePath)
           } else {
             // 默认工作区，使用AppData路径
             const relPath = await toWorkspaceRelativePath(filePath)
             const pathOptions = await getFilePathOptions(relPath)
-            fileStat = await stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+            fileStat = await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
           }
           entry.createdAt = fileStat.birthtime?.toISOString()
           entry.modifiedAt = fileStat.mtime?.toISOString()
@@ -2383,7 +2382,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
           // 静默失败，不阻塞排序功能
         }
       } else if (entry.isDirectory && entry.children) {
-        const dirPath = await join(basePath, entry.name)
+        const dirPath = await platform.path.join(basePath, entry.name)
         await get().updateFileStats(dirPath, entry.children)
       }
     }
@@ -2407,7 +2406,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
     // 加载统计信息
     const workspace = await getWorkspacePath()
     // 使用正确的基础路径
-    const basePath = workspace.isCustom ? workspace.path : await join(await appDataDir(), 'article')
+    const basePath = workspace.isCustom ? workspace.path : await platform.path.join(await platform.path.appDataDir(), 'article')
     await get().updateFileStats(basePath, fileTree)
     set({ fileTree: preservePendingFileTreeRenameRows(fileTree) }) // 触发重新渲染
   },
@@ -2453,15 +2452,15 @@ const useArticleStore = create<NoteState>((set, get) => ({
     // 确保工作区目录存在
     if (workspace.isCustom) {
       // 自定义工作区
-      const isWorkspaceExists = await exists(workspace.path)
+      const isWorkspaceExists = await platform.fs.exists(workspace.path)
       if (!isWorkspaceExists) {
-        await mkdir(workspace.path)
+        await platform.fs.mkdir(workspace.path)
       }
     } else {
       // 默认工作区
-      const isArticleDir = await exists('article', { baseDir: BaseDirectory.AppData })
+      const isArticleDir = await platform.fs.exists('article', { baseDir: BaseDirectory.AppData })
       if (!isArticleDir) {
-        await mkdir('article', { baseDir: BaseDirectory.AppData })
+        await platform.fs.mkdir('article', { baseDir: BaseDirectory.AppData })
       }
     }
 
@@ -2469,7 +2468,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
     let dirs: DirTree[] = []
     if (workspace.isCustom) {
       // 自定义工作区
-      dirs = (await readDir(workspace.path))
+      dirs = (await platform.fs.readDir(workspace.path))
         .filter(file => file.name !== '.DS_Store' && !file.name.startsWith('.')).map(file => ({
           ...file,
           isEditing: false,
@@ -2483,7 +2482,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         }))
     } else {
       // 默认工作区
-      dirs = (await readDir('article', { baseDir: BaseDirectory.AppData }))
+      dirs = (await platform.fs.readDir('article', { baseDir: BaseDirectory.AppData }))
         .filter(file => file.name !== '.DS_Store' && !file.name.startsWith('.')).map(file => ({
           ...file,
           isEditing: false,
@@ -2510,7 +2509,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
     // 递归加载已展开文件夹的子内容
     async function loadFolderChildren(workspace: any, folder: DirTree, parentPath: string = '') {
       const folderPath = parentPath ? `${parentPath}/${folder.name}` : folder.name
-      const fullPath = await join(workspace.path, folderPath)
+      const fullPath = await platform.path.join(workspace.path, folderPath)
       
       let children: DirTree[] = []
       
@@ -2518,11 +2517,11 @@ const useArticleStore = create<NoteState>((set, get) => ({
       let dirExists = false
       try {
         if (workspace.isCustom) {
-          dirExists = await exists(fullPath)
+          dirExists = await platform.fs.exists(fullPath)
         } else {
           const dirRelative = await toWorkspaceRelativePath(fullPath)
           const pathOptions = await getFilePathOptions(dirRelative)
-          dirExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          dirExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
         }
       } catch {
         dirExists = false
@@ -2532,7 +2531,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
       if (dirExists) {
         try {
           if (workspace.isCustom) {
-            children = (await readDir(fullPath))
+            children = (await platform.fs.readDir(fullPath))
               .filter(file => file.name !== '.DS_Store' && !file.name.startsWith('.')).map(file => ({
                 ...file,
                 parent: folder,
@@ -2547,7 +2546,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
           } else {
             const dirRelative = await toWorkspaceRelativePath(fullPath)
             const pathOptions = await getFilePathOptions(dirRelative)
-            children = (await readDir(pathOptions.path, { baseDir: pathOptions.baseDir }))
+            children = (await platform.fs.readDir(pathOptions.path, { baseDir: pathOptions.baseDir }))
               .filter(file => file.name !== '.DS_Store' && !file.name.startsWith('.')).map(file => ({
                 ...file,
                 parent: folder,
@@ -2813,7 +2812,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
     }
     
     // 尝试加载本地子目录内容
-    const fullFolderPath = await join(workspace.path, fullpath)
+    const fullFolderPath = await platform.path.join(workspace.path, fullpath)
     
     let children: DirTree[] = []
     
@@ -2821,11 +2820,11 @@ const useArticleStore = create<NoteState>((set, get) => ({
     let dirExists = false
     try {
       if (workspace.isCustom) {
-        dirExists = await exists(fullFolderPath)
+        dirExists = await platform.fs.exists(fullFolderPath)
       } else {
         const dirRelative = await toWorkspaceRelativePath(fullFolderPath)
         const pathOptions = await getFilePathOptions(dirRelative)
-        dirExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+        dirExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
     } catch {
       dirExists = false
@@ -2835,7 +2834,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
     if (dirExists) {
       try {
         if (workspace.isCustom) {
-          children = (await readDir(fullFolderPath))
+          children = (await platform.fs.readDir(fullFolderPath))
             .filter(file => file.name !== '.DS_Store' && !file.name.startsWith('.'))
             .map(file => ({
               ...file,
@@ -2851,7 +2850,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         } else {
           const dirRelative = await toWorkspaceRelativePath(fullFolderPath)
           const pathOptions = await getFilePathOptions(dirRelative)
-          children = (await readDir(pathOptions.path, { baseDir: pathOptions.baseDir }))
+          children = (await platform.fs.readDir(pathOptions.path, { baseDir: pathOptions.baseDir }))
             .filter(file => file.name !== '.DS_Store' && !file.name.startsWith('.'))
             .map(file => ({
               ...file,
@@ -3178,9 +3177,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
     if (await writeSelfHostedWorkspaceText(fullPath, '')) {
       // Rust journal already persisted the synchronized file.
     } else if (workspace.isCustom) {
-      await writeTextFile(pathOptions.path, '')
+      await platform.fs.writeTextFile(pathOptions.path, '')
     } else {
-      await writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+      await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
     }
 
     // 更新树
@@ -3555,9 +3554,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
     try {
       const pathOptions = await getFilePathOptions(actualPath)
       if (!pathOptions.baseDir) {
-        localContent = await readTextFile(pathOptions.path)
+        localContent = await platform.fs.readTextFile(pathOptions.path)
       } else {
-        localContent = await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        localContent = await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
       }
 
       if (!isCurrentArticleRead()) return
@@ -3607,9 +3606,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
           if (await writeSelfHostedWorkspaceText(actualPath, '')) {
             // Rust journal already persisted the file.
           } else if (!pathOptions.baseDir) {
-            await writeTextFile(pathOptions.path, '')
+            await platform.fs.writeTextFile(pathOptions.path, '')
           } else {
-            await writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+            await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
           }
           if (isCurrentArticleRead()) {
             set({ currentArticle: '', loading: false })
@@ -3766,9 +3765,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
           if (await writeSelfHostedWorkspaceText(path, content)) {
             // Rust journal already persisted the file.
           } else if (!pathOptions.baseDir) {
-            await writeTextFile(pathOptions.path, content)
+            await platform.fs.writeTextFile(pathOptions.path, content)
           } else {
-            await writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+            await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
           }
           if (get().activeFilePath === path) {
             set({ currentArticle: content })
@@ -3820,9 +3819,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
           let isLocale = false
           const pathOptions = await getFilePathOptions(savePath)
           if (!pathOptions.baseDir) {
-            isLocale = await exists(pathOptions.path)
+            isLocale = await platform.fs.exists(pathOptions.path)
           } else {
-            isLocale = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+            isLocale = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
           }
           const wroteSelfHosted = await writeSelfHostedWorkspaceText(savePath, saveContent)
           if (!wroteSelfHosted) {
@@ -3835,24 +3834,24 @@ const useArticleStore = create<NoteState>((set, get) => ({
                 const dirOptions = await getFilePathOptions(dir)
                 let dirExists = false
                 if (!dirOptions.baseDir) {
-                  dirExists = await exists(dirOptions.path)
+                  dirExists = await platform.fs.exists(dirOptions.path)
                 } else {
-                  dirExists = await exists(dirOptions.path, { baseDir: dirOptions.baseDir })
+                  dirExists = await platform.fs.exists(dirOptions.path, { baseDir: dirOptions.baseDir })
                 }
                 if (!dirExists) {
                   if (!dirOptions.baseDir) {
-                    await mkdir(dirOptions.path)
+                    await platform.fs.mkdir(dirOptions.path)
                   } else {
-                    await mkdir(dirOptions.path, { baseDir: dirOptions.baseDir })
+                    await platform.fs.mkdir(dirOptions.path, { baseDir: dirOptions.baseDir })
                   }
                 }
               }
             }
 
             if (!pathOptions.baseDir) {
-              await writeTextFile(pathOptions.path, saveContent)
+              await platform.fs.writeTextFile(pathOptions.path, saveContent)
             } else {
-              await writeTextFile(pathOptions.path, saveContent, { baseDir: pathOptions.baseDir })
+              await platform.fs.writeTextFile(pathOptions.path, saveContent, { baseDir: pathOptions.baseDir })
             }
           }
           get().markFileDirty(savePath)
@@ -3881,9 +3880,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
                   let parentExists = false
                   try {
                     if (!parentOptions.baseDir) {
-                      parentExists = await exists(parentOptions.path)
+                      parentExists = await platform.fs.exists(parentOptions.path)
                     } else {
-                      parentExists = await exists(parentOptions.path, { baseDir: parentOptions.baseDir })
+                      parentExists = await platform.fs.exists(parentOptions.path, { baseDir: parentOptions.baseDir })
                     }
                   } catch {
                     parentExists = false
@@ -4278,8 +4277,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
       
       // 读取当前目录内容
       const res = isCustomWorkspace 
-        ? await readDir(dirPath)
-        : await readDir(dirPath, { baseDir: BaseDirectory.AppData })
+        ? await platform.fs.readDir(dirPath)
+        : await platform.fs.readDir(dirPath, { baseDir: BaseDirectory.AppData })
       
       // 过滤文件
       const files = res.filter(file => 
@@ -4292,15 +4291,15 @@ const useArticleStore = create<NoteState>((set, get) => ({
       // 添加文件到结果列表
       for (const file of files) {
         // 构建相对路径
-        const relativePath = await join(basePath, file.name)
+        const relativePath = await platform.path.join(basePath, file.name)
         
         // 读取文件内容
         let article = ''
         if (isCustomWorkspace) {
-          const fullPath = await join(dirPath, file.name)
-          article = await readTextFile(fullPath)
+          const fullPath = await platform.path.join(dirPath, file.name)
+          article = await platform.fs.readTextFile(fullPath)
         } else {
-          article = await readTextFile(`${dirPath}/${file.name}`, { baseDir: BaseDirectory.AppData })
+          article = await platform.fs.readTextFile(`${dirPath}/${file.name}`, { baseDir: BaseDirectory.AppData })
         }
         
         allArticles.push({ article, path: relativePath })
@@ -4313,8 +4312,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
       )
       
       for (const dir of directories) {
-        const newDirPath = await join(dirPath, dir.name)
-        const newBasePath = await join(basePath, dir.name)
+        const newDirPath = await platform.path.join(dirPath, dir.name)
+        const newBasePath = await platform.path.join(basePath, dir.name)
         const subDirArticles = await readDirRecursively(newDirPath, newBasePath, isCustomWorkspace)
         allArticles = [...allArticles, ...subDirArticles]
       }

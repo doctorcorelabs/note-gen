@@ -1,4 +1,4 @@
-import { stat } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getWorkspacePath, toWorkspaceRelativePath } from '@/lib/workspace'
 
 const OPENABLE_EXTENSIONS = new Set(['md', 'markdown'])
@@ -12,7 +12,7 @@ export async function resolveOpenedMarkdownPath(path: string): Promise<string | 
   }
 
   try {
-    const fileStat = await stat(path)
+    const fileStat = await platform.fs.stat(path)
     if (!fileStat.isFile) {
       return null
     }

@@ -15,8 +15,7 @@ import { SyncContentComparison } from '@/components/sync-content-comparison'
 import { Spinner } from '@/components/ui/spinner'
 import { X } from 'lucide-react'
 import { setLocalRecordedSha } from '@/lib/sync/auto-sync'
-import { readTextFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import useSettingStore from '@/stores/setting'
@@ -97,22 +96,22 @@ export function ConflictDialog({
     const current = () => !cancelled && isCurrent()
     const fetchContents = async () => {
       try {
-        const { primaryBackupMethod: platform, workspacePath } = useSettingStore.getState()
-        if (platform === 'local' || platform === 'selfHosted' || !current()) return
+        const { primaryBackupMethod: primaryPlatform, workspacePath } = useSettingStore.getState()
+        if (primaryPlatform === 'local' || primaryPlatform === 'selfHosted' || !current()) return
         const pathOptions = await getFilePathOptions(activeFilePath)
         const absolutePath = pathOptions.baseDir === undefined
-          ? pathOptions.path : await join(await appDataDir(), pathOptions.path)
+          ? pathOptions.path : await platform.path.join(await platform.path.appDataDir(), pathOptions.path)
         if (!current()) return
-        const metadataKey = await getSyncMetadataKey(activeFilePath, platform)
+        const metadataKey = await getSyncMetadataKey(activeFilePath, primaryPlatform)
         if (!current()) return
-        const remote = await readVersionedWorkspaceFile(activeFilePath, platform)
+        const remote = await readVersionedWorkspaceFile(activeFilePath, primaryPlatform)
         if (!current()) return
         const local = callbacksRef.current.getMarkdown?.()
           ?? callbacksRef.current.localMarkdown
           ?? editor.getMarkdown()
         setPreview({
           content: new TextDecoder().decode(remote.content), version: remote.version,
-          localContent: local, platform, workspacePath, metadataKey, absolutePath,
+          localContent: local, platform: primaryPlatform, workspacePath, metadataKey, absolutePath,
         })
       } catch (error) {
         if (current()) toast({ title: t('failed'), description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
@@ -144,7 +143,7 @@ export function ConflictDialog({
       await useArticleStore.getState().flushPendingArticleSave(activeFilePath)
       assertCurrent()
       const content = readMarkdown()
-      if (await readTextFile(preview.absolutePath) !== content) {
+      if (await platform.fs.readTextFile(preview.absolutePath) !== content) {
         throw syncStaleError({ stage: 'apply', path: activeFilePath, source: 'local', check: 'content' })
       }
       assertCurrent()

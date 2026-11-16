@@ -7,7 +7,7 @@ import { Image as TauriImage } from '@tauri-apps/api/image'
 import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition } from '@tauri-apps/api/window'
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { save } from '@tauri-apps/plugin-dialog'
-import { writeFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { Check, Copy, Download, NotebookPen, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -183,7 +183,7 @@ export default function ScreenshotPinPage() {
       } else {
         const filename = `NoteGen-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
         const path = await save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] })
-        if (path) await writeFile(path, png)
+        if (path) await platform.fs.writeFile(path, png)
       }
     } catch (cause) {
       console.error('Pinned screenshot action failed:', cause)

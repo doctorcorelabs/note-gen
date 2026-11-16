@@ -1,7 +1,6 @@
 import { executeRecordTransaction, getDb, type RecordStatement } from './index'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
-import { copyFile, exists, lstat, mkdir } from '@tauri-apps/plugin-fs'
 import { ensureWorkspaceDirectory, managedWorkspaceLocation, normalizeManagedWorkspacePath, resolveManagedWorkspacePath } from '@/lib/managed-workspace'
 
 const SYNC_TABLES = `
@@ -258,17 +257,17 @@ async function preservePendingWorkspaceFiles(workspaceId: string, sourceRoot: st
     let source = sourceRoot
     let missing = false
     for (const segment of portable.normalized.split('/')) {
-      source = await join(source, segment)
-      if (!await exists(source)) { missing = true; break }
-      if ((await lstat(source)).isSymlink) throw new Error('Symbolic-link workspace files are not synchronized')
+      source = await platform.path.join(source, segment)
+      if (!await platform.fs.exists(source)) { missing = true; break }
+      if ((await platform.fs.lstat(source)).isSymlink) throw new Error('Symbolic-link workspace files are not synchronized')
     }
     if (missing) continue
     const segments = portable.normalized.split('/')
-    const target = await join(targetRoot, ...segments)
-    if (change.domain === 'folder') await mkdir(target, { recursive: true })
+    const target = await platform.path.join(targetRoot, ...segments)
+    if (change.domain === 'folder') await platform.fs.mkdir(target, { recursive: true })
     else {
-      await mkdir(await join(targetRoot, ...segments.slice(0, -1)), { recursive: true })
-      await copyFile(source, target)
+      await platform.fs.mkdir(await platform.path.join(targetRoot, ...segments.slice(0, -1)), { recursive: true })
+      await platform.fs.copyFile(source, target)
     }
   }
 }
@@ -317,9 +316,9 @@ export async function restoreSelfHostedWorkspaceRoots() {
       }
       // Keep the original directory with its owner. An accidentally aliased
       // workspace receives a separate replica and an authoritative bootstrap.
-      let root = await join(await appDataDir(), 'workspaces', 'self-hosted', plan.workspaceId)
-      if (reserved.has(normalizeManagedWorkspacePath(root)) || await exists(root)) {
-        root = await join(await appDataDir(), 'restored-workspaces', `self-hosted-${Date.now()}-${crypto.randomUUID()}`)
+      let root = await platform.path.join(await platform.path.appDataDir(), 'workspaces', 'self-hosted', plan.workspaceId)
+      if (reserved.has(normalizeManagedWorkspacePath(root)) || await platform.fs.exists(root)) {
+        root = await platform.path.join(await platform.path.appDataDir(), 'restored-workspaces', `self-hosted-${Date.now()}-${crypto.randomUUID()}`)
       }
       reserved.add(normalizeManagedWorkspacePath(root))
       await preservePendingWorkspaceFiles(plan.workspaceId, group[0].root!, root)

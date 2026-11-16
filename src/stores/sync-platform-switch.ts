@@ -1,7 +1,8 @@
 'use client'
 
 import { create } from 'zustand'
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform, BaseDirectory } from '@/lib/platform'
 import useSettingStore from './setting'
 import useSyncStore from './sync'
 import emitter from '@/lib/emitter'
@@ -115,7 +116,7 @@ const commitProgress = (step: 'preparing' | 'saving' | 'starting' | 'reconciling
 
 async function releaseSync(cancelled = false) {
   if (!paused) return
-  const recovery = await (await Store.load('store.json')).get<PlatformSwitchRecovery>('platformSwitchRecovery')
+  const recovery = await (await platform.store.load('store.json')).get<PlatformSwitchRecovery>('platformSwitchRecovery')
   if (cancelled && recovery?.mutated && recovery.resolution !== 'skipped') return
   paused = false
   const settings = useSettingStore.getState()
@@ -136,7 +137,7 @@ export async function restorePlatformSwitchRecovery() {
   if (running || cancelling || dismissing || usePlatformSwitchStore.getState().platform) return
   if (restoringRecovery) return restoringRecovery
   restoringRecovery = (async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const saved = await restoreInterruptedPrimaryPlatform(store)
     if (!saved || running || cancelling || dismissing || usePlatformSwitchStore.getState().platform) return
     const primary = await store.get<SyncPlatform>('primaryBackupMethod')
@@ -168,7 +169,7 @@ export async function dismissPlatformSwitch() {
     // During a write, leaving the settings page must never cancel a partly applied plan.
     if (state.step !== 'completed' && (state.mutated || (running && !['review', 'confirm', 'error'].includes(state.step)))) return
     if (!running && ['error', 'cancelled'].includes(state.step)) {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
       if (recovery && recovery.mutated === false && !recovery.workspaceSetup && recovery.resolution !== 'skipped') {
         await store.delete('platformSwitchRecovery')
@@ -271,7 +272,7 @@ const progress = (value: SwitchOperationProgress) => {
   usePlatformSwitchStore.setState({ progress: value, step: value.phase === 'start' ? 'starting'
     : value.phase === 'list' || value.phase === 'scan' || value.phase === 'compare' ? (value.source === 'local' ? 'local' : 'nextRemote') : 'reconciling' })
 }
-async function clearCancelledPlatformSwitch(store: Store, recovery: PlatformSwitchRecovery | null | undefined) {
+async function clearCancelledPlatformSwitch(store: StoreHandle, recovery: PlatformSwitchRecovery | null | undefined) {
   const state = usePlatformSwitchStore.getState()
   const setup = recovery?.workspaceSetup
   let noMutations = !state.mutated && recovery?.mutated !== true
@@ -328,7 +329,7 @@ export async function cancelPlatformSwitch() {
   cancelling = true
   usePlatformSwitchStore.setState({ cancelRequested: true, cancelledHidden: true })
   try {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
     const noMutations = await clearCancelledPlatformSwitch(store, recovery)
     await finishBackupRetention(null, recoveryBackupPaths(recovery, { backupPath: state.backupPath || undefined }), false, noMutations)
@@ -432,12 +433,12 @@ export async function reviewSelfHostedConnection(): Promise<boolean> {
   return switchSyncPlatform('selfHosted', retry, undefined, true)
 }
 
-export async function switchSyncPlatform(platform: SyncPlatform, retry = false, workspaceSetup?: PlatformSwitchRecovery['workspaceSetup'], reviewConnection = false): Promise<boolean> {
+export async function switchSyncPlatform(targetPlatform: SyncPlatform, retry = false, workspaceSetup?: PlatformSwitchRecovery['workspaceSetup'], reviewConnection = false): Promise<boolean> {
   await restorePlatformSwitchRecovery()
-  if (retry && usePlatformSwitchStore.getState().platform !== platform) return false
+  if (retry && usePlatformSwitchStore.getState().platform !== targetPlatform) return false
   const previousState = usePlatformSwitchStore.getState()
   if (running || cancelling || dismissing || (!retry && previousState.platform && !(previousState.step === 'completed' && previousState.skipped))) return false
-  if (!retry && !workspaceSetup && !(reviewConnection && platform === 'selfHosted') && useSettingStore.getState().primaryBackupMethod === platform) return false
+  if (!retry && !workspaceSetup && !(reviewConnection && targetPlatform === 'selfHosted') && useSettingStore.getState().primaryBackupMethod === targetPlatform) return false
   if (hideTimer) clearTimeout(hideTimer)
   running = true
   const current = useSettingStore.getState().primaryBackupMethod
@@ -451,14 +452,14 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
   let cleanCancellation = false
   const recoveryBackup = usePlatformSwitchStore.getState().backupPath
   let attemptBackupPaths = recoveryBackupPaths({ backupPath: recoveryBackup || undefined })
-  usePlatformSwitchStore.setState({ ...initialState, platform, backupPath: recoveryBackup })
+  usePlatformSwitchStore.setState({ ...initialState, platform: targetPlatform, backupPath: recoveryBackup })
   try {
-    const recoveryStore = await Store.load('store.json')
+    const recoveryStore = await platform.store.load('store.json')
     let pendingRecovery = await recoveryStore.get<PlatformSwitchRecovery>('platformSwitchRecovery')
     attemptBackupPaths = recoveryBackupPaths(pendingRecovery, { backupPaths: attemptBackupPaths })
     inheritedUnverified = Boolean(pendingRecovery?.resolution === 'skipped' || pendingRecovery?.skippedFromPlatform)
     if (pendingRecovery) usePlatformSwitchStore.setState({ mutated: inheritedUnverified || (pendingRecovery.mutated ?? true), selfHostedBackupPath: pendingRecovery.selfHostedBackupPath || null })
-    if (retry && pendingRecovery?.platform === platform) {
+    if (retry && pendingRecovery?.platform === targetPlatform) {
       // A new scan is a new attempt, even when it inherits unresolved writes
       // and protected backups. Do not resurrect the previous failure on reload.
       pendingRecovery = { ...pendingRecovery, startedAt: Date.now() }
@@ -467,11 +468,11 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
       await recoveryStore.set('platformSwitchRecovery', pendingRecovery)
       await recoveryStore.save()
     }
-    fingerprint = await targetFingerprint(platform)
+    fingerprint = await targetFingerprint(targetPlatform)
     assertSwitchActive()
     if (pendingRecovery?.resolution === 'skipped') {
-      const store = await Store.load('store.json')
-      await store.set('platformSwitchRecovery', { ...pendingRecovery, platform, originalPlatform: current, commitPlatform: undefined,
+      const store = await platform.store.load('store.json')
+      await store.set('platformSwitchRecovery', { ...pendingRecovery, platform: targetPlatform, originalPlatform: current, commitPlatform: undefined,
         workspace, targetFingerprint: fingerprint, workspaceSetup: workspaceSetup, mutated: true, resolution: undefined, startedAt: Date.now(),
       } satisfies PlatformSwitchRecovery)
       await store.save()
@@ -482,7 +483,7 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
       inspectionContext = { method: current, workspace, targetFingerprint: fingerprint }
       await Promise.all([getSyncPushQueue().prepareForWorkspaceSwitch(), prepareAutoDataSyncForRepositoryChange()])
     }
-    if (platform === 'selfHosted' || current === 'selfHosted') {
+    if (targetPlatform === 'selfHosted' || current === 'selfHosted') {
       const collaboration = await import('@/lib/self-hosted-sync/collaboration')
       await prepareSelfHostedLocalEditors()
       resumeSwitchCollaboration ??= collaboration.pauseSelfHostedCollaboration()
@@ -495,12 +496,12 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
     const activePath = (await import('./article')).default.getState().activeFilePath
     if (activePath && !await prepareActiveEditorDeactivationDurably(activePath)) throw new Error('SYNC_SWITCH_EDITOR_BUSY')
     if (activePath && resumeSwitchCollaboration) emitter.emit('editor-file-close', { path: activePath })
-    const setupStore = await Store.load('store.json')
+    const setupStore = await platform.store.load('store.json')
     const pendingSetup = await setupStore.get<PlatformSwitchRecovery>('platformSwitchRecovery')
-    const setup = workspaceSetup || (pendingSetup?.platform === platform && pendingSetup.resolution !== 'skipped' ? pendingSetup.workspaceSetup : undefined)
+    const setup = workspaceSetup || (pendingSetup?.platform === targetPlatform && pendingSetup.resolution !== 'skipped' ? pendingSetup.workspaceSetup : undefined)
     activeWorkspaceSetup = setup
     if (setup) {
-      if (platform !== 'cloudFolder' || setup.config.provider !== 'oneDrive' || !setup.path) throw syncStaleError({ stage: 'validate', path: 'cloudFolderSyncConfig', check: 'configuration' })
+      if (targetPlatform !== 'cloudFolder' || setup.config.provider !== 'oneDrive' || !setup.path) throw syncStaleError({ stage: 'validate', path: 'cloudFolderSyncConfig', check: 'configuration' })
       if (setup.originalPath === undefined) {
         setup.originalPath = workspace
         setup.originalConfig = await setupStore.get<CloudFolderConfig>('cloudFolderSyncConfig')
@@ -510,20 +511,20 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
       assertSwitchActive()
       pauseSyncEngine(current)
       usePlatformSwitchStore.setState({ mutated: true, step: 'preparing' })
-      await setupStore.set('platformSwitchRecovery', { ...pendingSetup, platform, originalPlatform: current, workspaceSetup: setup, workspace, targetFingerprint: fingerprint, mutated: true, resolution: undefined, startedAt: pendingSetup?.startedAt || Date.now() })
+      await setupStore.set('platformSwitchRecovery', { ...pendingSetup, platform: targetPlatform, originalPlatform: current, workspaceSetup: setup, workspace, targetFingerprint: fingerprint, mutated: true, resolution: undefined, startedAt: pendingSetup?.startedAt || Date.now() })
       await setupStore.save()
       await setupStore.set('cloudFolderSyncConfig', setup.config)
       await setupStore.save()
       await useSettingStore.getState().setWorkspacePath(setup.path)
       workspace = useSettingStore.getState().workspacePath
-      fingerprint = await targetFingerprint(platform)
+      fingerprint = await targetFingerprint(targetPlatform)
       assertSwitchActive()
     }
-    if (platform === 'local') {
+    if (targetPlatform === 'local') {
       pauseSyncEngine(current)
-      await useSettingStore.getState().commitVerifiedPrimaryBackupMethod(platform, commitProgress, 'deferred', undefined, assertSwitchActive)
-    } else if (platform === 'selfHosted') {
-      const review = await inspectSyncEngineSwitch(current, platform, (step, listing) => { assertSwitchActive(); usePlatformSwitchStore.setState({ step, listing: listing || null }) }, assertSwitchActive)
+      await useSettingStore.getState().commitVerifiedPrimaryBackupMethod(targetPlatform, commitProgress, 'deferred', undefined, assertSwitchActive)
+    } else if (targetPlatform === 'selfHosted') {
+      const review = await inspectSyncEngineSwitch(current, targetPlatform, (step, listing) => { assertSwitchActive(); usePlatformSwitchStore.setState({ step, listing: listing || null }) }, assertSwitchActive)
       assertSwitchActive()
       const decision = await new Promise<Decision | null>(resolve => {
         reviewDecision = resolve
@@ -540,16 +541,16 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
       const selfHostedBackupPath = await backupSelfHostedSwitch(review.selfHostedPreview!, assertSwitchActive, progress)
       usePlatformSwitchStore.setState({ selfHostedBackupPath })
       assertSwitchConfiguration(current, workspace, 'validate')
-      if (await targetFingerprint(platform) !== fingerprint) throw syncStaleError({ stage: 'validate', path: 'syncTarget', check: 'configuration' })
+      if (await targetFingerprint(targetPlatform) !== fingerprint) throw syncStaleError({ stage: 'validate', path: 'syncTarget', check: 'configuration' })
       assertSwitchActive()
       usePlatformSwitchStore.setState({ mutated: true })
       pauseSyncEngine(current)
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const previousRecovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
       assertSwitchActive()
-      await store.set('platformSwitchRecovery', { ...previousRecovery, platform, originalPlatform: current, commitPlatform: undefined, workspace, targetFingerprint: fingerprint, workspaceSetup: activeWorkspaceSetup, selfHostedBackupPath, mutated: true, resolution: undefined, startedAt: Date.now() })
+      await store.set('platformSwitchRecovery', { ...previousRecovery, platform: targetPlatform, originalPlatform: current, commitPlatform: undefined, workspace, targetFingerprint: fingerprint, workspaceSetup: activeWorkspaceSetup, selfHostedBackupPath, mutated: true, resolution: undefined, startedAt: Date.now() })
       await store.save()
-      await useSettingStore.getState().commitVerifiedPrimaryBackupMethod(platform, commitProgress, 'deferred', async () => {
+      await useSettingStore.getState().commitVerifiedPrimaryBackupMethod(targetPlatform, commitProgress, 'deferred', async () => {
         if (decision.strategy !== 'merge') {
           await executeSelfHostedSwitch(review.selfHostedPreview!, decision.strategy, assertSwitchActive, progress)
         }
@@ -561,7 +562,7 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
         return { selfHostedRuntimeReady: true }
       }, assertSwitchActive)
     } else {
-      const plan = await inspectPlatformSwitchPlan(platform, progress)
+      const plan = await inspectPlatformSwitchPlan(targetPlatform, progress)
       activePlan = plan
       assertSwitchActive()
       const selected = [...plan.available]
@@ -586,10 +587,10 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
       if (usePlatformSwitchStore.getState().cancelRequested) throw new Error('SYNC_SWITCH_CANCELLED')
       pauseSyncEngine(current)
       usePlatformSwitchStore.setState({ mutated: true })
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const previousRecovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
       attemptBackupPaths = recoveryBackupPaths(previousRecovery, { backupPaths: attemptBackupPaths })
-      await store.set('platformSwitchRecovery', { ...previousRecovery, platform, originalPlatform: current, commitPlatform: undefined, workspace, targetFingerprint: fingerprint, workspaceSetup: activeWorkspaceSetup, mutated: true, resolution: undefined, backupPath: plan.backupPath,
+      await store.set('platformSwitchRecovery', { ...previousRecovery, platform: targetPlatform, originalPlatform: current, commitPlatform: undefined, workspace, targetFingerprint: fingerprint, workspaceSetup: activeWorkspaceSetup, mutated: true, resolution: undefined, backupPath: plan.backupPath,
         backupPaths: attemptBackupPaths, startedAt: Date.now() })
       await store.save()
       await executePlatformSwitchPlan(plan, decision.strategy, decision.selected, decision.resolutions, progress)
@@ -602,7 +603,7 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
         if (!decision.selected.includes('settings') && settings.autoSettingsSyncEnabled) await settings.setAutoSettingsSyncEnabled(false)
         if (!decision.selected.includes('conversations') && settings.autoConversationSyncEnabled) await settings.setAutoConversationSyncEnabled(false)
         if (plan.available.includes('notes') && !decision.selected.includes('notes')) await settings.setAutoSync('disabled')
-        await useSettingStore.getState().commitVerifiedPrimaryBackupMethod(platform, commitProgress, 'deferred', undefined, assertSwitchActive)
+        await useSettingStore.getState().commitVerifiedPrimaryBackupMethod(targetPlatform, commitProgress, 'deferred', undefined, assertSwitchActive)
       } catch (error) {
         for (const [key, value] of Object.entries(previousPreferences)) await store.set(key, value)
         await store.save()
@@ -615,23 +616,23 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
     verified = true
     return true
   } catch (error) {
-    if (platform === 'selfHosted') pauseSyncEngine('selfHosted')
+    if (targetPlatform === 'selfHosted') pauseSyncEngine('selfHosted')
     const state = usePlatformSwitchStore.getState()
     const cancelled = state.cancelRequested || (error instanceof Error && error.message === 'SYNC_SWITCH_CANCELLED')
     const message = cancelled ? 'SYNC_SWITCH_CANCELLED' : sanitizeSyncErrorMessage(withSyncStaleContext(error, switchErrorContext(state, 'validate')))
     usePlatformSwitchStore.setState({ failedStep: state.step, step: cancelled ? 'cancelled' : 'error', error: message, cancelRequested: false })
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
       attemptBackupPaths = recoveryBackupPaths(recovery, { backupPaths: attemptBackupPaths }, { backupPath: state.backupPath || undefined }, activePlan || undefined)
       if (cancelled) {
         cleanCancellation = await clearCancelledPlatformSwitch(store, {
-          platform, mutated: state.mutated, ...recovery, workspaceSetup: recovery?.workspaceSetup || activeWorkspaceSetup,
+          platform: targetPlatform, mutated: state.mutated, ...recovery, workspaceSetup: recovery?.workspaceSetup || activeWorkspaceSetup,
         })
         return false
       }
       // Keep the failed attempt and its backup durable, including a deliberate skip.
-      await store.set('platformSwitchRecovery', { ...recovery, platform, originalPlatform: current, commitPlatform: undefined,
+      await store.set('platformSwitchRecovery', { ...recovery, platform: targetPlatform, originalPlatform: current, commitPlatform: undefined,
         workspace, targetFingerprint: fingerprint, workspaceSetup: activeWorkspaceSetup, mutated: state.mutated, resolution: cancelled ? 'cancelled' : undefined,
         backupPath: state.backupPath || recovery?.backupPath,
         backupPaths: attemptBackupPaths,
@@ -659,30 +660,29 @@ export async function switchSyncPlatform(platform: SyncPlatform, retry = false, 
 export async function skipPlatformSwitchError() {
   const state = usePlatformSwitchStore.getState()
   if (state.selfHostedSafetyBackupPath) return false
-  const platform = state.platform
-  if (!platform || running || cancelling || dismissing || !['error', 'cancelled'].includes(state.step)) return false
+  const switchPlatform = state.platform
+  if (!switchPlatform || running || cancelling || dismissing || !['error', 'cancelled'].includes(state.step)) return false
   const previous = useSettingStore.getState().primaryBackupMethod
   const workspace = useSettingStore.getState().workspacePath
   running = true
   usePlatformSwitchStore.setState({ step: 'saving', cancelRequested: false, progress: null })
   try {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     let recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
     if (recovery && (!recovery.targetFingerprint || recovery.workspace === undefined)) {
       // Older interrupted attempts had no target guard. An explicit skip only
       // selects a provider and keeps sync paused, so bind it to the current local
       // configuration after checking the backup's workspace; never replay data.
-      if (recovery.platform !== platform || (recovery.workspace !== undefined && recovery.workspace !== workspace)) throw syncStaleError({ stage: 'validate', path: 'platformSwitchRecovery', check: 'configuration' })
+      if (recovery.platform !== switchPlatform || (recovery.workspace !== undefined && recovery.workspace !== workspace)) throw syncStaleError({ stage: 'validate', path: 'platformSwitchRecovery', check: 'configuration' })
       if (recovery.backupPath) {
         const { assertSwitchBackupPath } = await import('@/lib/sync/platform-switch-journal')
-        const { readFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
-        assertSwitchBackupPath(recovery.backupPath)
-        const manifest = JSON.parse(new TextDecoder().decode(await readFile(`${recovery.backupPath}/manifest.json`, { baseDir: BaseDirectory.AppData }))) as { version?: number; workspace?: string; platform?: SyncPlatform }
-        if (manifest.version !== 1 || manifest.workspace !== workspace || (manifest.platform && manifest.platform !== platform)) throw syncStaleError({ stage: 'validate', path: `${recovery.backupPath}/manifest.json`, check: 'configuration' })
+                assertSwitchBackupPath(recovery.backupPath)
+        const manifest = JSON.parse(new TextDecoder().decode(await platform.fs.readFile(`${recovery.backupPath}/manifest.json`, { baseDir: BaseDirectory.AppData }))) as { version?: number; workspace?: string; platform?: SyncPlatform }
+        if (manifest.version !== 1 || manifest.workspace !== workspace || (manifest.platform && manifest.platform !== switchPlatform)) throw syncStaleError({ stage: 'validate', path: `${recovery.backupPath}/manifest.json`, check: 'configuration' })
       } else if (recovery.workspaceSetup && recovery.workspaceSetup.path !== workspace) {
         throw syncStaleError({ stage: 'validate', path: 'workspacePath', check: 'configuration' })
       }
-      const fingerprint = await targetFingerprint(platform)
+      const fingerprint = await targetFingerprint(switchPlatform)
       if (recovery.targetFingerprint && recovery.targetFingerprint !== fingerprint) throw syncStaleError({ stage: 'validate', path: 'syncTarget', check: 'configuration', expected: { sha: recovery.targetFingerprint }, actual: { sha: fingerprint } })
       assertSwitchActive()
       recovery = { ...recovery, workspace, targetFingerprint: fingerprint, error: recovery.error || state.error || 'SYNC_SWITCH_INTERRUPTED', failedAt: recovery.failedAt || Date.now() }
@@ -698,17 +698,17 @@ export async function skipPlatformSwitchError() {
     const assertTarget = async () => {
       assertSwitchActive()
       const current = useSettingStore.getState()
-      if (!recovery || recovery.platform !== platform || !recovery.targetFingerprint
+      if (!recovery || recovery.platform !== switchPlatform || !recovery.targetFingerprint
         || recovery.workspace !== workspace || current.workspacePath !== workspace || current.primaryBackupMethod !== previous
-        || await targetFingerprint(platform) !== recovery.targetFingerprint) throw syncStaleError({ stage: 'validate', path: 'platformSwitchRecovery / syncTarget', check: 'configuration' })
+        || await targetFingerprint(switchPlatform) !== recovery.targetFingerprint) throw syncStaleError({ stage: 'validate', path: 'platformSwitchRecovery / syncTarget', check: 'configuration' })
       const latest = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
-      if (!latest || latest.platform !== platform || latest.startedAt !== recovery.startedAt || latest.failedAt !== recovery.failedAt) throw syncStaleError({ stage: 'validate', path: 'platformSwitchRecovery', check: 'configuration' })
+      if (!latest || latest.platform !== switchPlatform || latest.startedAt !== recovery.startedAt || latest.failedAt !== recovery.failedAt) throw syncStaleError({ stage: 'validate', path: 'platformSwitchRecovery', check: 'configuration' })
       assertSwitchActive()
     }
     await assertTarget()
     pauseSyncEngine(previous)
-    pauseSyncEngine(platform)
-    await useSettingStore.getState().commitUnverifiedPrimaryBackupMethod(platform, assertTarget)
+    pauseSyncEngine(switchPlatform)
+    await useSettingStore.getState().commitUnverifiedPrimaryBackupMethod(switchPlatform, assertTarget)
     await releaseSync().catch(error => console.warn('Skipped platform switch queue cleanup failed', error))
     // No success timer: this remains an unresolved, explicitly paused selection.
     usePlatformSwitchStore.setState({ step: 'completed', skipped: true, cancelRequested: false, error: recovery?.error || state.error })
@@ -719,11 +719,11 @@ export async function skipPlatformSwitchError() {
     usePlatformSwitchStore.setState({ step: cancelled ? 'cancelled' : 'error', error: message, cancelRequested: false })
     if (cancelled) {
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await clearCancelledPlatformSwitch(store, await store.get<PlatformSwitchRecovery>('platformSwitchRecovery'))
         await releaseSync(true)
       } catch (cleanupError) {
-        usePlatformSwitchStore.setState({ platform, step: 'error', error: sanitizeSyncErrorMessage(cleanupError) })
+        usePlatformSwitchStore.setState({ platform: switchPlatform, step: 'error', error: sanitizeSyncErrorMessage(cleanupError) })
       }
     }
     return false
@@ -771,7 +771,7 @@ export async function recoverPlatformSwitchLocalBackup() {
     // Restoring a backup follows the same final-commit rule as switching: a
     // failed/interrupted restore must retain the original primary provider.
     pauseSyncEngine(useSettingStore.getState().primaryBackupMethod)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
     if (!recovery) throw syncStaleError({ stage: 'restore', path: 'platformSwitchRecovery', check: 'configuration', expected: { exists: true }, actual: { exists: false } })
     attemptBackupPaths = recoveryBackupPaths(recovery, { backupPaths: attemptBackupPaths })
@@ -796,7 +796,7 @@ export async function recoverPlatformSwitchLocalBackup() {
     const message = cancelled ? 'SYNC_SWITCH_CANCELLED' : sanitizeSyncErrorMessage(error)
     usePlatformSwitchStore.setState({ step: cancelled ? 'cancelled' : 'error', mutated: true, error: message, cancelRequested: false })
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
       if (cancelled) {
         await clearCancelledPlatformSwitch(store, recovery)
@@ -845,7 +845,7 @@ export async function recoverSelfHostedSwitchBackup() {
     await collaboration.waitForSelfHostedCollaborationIdle()
     await import('@/lib/self-hosted-sync/runtime').then(module => module.getSelfHostedSyncRuntime().stopAndWait())
     if (activePath) emitter.emit('editor-file-close', { path: activePath })
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
     if (!recovery || recovery.selfHostedBackupPath !== backupPath) throw new Error('SELF_HOSTED_BACKUP_INVALID')
     const { getDb } = await import('@/db')
@@ -855,10 +855,10 @@ export async function recoverSelfHostedSwitchBackup() {
     )
     const { getCurrentWorkspaceRoot } = await import('@/lib/self-hosted-sync/workspaces')
     const activeRoot = await getCurrentWorkspaceRoot()
-    const { platform } = await import('@tauri-apps/plugin-os')
+    const { platform: switchPlatform } = await import('@tauri-apps/plugin-os')
     const normalizeRoot = (root: string) => {
       const normalized = root.normalize('NFC').replaceAll('\\', '/').replace(/\/+$/, '')
-      return platform() === 'windows' ? normalized.toLowerCase() : normalized
+      return switchPlatform() === 'windows' ? normalized.toLowerCase() : normalized
     }
     const activeBinding = bindings.find(binding => normalizeRoot(binding.localRoot) === normalizeRoot(activeRoot))
     const currentLibraries = [
@@ -901,8 +901,7 @@ export async function recoverSelfHostedSwitchBackup() {
       const journal = await database.select<Array<Record<string, unknown>>>(
         'select * from self_hosted_file_journal where id in (select value from json_each($1))', [JSON.stringify(pendingFileWrites)],
       )
-      const { BaseDirectory, writeFile } = await import('@tauri-apps/plugin-fs')
-      await writeFile(`${safetyPath}/quarantined-file-journal-${Date.now()}-${crypto.randomUUID()}.json`,
+            await platform.fs.writeFile(`${safetyPath}/quarantined-file-journal-${Date.now()}-${crypto.randomUUID()}.json`,
         new TextEncoder().encode(JSON.stringify(journal)), { baseDir: BaseDirectory.AppData })
       await invoke('self_hosted_flush_switch_data', { relativePath: safetyPath })
       // Preserve both the journal evidence and its temporary files. This
@@ -926,7 +925,7 @@ export async function recoverSelfHostedSwitchBackup() {
     const message = sanitizeSyncErrorMessage(error)
     usePlatformSwitchStore.setState({ step: 'error', error: message, cancelRequested: false })
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const recovery = await store.get<PlatformSwitchRecovery>('platformSwitchRecovery')
       if (recovery) {
         await store.set('platformSwitchRecovery', { ...recovery, error: message, failedAt: Date.now() })

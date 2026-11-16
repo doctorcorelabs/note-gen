@@ -1,4 +1,5 @@
 import { Tool, ToolResult } from '../types'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { skillManager } from '@/lib/skills'
 import { executeSkillRuntime, getSkillWorkspaceIdentity, installSkillPythonDependencies } from '@/lib/skills/runtime'
 import { getWorkspacePath } from '@/lib/workspace'
@@ -135,18 +136,16 @@ export const loadSkillContentTool: Tool = {
       }
 
       // 读取文件内容
-      const { readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
       const { getFilePathOptions } = await import('@/lib/workspace')
-      const { exists } = await import('@tauri-apps/plugin-fs')
 
       // 辅助函数：读取文件
       const readFile = async (fileName: string, filePath: string): Promise<boolean> => {
         let fileExists = false
         if (skill.metadata.scope === 'global') {
-          fileExists = await exists(filePath, { baseDir: BaseDirectory.AppData })
+          fileExists = await platform.fs.exists(filePath, { baseDir: BaseDirectory.AppData })
           if (fileExists) {
             try {
-              results[fileName] = await readTextFile(filePath, { baseDir: BaseDirectory.AppData })
+              results[fileName] = await platform.fs.readTextFile(filePath, { baseDir: BaseDirectory.AppData })
               return true
             } catch (error) {
               console.error(`[load_skill_content] 读取文件失败: ${filePath}`, error)
@@ -155,14 +154,14 @@ export const loadSkillContentTool: Tool = {
         } else {
           const options = await getFilePathOptions(filePath)
           fileExists = options.baseDir
-            ? await exists(options.path, { baseDir: options.baseDir })
-            : await exists(options.path)
+            ? await platform.fs.exists(options.path, { baseDir: options.baseDir })
+            : await platform.fs.exists(options.path)
           if (fileExists) {
             try {
               if (options.baseDir) {
-                results[fileName] = await readTextFile(options.path, { baseDir: options.baseDir })
+                results[fileName] = await platform.fs.readTextFile(options.path, { baseDir: options.baseDir })
               } else {
-                results[fileName] = await readTextFile(options.path)
+                results[fileName] = await platform.fs.readTextFile(options.path)
               }
               return true
             } catch (error) {

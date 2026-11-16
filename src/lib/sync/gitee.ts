@@ -1,7 +1,7 @@
 import { withGitRepoWriteLock } from './git-repo-write-lock'
 import { assertConditionalResponse } from './write-condition'
 import { toast } from '@/hooks/use-toast';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { v4 as uuid } from 'uuid';
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
 import { buildRemoteLogicalPath, buildRepoContentPath, buildRepoContentsEndpoint, debugSyncPath, readSyncResponseJson, encodeRemoteFileContent, decodeBase64ToBytes, pickNestedFileEntry } from './remote-file'
@@ -258,7 +258,7 @@ export async function uploadFile(
   { file, filename, sha, message, repo, path, guarded = false, beforeWrite }:
   { file: string | Uint8Array, filename?: string, sha?: string, message?: string, repo: string, path?: string, guarded?: boolean, beforeWrite?: () => Promise<void> })
 {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('giteeAccessToken')
   const giteeUsername = await store.get<string>('giteeUsername')
   const id = uuid()
@@ -376,7 +376,7 @@ export async function uploadFile(
 }
 
 export async function getDirectoryFiles({ path, repo, cache }: { path: string; repo: string; cache?: Map<string, Promise<unknown>> }) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const token = await store.get<string>('giteeAccessToken')
   const username = await store.get<string>('giteeUsername')
   if (!token || !username) throw new Error('Gitee sync is not configured')
@@ -390,7 +390,7 @@ export async function getDirectoryFiles({ path, repo, cache }: { path: string; r
 }
 
 export async function getFiles({ path, repo, ref }: { path: string, repo: string, ref?: string }): Promise<GiteeGetFilesResult> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('giteeAccessToken')
   if (!accessToken) throw new Error('Gitee sync is not configured')
 
@@ -471,7 +471,7 @@ export async function getFiles({ path, repo, ref }: { path: string, repo: string
 }
 
 export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite }: { path: string, sha: string, repo: string; guarded?: boolean; beforeWrite?: () => Promise<void> }) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('giteeAccessToken')
   if (!accessToken) return;
   
@@ -554,7 +554,7 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
 }
 
 export async function getFileCommits({ path, repo }: { path: string, repo: string }) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('giteeAccessToken')
   if (!accessToken) return;
   
@@ -592,7 +592,7 @@ export async function getFileCommits({ path, repo }: { path: string, repo: strin
 
 // 获取 Gitee 用户信息
 export async function getUserInfo() {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('giteeAccessToken')
   if (!accessToken) {
     return;
@@ -630,7 +630,7 @@ export async function getUserInfo() {
 
 // 检查 Gitee 仓库
 export async function checkSyncRepoState(name: string): Promise<GiteeRepoInfo | null | undefined> {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get<string>('giteeAccessToken')
   if (!accessToken) {
     return;
@@ -672,7 +672,7 @@ export async function checkSyncRepoState(name: string): Promise<GiteeRepoInfo | 
 }
 
 export async function listUserRepositories(): Promise<string[]> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const accessToken = await store.get<string>('giteeAccessToken')
   if (!accessToken) throw new Error('Gitee Access Token 未配置')
 
@@ -698,7 +698,7 @@ export async function listUserRepositories(): Promise<string[]> {
 
 // 创建 Gitee 仓库
 export async function createSyncRepo(name: string, isPrivate?: boolean) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const accessToken = await store.get('giteeAccessToken')
   if (!accessToken) return;
   

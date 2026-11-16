@@ -1,5 +1,6 @@
 import type { RemoteWriteCondition } from './write-condition'
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { deleteFile as deleteGithubFile, uploadFile as uploadGithubFile, getFiles as githubGetFiles } from '@/lib/sync/github'
 import { deleteFile as deleteGiteeFile, uploadFile as uploadGiteeFile, getFiles as giteeGetFiles } from '@/lib/sync/gitee'
 import { deleteFile as deleteGitlabFile, uploadFile as uploadGitlabFile, getFiles as gitlabGetFiles, getFileContent as gitlabGetFileContent } from '@/lib/sync/gitlab'
@@ -239,7 +240,7 @@ function mergeCanvasProjects(
   return Array.from(projects.values())
 }
 
-async function createCanvasRemoteStorage(store: Store, conditions?: Map<string, RemoteWriteCondition>): Promise<CanvasRemoteStorage | null> {
+async function createCanvasRemoteStorage(store: StoreHandle, conditions?: Map<string, RemoteWriteCondition>): Promise<CanvasRemoteStorage | null> {
   const storage = await createRawCanvasRemoteStorage(store, conditions)
   if (!storage) return null
   const provider = await store.get<string>('primaryBackupMethod') || 'github'
@@ -255,7 +256,7 @@ async function createCanvasRemoteStorage(store: Store, conditions?: Map<string, 
   } }
 }
 
-async function createRawCanvasRemoteStorage(store: Store, conditions?: Map<string, RemoteWriteCondition>): Promise<CanvasRemoteStorage | null> {
+async function createRawCanvasRemoteStorage(store: StoreHandle, conditions?: Map<string, RemoteWriteCondition>): Promise<CanvasRemoteStorage | null> {
   const provider = await store.get<string>('primaryBackupMethod') || 'github'
 
   if (provider === 'github') {
@@ -418,7 +419,7 @@ function indexMatchesProjects(index: CanvasSyncIndex, projects: CanvasProject[])
 export async function uploadCanvases(conditions?: Map<string, RemoteWriteCondition>) {
   const { getCanvasProjects } = await import('@/db/canvases')
   const projects = await getCanvasProjects({ includeDeleted: true })
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createCanvasRemoteStorage(store, conditions)
   if (!storage) return false
 
@@ -467,7 +468,7 @@ export async function uploadCanvas(canvasId: string) {
   const project = projects.find(candidate => candidate.id === canvasId)
   if (!project) return false
 
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createCanvasRemoteStorage(store)
   if (!storage) return false
 
@@ -501,7 +502,7 @@ export async function uploadCanvas(canvasId: string) {
 }
 
 export async function purgeCanvas(canvasId: string) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createCanvasRemoteStorage(store)
   if (!storage) return false
 
@@ -557,7 +558,7 @@ export async function purgeCanvas(canvasId: string) {
 async function persistMergedCanvases(
   local: CanvasProject[],
   remote: CanvasProject[],
-  store: Store
+  store: StoreHandle
 ) {
   const { replaceAllCanvasProjects } = await import('@/db/canvases')
   const lastSyncedVersions = await store.get<Record<string, number>>('canvasSyncVersions') || {}
@@ -572,7 +573,7 @@ async function persistMergedCanvases(
 
 export async function downloadCanvases() {
   const { getCanvasProjects } = await import('@/db/canvases')
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const storage = await createCanvasRemoteStorage(store)
   const local = await getCanvasProjects({ includeDeleted: true })
   if (!storage) return local

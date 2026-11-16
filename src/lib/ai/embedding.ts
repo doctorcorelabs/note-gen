@@ -1,4 +1,4 @@
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { AiConfig } from "@/app/core/setting/config";
 import { handleAIError } from "./utils";
 import { invokeAiJson, resolveAiRequestConfig } from "./tauri-client";
@@ -31,7 +31,7 @@ interface RerankResponse {
  * 获取嵌入模型信息
  */
 export async function getEmbeddingModelInfo() {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const embeddingModel = await store.get<string>('embeddingModel');
   if (!embeddingModel) return null;
   
@@ -84,7 +84,7 @@ export async function getEmbeddingModelDescriptor(): Promise<{
  * 获取重排序模型信息
  */
 export async function getRerankModelInfo() {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
   const rerankModel = await store.get<string>('rerankingModel');
   if (!rerankModel) return null;
   

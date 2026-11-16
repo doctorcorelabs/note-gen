@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { testS3Connection } from '@/lib/sync/s3';
 import { S3Config } from '@/types/sync';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import useSyncStore from '@/stores/sync';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
@@ -36,7 +36,7 @@ export function S3Sync() {
   useEffect(() => {
     const initConfig = async () => {
       try {
-        const store = await Store.load('store.json');
+        const store = await platform.store.load('store.json');
         const savedConfig = await store.get<S3Config>('s3SyncConfig');
         if (savedConfig) {
           setConfig(savedConfig);
@@ -73,7 +73,7 @@ export function S3Sync() {
 
     const timer = setTimeout(async () => {
       try {
-        const store = await Store.load('store.json');
+        const store = await platform.store.load('store.json');
         await store.set('s3SyncConfig', config);
         await store.save();
       } catch (error) {

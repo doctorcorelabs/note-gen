@@ -1,6 +1,5 @@
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { save } from '@tauri-apps/plugin-dialog'
-import { copyFile, lstat } from '@tauri-apps/plugin-fs'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { getWorkspacePath } from '@/lib/workspace'
@@ -88,7 +87,7 @@ function requireDesktop(): void {
 
 async function captureWorkspace() {
   const workspace = await getWorkspacePath()
-  const path = workspace.isCustom ? workspace.path : await join(await appDataDir(), 'article')
+  const path = workspace.isCustom ? workspace.path : await platform.path.join(await platform.path.appDataDir(), 'article')
   const markedPath = parsePath(`${path.replace(/[\\/]+$/, '')}/__workspace__`, false)
   let normalized = markedPath?.slice(0, -'/__workspace__'.length)
   if (normalized === '' && markedPath?.startsWith('/')) normalized = '/'
@@ -119,7 +118,7 @@ function artifactParts(path: string): string[] {
 
 async function checkDirectory(path: string): Promise<void> {
   try {
-    const info = await lstat(path)
+    const info = await platform.fs.lstat(path)
     if (info.isSymlink) throw new ChatArtifactError('SYMLINK_BLOCKED')
     if (!info.isDirectory) throw new ChatArtifactError('NOT_ALLOWED')
   } catch (error) {
@@ -146,7 +145,7 @@ async function checkWorkspaceParents(root: string): Promise<void> {
   }
   await checkDirectory(current)
   for (const part of remaining) {
-    current = await join(current, part)
+    current = await platform.path.join(current, part)
     await checkDirectory(current)
   }
 }
@@ -178,9 +177,9 @@ export async function resolveChatArtifact(href: string, context: ChatArtifactCon
   await checkWorkspaceParents(workspace.normalizedRoot)
   let target = workspace.root
   for (let index = 0; index < parts.length; index += 1) {
-    target = await join(target, parts[index])
+    target = await platform.path.join(target, parts[index])
     try {
-      const info = await lstat(target)
+      const info = await platform.fs.lstat(target)
       if (info.isSymlink) throw new ChatArtifactError('SYMLINK_BLOCKED')
       if (index === parts.length - 1 ? !info.isFile : !info.isDirectory) {
         throw new ChatArtifactError('NOT_ALLOWED')
@@ -223,6 +222,6 @@ export async function saveChatArtifactAs(href: string, context: ChatArtifactCont
   if (!destination) return false
   const current = await resolveChatArtifact(href, { ...context, workspaceIdentity: artifact.workspaceIdentity })
   if (pathIdentity(current.absolutePath.replace(/\\/g, '/')) === pathIdentity(destination.replace(/\\/g, '/'))) return true
-  try { await copyFile(current.absolutePath, destination) } catch { throw new ChatArtifactError('SAVE_FAILED') }
+  try { await platform.fs.copyFile(current.absolutePath, destination) } catch { throw new ChatArtifactError('SAVE_FAILED') }
   return true
 }

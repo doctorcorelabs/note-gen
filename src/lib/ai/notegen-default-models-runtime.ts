@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 import type { AiConfig, ModelConfig, ModelType } from '@/app/core/setting/config'
 import { fetchConfigCenterConfig } from '@/lib/config-center/client'
@@ -156,7 +156,7 @@ async function fetchNoteGenDefaultModelsFromConfigCenter(versionCode?: number | 
 export async function loadNoteGenDefaultConfig(builtinConfig: AiConfig): Promise<AiConfig> {
   const policy = await loadNoteGenModelPolicy()
   builtinConfig = { ...builtinConfig, title: policy.title }
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const cached = await store.get<NoteGenDefaultModelsCache>(NOTEGEN_DEFAULT_MODELS_CACHE_KEY)
 
   try {

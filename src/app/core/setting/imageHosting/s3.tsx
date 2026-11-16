@@ -8,7 +8,7 @@ import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import useImageStore from '@/stores/imageHosting';
 import { SyncStateEnum } from '@/lib/sync/github.types';
 import { testS3Connection } from '@/lib/imageHosting/s3';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import {
@@ -73,7 +73,7 @@ export function S3ImageHosting() {
   useEffect(() => {
     let cancelled = false
     const initConfig = async () => {
-      const store = await Store.load('store.json');
+      const store = await platform.store.load('store.json');
       const savedConfig = await store.get<S3Config>('s3Config');
       if (cancelled) return
       if (savedConfig) {

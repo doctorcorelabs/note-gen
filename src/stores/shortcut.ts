@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut'
 import { globalShortcutIdentity, normalizeGlobalShortcut } from '@/lib/global-shortcut'
 import emitter from '@/lib/emitter'
@@ -64,7 +64,7 @@ const useShortcutStore = create<SettingState>((set, get) => ({
 
   initShortcut: () => serializeUpdate(async () => {
     if (get().initialized) return
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const storedShortcuts = await store.get<Shortcut[]>('shortcuts')
     const shortcuts = defaultShortcuts.map((shortcut) => (
       storedShortcuts?.find((item) => item.key === shortcut.key) ?? shortcut
@@ -128,7 +128,7 @@ const useShortcutStore = create<SettingState>((set, get) => ({
 
     let saved = false
     try {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       await store.set('shortcuts', nextShortcuts)
       await store.save()
       saved = true
@@ -139,7 +139,7 @@ const useShortcutStore = create<SettingState>((set, get) => ({
         await unregister(value).catch((cleanupError) => console.error('Failed to release new shortcut:', cleanupError))
       }
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await store.set('shortcuts', shortcuts)
         await store.save()
       } catch (restoreError) {

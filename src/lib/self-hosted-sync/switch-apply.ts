@@ -1,7 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { join } from '@tauri-apps/api/path'
-import { exists, readDir, readFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb, type RecordStatement } from '@/db'
 import { shouldExcludeFromSync } from '@/config/sync-exclusions'
 import { markEditorPathMutation, prepareActiveEditorPathMutationDurably, runEditorPathWriteTransaction } from '@/lib/editor-deactivation'
@@ -204,15 +202,15 @@ async function validateLocalFiles(input: ReplacementInput, workspace: SelfHosted
   let count = 0
   async function scan(directory: string, prefix = '') {
     if (!prefix) await ensureWorkspaceDirectory(directory)
-    for (const entry of await readDir(directory)) {
+    for (const entry of await platform.fs.readDir(directory)) {
       input.assertActive()
       if (entry.isSymlink || excluded(entry.name)) continue
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
-      const absolute = await join(directory, entry.name)
+      const absolute = await platform.path.join(directory, entry.name)
       if (entry.isDirectory) await scan(absolute, relativePath)
       else if (entry.isFile) {
         count++
-        if (await hashBytes(await readFile(absolute)) !== expected.get(relativePath)) throw stale(relativePath)
+        if (await hashBytes(await platform.fs.readFile(absolute)) !== expected.get(relativePath)) throw stale(relativePath)
       }
     }
   }
@@ -252,13 +250,13 @@ async function replaceLibrary(input: ReplacementInput, workspace: SelfHostedRepl
   }
   // Remove empty old directories, preserving excluded files and symlinks.
   async function prune(directory: string, prefix = '') {
-    if (!await exists(directory)) return
-    for (const entry of await readDir(directory)) {
+    if (!await platform.fs.exists(directory)) return
+    for (const entry of await platform.fs.readDir(directory)) {
       if (!entry.isDirectory || entry.isSymlink || excluded(entry.name)) continue
       const path = prefix ? `${prefix}/${entry.name}` : entry.name
-      const absolute = await join(directory, entry.name)
+      const absolute = await platform.path.join(directory, entry.name)
       await prune(absolute, path)
-      if ((await readDir(absolute)).length === 0) {
+      if ((await platform.fs.readDir(absolute)).length === 0) {
         input.assertActive()
         await invoke('self_hosted_delete_directory', { workspaceId: workspace.workspaceId, objectId: null,
           workspaceRoot: root, relativePath: path, allowNonEmpty: false })
@@ -281,9 +279,9 @@ async function replaceLibrary(input: ReplacementInput, workspace: SelfHostedRepl
     } else {
       const accepted = await runEditorPathWriteTransaction(path, async ({ hasQueuedSave }) => {
         if (hasQueuedSave()) return false
-        const absolute = await join(root, path)
-        if (await exists(absolute)) {
-          if (await hashBytes(await readFile(absolute)) !== expected.get(path)) throw stale(path)
+        const absolute = await platform.path.join(root, path)
+        if (await platform.fs.exists(absolute)) {
+          if (await hashBytes(await platform.fs.readFile(absolute)) !== expected.get(path)) throw stale(path)
         } else if (expected.has(path)) throw stale(path)
         await invoke('self_hosted_atomic_write', { workspaceId: workspace.workspaceId, objectId: entry.object.objectId,
           workspaceRoot: root, relativePath: path, contents: bytesToBase64Url(entry.bytes!), expectedHash: await hashBytes(entry.bytes!) })
@@ -400,12 +398,12 @@ async function normalizedSettings(value: unknown) {
   const defaults = Object.fromEntries(Object.entries(useSettingStore.getInitialState())
     .filter(([, item]) => typeof item !== 'function' && item !== undefined))
   const remote = record(value)
-  const excludeSensitiveConfig = await (await Store.load('store.json')).get<boolean>('excludeSensitiveConfig') ?? true
+  const excludeSensitiveConfig = await (await platform.store.load('store.json')).get<boolean>('excludeSensitiveConfig') ?? true
   return { ...defaults, ...remote, ...normalizeSettingsSnapshot(remote, defaults, { excludeSensitiveConfig }) }
 }
 
 async function replaceSettings(remote: Record<string, unknown>) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const options = { excludeSensitiveConfig: await store.get<boolean>('excludeSensitiveConfig') !== false }
   for (const [key] of await store.entries()) {
     if (!shouldExcludeFromSync(key, options) && !(key in remote)) await store.delete(key)

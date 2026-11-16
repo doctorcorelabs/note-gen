@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 
 export const SYNC_REPO_PLATFORMS = ['github', 'gitee', 'gitlab', 'gitea'] as const
 
@@ -24,13 +25,13 @@ function getWorkspaceKey(workspacePath: string): string {
   return normalizedPath || DEFAULT_WORKSPACE_KEY
 }
 
-async function getLegacyRepo(store: Store, platform: SyncRepoPlatform): Promise<string> {
+async function getLegacyRepo(store: StoreHandle, platform: SyncRepoPlatform): Promise<string> {
   return await store.get<string>(LEGACY_REPO_KEYS[platform]) || ''
 }
 
 export async function getWorkspaceSyncRepos(workspacePath?: string): Promise<WorkspaceSyncRepos> {
   await updateQueue
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const currentWorkspacePath = workspacePath ?? await store.get<string>('workspacePath') ?? ''
   const workspaceKey = getWorkspaceKey(currentWorkspacePath)
   const repoMap = await store.get<WorkspaceSyncRepoMap>(WORKSPACE_SYNC_REPOS_KEY) || {}
@@ -48,19 +49,19 @@ export async function getWorkspaceSyncRepos(workspacePath?: string): Promise<Wor
 }
 
 export async function setWorkspaceSyncRepo(
-  platform: SyncRepoPlatform,
+  repoPlatform: SyncRepoPlatform,
   repo: string,
   workspacePath?: string
 ): Promise<void> {
   await updateQueue
-  const inspectionStore = await Store.load('store.json')
+  const inspectionStore = await platform.store.load('store.json')
   const targetWorkspacePath = workspacePath ?? await inspectionStore.get<string>('workspacePath') ?? ''
   const workspaceKey = getWorkspaceKey(targetWorkspacePath)
   const initialRepoMap = await inspectionStore.get<WorkspaceSyncRepoMap>(WORKSPACE_SYNC_REPOS_KEY) || {}
   const activeWorkspacePath = await inspectionStore.get<string>('workspacePath') ?? ''
   const isActiveWorkspace = getWorkspaceKey(activeWorkspacePath) === workspaceKey
-  const existingRepo = initialRepoMap[workspaceKey]?.[platform]
-    ?? (workspaceKey === DEFAULT_WORKSPACE_KEY ? await getLegacyRepo(inspectionStore, platform) : '')
+  const existingRepo = initialRepoMap[workspaceKey]?.[repoPlatform]
+    ?? (workspaceKey === DEFAULT_WORKSPACE_KEY ? await getLegacyRepo(inspectionStore, repoPlatform) : '')
 
   if (existingRepo === repo) return
 
@@ -85,13 +86,13 @@ export async function setWorkspaceSyncRepo(
   }
 
   const update = async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const repoMap = await store.get<WorkspaceSyncRepoMap>(WORKSPACE_SYNC_REPOS_KEY) || {}
     await store.set(WORKSPACE_SYNC_REPOS_KEY, {
       ...repoMap,
       [workspaceKey]: {
         ...repoMap[workspaceKey],
-        [platform]: repo,
+        [repoPlatform]: repo,
       },
     })
     await store.save()

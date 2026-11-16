@@ -3,7 +3,7 @@ import { DirTree } from "@/stores/article";
 import { computedParentPath } from "@/lib/path";
 import { Copy } from "lucide-react"
 import { Kbd } from "@/components/ui/kbd"
-import { BaseDirectory, mkdir, readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { toast } from "@/hooks/use-toast";
 
 interface DuplicateFolderProps {
@@ -33,14 +33,14 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
 
       // 创建目标文件夹
       if (workspace.isCustom) {
-        await mkdir(targetPathOptions.path)
+        await platform.fs.mkdir(targetPathOptions.path)
       } else {
-        await mkdir(targetPathOptions.path, { baseDir: targetPathOptions.baseDir })
+        await platform.fs.mkdir(targetPathOptions.path, { baseDir: targetPathOptions.baseDir })
       }
 
       // 递归复制文件夹内容
       const copyDirRecursively = async (srcRelative: string, destRelative: string) => {
-        const entries = await readDir(
+        const entries = await platform.fs.readDir(
           srcRelative,
           workspace.isCustom ? {} : { baseDir: BaseDirectory.AppData }
         )
@@ -52,9 +52,9 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
           if (entry.isDirectory) {
             // 创建子目录
             if (workspace.isCustom) {
-              await mkdir(destEntryPath)
+              await platform.fs.mkdir(destEntryPath)
             } else {
-              await mkdir(destEntryPath, { baseDir: BaseDirectory.AppData })
+              await platform.fs.mkdir(destEntryPath, { baseDir: BaseDirectory.AppData })
             }
             await copyDirRecursively(srcEntryPath, destEntryPath)
           } else {
@@ -62,11 +62,11 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
             try {
               let content = ''
               if (workspace.isCustom) {
-                content = await readTextFile(srcEntryPath)
-                await writeTextFile(destEntryPath, content)
+                content = await platform.fs.readTextFile(srcEntryPath)
+                await platform.fs.writeTextFile(destEntryPath, content)
               } else {
-                content = await readTextFile(srcEntryPath, { baseDir: BaseDirectory.AppData })
-                await writeTextFile(destEntryPath, content, { baseDir: BaseDirectory.AppData })
+                content = await platform.fs.readTextFile(srcEntryPath, { baseDir: BaseDirectory.AppData })
+                await platform.fs.writeTextFile(destEntryPath, content, { baseDir: BaseDirectory.AppData })
               }
             } catch (err) {
               console.error(`Error copying file ${srcEntryPath}:`, err)

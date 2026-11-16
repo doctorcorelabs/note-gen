@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import {
   defaultEditorShortcuts,
   type EditorShortcut,
@@ -21,7 +21,7 @@ interface EditorShortcutState {
 }
 
 async function saveEditorShortcuts(shortcuts: EditorShortcut[]) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set(STORE_KEY, shortcuts)
   await store.save()
 }
@@ -30,7 +30,7 @@ const useEditorShortcutStore = create<EditorShortcutState>((set, get) => ({
   shortcuts: defaultEditorShortcuts,
 
   initEditorShortcuts: async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const storedShortcuts = await store.get<EditorShortcut[]>(STORE_KEY)
     const mergedShortcuts = mergeEditorShortcuts(storedShortcuts)
 

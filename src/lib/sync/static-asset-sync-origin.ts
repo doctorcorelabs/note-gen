@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 
 import type { S3Config, WebDAVConfig } from '@/types/sync'
 
@@ -30,7 +30,7 @@ async function getStaticAssetOperationKey(path: string, provider?: string): Prom
   let target = context.repo
 
   if (context.provider === 's3') {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const config = await store.get<S3Config>('s3SyncConfig')
     target = JSON.stringify([
       config?.endpoint || '',
@@ -39,7 +39,7 @@ async function getStaticAssetOperationKey(path: string, provider?: string): Prom
       config?.pathPrefix || '',
     ])
   } else if (context.provider === 'webdav') {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     target = JSON.stringify([
       config?.url || '',

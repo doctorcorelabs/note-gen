@@ -1,4 +1,5 @@
 import type { Tag } from '@/db/tags'
+import { platform } from '@/lib/platform'
 
 export type TagSyncIdentityBaseline = Record<string, { localId: number; localName: string; remoteName: string }>
 
@@ -119,7 +120,7 @@ export function remapRemoteProtectedTags(remoteValue: Tag[], localValue: Tag[], 
 export async function invalidateLocalTagSyncIdentity(ids: number[]) {
   if (!ids.length) return
   const removed = new Set(ids)
-  const store = await import('@tauri-apps/plugin-store').then(module => module.Store.load('store.json'))
+  const store = await platform.store.load('store.json')
   for (const [key, value] of await store.entries()) {
     if (!/^conversationSyncVersions:.*:tags:[a-f0-9]{64}$/.test(key)
       || !value || typeof value !== 'object' || Array.isArray(value)) continue

@@ -18,7 +18,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import useMarkStore from "@/stores/mark";
 import useTagStore from "@/stores/tag";
 import { fetchAiDesc } from "@/lib/ai/description";
-import { appDataDir } from "@tauri-apps/api/path";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { AlertCircle, CheckSquare, ImageUp, LoaderCircle, RefreshCw, Settings2, Square } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -33,7 +33,6 @@ import { markToMarkdown } from "@/lib/mark-to-markdown";
 import useSettingStore from "@/stores/setting";
 import { TodoItemContent } from "./todo-item-content";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { BaseDirectory, readFile } from "@tauri-apps/plugin-fs";
 import { useRouter } from "next/navigation";
 import { NO_TRANSCRIPTION_MESSAGE, transcribeRecording } from "@/lib/audio";
 import { cn, isHttpUrl } from "@/lib/utils";
@@ -309,7 +308,7 @@ export const MarkWrapper = React.memo(({mark, variant = 'list', interactive = tr
 
     try {
       setIsRetryingTranscription(true)
-      const fileData = await readFile(mark.url, { baseDir: BaseDirectory.AppData })
+      const fileData = await platform.fs.readFile(mark.url, { baseDir: BaseDirectory.AppData })
       const extension = mark.url.split('.').pop()?.toLowerCase()
       const mimeType = extension === 'wav' ? 'audio/wav' :
         extension === 'mp3' ? 'audio/mpeg' :
@@ -938,7 +937,7 @@ export const MarkItem = React.memo(({
   const handelShowInFolder = useCallback(async (e?: React.MouseEvent) => {
     e?.stopPropagation()
     try {
-      const appDir = await appDataDir()
+      const appDir = await platform.path.appDataDir()
       const action = getMarkOpenAction(mark, appDir, 'folder')
 
       if (!action?.path) {
@@ -959,7 +958,7 @@ export const MarkItem = React.memo(({
   const handelShowInFile = useCallback(async (e?: React.MouseEvent) => {
     e?.stopPropagation()
     try {
-      const appDir = await appDataDir()
+      const appDir = await platform.path.appDataDir()
       const action = getMarkOpenAction(mark, appDir, 'file')
 
       if (!action?.path) {

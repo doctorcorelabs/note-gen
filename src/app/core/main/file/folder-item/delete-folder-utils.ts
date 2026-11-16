@@ -1,5 +1,4 @@
-import { exists, remove } from "@tauri-apps/plugin-fs";
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import type { DirTree } from "@/stores/article";
 import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from "@/types/sync";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";
@@ -132,17 +131,17 @@ export async function deleteLocalFolderIfExists(folderPath: string) {
   const workspace = await getWorkspacePath();
   const pathOptions = await getFilePathOptions(folderPath);
   const localExists = workspace.isCustom
-    ? await exists(pathOptions.path)
-    : await exists(pathOptions.path, { baseDir: pathOptions.baseDir });
+    ? await platform.fs.exists(pathOptions.path)
+    : await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir });
 
   if (!localExists) {
     return false;
   }
 
   if (workspace.isCustom) {
-    await remove(pathOptions.path, { recursive: true });
+    await platform.fs.remove(pathOptions.path, { recursive: true });
   } else {
-    await remove(pathOptions.path, { baseDir: pathOptions.baseDir, recursive: true });
+    await platform.fs.remove(pathOptions.path, { baseDir: pathOptions.baseDir, recursive: true });
   }
 
   return true;
@@ -292,8 +291,8 @@ export async function deleteRemoteFolder(
   target?: SyncPlatform,
   beforeDelete?: () => Promise<void>,
 ): Promise<DeleteRemoteFolderResult> {
-  const store = await Store.load("store.json");
-  const platform = target ?? await store.get<SyncPlatform>("primaryBackupMethod") ?? "github";
+  const store = await platform.store.load("store.json");
+  const effectivePlatform = target ?? await store.get<SyncPlatform>("primaryBackupMethod") ?? "github";
   const folderPath = normalizeFolderPath(computedParentPath(item));
   if (!folderPath || folderPath.split("/").some(part => part === ".." || part === ".")) {
     throw new Error("Invalid folder deletion path");
@@ -303,26 +302,26 @@ export async function deleteRemoteFolder(
   }
   await beforeDelete?.();
 
-  if (isGitPlatform(platform)) {
-    const repo = await getSyncRepoName(platform);
-    const entries = await collectGitRemoteFileEntries(platform, folderPath, repo);
-    const result = await deleteListedRemoteFiles(platform,
+  if (isGitPlatform(effectivePlatform)) {
+    const repo = await getSyncRepoName(effectivePlatform);
+    const entries = await collectGitRemoteFileEntries(effectivePlatform, folderPath, repo);
+    const result = await deleteListedRemoteFiles(effectivePlatform,
       entries.map(entry => ({ path: entry.path, version: entry.sha })), beforeDelete);
     if (result.failedPaths.length === 0) {
       await beforeDelete?.();
       // Re-read rather than reusing the inventory: another client may have added a file.
-      const remaining = await collectGitRemoteFileEntries(platform, folderPath, repo);
+      const remaining = await collectGitRemoteFileEntries(effectivePlatform, folderPath, repo);
       result.failedPaths.push(...remaining.map(entry => entry.path));
     }
     return result;
   }
 
-  if (platform === "s3") {
+  if (effectivePlatform === "s3") {
     const config = await store.get<S3Config>("s3SyncConfig");
     if (!config) throw new Error("S3 is not configured");
     const entries = (await s3ListObjects(config, folderPath))
       .filter(entry => entry.key.startsWith(`${folderPath}/`));
-    const result = await deleteListedRemoteFiles(platform,
+    const result = await deleteListedRemoteFiles(effectivePlatform,
       entries.map(entry => ({ path: entry.key, version: entry.etag })), beforeDelete);
     if (result.failedPaths.length === 0) {
       await beforeDelete?.();
@@ -332,9 +331,9 @@ export async function deleteRemoteFolder(
     return result;
   }
 
-  const beforeWrite = await captureWorkspaceRemoteWriteGuard(folderPath, platform, false);
+  const beforeWrite = await captureWorkspaceRemoteWriteGuard(folderPath, effectivePlatform, false);
   const guard = async () => { await beforeDelete?.(); await beforeWrite?.(); };
-  if (platform === "cloudFolder") {
+  if (effectivePlatform === "cloudFolder") {
     const config = await store.get<CloudFolderConfig>("cloudFolderSyncConfig");
     if (!config?.path || !supportsCloudFolderWorkspace(config)) {
       throw new Error("Cloud folder does not support remote workspace deletion");
@@ -342,7 +341,7 @@ export async function deleteRemoteFolder(
     const deleted = await androidCloudFolderWorkspaceDelete(config, folderPath, undefined, guard);
     return { attempted: true, deletedPaths: deleted ? [folderPath] : [], failedPaths: deleted ? [] : [folderPath] };
   }
-  if (platform !== "webdav") throw new Error("Remote folder deletion is unavailable");
+  if (effectivePlatform !== "webdav") throw new Error("Remote folder deletion is unavailable");
   const config = await store.get<WebDAVConfig>("webdavSyncConfig");
   if (!config) throw new Error("WebDAV is not configured");
   const deleted = await webdavDelete(config, folderPath, undefined, undefined, guard);

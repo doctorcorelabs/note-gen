@@ -1,26 +1,26 @@
 import { RepoNames } from './github.types'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { getWorkspaceSyncRepos } from './workspace-repos'
 
 /**
  * 获取实际使用的仓库名称
  * @param type 仓库类型：'sync' | 'image'
- * @param platform 平台：'github' | 'gitee' | 'gitlab' | 'gitea'
+ * @param repoPlatform 平台：'github' | 'gitee' | 'gitlab' | 'gitea'
  * @returns 实际使用的仓库名称
  */
 export async function getActualRepoName(
   type: 'sync' | 'image',
-  platform: 'github' | 'gitee' | 'gitlab' | 'gitea'
+  repoPlatform: 'github' | 'gitee' | 'gitlab' | 'gitea'
 ): Promise<string> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   
   // 根据类型和平台获取自定义仓库名
   let customRepoName = ''
   
   if (type === 'sync') {
     const workspaceRepos = await getWorkspaceSyncRepos()
-    customRepoName = workspaceRepos[platform] || ''
-  } else if (type === 'image' && platform === 'github') {
+    customRepoName = workspaceRepos[repoPlatform] || ''
+  } else if (type === 'image' && repoPlatform === 'github') {
     customRepoName = await store.get<string>('githubCustomImageRepo') || ''
   }
   

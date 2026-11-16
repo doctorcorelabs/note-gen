@@ -1,6 +1,6 @@
 'use client'
 
-import { exists, lstat, readFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 
 import { getCurrentFolder } from '@/lib/path'
 import { getFilePathOptions } from '@/lib/workspace'
@@ -127,13 +127,13 @@ async function isSafeLocalAsset(path: string): Promise<boolean> {
     const candidate = segments.slice(0, index).join('/')
     const pathOptions = await getFilePathOptions(candidate)
     const candidateExists = pathOptions.baseDir
-      ? await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : await exists(pathOptions.path)
+      ? await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : await platform.fs.exists(pathOptions.path)
     if (!candidateExists) return false
 
     const info = pathOptions.baseDir
-      ? await lstat(pathOptions.path, { baseDir: pathOptions.baseDir })
-      : await lstat(pathOptions.path)
+      ? await platform.fs.lstat(pathOptions.path, { baseDir: pathOptions.baseDir })
+      : await platform.fs.lstat(pathOptions.path)
     if (info.isSymlink) return false
     if (index < segments.length && !info.isDirectory) return false
     if (index === segments.length && !info.isFile) return false
@@ -147,8 +147,8 @@ async function readLocalBytes(path: string): Promise<Uint8Array | null> {
 
   const pathOptions = await getFilePathOptions(path)
   return pathOptions.baseDir
-    ? await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-    : await readFile(pathOptions.path)
+    ? await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+    : await platform.fs.readFile(pathOptions.path)
 }
 
 function markTaskRemote(path: string): void {

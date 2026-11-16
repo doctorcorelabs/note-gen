@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
 import { check, Update } from '@tauri-apps/plugin-updater'
@@ -116,13 +116,13 @@ const useUpdateStore = create<UpdateState>((set, get) => ({
   
   ignoredVersion: '',
   setIgnoredVersion: async (version) => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('ignoredVersion', version)
     await store.save()
     set({ ignoredVersion: version })
   },
   clearIgnoredVersion: async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('ignoredVersion', '')
     await store.save()
 
@@ -170,7 +170,7 @@ const useUpdateStore = create<UpdateState>((set, get) => ({
   },
   
   initUpdateStore: async () => {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const ignoredVersion = await store.get('ignoredVersion') as string
     if (ignoredVersion) {
       set({ ignoredVersion })

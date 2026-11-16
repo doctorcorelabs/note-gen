@@ -1,4 +1,4 @@
-import { Store } from "@tauri-apps/plugin-store";
+import { platform } from "@/lib/platform";
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
 import { toast } from '@/hooks/use-toast';
 import { v4 as uuid } from 'uuid';
@@ -152,7 +152,7 @@ async function getSignatureKey(key: string, dateStamp: string, regionName: strin
 // 测试 S3 连接
 export async function testS3Connection(config: S3Config): Promise<boolean> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const proxyUrl = await store.get<string>('proxy')
     const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
 
@@ -254,7 +254,7 @@ export async function testS3Connection(config: S3Config): Promise<boolean> {
 // 上传图片到 S3
 export async function uploadImageByS3(file: File): Promise<string | undefined> {
   try {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const config = await store.get<S3Config>('s3Config');
     
     if (!config) {

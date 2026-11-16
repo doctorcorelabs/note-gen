@@ -1,7 +1,7 @@
 import { GithubFile } from '@/lib/sync/github';
 import { getImageFiles } from '@/lib/imageHosting/github';
 import { GithubRepoInfo, OctokitResponse, SyncStateEnum, UserInfo } from '@/lib/sync/github.types';
-import { Store } from '@tauri-apps/plugin-store';
+import { platform } from '@/lib/platform';
 import { create } from 'zustand'
 import type { S3Config } from '@/lib/imageHosting/types';
 import type { ImageHostingType } from '@/lib/image-hosting-config';
@@ -47,7 +47,7 @@ interface ImageHostingState {
 
 const useImageStore = create<ImageHostingState>((set, get) => ({
   initMainHosting: async () => {
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     const [mainImageHosting, s3Config] = await Promise.all([
       store.get<string>('mainImageHosting'),
       store.get<S3Config>('s3Config'),
@@ -84,7 +84,7 @@ const useImageStore = create<ImageHostingState>((set, get) => ({
   mainImageHosting: 'github',
   setMainImageHosting: async (mainImageHosting) => {
     set({ mainImageHosting })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('mainImageHosting', mainImageHosting)
     await store.save()
   },
@@ -93,7 +93,7 @@ const useImageStore = create<ImageHostingState>((set, get) => ({
   setImageRepoUserInfo: async (imageRepoUserInfo) => {
     set({ imageRepoUserInfo })
     if (!imageRepoUserInfo) return
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('githubImageUsername', imageRepoUserInfo?.data?.login)
     await store.save()
   },
@@ -110,7 +110,7 @@ const useImageStore = create<ImageHostingState>((set, get) => ({
   s3Config: undefined,
   setS3Config: async (config) => {
     set({ s3Config: config })
-    const store = await Store.load('store.json');
+    const store = await platform.store.load('store.json');
     await store.set('s3Config', config)
     await store.save()
   },

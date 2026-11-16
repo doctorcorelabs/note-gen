@@ -2,8 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { copyFile, exists, mkdir, readDir, writeTextFile } from '@tauri-apps/plugin-fs'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { invoke } from '@tauri-apps/api/core'
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
@@ -28,11 +27,11 @@ function markdownNameFromDocumentName(fileName: string) {
 async function getAvailableMarkdownPath(targetDir: string, fileName: string) {
   const markdownName = markdownNameFromDocumentName(fileName)
   const baseName = markdownName.slice(0, -3)
-  let candidate = await join(targetDir, markdownName)
+  let candidate = await platform.path.join(targetDir, markdownName)
   let suffix = 1
 
-  while (await exists(candidate)) {
-    candidate = await join(targetDir, `${baseName} (${suffix}).md`)
+  while (await platform.fs.exists(candidate)) {
+    candidate = await platform.path.join(targetDir, `${baseName} (${suffix}).md`)
     suffix += 1
   }
 
@@ -45,16 +44,16 @@ async function copyMarkdownFilesRecursively(
   relativePath = ''
 ): Promise<number> {
   let copiedCount = 0
-  const entries = await readDir(sourceDir)
+  const entries = await platform.fs.readDir(sourceDir)
 
   for (const entry of entries) {
     if (entry.name.startsWith('.')) {
       continue
     }
 
-    const sourcePath = await join(sourceDir, entry.name)
-    const nextRelativePath = relativePath ? await join(relativePath, entry.name) : entry.name
-    const targetPath = await join(targetDir, nextRelativePath)
+    const sourcePath = await platform.path.join(sourceDir, entry.name)
+    const nextRelativePath = relativePath ? await platform.path.join(relativePath, entry.name) : entry.name
+    const targetPath = await platform.path.join(targetDir, nextRelativePath)
 
     if (entry.isDirectory) {
       copiedCount += await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath)
@@ -71,12 +70,12 @@ async function copyMarkdownFilesRecursively(
       continue
     }
 
-    const targetDirectory = relativePath ? await join(targetDir, relativePath) : targetDir
-    if (!await exists(targetDirectory)) {
-      await mkdir(targetDirectory, { recursive: true })
+    const targetDirectory = relativePath ? await platform.path.join(targetDir, relativePath) : targetDir
+    if (!await platform.fs.exists(targetDirectory)) {
+      await platform.fs.mkdir(targetDirectory, { recursive: true })
     }
 
-    await copyFile(sourcePath, targetPath)
+    await platform.fs.copyFile(sourcePath, targetPath)
     copiedCount++
   }
 
@@ -108,7 +107,7 @@ export function useMarkdownImport() {
       const workspace = await getWorkspacePath()
       const targetDir = workspace.isCustom
         ? workspace.path
-        : await join(await appDataDir(), 'article')
+        : await platform.path.join(await platform.path.appDataDir(), 'article')
       const copiedCount = await copyMarkdownFilesRecursively(selectedPath, targetDir)
 
       await loadFileTree()
@@ -148,7 +147,7 @@ export function useMarkdownImport() {
       const workspace = await getWorkspacePath()
       const targetDir = workspace.isCustom
         ? workspace.path
-        : await join(await appDataDir(), 'article')
+        : await platform.path.join(await platform.path.appDataDir(), 'article')
       const copiedCount = await invoke<number>('import_notion_zip', {
         zipPath: selectedPath,
         targetDir,
@@ -196,7 +195,7 @@ export function useMarkdownImport() {
       const workspace = await getWorkspacePath()
       const targetDir = workspace.isCustom
         ? workspace.path
-        : await join(await appDataDir(), 'article')
+        : await platform.path.join(await platform.path.appDataDir(), 'article')
       let convertedCount = 0
       const failures: string[] = []
 
@@ -205,7 +204,7 @@ export function useMarkdownImport() {
         try {
           const parsed = await parseLocalDocument(sourcePath, fileName)
           const targetPath = await getAvailableMarkdownPath(targetDir, fileName)
-          await writeTextFile(targetPath, parsed.markdown)
+          await platform.fs.writeTextFile(targetPath, parsed.markdown)
           convertedCount += 1
         } catch (error) {
           console.error(`Convert document to Markdown failed: ${fileName}`, error)

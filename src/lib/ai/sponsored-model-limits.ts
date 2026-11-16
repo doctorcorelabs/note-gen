@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { noteGenDefaultModels } from '@/app/model-config'
 import type { AiRequestConfig } from './tauri-client'
 import { loadNoteGenModelPolicy } from './notegen-model-policy'
@@ -51,7 +51,7 @@ export function noteGenUsageDate(): string {
 }
 
 export async function getNoteGenLimitedUsage(): Promise<number> {
-  const store = await Store.load(NOTEGEN_LIMITED_STORE, { autoSave: false })
+  const store = await platform.store.load(NOTEGEN_LIMITED_STORE, { autoSave: false })
   const usage = await store.get<TokenUsage>(NOTEGEN_LIMITED_USAGE_KEY)
   return tokensForDate(usage, noteGenUsageDate())
 }
@@ -101,7 +101,7 @@ export function createSponsoredUsageRecorder(config: AiRequestConfig, body: unkn
     const settlement = reservationQueue.then(async () => {
       // A request spanning midnight must not charge the following day's allowance.
       if (date !== noteGenUsageDate()) return
-      const store = await Store.load(NOTEGEN_LIMITED_STORE, { autoSave: false })
+      const store = await platform.store.load(NOTEGEN_LIMITED_STORE, { autoSave: false })
       const current = await store.get<TokenUsage>(NOTEGEN_LIMITED_USAGE_KEY)
       await store.set(NOTEGEN_LIMITED_USAGE_KEY, { date, tokens: tokensForDate(current, date) + delta })
       await store.save()

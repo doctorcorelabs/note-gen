@@ -1,7 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { BaseDirectory, exists, mkdir, readFile, readTextFile, writeFile } from '@tauri-apps/plugin-fs'
-import { join } from '@tauri-apps/api/path'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { executeRecordTransaction, getDb } from '@/db'
 import { SelfHostedApiError } from './client'
 import {
@@ -669,7 +667,7 @@ async function hasAmbiguousTombstonedLibraryFile(binding: Binding) {
     [binding.workspaceId],
   )
   for (const row of rows) {
-    if (await exists(await join(binding.localRoot, row.relativePath))) return true
+    if (await platform.fs.exists(await platform.path.join(binding.localRoot, row.relativePath))) return true
   }
   return false
 }
@@ -696,7 +694,7 @@ async function recoverUncoveredTombstonedPortableFiles(
   )
   for (const row of rows) {
     if (authoritativeObjectIds.has(row.objectId)) continue
-    if (!await exists(await join(binding.localRoot, row.relativePath))) continue
+    if (!await platform.fs.exists(await platform.path.join(binding.localRoot, row.relativePath))) continue
     // A tombstone omitted from the authoritative snapshot has been garbage
     // collected remotely. Treat the still-present local path as an explicit
     // recreation instead of forcing bootstrap on every wake forever.
@@ -1187,8 +1185,8 @@ async function preserveRejectedRevision(binding: Binding, row: OutboxRow, revisi
   const previousPath = previous[0]?.path
   const copyPath = previousPath && isRevisionConflictCopyPath(previousPath)
     ? previousPath : `self-hosted-conflict-backups/${crypto.randomUUID()}.json`
-  await mkdir('self-hosted-conflict-backups', { baseDir: BaseDirectory.AppData, recursive: true })
-  await writeFile(copyPath, new TextEncoder().encode(snapshot), { baseDir: BaseDirectory.AppData })
+  await platform.fs.mkdir('self-hosted-conflict-backups', { baseDir: BaseDirectory.AppData, recursive: true })
+  await platform.fs.writeFile(copyPath, new TextEncoder().encode(snapshot), { baseDir: BaseDirectory.AppData })
   // Persist the recovery copy before making the command non-retryable.
   await database.execute(`insert into self_hosted_conflicts(id, workspace_id, object_id, conflict_type,
       local_snapshot, remote_snapshot, local_copy_path, state, created_at)
@@ -1210,9 +1208,9 @@ async function releaseAcknowledgedRevisionConflicts(binding: Binding) {
   )
   for (const row of rows) {
     if (!row.copyPath || !isRevisionConflictCopyPath(row.copyPath)
-      || !await exists(row.copyPath, { baseDir: BaseDirectory.AppData })) throw new Error('SELF_HOSTED_REVISION_CONFLICT')
+      || !await platform.fs.exists(row.copyPath, { baseDir: BaseDirectory.AppData })) throw new Error('SELF_HOSTED_REVISION_CONFLICT')
     try {
-      const saved = JSON.parse(await readTextFile(row.copyPath, { baseDir: BaseDirectory.AppData })) as {
+      const saved = JSON.parse(await platform.fs.readTextFile(row.copyPath, { baseDir: BaseDirectory.AppData })) as {
         command?: { commandId?: unknown }
       }
       if (saved.command?.commandId !== row.commandId) throw new Error('invalid_recovery_copy')
@@ -1826,9 +1824,9 @@ async function applyRemoteAsset(binding: Binding, event: SyncEvent, payload: Rec
      where workspace_id = $1 and object_id = $2 limit 1`,
     [binding.workspaceId, event.objectId]
   )
-  const absolutePath = await join(binding.localRoot!, portable.normalized)
-  if (await exists(absolutePath) && mappings[0]?.contentHash) {
-    const current = await readFile(absolutePath)
+  const absolutePath = await platform.path.join(binding.localRoot!, portable.normalized)
+  if (await platform.fs.exists(absolutePath) && mappings[0]?.contentHash) {
+    const current = await platform.fs.readFile(absolutePath)
     if (await hashBytes(current) !== mappings[0].contentHash) {
       const conflictPath = conflictCopyPath(portable.normalized)
       await writeBytesJournaled(binding, event.objectId!, conflictPath, current)
@@ -1916,8 +1914,8 @@ async function applyRemoteDelete(binding: Binding, objectId: string) {
   const mapping = mappings[0]
   if (mapping?.relativePath && binding.localRoot) {
     await assertNoPendingPathMove(binding, mapping.relativePath)
-    const absolutePath = await join(binding.localRoot, mapping.relativePath)
-    const pathExists = await exists(absolutePath)
+    const absolutePath = await platform.path.join(binding.localRoot, mapping.relativePath)
+    const pathExists = await platform.fs.exists(absolutePath)
     const fileExists = mapping.kind !== 'folder' && pathExists
     if (
       pathExists
@@ -1941,9 +1939,9 @@ async function applyRemoteDelete(binding: Binding, objectId: string) {
       return
     }
     if (fileExists && mapping.contentHash) {
-      const current = mapping.kind === 'asset' ? null : await readTextFile(absolutePath)
+      const current = mapping.kind === 'asset' ? null : await platform.fs.readTextFile(absolutePath)
       const currentHash = mapping.kind === 'asset'
-        ? await hashBytes(await readFile(absolutePath))
+        ? await hashBytes(await platform.fs.readFile(absolutePath))
         : await invoke<string>('self_hosted_sha256', { value: current! })
       if (currentHash !== mapping.contentHash) {
         await database.execute(
@@ -2461,9 +2459,9 @@ async function rollbackRemoteEditorSnapshot(
   previousContent: string | null,
   writtenContent: string,
 ) {
-  const absolutePath = await join(binding.localRoot!, relativePath)
-  const currentExists = await exists(absolutePath)
-  const currentContent = currentExists ? await readTextFile(absolutePath) : null
+  const absolutePath = await platform.path.join(binding.localRoot!, relativePath)
+  const currentExists = await platform.fs.exists(absolutePath)
+  const currentContent = currentExists ? await platform.fs.readTextFile(absolutePath) : null
   if (previousContent !== null) {
     if (currentContent === previousContent) return
     if (currentContent !== null && currentContent !== writtenContent) {
@@ -2504,9 +2502,9 @@ async function writeRemoteEditorSnapshot(
     relativePath,
     async ({ hasQueuedSave }) => {
       if (getEditorPathMutationRevision(relativePath) !== initialMutationRevision) return false
-      const absolutePath = await join(binding.localRoot!, relativePath)
-      const existed = await exists(absolutePath)
-      const previousContent = existed ? await readTextFile(absolutePath) : null
+      const absolutePath = await platform.path.join(binding.localRoot!, relativePath)
+      const existed = await platform.fs.exists(absolutePath)
+      const previousContent = existed ? await platform.fs.readTextFile(absolutePath) : null
       if (hasQueuedSave()) return false
 
       const snapshot = await resolveSnapshot(previousContent)
@@ -2613,9 +2611,9 @@ async function deleteRemoteEditorFile(
     relativePath,
     async ({ hasQueuedSave }) => {
       if (getEditorPathMutationRevision(relativePath) !== initialMutationRevision) return false
-      const absolutePath = await join(localRoot, relativePath)
-      const fileExists = await exists(absolutePath)
-      const previousContent = fileExists ? await readTextFile(absolutePath) : null
+      const absolutePath = await platform.path.join(localRoot, relativePath)
+      const fileExists = await platform.fs.exists(absolutePath)
+      const previousContent = fileExists ? await platform.fs.readTextFile(absolutePath) : null
       if (hasQueuedSave()) return false
 
       if (fileExists && expectedHash) {
@@ -2626,7 +2624,7 @@ async function deleteRemoteEditorFile(
           relativePath,
           expectedHash,
         })
-        if (!deleted && await exists(absolutePath)) return false
+        if (!deleted && await platform.fs.exists(absolutePath)) return false
       }
 
       const targetIsActive = editorPathsReferToSameFile(
@@ -2695,7 +2693,7 @@ async function pendingPathMovesForBinding(binding: Binding): Promise<Array<{ sou
   if (binding.workspaceType !== 'library' || !binding.localRoot) return []
   const normalize = (path: string) => path.normalize('NFC').replaceAll('\\', '/').replace(/\/+$/, '')
   if (normalize(binding.localRoot) !== normalize(await getCurrentWorkspaceRoot())) return []
-  if (await (await Store.load('store.json')).get<string>('primaryBackupMethod') !== 'selfHosted') return []
+  if (await (await platform.store.load('store.json')).get<string>('primaryBackupMethod') !== 'selfHosted') return []
   const { getPendingWorkspacePathMoves } = await import('@/lib/sync/workspace-path-moves')
   return getPendingWorkspacePathMoves()
 }

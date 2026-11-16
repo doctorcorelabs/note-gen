@@ -1,6 +1,6 @@
-import { readDir, BaseDirectory, DirEntry } from "@tauri-apps/plugin-fs";
+import type { DirEntry } from "@/lib/platform";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { getFilePathOptions, getWorkspacePath } from "./workspace";
-import { join } from "@tauri-apps/api/path";
 
 export interface MarkdownFile {
   name: string;
@@ -45,9 +45,9 @@ export async function collectMarkdownFiles(folderPath: string): Promise<Array<{p
       
       let entries;
       if (workspace.isCustom) {
-        entries = await readDir(pathOptions.path);
+        entries = await platform.fs.readDir(pathOptions.path);
       } else {
-        entries = await readDir(pathOptions.path, { baseDir: pathOptions.baseDir });
+        entries = await platform.fs.readDir(pathOptions.path, { baseDir: pathOptions.baseDir });
       }
       
       for (const entry of entries) {
@@ -94,9 +94,9 @@ export async function getAllMarkdownFiles(includeMetadata: boolean = false): Pro
 
     try {
       if (useCustomPath) {
-        entries = await readDir(dirPath);
+        entries = await platform.fs.readDir(dirPath);
       } else {
-        entries = await readDir(dirPath, { baseDir: BaseDirectory.AppData });
+        entries = await platform.fs.readDir(dirPath, { baseDir: BaseDirectory.AppData });
       }
 
       for (const entry of entries) {
@@ -109,12 +109,12 @@ export async function getAllMarkdownFiles(includeMetadata: boolean = false): Pro
 
         if (entry.isDirectory) {
           // 递归处理子目录
-          const childPath = await join(dirPath, entry.name);
+          const childPath = await platform.path.join(dirPath, entry.name);
           await processDirectory(childPath, useCustomPath, currentRelativePath, depth + 1);
         } else if (entry.name.endsWith('.md')) {
           // 添加Markdown文件
           const fullPath = useCustomPath
-            ? await join(dirPath, entry.name)
+            ? await platform.path.join(dirPath, entry.name)
             : currentRelativePath;
 
           const fileInfo: MarkdownFile = {
@@ -126,12 +126,11 @@ export async function getAllMarkdownFiles(includeMetadata: boolean = false): Pro
           // 如果需要元数据，获取文件完整元数据
           if (includeMetadata) {
             try {
-              const { stat } = await import('@tauri-apps/plugin-fs');
               // 使用 getFilePathOptions 获取正确的路径（兼容自定义工作区和默认工作区）
               const pathOptions = await getFilePathOptions(currentRelativePath);
               const metadata = pathOptions.baseDir
-                ? await stat(pathOptions.path, { baseDir: pathOptions.baseDir })
-                : await stat(pathOptions.path);
+                ? await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+                : await platform.fs.stat(pathOptions.path);
 
               // 存储 modifiedAt 用于兼容
               fileInfo.modifiedAt = metadata.mtime ?? undefined;

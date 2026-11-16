@@ -1,6 +1,6 @@
 'use client'
 
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { Globe, Server } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
@@ -28,7 +28,7 @@ export function GitlabSync() {
   async function handleTokenChange(event: React.ChangeEvent<HTMLInputElement>) {
     const value = event.target.value
     setGitlabAccessToken(value)
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     await store.set('gitlabAccessToken', value)
     await store.save()
   }
@@ -44,7 +44,7 @@ export function GitlabSync() {
 
   useEffect(() => {
     async function init() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const instanceType = await store.get<GitlabInstanceType>('gitlabInstanceType')
       const customUrl = await store.get<string>('gitlabCustomUrl')
       const token = await store.get<string>('gitlabAccessToken')

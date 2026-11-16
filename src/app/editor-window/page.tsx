@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-import { platform } from '@tauri-apps/plugin-os'
-import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import { MoreHorizontal, Pin, PinOff } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -70,10 +69,10 @@ export default function EditorWindowPage() {
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        if (!await exists(currentSession.absolutePath)) {
+        if (!await platform.fs.exists(currentSession.absolutePath)) {
           throw new Error(t('fileMissing'))
         }
-        await writeTextFile(currentSession.absolutePath, nextContent)
+        await platform.fs.writeTextFile(currentSession.absolutePath, nextContent)
         savedContentRef.current = nextContent
         if (contentRef.current === nextContent) setDirty(false)
         setError('')
@@ -124,7 +123,7 @@ export default function EditorWindowPage() {
       useSettingStore.setState({ developerMode: event.payload === true })
     }).then(async (unlisten) => {
       removeListener = unlisten
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const developerMode = await store.get<boolean>('developerMode') === true
       if (!disposed) {
         useSettingStore.setState({ developerMode })
@@ -141,7 +140,7 @@ export default function EditorWindowPage() {
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('session')
-    setIsMacOS(platform() === 'macos')
+    setIsMacOS(getRuntimePlatform() === 'macos')
     if (!id) {
       setError(t('missing'))
       return
@@ -153,7 +152,7 @@ export default function EditorWindowPage() {
         return
       }
       setRuntimeWorkspaceRoot(storedSession.workspaceRoot, storedSession.workspaceIsCustom ?? true)
-      const initialContent = await readTextFile(storedSession.absolutePath)
+      const initialContent = await platform.fs.readTextFile(storedSession.absolutePath)
       sessionRef.current = storedSession
       contentRef.current = initialContent
       savedContentRef.current = initialContent

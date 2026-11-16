@@ -24,7 +24,7 @@ import type { PendingQuote } from "@/stores/chat"
 import { AgentPermissionModeSelect } from "./agent-permission-mode"
 import { AgentPendingMessageList } from "./agent-pending-message-list"
 import { ContextUsageIndicator } from "./context-usage-indicator"
-import { readFile, readTextFile, writeFile, BaseDirectory, exists, mkdir, stat } from "@tauri-apps/plugin-fs"
+import { platform, BaseDirectory } from "@/lib/platform"
 import { ShineBorder } from "@/components/ui/shine-border"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -399,9 +399,9 @@ export const ChatInput = React.memo(function ChatInput() {
       try {
         const workspace = await getWorkspacePath()
         const content = workspace.isCustom
-          ? await readTextFile(linkedResource.path)
+          ? await platform.fs.readTextFile(linkedResource.path)
           : await getFilePathOptions(linkedResource.path).then(({ path, baseDir }) =>
-              readTextFile(path, { baseDir })
+              platform.fs.readTextFile(path, { baseDir })
             )
         if (!cancelled) {
           setContextUsageLinkedContent(content)
@@ -865,9 +865,9 @@ export const ChatInput = React.memo(function ChatInput() {
   }
 
   async function ensureImageAttachmentDir() {
-    const dirExists = await exists(IMAGE_ATTACHMENT_DIR, { baseDir: BaseDirectory.AppData })
+    const dirExists = await platform.fs.exists(IMAGE_ATTACHMENT_DIR, { baseDir: BaseDirectory.AppData })
     if (!dirExists) {
-      await mkdir(IMAGE_ATTACHMENT_DIR, { baseDir: BaseDirectory.AppData })
+      await platform.fs.mkdir(IMAGE_ATTACHMENT_DIR, { baseDir: BaseDirectory.AppData })
     }
   }
 
@@ -881,8 +881,8 @@ export const ChatInput = React.memo(function ChatInput() {
     const filePath = `${IMAGE_ATTACHMENT_DIR}/${fileName}`
 
     await ensureImageAttachmentDir()
-    if (!await exists(filePath, { baseDir: BaseDirectory.AppData })) {
-      await writeFile(filePath, uint8Array, { baseDir: BaseDirectory.AppData })
+    if (!await platform.fs.exists(filePath, { baseDir: BaseDirectory.AppData })) {
+      await platform.fs.writeFile(filePath, uint8Array, { baseDir: BaseDirectory.AppData })
     }
 
     return {
@@ -949,13 +949,13 @@ export const ChatInput = React.memo(function ChatInput() {
       }
 
       try {
-        const fileStat = await stat(path)
+        const fileStat = await platform.fs.stat(path)
         if (typeof fileStat.size === 'number' && fileStat.size > MAX_IMAGE_ATTACHMENT_SIZE_BYTES) {
           skipped.oversized.push(fileName)
           continue
         }
 
-        const bytes = await readFile(path)
+        const bytes = await platform.fs.readFile(path)
         const extension = getExtension(fileName)
         const mimeType = extension === 'jpg' || extension === 'jpeg'
           ? 'image/jpeg'
@@ -1351,8 +1351,8 @@ ${previewLines.join('\n')}
 
       // 检查文件是否存在
       const fileExists = isCustom
-        ? await exists(filePath)
-        : await exists(filePath, { baseDir: BaseDirectory.AppData })
+        ? await platform.fs.exists(filePath)
+        : await platform.fs.exists(filePath, { baseDir: BaseDirectory.AppData })
 
       if (!fileExists) {
         return `文件 ${filePath.split('/').pop() || filePath} 不存在或已被删除`
@@ -1360,9 +1360,9 @@ ${previewLines.join('\n')}
 
       let content: string
       if (isCustom) {
-        content = await readTextFile(filePath)
+        content = await platform.fs.readTextFile(filePath)
       } else {
-        content = await readTextFile(filePath, { baseDir: BaseDirectory.AppData })
+        content = await platform.fs.readTextFile(filePath, { baseDir: BaseDirectory.AppData })
       }
 
       const lines = content.split('\n')

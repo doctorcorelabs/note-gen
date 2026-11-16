@@ -1,4 +1,4 @@
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import bundledPolicy from '../../../config/notegen-model-policy.json'
 import { fetchNoteGenModelPolicy } from '@/lib/config-center/client'
 
@@ -68,7 +68,7 @@ export function loadNoteGenModelPolicy(): Promise<NoteGenModelPolicy> {
       if (!next) throw new Error('Invalid NoteGen model policy')
       applyPolicy(next)
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         await store.set(CACHE_KEY, { versionCode: 0, content: next })
         await store.save()
       } catch (error) {
@@ -78,7 +78,7 @@ export function loadNoteGenModelPolicy(): Promise<NoteGenModelPolicy> {
       // Cached model names remain useful offline, but never retain a stale quota.
       let fallback = policy
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const cached = await store.get<PolicyCache>(CACHE_KEY)
         fallback = normalizePolicy(cached?.content) ?? policy
       } catch {

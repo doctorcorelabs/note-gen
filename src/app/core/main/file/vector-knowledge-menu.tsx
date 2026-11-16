@@ -1,10 +1,9 @@
 import { ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/enhanced-context-menu"
 import { Switch } from "@/components/ui/switch"
 import { Database, Trash2 } from "lucide-react"
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { toast } from "@/hooks/use-toast"
 import useArticleStore, { DirTree } from "@/stores/article"
-import { readTextFile } from "@tauri-apps/plugin-fs"
 import { useState, useEffect } from "react"
 import { useTranslations } from "next-intl"
 import { computedParentPath } from "@/lib/path"
@@ -28,7 +27,7 @@ export function VectorKnowledgeMenu({ item, hasVector, onVectorUpdated }: Vector
   // 加载向量配置状态
   useEffect(() => {
     async function loadVectorSettings() {
-      const store = await Store.load('store.json')
+      const store = await platform.store.load('store.json')
       const disabledFiles = await store.get<string[]>('vectorAutoCalcDisabled') || []
       const excludedFiles = await store.get<string[]>('vectorExcludedFiles') || []
       setAutoCalcEnabled(!disabledFiles.includes(filePath))
@@ -50,9 +49,9 @@ export function VectorKnowledgeMenu({ item, hasVector, onVectorUpdated }: Vector
 
       let content = ''
       if (pathOptions.baseDir) {
-        content = await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        content = await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
       } else {
-        content = await readTextFile(pathOptions.path)
+        content = await platform.fs.readTextFile(pathOptions.path)
       }
 
       // 直接调用 RAG 库计算向量，与文件夹批量计算保持一致
@@ -89,7 +88,7 @@ export function VectorKnowledgeMenu({ item, hasVector, onVectorUpdated }: Vector
   }
 
   async function handleToggleAutoCalc(checked: boolean) {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const disabledFiles = await store.get<string[]>('vectorAutoCalcDisabled') || []
 
     if (checked) {
@@ -108,7 +107,7 @@ export function VectorKnowledgeMenu({ item, hasVector, onVectorUpdated }: Vector
   }
 
   async function handleToggleExcludeFromKB(checked: boolean) {
-    const store = await Store.load('store.json')
+    const store = await platform.store.load('store.json')
     const excludedFiles = await store.get<string[]>('vectorExcludedFiles') || []
 
     if (checked) {

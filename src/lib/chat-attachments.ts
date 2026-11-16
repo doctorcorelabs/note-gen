@@ -1,5 +1,4 @@
-import { readDir, stat } from '@tauri-apps/plugin-fs'
-import { basename, join, normalize } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { getDocumentExtension, isReadableDocumentName } from '@/lib/document-parser'
 
 export type ChatAttachmentKind = 'file' | 'folder'
@@ -72,8 +71,8 @@ export function parsePersistedChatAttachments(value?: string | null) {
 }
 
 export async function createFileAttachment(path: string): Promise<RuntimeChatAttachment> {
-  const fileStat = await stat(path)
-  const name = await basename(path)
+  const fileStat = await platform.fs.stat(path)
+  const name = await platform.path.basename(path)
   return {
     id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     kind: 'file',
@@ -86,7 +85,7 @@ export async function createFileAttachment(path: string): Promise<RuntimeChatAtt
 }
 
 export async function createFolderAttachment(path: string): Promise<RuntimeChatAttachment> {
-  const name = await basename(path)
+  const name = await platform.path.basename(path)
   const preview = await buildFolderPreview(path)
   return {
     id: `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -107,7 +106,7 @@ export async function buildFolderPreview(rootPath: string) {
 
   const visit = async (directoryPath: string, prefix: string, depth: number) => {
     if (depth > FOLDER_PREVIEW_MAX_DEPTH || truncated) return
-    const entries = (await readDir(directoryPath))
+    const entries = (await platform.fs.readDir(directoryPath))
       .filter((entry) => !entry.name.startsWith('.'))
       .sort((left, right) => {
         if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1
@@ -123,7 +122,7 @@ export async function buildFolderPreview(rootPath: string) {
       const suffix = entry.isDirectory ? '/' : entry.isSymlink ? ' (symlink)' : ''
       lines.push(`${prefix}${entry.name}${suffix}`)
       if (entry.isDirectory && !entry.isSymlink && depth < FOLDER_PREVIEW_MAX_DEPTH) {
-        await visit(await join(directoryPath, entry.name), `${prefix}  `, depth + 1)
+        await visit(await platform.path.join(directoryPath, entry.name), `${prefix}  `, depth + 1)
       }
     }
   }
@@ -147,11 +146,11 @@ async function ensureNoSymlinkTraversal(rootPath: string, relativePath: string) 
   const segments = relativePath.split('/').filter(Boolean)
   let currentPath = rootPath
   for (const segment of segments) {
-    const entries = await readDir(currentPath)
+    const entries = await platform.fs.readDir(currentPath)
     const entry = entries.find((candidate) => candidate.name === segment)
     if (!entry) throw new Error('ATTACHMENT_PATH_NOT_FOUND')
     if (entry.isSymlink) throw new Error('ATTACHMENT_SYMLINK_BLOCKED')
-    currentPath = await join(currentPath, segment)
+    currentPath = await platform.path.join(currentPath, segment)
   }
 }
 
@@ -173,9 +172,9 @@ export async function resolveAttachmentChildPath(
   }
 
   if (cleanRelativePath) await ensureNoSymlinkTraversal(attachment.path, cleanRelativePath)
-  const normalizedRoot = await normalize(attachment.path)
-  const normalizedTarget = await normalize(
-    cleanRelativePath ? await join(attachment.path, cleanRelativePath) : attachment.path
+  const normalizedRoot = await platform.path.normalize(attachment.path)
+  const normalizedTarget = await platform.path.normalize(
+    cleanRelativePath ? await platform.path.join(attachment.path, cleanRelativePath) : attachment.path
   )
   const resolvedRoot = normalizeForCompare(normalizedRoot)
   const resolvedTarget = normalizeForCompare(normalizedTarget)

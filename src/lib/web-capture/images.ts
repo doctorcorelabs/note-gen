@@ -1,4 +1,4 @@
-import { BaseDirectory, mkdir, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { platform, BaseDirectory } from '@/lib/platform'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { assertPublicWebUrl } from './service'
 import type { WebCaptureResult } from './types'
@@ -169,7 +169,7 @@ function assertAssetGroupId(value: string) {
 export async function removeLinkAssetGroup(assetGroupId: string) {
   const groupId = assertAssetGroupId(assetGroupId)
   try {
-    await remove(`${LINK_ASSET_DIRECTORY}/${groupId}`, {
+    await platform.fs.remove(`${LINK_ASSET_DIRECTORY}/${groupId}`, {
       baseDir: BaseDirectory.AppData,
       recursive: true,
     })
@@ -187,8 +187,8 @@ export async function cacheCapturedRecordImage(
   const image = await downloadImage(sourceUrl, referer)
   const filename = `${safeRecordId}.${image.extension}`
   const imagePath = `image/${filename}`
-  await mkdir('image', { baseDir: BaseDirectory.AppData, recursive: true })
-  await writeFile(imagePath, image.bytes, { baseDir: BaseDirectory.AppData })
+  await platform.fs.mkdir('image', { baseDir: BaseDirectory.AppData, recursive: true })
+  await platform.fs.writeFile(imagePath, image.bytes, { baseDir: BaseDirectory.AppData })
   return {
     ...image,
     filename,
@@ -234,11 +234,11 @@ export async function localizeCapturedImages(
           totalBytes += image.bytes.byteLength
 
           const localPath = `${LINK_ASSET_DIRECTORY}/${groupId}/${index + 1}.${image.extension}`
-          await mkdir(`${LINK_ASSET_DIRECTORY}/${groupId}`, {
+          await platform.fs.mkdir(`${LINK_ASSET_DIRECTORY}/${groupId}`, {
             baseDir: BaseDirectory.AppData,
             recursive: true,
           })
-          await writeFile(localPath, image.bytes, { baseDir: BaseDirectory.AppData })
+          await platform.fs.writeFile(localPath, image.bytes, { baseDir: BaseDirectory.AppData })
           savedPaths.push(localPath)
           replacements.set(source, localPath)
         } catch {

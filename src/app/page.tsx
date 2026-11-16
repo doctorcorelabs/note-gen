@@ -24,7 +24,7 @@
 // before the redirect (instead of a blank page) and a visible error
 // screen with retry when the Store cannot be read (instead of a blank
 // page with an unhandled rejection). The success path is unchanged.
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isMobileDevice } from '@/lib/check'
@@ -80,7 +80,7 @@ export default function Home() {
       const outcome = await runBootGuard(
         {
           loadStore: async () => {
-            const store = await Store.load('store.json')
+            const store = await platform.store.load('store.json')
             const currentPage = await store.get<string>('currentPage')
             return {
               currentPage: currentPage ?? undefined,
@@ -124,7 +124,7 @@ export default function Home() {
         })
       }, BOOT_GUARD_TIMEOUT_MS)
       try {
-        const store = await Store.load('store.json')
+        const store = await platform.store.load('store.json')
         const currentPage = await store.get<string>('currentPage')
         const { target, storeUpdate } = resolveRedirectTarget(
           currentPage ?? undefined,

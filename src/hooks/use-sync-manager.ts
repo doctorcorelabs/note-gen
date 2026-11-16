@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { getSyncManager, SyncResult } from '@/lib/sync/sync-manager'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { platform } from '@/lib/platform'
 import { getFilePathOptions } from '@/lib/workspace'
 
 interface UseSyncManagerOptions {
@@ -67,8 +67,8 @@ export function useSyncManager(path?: string, options: UseSyncManagerOptions = {
     try {
       const pathOptions = await getFilePathOptions(path)
       const content = pathOptions.baseDir === undefined
-        ? await readFile(pathOptions.path)
-        : await readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        ? await platform.fs.readFile(pathOptions.path)
+        : await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir })
       const result = await manager.pushFile(path, content)
       await checkStatus(path)
       return result

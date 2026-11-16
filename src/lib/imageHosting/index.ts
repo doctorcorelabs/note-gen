@@ -2,7 +2,8 @@ import { uploadImageByGithub } from "./github";
 import { uploadImageBySmms } from "./smms";
 import { uploadImageByPicgo } from "./picgo";
 import { uploadImageByS3 } from "./s3";
-import { Store } from "@tauri-apps/plugin-store";
+import type { StoreHandle } from "@/lib/platform";
+import { platform } from "@/lib/platform";
 import { getNormalizedImageHosting } from "../image-hosting-config";
 import {
   isCloudinaryConfigComplete,
@@ -36,7 +37,7 @@ import type { SMMSImageHostingSetting } from './smms';
 import type { PicgoImageHostingSetting } from './picgo';
 
 async function hasCompleteImageHostingConfig(
-  store: Store,
+  store: StoreHandle,
   provider: ReturnType<typeof getNormalizedImageHosting>['value'],
 ): Promise<boolean> {
   switch (provider) {
@@ -90,7 +91,7 @@ async function hasCompleteImageHostingConfig(
 }
 
 export async function isImageHostingReady(): Promise<boolean> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (!await store.get<boolean>('useImageRepo')) return false
 
   const normalized = getNormalizedImageHosting(await store.get<string>('mainImageHosting'))
@@ -102,7 +103,7 @@ export async function isImageHostingReady(): Promise<boolean> {
 }
 
 export async function uploadImage(file: File) {
-  const store = await Store.load('store.json');
+  const store = await platform.store.load('store.json');
 
   // 检查是否启用了图床功能
   const useImageRepo = await store.get<boolean>('useImageRepo')

@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { Store } from '@tauri-apps/plugin-store'
+import { platform } from '@/lib/platform'
 import { executeRecordTransaction, getDb } from '@/db'
 import { SelfHostedApiError, SelfHostedClient, normalizeServerUrl } from './client'
 import type { ClientSession } from './protocol'
@@ -140,7 +140,7 @@ export async function connectWithBrowser(input: {
     const authorization = await client.createDeviceAuthorization({
       deviceId: keyPair.deviceId,
       deviceName: input.deviceName,
-      platform: platform(),
+      platform: getRuntimePlatform(),
       encryptionPublicKey: keyPair.publicKey,
     })
     await openUrl(authorization.verificationUriComplete)
@@ -518,7 +518,7 @@ export async function disconnectProfile(profileId: string) {
     "update self_hosted_sync_profiles set state = 'disconnected', updated_at = $1 where id = $2",
     [Date.now(), profileId]
   )
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   if (await store.get<string>('selfHostedConnectionReviewProfileId') === profileId) {
     await store.delete('selfHostedConnectionReviewProfileId')
     await store.save()
@@ -526,7 +526,7 @@ export async function disconnectProfile(profileId: string) {
 }
 
 export async function requireConnectionReview(profileId: string) {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await store.set('selfHostedConnectionReviewProfileId', profileId)
   await store.save()
 }
@@ -657,7 +657,7 @@ async function getOrCreateDeviceIdentity(preferredDeviceId?: string): Promise<De
 }
 
 async function loadOrCreateDeviceIdentity(preferredDeviceId?: string): Promise<DeviceIdentity> {
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   const [privateKey, publicKey, secureDeviceId, persistedDeviceId] = await Promise.all([
     secureGet('device.identity.private-key'),
     secureGet('device.identity.public-key'),
@@ -676,7 +676,7 @@ async function loadOrCreateDeviceIdentity(preferredDeviceId?: string): Promise<D
 
 async function rotateDeviceIdentity(deviceId: string): Promise<DeviceIdentity> {
   const generated = await invoke<DeviceKeyPair>('self_hosted_generate_device_key_pair')
-  const store = await Store.load('store.json')
+  const store = await platform.store.load('store.json')
   await Promise.all([
     secureSet('device.identity.private-key', generated.privateKey),
     secureSet('device.identity.public-key', generated.publicKey),
@@ -698,7 +698,7 @@ function loginWithDeviceIdentity(
     ...(input.totpCode ? { totpCode: input.totpCode } : {}),
     deviceId: identity.deviceId,
     deviceName: input.deviceName,
-    platform: platform(),
+    platform: getRuntimePlatform(),
     encryptionPublicKey: identity.publicKey,
   })
 }

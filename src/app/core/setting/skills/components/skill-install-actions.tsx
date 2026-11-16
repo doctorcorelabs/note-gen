@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { platform } from '@/lib/platform'
 import { open } from '@tauri-apps/plugin-dialog'
-import { mkdir } from '@tauri-apps/plugin-fs'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, FileArchive, FolderInput, FolderOpen, Upload } from 'lucide-react'
@@ -25,13 +24,13 @@ interface SkillInstallActionsProps {
 
 async function getSkillsDirectory(scope: SkillScope): Promise<string> {
   if (scope === 'global') {
-    return join(await appDataDir(), 'skills')
+    return platform.path.join(await platform.path.appDataDir(), 'skills')
   }
 
   const workspace = await getWorkspacePath()
   return workspace.isCustom
-    ? join(workspace.path, 'skills')
-    : join(await appDataDir(), 'article', 'skills')
+    ? platform.path.join(workspace.path, 'skills')
+    : platform.path.join(await platform.path.appDataDir(), 'article', 'skills')
 }
 
 export function SkillInstallActions({
@@ -46,7 +45,7 @@ export function SkillInstallActions({
   const handleOpenDirectory = async () => {
     try {
       const skillsDirectory = await getSkillsDirectory(scope)
-      await mkdir(skillsDirectory, { recursive: true })
+      await platform.fs.mkdir(skillsDirectory, { recursive: true })
       await openPath(skillsDirectory)
     } catch (error) {
       console.error('Failed to open Skills directory:', error)

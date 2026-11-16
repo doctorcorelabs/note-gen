@@ -4,7 +4,7 @@ import { isWikiFolderPath } from '@/lib/wiki/path'
 import { ContextMenu, ContextMenuContent, ContextMenuSeparator, ContextMenuTrigger, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/enhanced-context-menu";
 import { Input } from "@/components/ui/input";
 import useArticleStore, { beginDeferredFileActivation, DirTree } from "@/stores/article";
-import { BaseDirectory, exists, mkdir, rename } from "@tauri-apps/plugin-fs";
+import { platform, BaseDirectory } from "@/lib/platform";
 import { moveSelfHostedWorkspacePath } from '@/lib/self-hosted-sync/files'
 import { withWorkspacePathMove } from '@/lib/sync/workspace-path-moves'
 import { Folder, FolderOpen, Database, PackageOpen, Sparkles } from "lucide-react"
@@ -42,7 +42,6 @@ import {
   setFileManagerDragData,
 } from '../file-dnd'
 import { debugSyncPath } from "@/lib/sync/remote-file";
-import { appDataDir, join } from '@tauri-apps/api/path'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { BatchSelectionContextMenu } from "../batch-selection-context-menu";
 import { getTopLevelSelectionEntries, toFileSelectionEntry, type FileSelectionEntry } from "../file-selection";
@@ -315,7 +314,7 @@ export function FolderItem({
       await openPath(pathOptions.path)
       return
     }
-    await openPath(await join(await appDataDir(), 'article', path))
+    await openPath(await platform.path.join(await platform.path.appDataDir(), 'article', path))
   }
 
   function handleCutFolder() {
@@ -399,8 +398,8 @@ export function FolderItem({
       const targetRelativePath = joinRelativePath(parentPath, nextName)
       const newPathOptions = await getFilePathOptions(targetRelativePath)
       const targetExists = workspace.isCustom
-        ? await exists(newPathOptions.path)
-        : await exists(newPathOptions.path, { baseDir: newPathOptions.baseDir })
+        ? await platform.fs.exists(newPathOptions.path)
+        : await platform.fs.exists(newPathOptions.path, { baseDir: newPathOptions.baseDir })
       if (targetExists) {
         setRenameError(t('error.fileExists'))
         setTimeout(() => inputRef.current?.focus(), 0)
@@ -428,9 +427,9 @@ export function FolderItem({
           if (await moveSelfHostedWorkspacePath(path, targetRelativePath)) {
             // Rust journal already completed the atomic move.
           } else if (workspace.isCustom) {
-            await rename(oldPathOptions.path, newPathOptions.path)
+            await platform.fs.rename(oldPathOptions.path, newPathOptions.path)
           } else {
-            await rename(oldPathOptions.path, newPathOptions.path, {
+            await platform.fs.rename(oldPathOptions.path, newPathOptions.path, {
               newPathBaseDir: BaseDirectory.AppData,
               oldPathBaseDir: BaseDirectory.AppData
             })
@@ -445,9 +444,9 @@ export function FolderItem({
             if (await moveSelfHostedWorkspacePath(targetRelativePath, path)) {
               // Rust journal already completed the rollback.
             } else if (workspace.isCustom) {
-              await rename(newPathOptions.path, oldPathOptions.path)
+              await platform.fs.rename(newPathOptions.path, oldPathOptions.path)
             } else {
-              await rename(newPathOptions.path, oldPathOptions.path, {
+              await platform.fs.rename(newPathOptions.path, oldPathOptions.path, {
                 newPathBaseDir: BaseDirectory.AppData,
                 oldPathBaseDir: BaseDirectory.AppData,
               })
@@ -483,9 +482,9 @@ export function FolderItem({
         
         let isExists = false
         if (workspace.isCustom) {
-          isExists = await exists(pathOptions.path)
+          isExists = await platform.fs.exists(pathOptions.path)
         } else {
-          isExists = await exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+          isExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
         }
         
         if (isExists) {
@@ -495,9 +494,9 @@ export function FolderItem({
         } else {
           // 创建新文件夹
           if (workspace.isCustom) {
-            await mkdir(pathOptions.path)
+            await platform.fs.mkdir(pathOptions.path)
           } else {
-            await mkdir(pathOptions.path, { baseDir: pathOptions.baseDir })
+            await platform.fs.mkdir(pathOptions.path, { baseDir: pathOptions.baseDir })
           }
           
           // 更新缓存树

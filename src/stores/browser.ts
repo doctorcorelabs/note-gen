@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { Store } from '@tauri-apps/plugin-store'
+import type { StoreHandle } from '@/lib/platform'
+import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 
 export interface BrowserEntry {
@@ -26,12 +27,12 @@ interface BrowserLibraryState {
 const STORE_FILE = 'browser.json'
 const HISTORY_LIMIT = 200
 const SEARCH_ENGINES: BrowserSearchEngine[] = ['bing', 'google', 'baidu', 'duckduckgo']
-let storePromise: Promise<Store> | null = null
+let storePromise: Promise<StoreHandle> | null = null
 let loadPromise: Promise<void> | null = null
 let saveQueue: Promise<void> = Promise.resolve()
 
-function getStore(): Promise<Store> {
-  storePromise ??= Store.load(STORE_FILE, { autoSave: false }).catch(error => {
+function getStore(): Promise<StoreHandle> {
+  storePromise ??= platform.store.load(STORE_FILE, { autoSave: false }).catch(error => {
     storePromise = null
     throw error
   })
