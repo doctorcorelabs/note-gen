@@ -8,9 +8,10 @@
 // Subcheck A, derivative patterns, over src/:
 //   - raw Store.load calls outside src/lib/platform/ (0 from G1 on)
 //   - raw invoke calls outside src/lib/platform/ (0 from G2 on)
-//   - __TAURI_INTERNALS__ outside src/lib/platform/detect.ts (baseline
-//     set of 3 files; only developer-tools.ts may remain at G2/G3;
-//     0 from G4 on)
+//   - __TAURI_INTERNALS__ outside src/lib/platform/detect.ts (AD-89:
+//     0 files from the 3D detect.ts consolidation on; the delta
+//     baseline {debug-log.ts, event-listener.tauri.ts} closed when
+//     both markers moved to the detect.ts seam)
 //   - direct adapter implementation imports (*.tauri / *.web) outside
 //     registry.ts and __tests__/ (always 0; mirrors guard check 3)
 // Without --wave, Store/invoke counts are informational, but a new
@@ -73,12 +74,18 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WAVE_ORDER = { G1: 1, G2: 2, G3: 3, G4: 4, G5: 5, all: 5 };
-const INTERNALS_BASELINE = new Set([
-  "src/lib/agent/debug-log.ts",
-  "src/lib/developer-tools.ts",
-  "src/lib/tauri-event-listener.ts",
-]);
-const INTERNALS_G2_G3 = new Set(["src/lib/developer-tools.ts"]);
+// AD-89 delta baseline, closed at the 3D detect.ts consolidation:
+// developer-tools.ts lost its marker at G4 (now isTauri() via the
+// registry); the tauri-event-listener.ts marker moved to the
+// relocated event-listener.tauri.ts at G2 and was removed together
+// with the debug-log.ts marker when both call sites moved to the
+// detect.ts seam. Both sets stay empty: any marker file outside
+// detect.ts fails in every mode. The intermediate draft sets
+// ({debug-log.ts, event-listener.tauri.ts}) belong to the gate-patch
+// slot as the pre-consolidation delta baseline; this branch records
+// the post-consolidation state.
+const INTERNALS_BASELINE = new Set();
+const INTERNALS_G2_G3 = new Set();
 const ALLOWED_OUTSIDE_SRC = new Set([
   "scripts/ci/tauri-import-allowlist.txt",
   "scripts/ci/tauri-internals-allowlist.txt",
