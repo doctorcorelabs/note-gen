@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
-// Unit tests for toWorkspaceMediaRelativePath (Fase 1, V3-23) and
-// its contract with the web asset adapter: a workspace-relative
-// image path must build an authenticated media URL, and funnel
-// inputs that still carry desktop prefixes must not reach the
-// adapter as absolute paths.
+// Unit tests for toWorkspaceMediaRelativePath (Fase 1, V3-23).
+// The helper prepares funnel inputs for the web asset adapter,
+// which only accepts workspace-relative paths and builds the
+// authenticated media URL from them; the adapter's own URL
+// building is covered by its test file, so this suite asserts
+// the normalizer output shape and the markdown round-trip only
+// and never imports an adapter implementation directly.
 //
 // Runner: Vitest, unit project (vitest run --project unit). Pure
-// functions and a pure URL builder only; no DOM, no network.
+// functions only; no DOM, no network.
 
 import { describe, expect, it } from "vitest";
 
-import { createWebAssetUrlAdapter } from "@/lib/platform/asset/asset.web";
 import {
   resolveImagePathFromMarkdown,
   toMarkdownImagePath,
@@ -59,18 +60,17 @@ describe("toWorkspaceMediaRelativePath", () => {
   });
 });
 
-describe("media URL contract", () => {
-  const adapter = createWebAssetUrlAdapter();
-
-  it("builds media URLs from markdown-relative image references", () => {
+describe("adapter input contract", () => {
+  it("produces a relative path from markdown-relative image references", () => {
     const workspacePath = resolveImagePathFromMarkdown(
       "notes/meeting.md",
       "assets/diagram.png",
     );
     expect(workspacePath).toBe("notes/assets/diagram.png");
-    expect(
-      adapter.convertFileSrc(toWorkspaceMediaRelativePath(workspacePath, false)),
-    ).toBe("/api/workspace/media/notes/assets/diagram.png");
+    const normalized = toWorkspaceMediaRelativePath(workspacePath, false);
+    expect(normalized).toBe("notes/assets/diagram.png");
+    expect(normalized.startsWith("/")).toBe(false);
+    expect(normalized.startsWith("http")).toBe(false);
   });
 
   it("round-trips upload paths through markdown-relative form", () => {
@@ -78,27 +78,20 @@ describe("media URL contract", () => {
     const workspaceImagePath = "notes/assets/uuid-1.png";
     const markdownRelative = toMarkdownImagePath(markdownPath, workspaceImagePath);
     expect(markdownRelative).toBe("assets/uuid-1.png");
-    expect(
-      adapter.convertFileSrc(
-        toWorkspaceMediaRelativePath(
-          resolveImagePathFromMarkdown(markdownPath, markdownRelative),
-          false,
-        ),
-      ),
-    ).toBe("/api/workspace/media/notes/assets/uuid-1.png");
-  });
-
-  it("encodes segments with spaces and keeps the URL relative", () => {
-    const url = adapter.convertFileSrc(
-      toWorkspaceMediaRelativePath("my notes/a b.png", false),
+    const normalized = toWorkspaceMediaRelativePath(
+      resolveImagePathFromMarkdown(markdownPath, markdownRelative),
+      false,
     );
-    expect(url).toBe("/api/workspace/media/my%20notes/a%20b.png");
-    expect(url.startsWith("http")).toBe(false);
+    expect(normalized).toBe(workspaceImagePath);
   });
 
-  it("rejects traversal instead of resolving it upward", () => {
-    expect(() =>
-      adapter.convertFileSrc(toWorkspaceMediaRelativePath("../secret.png", false)),
-    ).toThrow();
+  it("keeps decoded segments for the adapter to encode", () => {
+    expect(toWorkspaceMediaRelativePath("my notes/a b.png", false)).toBe(
+      "my notes/a b.png",
+    );
+  });
+
+  it("leaves traversal visible instead of resolving it upward", () => {
+    expect(toWorkspaceMediaRelativePath("../secret.png", false)).toBe("../secret.png");
   });
 });
