@@ -23,8 +23,7 @@
 // Memory-only rules (desain-auth sections 4.3 and 5.2): the CSRF
 // token lives only in the seam store, the login challengeToken lives
 // only in the login page component state, and nothing here touches
-// localStorage, sessionStorage, IndexedDB, document.cookie, or the
-// URL. The session cookie is HttpOnly and is never read or written
+// persistent browser storage, cookies, or the URL. The session cookie is HttpOnly and is never read or written
 // by this code; the browser carries it. After a reload the CSRF
 // token is refetched through GET /api/auth/csrf by the seam store,
 // never restored from storage.

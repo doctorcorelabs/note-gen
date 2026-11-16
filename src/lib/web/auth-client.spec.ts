@@ -126,8 +126,15 @@ describe("parseLoginSuccess", () => {
   });
 
   it("rejects a missing csrfToken", () => {
-    const { csrfToken: _dropped, ...rest } = LOGIN_SUCCESS;
-    expect(parseLoginSuccess(rest)).toBeNull();
+    expect(
+      parseLoginSuccess({
+        id: LOGIN_SUCCESS.id,
+        email: LOGIN_SUCCESS.email,
+        role: LOGIN_SUCCESS.role,
+        totpEnabled: LOGIN_SUCCESS.totpEnabled,
+        sessionExpiresAt: LOGIN_SUCCESS.sessionExpiresAt,
+      }),
+    ).toBeNull();
   });
 
   it("rejects a csrfToken containing whitespace", () => {

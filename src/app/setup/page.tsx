@@ -14,9 +14,8 @@
 // direction; it never claims to know the installation state beyond
 // that, and it is never a way in without signing in.
 //
-// There is deliberately NO registration link on this page: the
-// deployment runs in closed registration mode (desain-auth section
-// 2.4). The only link is to the sign-in page.
+// There is deliberately NO account-creation link on this page: the
+// deployment runs in closed mode (desain-auth section 2.4). The only link is to the sign-in page.
 //
 // The strings here are hardcoded English, following the boot guard
 // precedent (src/lib/web/boot-guard.ts): no `auth` message catalog

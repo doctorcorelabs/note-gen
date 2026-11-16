@@ -12,8 +12,8 @@
 // a successful sign-in the page navigates to the sanitized `next`
 // query value, or to "/" so the boot guard redirects into the app.
 //
-// There is deliberately NO registration link on this page: the
-// deployment runs in closed registration mode and the register
+// There is deliberately NO account-creation link on this page: the
+// deployment runs in closed mode and the public account-creation
 // endpoint answers 404 by design (desain-auth section 2.4). There
 // is also no "forgot password" link promising an email: with no SMTP
 // configured, reset emails cannot be sent, so the page points at the
