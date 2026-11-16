@@ -1,6 +1,6 @@
 'use client';
 
-import { relaunch } from '@tauri-apps/plugin-process';
+import { platform } from '@/lib/platform';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useLocale, useTranslations } from 'next-intl';
@@ -249,7 +249,7 @@ export default function Updater() {
 
     try {
       await availableUpdate.downloadAndInstall();
-      await relaunch();
+      await platform.process.relaunch();
     } catch (error) {
       toast({
         title: t('installError'),
@@ -353,6 +353,13 @@ export default function Updater() {
           </div>
         </CardHeader>
       </Card>
+
+      {!isTauri ? (
+        <Alert>
+          <Info />
+          <AlertDescription>In the web version, updates are installed on the server. There is nothing to download here.</AlertDescription>
+        </Alert>
+      ) : null}
 
       {ignoredUpdateVersion ? (
         <Alert>

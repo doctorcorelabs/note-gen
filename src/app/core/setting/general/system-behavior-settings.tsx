@@ -1,11 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  disable as disableAutostart,
-  enable as enableAutostart,
-  isEnabled as isAutostartEnabled,
-} from '@tauri-apps/plugin-autostart'
+import { capabilities, platform } from '@/lib/platform'
 import { AppWindow, PanelTopClose, Rocket } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -29,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import { SettingSection } from '../components/setting-base'
 
 export function SystemBehaviorSettings() {
@@ -41,13 +38,14 @@ export function SystemBehaviorSettings() {
   } = useSettingStore()
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
+  const autostartAvailable = capabilities.autostart
 
   useEffect(() => {
     let cancelled = false
 
     async function loadAutostartState() {
       try {
-        const enabled = await isAutostartEnabled()
+        const enabled = autostartAvailable ? await platform.autostart.isEnabled() : false
         if (!cancelled) setAutostart(enabled)
       } catch (error) {
         console.error('Failed to read autostart state:', error)
@@ -67,11 +65,11 @@ export function SystemBehaviorSettings() {
     setAutostartLoading(true)
     try {
       if (enabled) {
-        await enableAutostart()
+        await platform.autostart.enable()
       } else {
-        await disableAutostart()
+        await platform.autostart.disable()
       }
-      setAutostart(await isAutostartEnabled())
+      setAutostart(await platform.autostart.isEnabled())
     } catch (error) {
       console.error('Failed to update autostart state:', error)
       toast({
@@ -87,14 +85,14 @@ export function SystemBehaviorSettings() {
     setAutostartLoading(true)
     try {
       if (enabled && autostart) {
-        await disableAutostart()
-        await enableAutostart()
+        await platform.autostart.disable()
+        await platform.autostart.enable()
       }
       await setAutostartMinimized(enabled)
     } catch (error) {
       console.error('Failed to update minimized autostart state:', error)
       try {
-        setAutostart(await isAutostartEnabled())
+        setAutostart(await platform.autostart.isEnabled())
       } catch (stateError) {
         console.error('Failed to refresh autostart state:', stateError)
       }
@@ -138,13 +136,13 @@ export function SystemBehaviorSettings() {
         <Item variant="outline">
           <ItemMedia variant="icon"><Rocket /></ItemMedia>
           <ItemContent>
-            <ItemTitle>{t('autostart.title')}</ItemTitle>
+            <ItemTitle>{t('autostart.title')} {!autostartAvailable && <Badge variant="secondary">Desktop only</Badge>}</ItemTitle>
             <ItemDescription>{t('autostart.desc')}</ItemDescription>
           </ItemContent>
           <ItemActions className="ml-auto mobile-setting-inline-action">
             <Switch
               checked={autostart}
-              disabled={autostartLoading}
+              disabled={!autostartAvailable || autostartLoading}
               aria-label={t('autostart.title')}
               onCheckedChange={(enabled) => void handleAutostartChange(enabled)}
             />
@@ -160,7 +158,7 @@ export function SystemBehaviorSettings() {
           <ItemActions className="ml-auto mobile-setting-inline-action">
             <Switch
               checked={autostartMinimized}
-              disabled={!autostart || autostartLoading}
+              disabled={!autostartAvailable || !autostart || autostartLoading}
               aria-label={t('autostartMinimized.title')}
               onCheckedChange={(enabled) => void handleAutostartMinimizedChange(enabled)}
             />

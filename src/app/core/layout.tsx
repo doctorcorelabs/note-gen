@@ -419,9 +419,15 @@ export default function RootLayout({
         initShowWindow()
         initMcp()
 
-        await initUpdateStore()
-        if (cancelled) return
-        checkForUpdates()
+        // Web fork (Fase 1, V3-21, AD-42): the updater trigger is
+        // guarded in web mode. Updates are deployed on the server;
+        // the desktop update check must never run in a browser.
+        // Desktop behavior is unchanged.
+        if (!webMode) {
+          await initUpdateStore()
+          if (cancelled) return
+          checkForUpdates()
+        }
       } catch (error) {
         console.error('Failed to initialize app core:', error)
       }

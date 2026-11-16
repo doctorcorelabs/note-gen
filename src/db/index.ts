@@ -1,4 +1,6 @@
 
+
+// eslint-disable-next-line no-restricted-imports -- AD-90 SQL funnel exception, self-expiring at V3-14 (remove together with this import)
 import Database, { type QueryResult } from '@tauri-apps/plugin-sql'
 import { platform } from '@/lib/platform'
 

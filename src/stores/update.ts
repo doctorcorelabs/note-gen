@@ -1,6 +1,6 @@
 import { platform } from '@/lib/platform'
 import { create } from 'zustand'
-import { check, Update } from '@tauri-apps/plugin-updater'
+import type { UpdateInfo } from '@/lib/platform'
 import { compareVersions, extractVersionText } from '@/lib/version'
 
 export const MOBILE_UPDATE_MANIFEST_URL = 'https://download.notegen.top/updates/latest.json'
@@ -25,8 +25,8 @@ interface UpdateState {
   hasUpdate: boolean
   setHasUpdate: (hasUpdate: boolean) => void
   
-  update: Update | null
-  setUpdate: (update: Update | null) => void
+  update: UpdateInfo | null
+  setUpdate: (update: UpdateInfo | null) => void
   
   latestVersion: string
   setLatestVersion: (version: string) => void
@@ -132,7 +132,7 @@ const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       // Never fall back to the legacy MSI target if installation detection fails.
       const target = await platform.invoke.invoke<string | null>('get_desktop_update_target')
-      const update = await check({
+      const update = await platform.updater.check({
         timeout: 5000,
         ...(target ? { target } : {}),
       })

@@ -85,11 +85,14 @@ failures=0
 # Step 1: the merged M5 guard. At G5 the allowlist may already be
 # deleted by V3-21; the guard fails when its allowlist is missing, so
 # in that state this layer checks the 0-import invariant directly and
-# says so explicitly instead of calling the guard.
+# says so explicitly instead of calling the guard. The direct check
+# excludes the AD-90 funnel line (enforced exactly-once in Step 4
+# below) and pure comment lines (the re-export file mentions the
+# pattern in a comment); anything else fails.
 if [ "$WAVE" = "G5" ] || [ "$WAVE" = "all" ]; then
   if [ ! -f "scripts/ci/tauri-import-allowlist.txt" ]; then
-    echo "layer1: allowlist deleted (G5 state); checking 0 imports directly"
-    remaining=$(grep -rn --include='*.ts' --include='*.tsx' -e '@tauri-apps/' -e 'tauri-plugin-clipboard-api' src --exclude-dir=platform 2>/dev/null | wc -l | tr -d ' ')
+    echo "layer1: allowlist deleted (G5 state); checking 0 imports directly (funnel + comment lines excluded, funnel enforced in Step 4)"
+    remaining=$(grep -rn --include='*.ts' --include='*.tsx' -e '@tauri-apps/' -e 'tauri-plugin-clipboard-api' src --exclude-dir=platform 2>/dev/null | grep -v '^src/db/index.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | wc -l | tr -d ' ')
     if [ "$remaining" != "0" ]; then
       echo "layer1: FAIL: $remaining Tauri import line(s) remain outside src/lib/platform/ after G5"
       failures=$((failures + 1))

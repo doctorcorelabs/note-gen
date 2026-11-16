@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
-import { platform } from '@/lib/platform'
+import { capabilities, platform } from '@/lib/platform'
 import type { UnlistenFn } from '@/lib/platform'
 import { Check, Copy, Download, NotebookPen, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -43,6 +43,7 @@ function ActionButton({ label, children, ...props }: ComponentProps<typeof Butto
 
 export default function ScreenshotPinPage() {
   const t = useTranslations('screenshotPin')
+  const screenshotAvailable = capabilities.screenshot
   const [context, setContext] = useState<PinnedScreenshotContext | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -192,6 +193,7 @@ export default function ScreenshotPinPage() {
   }, [loaded, t])
 
   useEffect(() => {
+    if (!screenshotAvailable) return
     mountedRef.current = true
     document.documentElement.style.fontSize = '100%'
     let disposed = false
@@ -238,7 +240,7 @@ export default function ScreenshotPinPage() {
       pendingZoomRef.current = null
       window.removeEventListener('resize', updateZoom)
     }
-  }, [showWindow, t, updateZoom])
+  }, [showWindow, screenshotAvailable, t, updateZoom])
 
   useEffect(() => {
     if (!copied) return
@@ -296,6 +298,16 @@ export default function ScreenshotPinPage() {
   }
 
   const sourceScale = context && context.scaleFactor > 0 ? context.scaleFactor : 1
+
+  if (!screenshotAvailable) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
+          <Alert className="max-w-lg"><AlertDescription>Pinned screenshots are not available in the web version.</AlertDescription></Alert>
+        </main>
+      </ThemeProvider>
+    )
+  }
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

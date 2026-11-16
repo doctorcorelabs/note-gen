@@ -23,7 +23,9 @@
 #      allowlist in scripts/ci/tauri-import-allowlist.txt exactly: no
 #      import outside the allowlist (a new import that bypassed the
 #      registry), and no stale allowlist entry (a file that no longer
-#      imports the module must lose its entry when it migrates).
+#      imports the module must lose its entry when it migrates). At G5
+#      the allowlist is deleted (V3-21); check 1 then enforces the
+#      funnel-only invariant directly (AD-90, self-expiring at V3-14).
 #   2. The Tauri internals marker outside src/lib/platform/detect.ts
 #      must match the allowlist in
 #      scripts/ci/tauri-internals-allowlist.txt exactly.
@@ -62,8 +64,34 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 # Check 1: Tauri imports outside src/lib/platform/ versus the allowlist.
 echo "check 1: Tauri imports outside src/lib/platform/"
 if [ ! -f "$IMPORT_ALLOWLIST" ]; then
-  echo "  FAIL: allowlist not found: $IMPORT_ALLOWLIST"
-  failures=$((failures + 1))
+  # G5 state (V3-21, rev5b Temuan 9): the allowlist is deleted. Check 1
+  # enforces the funnel-only invariant directly: the only permitted
+  # pair is the AD-90 SQL funnel (exactly src/db/index.ts plugin-sql,
+  # self-expiring at V3-14); zero pairs also passes (post-V3-14 state).
+  # Do NOT close this branch by restoring the allowlist (rev5b).
+  : > "$tmpdir/actual-pairs.txt"
+  grep -rln --include='*.ts' --include='*.tsx' \
+    -e '@tauri-apps/' -e 'tauri-plugin-clipboard-api' \
+    src --exclude-dir=platform 2>/dev/null | LC_ALL=C sort > "$tmpdir/files.txt" || true
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    grep -o -e '@tauri-apps/[A-Za-z0-9][A-Za-z0-9/_-]*' \
+      -e 'tauri-plugin-clipboard-api' "$file" 2>/dev/null | LC_ALL=C sort -u |
+      while IFS= read -r spec; do
+        [ -n "$spec" ] || continue
+        echo "$file:$spec" >> "$tmpdir/actual-pairs.txt"
+      done
+  done < "$tmpdir/files.txt"
+  LC_ALL=C sort -u "$tmpdir/actual-pairs.txt" -o "$tmpdir/actual-pairs.txt"
+  offending=$(grep -v '^src/db/index.ts:@tauri-apps/plugin-sql$' "$tmpdir/actual-pairs.txt" || true)
+  if [ -n "$offending" ]; then
+    echo "  FAIL: Tauri imports remain outside src/lib/platform/ after G5 (allowlist deleted; only the AD-90 funnel is permitted):"
+    echo "$offending" | sed 's/^/    /'
+    failures=$((failures + 1))
+  else
+    count=$(wc -l < "$tmpdir/actual-pairs.txt" | tr -d ' ')
+    echo "  PASS: G5 state, $count pair(s) (funnel-only, AD-90)"
+  fi
 else
   : > "$tmpdir/actual-pairs.txt"
   grep -rln --include='*.ts' --include='*.tsx' \
@@ -130,9 +158,10 @@ else
 fi
 
 # Check 3: direct implementation imports outside registry.ts and tests.
-# Exception (G2 merge, self-expiring at G4): the transitional re-export
-# src/lib/tauri-event-listener.ts (deleted at G4 when the Event migration
-# completes) necessarily imports the relocated *.tauri implementation.
+# Exception (G2 merge; deletion deferred to 3D by AD-91): the transitional
+# re-export src/lib/tauri-event-listener.ts (deleted at 3D when the
+# registry-surface decision for listenTauriEvent lands) necessarily
+# imports the relocated *.tauri implementation.
 # The G4 merge MUST remove this exclusion together with the file.
 echo "check 3: direct adapter implementation imports"
 direct=$(grep -rn --include='*.ts' --include='*.tsx' -E \

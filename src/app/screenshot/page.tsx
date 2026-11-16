@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from 'react'
-import { platform } from '@/lib/platform'
+import { capabilities, platform } from '@/lib/platform'
 import { ArrowUpRight, Check, Circle, Copy, Download, MousePointer2, Pencil, Pin, Redo2, ScanLine, Square, Type, Undo2, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -111,6 +111,7 @@ function ActionButton({ label, children, ...props }: ComponentProps<typeof Butto
 
 export default function ScreenshotPage() {
   const t = useTranslations('screenshotEditor')
+  const screenshotAvailable = capabilities.screenshot
   const [context, setContext] = useState<ScreenshotContext | null>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR)
@@ -256,6 +257,7 @@ export default function ScreenshotPage() {
   }, [t])
 
   useEffect(() => {
+    if (!screenshotAvailable) return
     let disposed = false
     let unlisten: (() => void) | undefined
     const initialise = async () => {
@@ -293,7 +295,7 @@ export default function ScreenshotPage() {
       unlisten?.()
       imageRef.current = null
     }
-  }, [reportLoadFailure])
+  }, [reportLoadFailure, screenshotAvailable])
 
   useEffect(() => {
     const onResize = () => {
@@ -553,6 +555,16 @@ export default function ScreenshotPage() {
   } : null
   const canUndo = historyRef.current.past.length > 0
   const canRedo = historyRef.current.future.length > 0
+
+  if (!screenshotAvailable) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
+          <Alert className="max-w-lg"><AlertDescription>Desktop screenshot capture is not available in the web version.</AlertDescription></Alert>
+        </main>
+      </ThemeProvider>
+    )
+  }
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

@@ -1,6 +1,5 @@
 'use client'
 
-import { relaunch } from '@tauri-apps/plugin-process'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -57,7 +56,7 @@ export function ConfigFileActions() {
       if (isMobileDevice()) {
         toast({ description: t('importConfigSuccessMobile') })
       } else {
-        await relaunch()
+        await platform.process.relaunch()
       }
     } catch (error) {
       toast({

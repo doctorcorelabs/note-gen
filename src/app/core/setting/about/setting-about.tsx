@@ -4,12 +4,11 @@ import { Item, ItemGroup, ItemMedia, ItemContent, ItemTitle, ItemDescription, It
 import { useTranslations } from 'next-intl';
 import Updater from "./updater";
 import { BriefcaseBusiness, Bug, ExternalLink, GitFork, HandHeart, HomeIcon, MessageSquare } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
+import { platform } from "@/lib/platform";
 import { Button } from "@/components/ui/button";
 import { ShineBorder } from '@/components/ui/shine-border'
 import type { ReactNode } from "react";
 import { cn } from '@/lib/utils'
-import { checkIsTauri } from "@/lib/check";
 
 interface AboutResource {
   url: string
@@ -123,12 +122,7 @@ function ResourceSection({ section }: { section: AboutResourceSection }) {
 
 function AboutItem({url, title, desc, icon, buttonName, shine}: AboutResource) {
   const openInBrowser = () => {
-    if (checkIsTauri()) {
-      open(url);
-      return;
-    }
-
-    window.open(url, '_blank', 'noopener,noreferrer');
+    platform.opener.openUrl(url);
   }
   return (
     <Item variant="outline" className={cn(shine && 'relative')}>

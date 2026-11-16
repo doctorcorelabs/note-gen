@@ -35,6 +35,27 @@ Kode baru fork juga dilisensikan GPLv3.
 - Workflow rilis dan publikasi config upstream dinonaktifkan (file .disabled di .github/workflows/). Penonaktifan ini disengaja, bukan kelalaian.
 - Dokumen fork: file ini di root (dengan exception gitignore). Runbook infra direncanakan di infra/docs/ (belum ada di Fase 0). Desain panjang tetap di luar repo.
 
+## Fitur nonaktif di web (G5)
+
+Fitur berikut hanya ada di aplikasi desktop dan nonaktif secara eksplisit
+di versi web. Tidak ada yang gagal diam-diam: adapter web menolak dengan
+`PlatformCapabilityError` berkode `unsupported`, dan UI menampilkan penanda
+nonaktif. Penanda UI membaca flag kapabilitas dari registry
+(`capabilities.*`); pemanggil tidak memeriksa mode runtime sendiri.
+Di desktop, perilaku mengikuti implementasi Tauri yang diregistrasi;
+registrasi implementasi Tauri adalah pekerjaan terpisah dari migrasi
+call site G5.
+
+| Fitur | Adapter web | Penanda UI di web |
+| --- | --- | --- |
+| Shortcut global (di luar aplikasi) | `ShortcutAdapter`: `register`/`unregister` menolak, `isRegistered` mengembalikan false. Flag `globalShortcut`. | Halaman pengaturan shortcut: pemberitahuan bahwa shortcut global hanya ada di desktop, dan input shortcut dinonaktifkan. Shortcut di dalam tab memakai registry shortcut web yang terpisah. |
+| Buka lewat shell desktop | `ShellAdapter.open` menolak (tidak ada padanan server, AD-14). | Tidak ada permukaan UI sendiri. Keempat call site yang ada membuka URL http(s) dan dirutekan ke `OpenerAdapter.openUrl`, sehingga tautan tetap terbuka di tab baru. |
+| Keluar / jalankan ulang proses | `ProcessAdapter`: `exit`/`relaunch` menolak. | Dialog perilaku tutup hanya terpicu event desktop sehingga tidak muncul di web. Tombol updater dinonaktifkan di web (lihat baris pembaruan). Alur reset database lokal gagal di command `delete_local_database` (DISABLE) sebelum mencapai `relaunch`. |
+| Luncur saat startup | `AutostartAdapter`: `isEnabled`/`enable`/`disable` menolak. Flag `autostart`. | Pengaturan perilaku sistem: badge "Desktop only" pada pengaturan luncur saat startup, dan kedua switch dinonaktifkan. Adapter tidak dipanggil di web. |
+| Pemeriksa pembaruan aplikasi | `UpdaterAdapter.check` menolak; pembaruan adalah deploy server. Flag `updater`. | Halaman Tentang: pemberitahuan bahwa pembaruan dipasang di server dan tombol pemeriksaan dinonaktifkan. Pemicu pemeriksaan saat boot dijaga agar tidak berjalan di web (AD-42). |
+| Tangkap layar desktop dan pin | Rute desktop; flag `screenshot`. Salin gambar memakai `ClipboardAdapter.writeImage` dengan bytes PNG langsung. | Rute `/screenshot` dan `/screenshot-pin` menampilkan pemberitahuan nonaktif di web dan tidak memulai sesi desktop. |
+| Eksekusi terminal plugin | Tanpa adapter; dihapus permanen tanpa padanan web (AD-14). | Tidak ada permukaan UI; izin `terminal.open` tidak ada di fork web. |
+
 ## Branch
 
 - dev: cermin pristine upstream. Selalu sama dengan upstream/dev setelah sync. Tidak pernah berisi commit fork.
@@ -67,6 +88,8 @@ Aturan merge: PR fitur ke web memakai squash merge. PR sync upstream ke web mema
 ## Changelog
 
 ### web-v0.1.0 (belum dirilis)
+
+- 2026-11-16: codemod G5 dan penanda nonaktif (V3-21): 6 spesifier terakhir (`plugin-global-shortcut`, `plugin-shell`, `plugin-process`, `plugin-autostart`, `plugin-updater`, `api/image`) dimigrasikan ke registry platform; penanda nonaktif untuk shortcut global, autostart, updater, dan rute screenshot; daftar fitur nonaktif di web didokumentasikan di bagian "Fitur nonaktif di web (G5)" di atas; allowlist import Tauri dihapus dan Override 1 ESLint menjadi error.
 
 - 2026-11-14: penamaan branch fitur diperbaiki menjadi `web-<topik>` (AD-24, amandemen atas AD-02; bentuk lama memakai slash dan tidak dapat dipakai berdampingan dengan ref trunk `web`) dan exception `.gitignore` ditambahkan untuk `infra/docs/` agar runbook infra dapat di-commit tanpa `git add -f`.
 - 2026-11-14: keputusan gate S2 diformalkan (AD-22): static export + API terpisah dipertahankan; rumah kanonis registry shim ditetapkan di src/lib/platform/ (AD-23); kalimat branch diperbaiki agar konsisten dengan praktik push langsung Fase 0-1.

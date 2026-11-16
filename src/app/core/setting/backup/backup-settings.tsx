@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { relaunch } from '@tauri-apps/plugin-process'
 import { platform } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
@@ -173,7 +172,7 @@ export function BackupSettings() {
           kind: 'error',
         })
       }
-      await relaunch()
+      await platform.process.relaunch()
     } catch (error) {
       toast.error(t('restore.safetyBackupError'), { description: String(error) })
       setRestoring(false)

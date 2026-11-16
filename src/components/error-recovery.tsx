@@ -15,8 +15,7 @@ import {
   RotateCcwIcon,
   Trash2Icon,
 } from 'lucide-react'
-import { platform } from '@/lib/platform'
-import { relaunch } from '@tauri-apps/plugin-process'
+import { platform, platform as platformAdapters } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -299,7 +298,7 @@ export function ErrorRecovery({
       }
 
       await platform.invoke.invoke('delete_local_database')
-      await relaunch()
+      await platformAdapters.process.relaunch()
     })
   }
 
