@@ -44,6 +44,7 @@ export default defineConfig({
             "src/lib/platform/__tests__/v3b-11c-registry-wiring.spec.ts",
             "src/lib/platform/autostart/autostart.web.spec.ts",
             "src/lib/platform/dialog/dialog-wiring.spec.ts",
+            "src/lib/platform/invoke/channel.web.spec.ts",
             "src/lib/platform/invoke/router.spec.ts",
             "src/lib/platform/process/process.web.spec.ts",
             "src/lib/platform/shell/shell.web.spec.ts",

@@ -20,26 +20,26 @@
  * boot call site itself is owned by the boot/integrator task (N-5);
  * this task adds the module only and edits no boot file.
  *
- * Registered here (17): every factory present at the base, each
+ * Registered here (18): every factory present at the base, each
  * called with no arguments so the adapter reads browser globals and
  * defaults at call time, and each registered for mode "web" only.
  * Tauri implementations, when they exist, are registered by a
  * separate Tauri wiring step; this module never imports a
  * *.tauri.ts file.
  *
- * NOT registered here (recorded follow-up, no stubs): store, sql,
- * and channel. No web factory exists for them at the base: the store
+ * NOT registered here (recorded follow-up, no stubs): store and
+ * sql. No web factory exists for them at the base: the store
  * directory holds only the interface, lazy.ts, and the fake used by
- * contract tests; the sql directory holds only the interface and the
- * ops catalog; and no factory implements ChannelAdapter (the
- * streaming surface on WebInvokeAdapter is a different interface and
- * must never be registered as the channel adapter). When a factory
- * lands, the follow-up adds its import plus exactly one registration
- * line inside registerWebAdapters, before the freeze:
+ * contract tests; the sql directory holds only the interface and
+ * the ops catalog. The channel factory landed as a 3D follow-up
+ * (C2) in invoke/channel.web.ts and is registered below; the
+ * streaming surface on WebInvokeAdapter is a different interface
+ * and must never be registered as the channel adapter. When a
+ * factory lands, the follow-up adds its import plus exactly one
+ * registration line inside registerWebAdapters, before the freeze:
  *
  *   registerPlatformAdapter("store", createWebStoreAdapter(), ["web"]);
  *   registerPlatformAdapter("sql", createWebSqlAdapter(), ["web"]);
- *   registerPlatformAdapter("channel", createWebChannelAdapter(), ["web"]);
  *
  * with the factory names adjusted to the names the landing workers
  * actually export. The follow-up also extends the wiring spec with
@@ -64,6 +64,7 @@ import { createWebDialogAdapter } from "./dialog/dialog.web";
 import { createWebEventAdapter } from "./event/event.web";
 import { createWebFsAdapter } from "./fs/fs.web";
 import { createWebHttpAdapter } from "./http/http.web";
+import { createWebChannelAdapter } from "./invoke/channel.web";
 import { createWebInvokeAdapter } from "./invoke/web";
 import { createWebNotificationAdapter } from "./notification/notification.web";
 import { createWebOpenerAdapter } from "./opener/opener.web";
@@ -88,6 +89,7 @@ import {
 export const REGISTERED_WEB_ADAPTER_NAMES: readonly string[] = [
   "assetUrl",
   "autostart",
+  "channel",
   "clipboard",
   "dialog",
   "event",
@@ -114,6 +116,7 @@ export const REGISTERED_WEB_ADAPTER_NAMES: readonly string[] = [
 export function registerWebAdapters(): void {
   registerPlatformAdapter("assetUrl", createWebAssetUrlAdapter(), ["web"]);
   registerPlatformAdapter("autostart", createWebAutostartAdapter(), ["web"]);
+  registerPlatformAdapter("channel", createWebChannelAdapter(), ["web"]);
   registerPlatformAdapter("clipboard", createWebClipboardAdapter(), ["web"]);
   registerPlatformAdapter("dialog", createWebDialogAdapter(), ["web"]);
   registerPlatformAdapter("event", createWebEventAdapter(), ["web"]);
