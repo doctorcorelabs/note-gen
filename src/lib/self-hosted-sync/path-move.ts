@@ -9,7 +9,7 @@ import { withSelfHostedPrepareLock } from './prepare-lock'
 import { assetAssociatedData } from './blob'
 
 class ExistingUploadPending extends Error {
-  constructor() { super('自托管已有文件上传尚未完成，重命名待办已保留') }
+  constructor() { super('SELF_HOSTED_EXISTING_UPLOAD_PENDING') }
 }
 
 type PathKind = 'note' | 'asset' | 'folder'
@@ -93,13 +93,13 @@ export async function getSelfHostedPathMoveIdentity(): Promise<string | null> {
 }
 
 function readSnapshot(value: unknown, context: string, source: string, target: string): SelfHostedPathMoveSnapshot {
-  if (!value || typeof value !== 'object') throw new Error('自托管重命名记录无效')
+  if (!value || typeof value !== 'object') throw new Error('SELF_HOSTED_RENAME_RECORD_INVALID')
   const item = value as SelfHostedPathMoveSnapshot
   if (item.provider !== 'selfHosted' || item.context !== context || item.source !== source || item.target !== target
     || typeof item.operationId !== 'string' || !item.operationId || typeof item.syncEpoch !== 'string' || !item.syncEpoch
     || (item.enqueued !== undefined && typeof item.enqueued !== 'boolean')
     || !Array.isArray(item.entries) || !item.entries.length || item.entries.length > 100_000) {
-    throw new Error('自托管重命名记录无效')
+    throw new Error('SELF_HOSTED_RENAME_RECORD_INVALID')
   }
   const objects = new Set<string>()
   const paths = new Set<string>()
@@ -116,14 +116,14 @@ function readSnapshot(value: unknown, context: string, source: string, target: s
         || (!within(target, entry.target) && !target.startsWith(`${entry.target}/`))))
       || (entry.contentHash !== null && typeof entry.contentHash !== 'string')
       || !Array.isArray(entry.blobRefs) || entry.blobRefs.some(ref => typeof ref !== 'string')
-      || typeof entry.command !== 'string') throw new Error('自托管重命名对象记录无效')
+      || typeof entry.command !== 'string') throw new Error('SELF_HOSTED_RENAME_OBJECT_RECORD_INVALID')
     const command = JSON.parse(entry.command) as Record<string, unknown>
     if (command.type !== 'upsert-object' || command.objectId !== entry.objectId || command.kind !== entry.kind
       || command.commandId !== entry.commandId || typeof command.ciphertext !== 'string'
       || typeof command.ciphertextHash !== 'string' || typeof command.keyVersion !== 'number'
       || !Number.isSafeInteger(command.keyVersion) || command.keyVersion < 1
       || (command.baseRevision !== null && typeof command.baseRevision !== 'string')) {
-      throw new Error('自托管重命名命令记录无效')
+      throw new Error('SELF_HOSTED_RENAME_COMMAND_RECORD_INVALID')
     }
     objects.add(entry.objectId)
     paths.add(entry.targetCasefold)
@@ -140,21 +140,21 @@ export async function moveSelfHostedRemotePath(
 ): Promise<{ status: 'moved' | 'missing' }> {
   if (!validPath(source) || !validPath(target) || source === target
     || within(source.toLowerCase(), target.toLowerCase()) || within(target.toLowerCase(), source.toLowerCase())) {
-    throw new Error('自托管重命名源路径和目标路径无效或互相包含')
+    throw new Error('SELF_HOSTED_RENAME_PATHS_INVALID_OR_NESTED')
   }
   source = await platform.invoke.invoke<string>('self_hosted_move_source_path', { relativePath: source })
   target = (await platform.invoke.invoke<{ normalized: string }>('self_hosted_portable_path', { relativePath: target })).normalized
   const binding = await activeBinding()
-  if (!binding) throw new Error('自托管工作区未绑定或已断开')
+  if (!binding) throw new Error('SELF_HOSTED_WORKSPACE_UNBOUND_OR_DISCONNECTED')
   const context = identity(binding)
   const current = async () => {
     if (!await assertCurrent() || await getSelfHostedPathMoveIdentity() !== context
       || await (await platform.store.load('store.json')).get('platformSwitchRecovery')) {
-      throw new Error('自托管同步配置或本地路径已变化，重命名待办已保留')
+      throw new Error('SELF_HOSTED_SYNC_CONFIG_OR_PATH_CHANGED')
     }
   }
   await current()
-  if (binding.accessMode !== 'read-write' || !binding.syncEpoch) throw new Error('自托管工作区当前不可写')
+  if (binding.accessMode !== 'read-write' || !binding.syncEpoch) throw new Error('SELF_HOSTED_WORKSPACE_NOT_WRITABLE')
   const syncEpoch = binding.syncEpoch
   const database = await getDb()
   const { client } = await authenticatedClient(binding.profileId)
@@ -162,7 +162,7 @@ export async function moveSelfHostedRemotePath(
     await current()
     const session = await client.syncSession(binding.workspaceId, '0', syncEpoch)
     if (session.syncEpoch !== syncEpoch || !session.protocol.compatible
-      || !session.workspace.capabilities.includes('content.update')) throw new Error('自托管工作区版本或写入权限已变化')
+      || !session.workspace.capabilities.includes('content.update')) throw new Error('SELF_HOSTED_WORKSPACE_VERSION_OR_PERMISSION_CHANGED')
     return client.withBootstrapSnapshot(binding.workspaceId, session.syncEpoch, async readPage => {
       type Remote = SyncBootstrapPage['objects'][number] & { path: string; casefold: string; payload: Record<string, unknown> }
       const remote: Remote[] = []
@@ -177,12 +177,12 @@ export async function moveSelfHostedRemotePath(
         const page = await readPage(bootstrapId, after, 200)
         if (page.syncEpoch !== session.syncEpoch || !page.bootstrapId
           || (bootstrapId && bootstrapId !== page.bootstrapId) || (sequence && sequence !== page.snapshotSequence)) {
-          throw new Error('自托管重命名读取到不完整的远端快照')
+          throw new Error('SELF_HOSTED_RENAME_INCOMPLETE_SNAPSHOT')
         }
         bootstrapId = page.bootstrapId
         sequence = page.snapshotSequence
         for (const object of page.objects) {
-          if (ids.has(object.objectId) || ids.size >= 100_000) throw new Error('自托管远端快照成员重复或数量过多')
+          if (ids.has(object.objectId) || ids.size >= 100_000) throw new Error('SELF_HOSTED_SNAPSHOT_DUPLICATE_OR_TOO_MANY')
           ids.add(object.objectId)
           if (object.deletedAt || !['note', 'asset', 'folder'].includes(object.kind)) continue
           const key = await loadWorkspaceKey(binding.workspaceId, object.keyVersion)
@@ -190,16 +190,16 @@ export async function moveSelfHostedRemotePath(
             key, object.ciphertext, objectAssociatedData(binding.workspaceId, object.objectId, object.kind),
           )
           if (payload.domain !== domain(object.kind as PathKind) || typeof payload.relativePath !== 'string') {
-            throw new Error('自托管远端路径载荷无效')
+            throw new Error('SELF_HOSTED_REMOTE_PATH_PAYLOAD_INVALID')
           }
           const path = await platform.invoke.invoke<string>('self_hosted_move_source_path', { relativePath: payload.relativePath })
           const casefold = path.toLowerCase()
-          if (paths.has(casefold)) throw new Error('自托管远端路径存在大小写冲突')
+          if (paths.has(casefold)) throw new Error('SELF_HOSTED_REMOTE_PATH_CASE_CONFLICT')
           paths.add(casefold)
           remote.push({ ...object, path, casefold, payload })
         }
         if (!page.hasMore) return { remote, keyVersion: Math.max(1, ...session.keyVersions.map(key => key.keyVersion)) }
-        if (!page.nextObjectId || pages.has(page.nextObjectId)) throw new Error('自托管远端快照分页无效')
+        if (!page.nextObjectId || pages.has(page.nextObjectId)) throw new Error('SELF_HOSTED_SNAPSHOT_PAGINATION_INVALID')
         pages.add(page.nextObjectId)
         after = page.nextObjectId
       }
@@ -236,7 +236,7 @@ export async function moveSelfHostedRemotePath(
     if (!snapshot) {
       const entries = remoteState.remote.filter(object => within(source, object.path))
       const unrelated = remoteState.remote.filter(object => !within(source, object.path))
-      if (unrelated.some(object => within(target.toLowerCase(), object.casefold))) throw new Error('自托管远端目标已存在，未覆盖任何内容')
+      if (unrelated.some(object => within(target.toLowerCase(), object.casefold))) throw new Error('SELF_HOSTED_REMOTE_TARGET_EXISTS')
       if (!entries.length) return 'missing'
       snapshot = {
         provider: 'selfHosted', context, operationId: crypto.randomUUID(), syncEpoch,
@@ -255,9 +255,9 @@ export async function moveSelfHostedRemotePath(
       for (const parent of [...requiredParents].sort((a, b) => a.length - b.length)) {
         if (folders.has(parent)) continue
         const conflict = remoteState.remote.find(object => object.casefold === parent.toLowerCase())
-        if (conflict) throw new Error('自托管目标父路径不是目录或存在大小写冲突')
+        if (conflict) throw new Error('SELF_HOSTED_TARGET_PARENT_NOT_DIRECTORY_OR_CASE_CONFLICT')
         const local = mappings.find(row => row.relativePath === parent)
-        if (local && local.kind !== 'folder') throw new Error('自托管目标父路径的本地映射不是目录')
+        if (local && local.kind !== 'folder') throw new Error('SELF_HOSTED_TARGET_PARENT_LOCAL_NOT_DIRECTORY')
         folders.set(parent, local?.objectId || crypto.randomUUID())
       }
       const prepare = async (
@@ -302,10 +302,10 @@ export async function moveSelfHostedRemotePath(
       await current()
       await rememberSource(structuredClone(snapshot))
     }
-    if (snapshot.syncEpoch !== syncEpoch) throw new Error('自托管工作区同步版本已变化，待办已保留')
+    if (snapshot.syncEpoch !== syncEpoch) throw new Error('SELF_HOSTED_WORKSPACE_SYNC_VERSION_CHANGED')
     const originalIds = new Set(snapshot.entries.filter(entry => entry.source !== null).map(entry => entry.objectId))
     if (remoteState.remote.some(object => within(source, object.path) && !originalIds.has(object.objectId))) {
-      throw new Error('自托管旧目录出现新的远端对象，未覆盖或删除新内容，重命名待办已保留')
+      throw new Error('SELF_HOSTED_OLD_DIRECTORY_NEW_OBJECTS')
     }
     const remoteById = () => new Map(remoteState.remote.map(object => [object.objectId, object]))
     const completed = () => {
@@ -338,7 +338,7 @@ export async function moveSelfHostedRemotePath(
       const collision = latestMappings.find(row => row.objectId !== entry.objectId && row.relativePath?.toLowerCase() === entry.targetCasefold)
       if (collision || (mapping && (mapping.kind !== entry.kind
         || (mapping.relativePath !== entry.source && mapping.relativePath !== entry.target)))) {
-        throw new Error('自托管路径映射已变化，未替换其他对象身份')
+        throw new Error('SELF_HOSTED_PATH_MAPPING_CHANGED')
       }
       if (mapping) {
         statements.push({
@@ -361,7 +361,7 @@ export async function moveSelfHostedRemotePath(
       const alreadyThere = remoteById().get(entry.objectId)?.path === entry.target
       if (!done && !alreadyThere) {
         if (command && ['failed', 'superseded', 'sent'].includes(command.state)) {
-          throw new Error(`自托管远端重命名未应用：${command.lastError || '版本冲突，请先处理同步冲突'}`)
+          throw new Error(`SELF_HOSTED_REMOTE_RENAME_NOT_APPLIED: ${command.lastError || 'Version conflict. Please resolve the sync conflict first.'}`)
         }
         if (!command) statements.push({
           sql: `insert into self_hosted_outbox(command_id, workspace_id, source_change_ids,
@@ -406,11 +406,11 @@ export async function moveSelfHostedRemotePath(
   await current()
   const after = await loadRemote()
   if (after.remote.some(object => within(source, object.path))) {
-    throw new Error('自托管旧目录仍有远端对象或出现新成员，未删除这些内容，重命名待办已保留')
+    throw new Error('SELF_HOSTED_OLD_DIRECTORY_STILL_HAS_OBJECTS')
   }
   const byId = new Map(after.remote.map(object => [object.objectId, object]))
   if (!snapshot!.entries.every(entry => byId.get(entry.objectId)?.path === entry.target)) {
-    throw new Error('自托管远端重命名尚未完成，已加入持久同步队列')
+    throw new Error('SELF_HOSTED_REMOTE_RENAME_PENDING')
   }
   return { status: 'moved' }
 }

@@ -33,13 +33,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 function getPlatformAvatarFallback(config: AiConfig) {
   const characterCount = config.templateSource === 'custom' ? 1 : 2
   const fallback = Array.from(config.title.trim()).slice(0, characterCount).join('').toUpperCase()
-  return fallback || (config.templateSource === 'custom' ? '自' : 'AI')
+  return fallback || (config.templateSource === 'custom' ? 'C' : 'AI')
 }
 
 function getCustomPlatformAvatarStyle(config: AiConfig) {
   if (config.templateSource !== 'custom') return undefined
 
-  const platformName = config.title.trim() || '自定义平台'
+  const platformName = config.title.trim() || 'Custom Platform'
   const hash = Array.from(platformName).reduce((value, character) => (
     Math.imul(value, 31) + (character.codePointAt(0) || 0)
   ), 17)
@@ -219,7 +219,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   const deleteModel = async (modelId: string) => {
     if (!currentConfig) return
     
-    const confirmed = await platform.dialog.confirm('确定要删除这个模型吗？')
+    const confirmed = await platform.dialog.confirm(t('deleteModelConfirm'))
     if (!confirmed) return
     
     const updatedConfig = {

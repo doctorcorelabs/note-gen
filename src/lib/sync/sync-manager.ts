@@ -191,16 +191,16 @@ export class SyncManager {
   async pushFile(path: string, content: string | Uint8Array, overwrite = false): Promise<SyncResult> {
     const proofWorkspaceIsCurrent = captureFileSyncWorkspaceGuard()
     if (isFileDeletionPending(path)) {
-      return { success: true, action: 'none', message: '文件正在删除' }
+      return { success: true, action: 'none', message: 'The file is being deleted.' }
     }
     // 检查是否应该排除
     if (shouldExclude(path)) {
-      return { success: true, action: 'none', message: '文件被排除在同步之外' }
+      return { success: true, action: 'none', message: 'The file is excluded from sync.' }
     }
 
     try {
       if (isBinaryFilePath(path) && typeof content === 'string') {
-        throw new Error('二进制文件必须以原始字节同步，不能上传文本解码结果')
+        throw new Error('Binary files must be synced as raw bytes. Text-decoded upload results cannot be used.')
       }
       const bytes = syncContentBytes(content)
       if (await (await platform.store.load('store.json')).get('platformSwitchRecovery')) throw new Error('SYNC_SWITCH_STALE')
@@ -209,10 +209,10 @@ export class SyncManager {
           import('@/lib/self-hosted-sync/outbox'),
           import('@/lib/self-hosted-sync/runtime'),
         ])
-        if (isFileDeletionPending(path)) return { success: true, action: 'none', message: '文件正在删除' }
+        if (isFileDeletionPending(path)) return { success: true, action: 'none', message: 'The file is being deleted.' }
         await enqueueFileSnapshot(path)
         void getSelfHostedSyncRuntime().wake('local-change')
-        return { success: true, action: 'push', message: '已加入自托管同步队列', content: decodeSyncText(path, bytes) }
+        return { success: true, action: 'push', message: 'Added to the self-hosted sync queue.', content: decodeSyncText(path, bytes) }
       }
       const currentPlatform = await this.getCurrentPlatform() as 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
       await prepareWorkspacePathUpload(path)
@@ -226,7 +226,7 @@ export class SyncManager {
       let version: string
       const config = currentPlatform === 'cloudFolder' ? await getCloudFolderWorkspaceConfig() : null
       if (currentPlatform === 'cloudFolder' && config?.provider !== 'oneDrive') {
-        if (!config) return { success: false, action: 'push', error: '网盘文件夹未配置' }
+        if (!config) return { success: false, action: 'push', error: 'The cloud drive folder is not configured.' }
         const beforeWrite = await captureWorkspaceRemoteWriteGuard(path, currentPlatform, true, content)
         const result = await androidCloudFolderWorkspaceUpload(config, path, content, undefined, beforeWrite)
         version = result.etag
@@ -248,11 +248,11 @@ export class SyncManager {
         if (currentPlatform === 's3') useSyncStore.getState().updateS3FileEtag(path, version)
         if (currentPlatform === 'webdav') useSyncStore.getState().updateWebDAVFileEtag(path, version)
         await this.logSync(path, 'push', true)
-        return { success: true, action: 'push', message: '推送成功' }
+        return { success: true, action: 'push', message: 'Push succeeded.' }
       }
 
-      await this.logSync(path, 'push', false, '推送失败')
-      return { success: false, action: 'push', error: '推送失败' }
+      await this.logSync(path, 'push', false, 'Push failed.')
+      return { success: false, action: 'push', error: 'Push failed.' }
     } catch (error) {
       await this.logSync(path, 'push', false, String(error))
       return { success: false, action: 'push', error: String(error) }
@@ -270,14 +270,14 @@ export class SyncManager {
     localGuard?: { expectedHash?: string; expectedMissing?: boolean },
   ): Promise<SyncResult> {
     const proofWorkspaceIsCurrent = captureFileSyncWorkspaceGuard()
-    if (isFileDeletionPending(path)) return { success: true, action: 'none', message: '文件正在删除' }
+    if (isFileDeletionPending(path)) return { success: true, action: 'none', message: 'The file is being deleted.' }
     try {
       const store = await platform.store.load('store.json')
       if (await store.get('platformSwitchRecovery')) throw new Error('SYNC_SWITCH_STALE')
       if (await this.getCurrentPlatform() === 'selfHosted') {
         const { getSelfHostedSyncRuntime } = await import('@/lib/self-hosted-sync/runtime')
         await getSelfHostedSyncRuntime().wake('foreground')
-        return { success: true, action: 'none', message: '已检查自托管同步事件' }
+        return { success: true, action: 'none', message: 'Self-hosted sync events checked.' }
       }
       const currentPlatform = await this.getCurrentPlatform() as 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
       const workspace = await getWorkspacePath()
@@ -299,12 +299,12 @@ export class SyncManager {
         ? config ? await androidCloudFolderWorkspaceDownloadBytes(config, path) : null
         : await readVersionedWorkspaceFile(path, currentPlatform)
       if (remoteFile) {
-        if (isFileDeletionPending(path)) return { success: true, action: 'none', message: '文件正在删除' }
+        if (isFileDeletionPending(path)) return { success: true, action: 'none', message: 'The file is being deleted.' }
         const decodedContent = decodeSyncText(path, remoteFile.content)
         const acceptedVersion = 'version' in remoteFile ? remoteFile.version : remoteFile.etag
 
         if (!await prepareActiveEditorDeactivationDurably(path)) {
-          return { success: false, action: 'none', error: '编辑器正在处理未完成的内容' }
+          return { success: false, action: 'none', error: 'The editor is processing unfinished content.' }
         }
         const writeCapturedFile = async (content: Uint8Array) => {
           // Never resolve the workspace again during rollback: it may already
@@ -375,7 +375,7 @@ export class SyncManager {
           return true
         })
         if (!pullAccepted) {
-          return { success: false, action: 'none', error: '本地内容在拉取期间发生变化' }
+          return { success: false, action: 'none', error: 'The local content changed during the pull.' }
         }
 
         // Metadata does not participate in the content transaction. Finish it
@@ -393,11 +393,11 @@ export class SyncManager {
           console.error('Failed to finalize pull metadata:', error)
         })
         emitter.emit('sync-pulled', { path })
-        return { success: true, action: 'pull', message: '拉取成功', content: decodedContent }
+        return { success: true, action: 'pull', message: 'Pull succeeded.', content: decodedContent }
       }
 
-      await this.logSync(path, 'pull', false, '文件不存在')
-      return { success: false, action: 'pull', error: '远程文件不存在' }
+      await this.logSync(path, 'pull', false, 'The file does not exist.')
+      return { success: false, action: 'pull', error: 'The remote file does not exist.' }
     } catch (error) {
       await this.logSync(path, 'pull', false, String(error))
       return { success: false, action: 'pull', error: String(error) }
@@ -416,7 +416,7 @@ export class SyncManager {
         ])
         await enqueueFileSnapshot(path, 'delete')
         void getSelfHostedSyncRuntime().wake('local-change')
-        return { success: true, action: 'delete', message: '删除操作已加入自托管同步队列' }
+        return { success: true, action: 'delete', message: 'The delete operation was added to the self-hosted sync queue.' }
       }
       const currentPlatform = await this.getCurrentPlatform() as 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
       const metadataKey = await getSyncMetadataKey(path, currentPlatform)
@@ -426,13 +426,13 @@ export class SyncManager {
       const config = currentPlatform === 'cloudFolder' ? await getCloudFolderWorkspaceConfig() : null
       let success: boolean
       if (currentPlatform === 'cloudFolder' && config?.provider !== 'oneDrive') {
-        if (!config) return { success: false, action: 'delete', error: '网盘文件夹未配置' }
+        if (!config) return { success: false, action: 'delete', error: 'The cloud drive folder is not configured.' }
         const beforeWrite = await captureWorkspaceRemoteWriteGuard(path, currentPlatform, false)
         success = await androidCloudFolderWorkspaceDelete(config, path, undefined, beforeWrite)
       } else {
         const remote = await import('./remote-library')
         if (!await remote.getRemoteFileMetadata(path, 'workspace', currentPlatform)) {
-          return { success: true, action: 'none', message: '远程文件不存在，无需删除' }
+          return { success: true, action: 'none', message: 'The remote file does not exist, so no deletion is needed.' }
         }
         if (!acceptedVersion || await this.getCurrentPlatform() !== currentPlatform
           || await getSyncMetadataKey(path, currentPlatform) !== metadataKey) throw new Error('SYNC_SWITCH_STALE')
@@ -447,11 +447,11 @@ export class SyncManager {
 
       if (success) {
         await this.logSync(path, 'delete', true)
-        return { success: true, action: 'delete', message: '删除成功' }
+        return { success: true, action: 'delete', message: 'Deletion succeeded.' }
       }
 
-      await this.logSync(path, 'delete', false, '删除失败')
-      return { success: false, action: 'delete', error: '删除失败' }
+      await this.logSync(path, 'delete', false, 'Deletion failed.')
+      return { success: false, action: 'delete', error: 'Deletion failed.' }
     } catch (error) {
       await this.logSync(path, 'delete', false, String(error))
       return { success: false, action: 'delete', error: String(error) }
@@ -466,7 +466,7 @@ export class SyncManager {
       // 如果策略是 ask，需要获取用户选择
       if (strategy === 'ask') {
         // 这里会通过 UI 弹窗让用户选择，实际处理在外部
-        return { success: false, action: 'conflict', message: '需要用户选择' }
+        return { success: false, action: 'conflict', message: 'A user choice is required.' }
       }
 
       // 获取内容
@@ -479,7 +479,7 @@ export class SyncManager {
         ? await this.pushFile(path, localContent ?? '', true)
         : await this.pullFile(path)
       if (!result.success) return { ...result, action: 'conflict' }
-      toast({ title: '冲突处理', description: strategy === 'local' ? '保留本地版本' : '使用远程版本' })
+      toast({ title: 'Conflict handling', description: strategy === 'local' ? 'Keep the local version' : 'Use the remote version' })
       return result
     } catch (error) {
       return { success: false, action: 'conflict', error: String(error) }
@@ -492,21 +492,21 @@ export class SyncManager {
   async syncFile(path: string, options: {
     onConflict?: (local: string, remote: string) => Promise<'local' | 'remote' | 'cancel'>
   } = {}): Promise<SyncResult> {
-    if (isFileDeletionPending(path)) return { success: true, action: 'none', message: '文件正在删除' }
+    if (isFileDeletionPending(path)) return { success: true, action: 'none', message: 'The file is being deleted.' }
     if (await this.getCurrentPlatform() === 'selfHosted') {
       const [{ enqueueFileSnapshot }, { getSelfHostedSyncRuntime }] = await Promise.all([
         import('@/lib/self-hosted-sync/outbox'),
         import('@/lib/self-hosted-sync/runtime'),
       ])
-      if (isFileDeletionPending(path)) return { success: true, action: 'none', message: '文件正在删除' }
+      if (isFileDeletionPending(path)) return { success: true, action: 'none', message: 'The file is being deleted.' }
       await enqueueFileSnapshot(path)
       void getSelfHostedSyncRuntime().wake('local-change')
-      return { success: true, action: 'push', message: '已加入自托管同步队列' }
+      return { success: true, action: 'push', message: 'Added to the self-hosted sync queue.' }
     }
     // 检查是否正在同步
     if (this.state.isSyncing) {
       this.state.pendingSync = true
-      return { success: true, action: 'none', message: '同步中，标记待同步' }
+      return { success: true, action: 'none', message: 'Syncing; marked for sync.' }
     }
 
     this.state.isSyncing = true
@@ -521,7 +521,7 @@ export class SyncManager {
       const syncResult = await compareFileVersions(path)
 
       if (syncResult.action === 'none') {
-        return { success: true, action: 'none', message: '文件已同步' }
+        return { success: true, action: 'none', message: 'The file has been synced.' }
       }
 
       if (syncResult.action === 'push') {
@@ -548,20 +548,20 @@ export class SyncManager {
         const pathOptions = await getFilePathOptions(path)
         const localContent = decodeSyncText(path, await platform.fs.readFile(pathOptions.path, { baseDir: pathOptions.baseDir }))
         if (localContent === undefined) {
-          return { success: false, action: 'conflict', message: '此文件不能使用文本合并，请选择保留本地或远程版本' }
+          return { success: false, action: 'conflict', message: 'This file cannot use text merge. Please choose to keep the local or remote version.' }
         }
         const remoteContent = await pullRemoteFile(path)
         const choice = await options.onConflict(localContent, remoteContent)
 
         if (choice === 'cancel') {
-          return { success: false, action: 'conflict', error: '用户取消' }
+          return { success: false, action: 'conflict', error: 'Cancelled by the user.' }
         }
 
         return await this.resolveConflict(path, choice, localContent)
       }
 
       if (syncResult.action === 'conflict') {
-        return { success: false, action: 'conflict', message: '文件存在冲突，需要选择保留本地或远程版本' }
+        return { success: false, action: 'conflict', message: 'The file has a conflict. Please choose to keep the local or remote version.' }
       }
 
       return { success: true, action: 'none' }

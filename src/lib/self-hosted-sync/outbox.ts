@@ -297,7 +297,7 @@ export async function resolveStructuredObjectId(workspaceId: string, domain: str
     )
     if (!owners[0] || owners[0].localIdentity === localIdentity) return candidate
     deviceId ??= await (await platform.store.load('store.json')).get<string>('selfHostedDeviceId')
-    if (!deviceId) throw new Error('自托管设备身份不可用，请重新授权')
+    if (!deviceId) throw new Error('SELF_HOSTED_DEVICE_IDENTITY_UNAVAILABLE')
     candidate = await structuredObjectId(workspaceId, domain, JSON.stringify({ localKey: identityKey, deviceId, attempt }))
   }
   throw new Error('SELF_HOSTED_PREVIEW_DUPLICATE_IDENTITY')

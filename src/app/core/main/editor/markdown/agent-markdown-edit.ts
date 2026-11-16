@@ -150,7 +150,7 @@ function assertAgentMetadataPreserved(before: ProseMirrorNode, after: ProseMirro
   })
   before.forEach(node => {
     if (node.type.name === WIKI_METADATA_NODE_NAME && typeof node.attrs.raw === 'string' && !retained.has(node.attrs.raw)) {
-      throw new EditorEditSkipped('该改动涉及受保护的 Wiki 元数据，未应用。请保留元数据后重新生成局部差异。')
+      throw new EditorEditSkipped('This change touches protected Wiki metadata and was not applied. Please keep the metadata and regenerate a local diff.')
     }
   })
 }
@@ -162,7 +162,7 @@ export function assertAgentChangeLocal(
   range: DiffPreviewRange
 ) {
   if (before.childCount > 1 && range.fromA === 0 && range.toA === before.content.size) {
-    throw new EditorEditSkipped('本次修改会替换整个文档，已拒绝执行；请拆分为局部修改。')
+    throw new EditorEditSkipped('This edit would replace the entire document, so it was rejected. Please split it into local edits.')
   }
   if (range.inline || range.fromA === range.toA || range.fromB === range.toB) return
   const oldNode = before.nodeAt(range.fromA)
@@ -192,7 +192,7 @@ export function assertAgentChangeLocal(
   before.nodesBetween(range.fromA, range.toA, (node, position) => {
     if (position >= range.fromA && position + node.nodeSize <= range.toA
       && retained.has(JSON.stringify(node.toJSON()))) {
-      throw new EditorEditSkipped('局部修改扩大到了未修改的内容，已拒绝整段替换，未写入笔记。请使用更小的行范围或精确选区重试，并保留原有缩进和结构。')
+      throw new EditorEditSkipped('The local edit expanded into unmodified content, so the whole-block replacement was rejected and nothing was written to the note. Please retry with a smaller line range or a precise selection, keeping the original indentation and structure.')
     }
   })
 }
@@ -205,11 +205,11 @@ export function assertAgentDocumentChangeLocal(
   assertAgentMetadataPreserved(before, after)
   for (const change of documentChanges(before, after)) {
     if (change.fromA <= 1 && change.toA >= before.content.size - 1 && before.childCount > 1) {
-      throw new EditorEditSkipped('本次修改会替换整个文档，已拒绝执行；请拆分为局部修改。')
+      throw new EditorEditSkipped('This edit would replace the entire document, so it was rejected. Please split it into local edits.')
     }
     const expanded = buildPreviewRange(before, after, change)
     if (expanded.fromA === 0 && expanded.toA === before.content.size && before.childCount > 1) {
-      throw new EditorEditSkipped('本次修改会替换整个文档，已拒绝执行；请拆分为局部修改。')
+      throw new EditorEditSkipped('This edit would replace the entire document, so it was rejected. Please split it into local edits.')
     }
     if (scope) {
       const $from = before.resolve(scope.from)
@@ -219,7 +219,7 @@ export function assertAgentDocumentChangeLocal(
       const from = $from.depth > 0 ? $from.before($from.depth) : scope.from
       const to = $to.depth > 0 ? $to.after($to.depth) : scope.to
       if (change.fromA < from || change.toA > to) {
-        throw new EditorEditSkipped('编辑超出指定选区，已拒绝写入。')
+        throw new EditorEditSkipped('The edit goes beyond the specified selection, so the write was rejected.')
       }
       // Exact selections already define the permitted structural change. Do
       // not reject a valid wrap/unwrap merely because its text stays unchanged.
@@ -291,14 +291,14 @@ export function mapAgentSerializedMarkdownChanges(
       return edit.from < normalized.to && normalized.from < edit.to
     })
     if (overlapsNormalization) {
-      throw new EditorEditSkipped('该选区与 Markdown 格式转换范围重叠，本次改动未应用。')
+      throw new EditorEditSkipped('The selection overlaps the Markdown format conversion range, so this change was not applied.')
     }
     // At a zero-width insertion, stay before untouched raw whitespace such as
     // the final newline. Replacements exclude normalization at both boundaries.
     const from = sourceMap.map(edit.from, edit.from === edit.to ? -1 : 1)
     const to = edit.from === edit.to ? from : sourceMap.map(edit.to, -1)
     if (to < from || originalMarkdown.slice(from, to) !== serializedBefore.slice(edit.from, edit.to)) {
-      throw new EditorEditSkipped('无法准确定位原文中的选区，本次改动未应用。')
+      throw new EditorEditSkipped('The selection cannot be located precisely in the original text, so this change was not applied.')
     }
     candidate = candidate.slice(0, from) + edit.text + candidate.slice(to)
   }
@@ -320,7 +320,7 @@ export function buildAgentRangeMarkdown(
   const candidate = mapAgentSerializedMarkdownChanges(originalMarkdown, serializedBefore, serializedAfter)
   const verifiedDoc = buildAgentMarkdownEdit(editor, originalMarkdown, candidate, currentDoc)
   if (!verifiedDoc.eq(modifiedDoc)) {
-    throw new EditorEditSkipped('原文映射与选区修改结果不一致，本次改动未应用。')
+    throw new EditorEditSkipped('The original-text mapping does not match the selection edit result, so this change was not applied.')
   }
   return candidate
 }
@@ -335,9 +335,9 @@ export function applyAgentDocumentEdit(editor: Editor, modifiedDoc: ProseMirrorN
     assertAgentChangeLocal(before, modifiedDoc, buildPreviewRange(before, modifiedDoc, change))
     transaction.replace(change.fromA, change.toA, modifiedDoc.slice(change.fromB, change.toB))
   }
-  if (!transaction.doc.eq(modifiedDoc)) throw new EditorEditSkipped('局部编辑结果与预期不一致，未写入笔记。')
+  if (!transaction.doc.eq(modifiedDoc)) throw new EditorEditSkipped('The local edit result does not match the expectation, so nothing was written to the note.')
   if (transaction.docChanged) editor.view.dispatch(transaction)
-  if (!editor.state.doc.eq(modifiedDoc)) throw new Error('编辑器未接受局部编辑，未完成写入。请等待当前预览结束后重试。')
+  if (!editor.state.doc.eq(modifiedDoc)) throw new Error('The editor did not accept the local edit, so the write did not complete. Please wait for the current preview to finish and retry.')
   if (transaction.docChanged) editor.view.dispatch(closeHistory(editor.state.tr))
 }
 
@@ -351,9 +351,9 @@ export function applyAgentSnapshotRestore(editor: Editor, content: string): void
   for (const change of [...documentChanges(before, target)].reverse()) {
     transaction.replace(change.fromA, change.toA, target.slice(change.fromB, change.toB))
   }
-  if (!transaction.doc.eq(target)) throw new Error('撤销结果与记录不一致，未写入笔记。')
+  if (!transaction.doc.eq(target)) throw new Error('The undo result does not match the record, so nothing was written to the note.')
   if (transaction.docChanged) editor.view.dispatch(transaction)
-  if (!editor.state.doc.eq(target)) throw new Error('编辑器未接受撤销，未写入笔记。')
+  if (!editor.state.doc.eq(target)) throw new Error('The editor did not accept the undo, so nothing was written to the note.')
   if (transaction.docChanged) editor.view.dispatch(closeHistory(editor.state.tr))
 }
 
@@ -460,7 +460,7 @@ function insertOrderedListSibling(
     const itemNode = editor.schema.nodeFromJSON(parsedItem)
     const nextItem = list.maybeChild($anchor.index(depth - 1) + 1)
     if (nextItem?.eq(itemNode)) {
-      throw new Error('相同的列表项已存在，未重复插入。')
+      throw new Error('The same list item already exists, so it was not inserted again.')
     }
     const transaction = new Transform(currentDoc)
     transaction.insert($anchor.after(depth), itemNode)
@@ -527,7 +527,7 @@ export function buildAgentMarkdownEdit(
       })
       // A local edit must never silently accept unrelated parse changes. The
       // user can use an exact selection when the source range is ambiguous.
-      throw new EditorEditSkipped('该修改范围与 Markdown 转换差异重叠，请选中目标内容后重试；未修改笔记。')
+      throw new EditorEditSkipped('The edit range overlaps a Markdown conversion diff. Please select the target content and retry; the note was not modified.')
     }
     const from = sourceToCurrent.map(change.fromA, 1)
     const to = change.fromA === change.toA ? from : sourceToCurrent.map(change.toA, -1)

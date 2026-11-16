@@ -160,7 +160,7 @@ export async function createLibrary(
 ) {
   await initAllDatabases()
   const resolvedName = name.trim() || (localRoot ? await nameFromWorkspaceFolder(localRoot, '我的工作区') : '')
-  if (!resolvedName) throw new Error('工作区名称不能为空')
+  if (!resolvedName) throw new Error('SELF_HOSTED_WORKSPACE_NAME_EMPTY')
   const workspaceId = await createRemoteLibrary(profileId, resolvedName, idempotencyKey)
   const resolvedLocalRoot = localRoot ?? await getManagedLibraryWorkspacePath(workspaceId, resolvedName)
   if (localRoot === null) await platform.fs.mkdir(resolvedLocalRoot, { recursive: true })
@@ -297,7 +297,7 @@ export async function ensureLibraryLocalWorkspace(profileId: string, workspaceId
 
   const { client } = await authenticatedClient(profileId)
   const workspace = (await client.workspaces()).find(item => item.id === workspaceId && item.type === 'library')
-  if (!workspace) throw new Error('工作区不存在或当前账号无权访问')
+  if (!workspace) throw new Error('SELF_HOSTED_WORKSPACE_NOT_FOUND_OR_NO_ACCESS')
   const localRoot = await getManagedLibraryWorkspacePath(workspaceId, await decryptLibraryName(profileId, workspace))
   await platform.fs.mkdir(localRoot, { recursive: true })
   await bindLibrary(profileId, workspaceId, localRoot, false)
@@ -424,7 +424,7 @@ export async function bindLibrary(
   await ensureWorkspaceDirectory(localRoot)
   const { client } = await authenticatedClient(profileId)
   const workspace = (await client.workspaces()).find(item => item.id === workspaceId && item.type === 'library')
-  if (!workspace) throw new Error('工作区不存在或当前账号无权访问')
+  if (!workspace) throw new Error('SELF_HOSTED_WORKSPACE_NOT_FOUND_OR_NO_ACCESS')
   const session = await client.syncSession(workspaceId, '0')
   const now = Date.now()
   // Releasing the previous owner and claiming the root must use the same
@@ -657,7 +657,7 @@ async function loadManagedWorkspaceKey(profileId: string, workspaceId: string, k
   const keys = await client.workspaceKeys(workspaceId)
   const managedKey = keys.find(item => item.keyVersion === keyVersion)?.envelopes
     .find(envelope => envelope.type === 'managed')?.wrappedKey
-  if (!managedKey) throw new Error('该工作区没有可用的 managed key')
+  if (!managedKey) throw new Error('SELF_HOSTED_WORKSPACE_NO_MANAGED_KEY')
   await secureSet(secureStorageKey, managedKey)
   return managedKey
 }
@@ -734,7 +734,7 @@ async function portablePath(relativePath: string, seen: Map<string, string>) {
   )
   const duplicate = seen.get(portable.caseFolded)
   if (duplicate && duplicate !== portable.normalized) {
-    throw new Error(`同一目录存在跨平台重名路径：${duplicate} / ${portable.normalized}`)
+    throw new Error(`SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH: ${duplicate} / ${portable.normalized}`)
   }
   seen.set(portable.caseFolded, portable.normalized)
   return portable.normalized

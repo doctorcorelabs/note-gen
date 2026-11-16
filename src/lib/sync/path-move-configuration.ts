@@ -15,7 +15,7 @@ export interface PathMoveConfiguration {
 function endpointIdentity(raw: string): string {
   const url = new URL(raw.trim().replace(/\/+$/, ''))
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error('同步服务器地址不能包含凭据或查询参数')
+    throw new Error('The sync server address must not contain credentials or query parameters.')
   }
   return `${url.origin}${url.pathname.replace(/\/+$/, '')}`
 }
@@ -78,7 +78,7 @@ export async function getPathMoveConfiguration(): Promise<PathMoveConfiguration 
       const workspace = await getWorkspacePath()
       const normalize = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '')
       if (!workspace.isCustom || normalize(workspace.path) !== normalize(config.path)) {
-        throw new Error('云同步文件夹与当前工作区不一致，请先完成工作区切换')
+        throw new Error('The cloud sync folder does not match the current workspace. Please finish switching workspaces first.')
       }
       return null // The local rename itself is propagated by iCloud/the OS.
     }
