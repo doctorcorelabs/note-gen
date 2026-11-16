@@ -5,6 +5,10 @@
 
 export { TopAppBar } from './top-app-bar'
 
+export { SessionGuard } from './session-guard'
+
+export { SessionMenu } from './session-menu'
+
 export {
   WebDialogProvider,
   WebDialogHost,

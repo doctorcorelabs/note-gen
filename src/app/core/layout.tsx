@@ -24,7 +24,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import initShowWindow from "@/lib/shortcut/show-window"
 import { initMcp } from "@/lib/mcp/init"
 import { reportAppStart } from "@/lib/event-report"
-import { TopAppBar, WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
+import { SessionGuard, TopAppBar, WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
 import { platform } from '@/lib/platform'
 import { TextSizeProvider } from "@/contexts/text-size-context"
 import { SyncConfirmDialog } from "@/components/sync-confirm-dialog"
@@ -527,7 +527,13 @@ export default function RootLayout({
     }
   }, [pathname, router])
 
+  // Web fork (Fase 1, V3-03 slot 03b): the session guard is the
+  // second seam after the boot guard in src/app/page.tsx. It probes
+  // the session before the shell renders, blocks deep links without
+  // a proven session, and redirects to the login page on expiry.
+  // In the desktop shell it renders children unchanged.
   return (
+    <SessionGuard>
     <ThemeProvider
       attribute="class"
       defaultTheme="system"
@@ -554,5 +560,6 @@ export default function RootLayout({
         </WebDialogProvider>
       </TextSizeProvider>
     </ThemeProvider>
+    </SessionGuard>
   );
 }
