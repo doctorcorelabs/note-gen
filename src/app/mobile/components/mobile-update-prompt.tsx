@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react'
 import { platform } from '@/lib/platform'
-import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import useSettingStore from '@/stores/setting'
 import useUpdateStore, {
   ANDROID_DOWNLOAD_URL,
@@ -12,7 +11,7 @@ import useUpdateStore, {
 export type MobilePlatform = 'android' | 'ios'
 
 export function getMobilePlatform(): MobilePlatform | null {
-  const currentPlatform = osPlatform()
+  const currentPlatform = platform.os.platform()
   return currentPlatform === 'android' || currentPlatform === 'ios'
     ? currentPlatform
     : null

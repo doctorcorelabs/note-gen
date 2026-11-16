@@ -9,5 +9,4 @@
 # The canonical mention in src/lib/platform/detect.ts is not listed
 # here; the guard excludes it.
 src/lib/agent/debug-log.ts
-src/lib/developer-tools.ts
 src/lib/platform/event/event-listener.tauri.ts

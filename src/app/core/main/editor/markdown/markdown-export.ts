@@ -507,10 +507,6 @@ function createPrintFrame(html: string) {
 }
 
 async function openTauriPrintWindow(html: string, title: string, outputPath?: string) {
-  const [{ once }, { WebviewWindow }] = await Promise.all([
-    import('@tauri-apps/api/event'),
-    import('@tauri-apps/api/webviewWindow'),
-  ])
   const documentKey = `document-${crypto.randomUUID()}`
   const windowLabel = `pdf-print-${crypto.randomUUID()}`
   const completionEvent = outputPath ? `pdf-export-result-${crypto.randomUUID()}` : undefined
@@ -553,7 +549,7 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
 
     void (async () => {
       if (completionEvent) {
-        removeCompletionListener = await once<{ success: boolean; error?: string }>(completionEvent, (event) => {
+        removeCompletionListener = await platform.event.once<{ success: boolean; error?: string }>(completionEvent, (event) => {
           if (event.payload.success) {
             finish(true)
           } else {
@@ -562,7 +558,7 @@ async function openTauriPrintWindow(html: string, title: string, outputPath?: st
         })
       }
 
-      const printWindow = new WebviewWindow(windowLabel, {
+      const printWindow = platform.window.createWebviewWindow(windowLabel, {
         url: `/print?key=${encodeURIComponent(documentKey)}`,
         title: outputPath ? `${title} - 正在导出 PDF` : `${title} - PDF 打印预览`,
         width: 900,
@@ -592,10 +588,9 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
   const fileName = getMarkdownExportBaseName(source.baseName)
 
   if (checkIsTauri()) {
-    const { platform: osPlatform } = await import('@tauri-apps/plugin-os')
     let outputPath: string | undefined
 
-    if (osPlatform() === 'macos') {
+    if (platform.os.platform() === 'macos') {
       const selectedPath = await platform.dialog.save({
         title: '导出 PDF',
         defaultPath: `${fileName}.pdf`,

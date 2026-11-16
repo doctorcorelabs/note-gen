@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState } from 'react'
 import { isMobileDevice } from '@/lib/check'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import useArticleStore from '@/stores/article'
 
 type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
@@ -37,7 +37,7 @@ export function useFileShortcuts({
   // 检测当前平台
   useEffect(() => {
     try {
-      const p = platform()
+      const p = platform.os.platform()
       if (p === 'macos') {
         setCurrentPlatform('macos')
       } else if (p === 'windows') {

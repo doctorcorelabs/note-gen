@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { platform, BaseDirectory } from '@/lib/platform'
-import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ClipboardPaste, Copy, FilePlus, FileUp, FolderDown, FolderInput, FolderPlus, FolderUp, Pencil, Scissors, Search, Trash2 } from 'lucide-react'
@@ -55,7 +54,7 @@ function getVisibleDirectoryPath(path: string, assetsFolderName: string) {
 }
 
 async function isMobileOneDriveSyncEnabled() {
-  if (getRuntimePlatform() !== 'android' && getRuntimePlatform() !== 'ios') return false
+  if (platform.os.platform() !== 'android' && platform.os.platform() !== 'ios') return false
   const store = await platform.store.load('store.json')
   if (await store.get<string>('primaryBackupMethod') !== 'cloudFolder') return false
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')

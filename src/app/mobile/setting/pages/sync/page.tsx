@@ -4,7 +4,6 @@ import { FileDown, Loader2, RefreshCcw } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { platform } from '@/lib/platform'
-import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { GithubSync } from '@/app/core/setting/sync/github-sync'
 import { GiteeSync } from '@/app/core/setting/sync/gitee-sync'
 import { GitlabSync } from '@/app/core/setting/sync/gitlab-sync'
@@ -49,7 +48,7 @@ function isRepoSyncPlatform(platformName: MobileSyncPlatform): platformName is S
 export default function SyncPage() {
   const t = useTranslations()
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
-  const currentPlatform = getRuntimePlatform()
+  const currentPlatform = platform.os.platform()
   const isIOS = currentPlatform === 'ios'
   const isAndroid = currentPlatform === 'android'
   const {

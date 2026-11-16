@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import Image from 'next/image'
-import { isTauri } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform, isTauri } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { isAppLockRemembered, readAppLock, setAppLockRemembered, verifyAppLock } from '@/lib/app-lock'
 import { Button } from '@/components/ui/button'
@@ -29,7 +28,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
       // Hidden auxiliary windows must initialize without waiting for an unlock UI.
       // Screenshot overlays only edit freshly captured desktop pixels; saving
       // records still waits for the main window's app lock to be unlocked.
-      if (!isTauri() || ['pdf-print-', 'desktop-screenshot-', 'screenshot-pin-'].some(prefix => getCurrentWindow().label.startsWith(prefix))) {
+      if (!isTauri() || ['pdf-print-', 'desktop-screenshot-', 'screenshot-pin-'].some(prefix => platform.window.getCurrentWindow().label.startsWith(prefix))) {
         setState('open')
         return
       }
@@ -75,7 +74,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
 
   return (
     <main className="flex h-dvh items-center justify-center overflow-y-auto bg-background p-6 text-foreground">
-      {isTauri() && getCurrentWindow().label === 'main' && <CloseBehaviorGuard />}
+      {isTauri() && platform.window.getCurrentWindow().label === 'main' && <CloseBehaviorGuard />}
       <Card className="my-auto w-full max-w-md overflow-hidden border-foreground/10 shadow-xl shadow-foreground/5">
         <CardHeader className="items-center gap-4 px-8 pt-10 text-center sm:px-10 sm:pt-12">
           <Image src="/app-icon.png" alt="NoteGen" width={64} height={64}

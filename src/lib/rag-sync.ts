@@ -1,4 +1,3 @@
-import { getVersion } from '@tauri-apps/api/app'
 import { platform } from '@/lib/platform'
 import {
   getAllVectorDocuments,
@@ -186,7 +185,7 @@ export async function uploadKnowledgeBaseSnapshot(
 
   const manifest: RagSnapshotManifest = {
     schemaVersion: RAG_SNAPSHOT_SCHEMA_VERSION,
-    appVersion: await getVersion(),
+    appVersion: await platform.os.getAppVersion(),
     generatedAt: Date.now(),
     embeddingModel: await store.get<string>('embeddingModel') || '',
     embeddingDimension: Array.from(dimensions)[0],

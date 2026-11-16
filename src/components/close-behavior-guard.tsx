@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform } from '@/lib/platform'
 import { exit } from '@tauri-apps/plugin-process'
 import { Power } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -24,7 +23,7 @@ export function CloseBehaviorGuard() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    const unlistenPromise = listen('close-behavior-requested', () => {
+    const unlistenPromise = platform.event.listen('close-behavior-requested', () => {
       setOpen(true)
     })
 
@@ -45,7 +44,7 @@ export function CloseBehaviorGuard() {
           <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant="outline"
-            onClick={() => void getCurrentWindow().hide()}
+            onClick={() => void platform.window.getCurrentWindow().hide()}
           >
             {t('minimize')}
           </AlertDialogAction>

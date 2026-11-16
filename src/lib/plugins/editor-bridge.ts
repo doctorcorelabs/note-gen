@@ -1,4 +1,4 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { platform } from '@/lib/platform'
 import emitter from '@/lib/emitter'
 import {
   PluginError,
@@ -72,7 +72,7 @@ function createOpaqueId(prefix: string): string {
 
 function getWindowId(): string {
   try {
-    return getCurrentWindow().label
+    return platform.window.getCurrentWindow().label
   } catch {
     return 'main'
   }

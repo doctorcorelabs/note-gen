@@ -1,7 +1,7 @@
 'use client'
 import { platform, BaseDirectory } from "@/lib/platform";
 import { useEffect, useRef } from 'react';
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/platform";
 import { v4 as uuid } from "uuid";
 import useChatStore from "@/stores/chat";
 import useTagStore from "@/stores/tag";
@@ -68,7 +68,7 @@ export function ClipboardListener() {
     let unlisten: UnlistenFn | undefined;
     
     async function initListen() {
-      unlisten = await listen('tauri://focus', readHandler)
+      unlisten = await platform.event.listen('tauri://focus', readHandler)
     }
     initListen()
 

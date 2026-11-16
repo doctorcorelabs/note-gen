@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
@@ -75,7 +74,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
         title: t('dataClearedRestartTitle'),
         kind: 'info',
       })
-      await getCurrentWindow().close()
+      await platform.window.getCurrentWindow().close()
     } finally {
       setPendingAction(null)
     }

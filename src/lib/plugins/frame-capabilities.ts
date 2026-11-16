@@ -1,5 +1,5 @@
 import { platform } from '@/lib/platform'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@/lib/platform'
 
 interface TerminalOutput { sessionId: string; data: string }
 interface TerminalClosed { sessionId: string }
@@ -31,7 +31,7 @@ export async function connectPluginFrameCapabilities(options: {
   const close = (sessionId: string) => platform.invoke.invoke('plugin_terminal_close', { pluginId, workspaceId, sessionId })
 
   if (terminal) {
-    unlistenOutput = await listen<TerminalOutput>('plugin-terminal-output', event => {
+    unlistenOutput = await platform.event.listen<TerminalOutput>('plugin-terminal-output', event => {
       if (!active) return
       const { sessionId, data } = event.payload
       if (sessions.has(sessionId)) send({ type: 'terminal.output', sessionId, data })
@@ -42,7 +42,7 @@ export async function connectPluginFrameCapabilities(options: {
       }
     })
     try {
-      unlistenClosed = await listen<TerminalClosed>('plugin-terminal-closed', event => {
+      unlistenClosed = await platform.event.listen<TerminalClosed>('plugin-terminal-closed', event => {
         if (!active) return
         const { sessionId } = event.payload
         if (sessions.delete(sessionId)) send({ type: 'terminal.closed', sessionId })

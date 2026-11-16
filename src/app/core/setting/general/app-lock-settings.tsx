@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { isTauri } from '@tauri-apps/api/core'
+import { isTauri } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import { LockKeyhole } from 'lucide-react'
 import { readAppLock, saveAppLock, verifyAppLock } from '@/lib/app-lock'

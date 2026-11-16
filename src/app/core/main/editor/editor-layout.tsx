@@ -16,7 +16,6 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { platform } from '@/lib/platform'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Layout } from 'react-resizable-panels'
 import { useTranslations } from 'next-intl'
@@ -1115,7 +1114,7 @@ export function EditorLayout() {
         && tab.autoCreated
         && getEditorGroupIds(currentLayout.root).length === 1
       if (!group || !tab || onlyPlaceholder) {
-        void getCurrentWindow().hide()
+        void platform.window.getCurrentWindow().hide()
         return
       }
       handleCloseTabRef.current(group.id, group.activeTabId)

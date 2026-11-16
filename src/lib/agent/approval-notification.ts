@@ -1,8 +1,4 @@
-import { getCurrentWindow } from "@tauri-apps/api/window"
-import {
-  isPermissionGranted,
-  sendNotification,
-} from "@tauri-apps/plugin-notification"
+import { platform } from "@/lib/platform"
 
 interface ApprovalNotification {
   title: string
@@ -14,7 +10,7 @@ async function isAppInBackground() {
   if (document.visibilityState !== "visible") return true
 
   try {
-    return !(await getCurrentWindow().isFocused())
+    return !(await platform.window.getCurrentWindow().isFocused())
   } catch {
     return false
   }
@@ -28,10 +24,10 @@ export async function notifyPendingAgentApproval({ title, body }: ApprovalNotifi
   if (!(await isAppInBackground())) return
 
   try {
-    const permissionGranted = await isPermissionGranted()
+    const permissionGranted = await platform.notification.isPermissionGranted()
 
     if (permissionGranted) {
-      sendNotification({ title, body })
+      platform.notification.sendNotification({ title, body })
     }
   } catch (error) {
     console.warn("Unable to send Agent approval notification:", error)

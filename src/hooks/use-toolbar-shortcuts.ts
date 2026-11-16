@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { platform } from '@tauri-apps/plugin-os'
+import { platform } from '@/lib/platform'
 import emitter from '@/lib/emitter'
 import useSettingStore from '@/stores/setting'
 import { resolveToolbarShortcutIndex } from '@/lib/toolbar-shortcuts'
@@ -14,7 +14,7 @@ export function useToolbarShortcuts() {
 
   useEffect(() => {
     try {
-      const p = platform()
+      const p = platform.os.platform()
       if (p === 'macos') {
         setCurrentPlatform('macos')
       } else if (p === 'windows') {

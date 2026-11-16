@@ -1,6 +1,4 @@
-import { emitTo } from '@tauri-apps/api/event'
 import { platform } from '@/lib/platform'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { CustomThemeColors } from '@/types/theme'
 import type { Tag } from '@/db/tags'
 
@@ -41,11 +39,11 @@ export async function requestQuickRecord(request: QuickRecordRequest): Promise<Q
   try {
     return await new Promise<QuickRecordResponse>((resolve, reject) => {
       void (async () => {
-        unlisten = await getCurrentWindow().listen<QuickRecordResponse>('quick-record-response', event => {
+        unlisten = await platform.window.getCurrentWindow().listen<QuickRecordResponse>('quick-record-response', event => {
           if (event.payload.id === request.id) resolve(event.payload)
         })
         timer = setTimeout(() => reject(new Error('timeout')), 15000)
-        await emitTo('main', 'quick-record-request', request)
+        await platform.event.emitTo('main', 'quick-record-request', request)
       })().catch(reject)
     })
   } finally {

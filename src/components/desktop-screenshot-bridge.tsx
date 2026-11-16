@@ -1,7 +1,6 @@
 'use client'
 
 import { platform, BaseDirectory } from '@/lib/platform'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef } from 'react'
 
@@ -325,7 +324,7 @@ export function DesktopScreenshotBridge({ ready }: { ready: boolean }) {
     const unlisteners: (() => void)[] = []
 
     const register = async () => {
-      const currentWindow = getCurrentWindow()
+      const currentWindow = platform.window.getCurrentWindow()
       const unlistenResult = await listenTauriEvent<DesktopScreenshotResult>(
         'desktop-screenshot-completed',
         event => acceptResultRef.current(event.payload),

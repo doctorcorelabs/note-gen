@@ -5,9 +5,7 @@
  * 不上报笔记内容、文件名、文件路径、AI 对话或硬件机器 ID。
  */
 
-import { getVersion } from '@tauri-apps/api/app'
 import { platform } from '@/lib/platform'
-import { platform as osPlatform } from '@tauri-apps/plugin-os'
 
 let runtimeSessionId: string | null = null
 
@@ -64,7 +62,7 @@ function getRuntimeSessionId(): string {
 
 async function getAppVersion(): Promise<string> {
   try {
-    return await getVersion()
+    return await platform.os.getAppVersion()
   } catch (error) {
     console.error('Failed to get app version:', error)
     return 'unknown'
@@ -73,7 +71,7 @@ async function getAppVersion(): Promise<string> {
 
 async function getPlatform(): Promise<string> {
   try {
-    return osPlatform()
+    return platform.os.platform()
   } catch (error) {
     console.error('Failed to get platform:', error)
     return 'unknown'

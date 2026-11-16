@@ -1,5 +1,4 @@
 import { platform } from '@/lib/platform'
-import { listen } from '@tauri-apps/api/event'
 import { getDb, initAllDatabases } from '@/db'
 import useSyncStore from '@/stores/sync'
 import { getSelfHostedSyncRuntime } from './runtime'
@@ -32,7 +31,7 @@ function installRuntimeListeners(runtime: ReturnType<typeof getSelfHostedSyncRun
   }
   window.addEventListener('focus', resume)
   window.addEventListener('pageshow', resume)
-  void listen('self-hosted-app-resumed', resume).catch(error => {
+  void platform.event.listen('self-hosted-app-resumed', resume).catch(error => {
     console.warn('[self-hosted-sync] Unable to listen for native resume', error)
   })
   document.addEventListener('visibilitychange', () => {

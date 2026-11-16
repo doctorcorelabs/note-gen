@@ -1,5 +1,4 @@
 import { platform } from '@/lib/platform'
-import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { executeRecordTransaction, getDb } from '@/db'
 import { SelfHostedApiError, SelfHostedClient, normalizeServerUrl } from './client'
 import type { ClientSession } from './protocol'
@@ -138,7 +137,7 @@ export async function connectWithBrowser(input: {
     const authorization = await client.createDeviceAuthorization({
       deviceId: keyPair.deviceId,
       deviceName: input.deviceName,
-      platform: getRuntimePlatform(),
+      platform: platform.os.platform(),
       encryptionPublicKey: keyPair.publicKey,
     })
     await platform.opener.openUrl(authorization.verificationUriComplete)
@@ -696,7 +695,7 @@ function loginWithDeviceIdentity(
     ...(input.totpCode ? { totpCode: input.totpCode } : {}),
     deviceId: identity.deviceId,
     deviceName: input.deviceName,
-    platform: getRuntimePlatform(),
+    platform: platform.os.platform(),
     encryptionPublicKey: identity.publicKey,
   })
 }

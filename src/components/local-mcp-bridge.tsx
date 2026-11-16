@@ -1,7 +1,6 @@
 'use client'
 
 import { platform } from '@/lib/platform'
-import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 
 import { executeLocalMcpTool } from '@/lib/local-mcp/tools'
@@ -13,7 +12,7 @@ export function LocalMcpBridge() {
     let unlisten: (() => void) | undefined
 
     async function start() {
-      unlisten = await listen<LocalMcpBridgeRequest>('local-mcp://request', event => {
+      unlisten = await platform.event.listen<LocalMcpBridgeRequest>('local-mcp://request', event => {
         const request = event.payload
         void (async () => {
           try {

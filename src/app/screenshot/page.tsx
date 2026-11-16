@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from 'react'
 import { platform } from '@/lib/platform'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { ArrowUpRight, Check, Circle, Copy, Download, MousePointer2, Pencil, Pin, Redo2, ScanLine, Square, Type, Undo2, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -177,7 +176,7 @@ export default function ScreenshotPage() {
     try {
       const sessionId = context?.sessionId || new URLSearchParams(window.location.search).get('sessionId')
       if (sessionId) await platform.invoke.invoke('cancel_desktop_screenshot', { sessionId })
-      else await getCurrentWindow().close()
+      else await platform.window.getCurrentWindow().close()
     } catch (cause) {
       console.error('Unable to cancel screenshot:', cause)
       setError(t('actionError'))
@@ -279,7 +278,7 @@ export default function ScreenshotPage() {
       // The native window may have received its final monitor size while loading.
       setViewport({ width: window.innerWidth, height: window.innerHeight })
       setReady(true)
-      unlisten = await getCurrentWindow().onCloseRequested(event => {
+      unlisten = await platform.window.getCurrentWindow().onCloseRequested(event => {
         event.preventDefault()
         if (!busyRef.current) void platform.invoke.invoke('cancel_desktop_screenshot', { sessionId: next.sessionId }).catch(cause => {
           console.error('Unable to cancel screenshot:', cause)

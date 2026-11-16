@@ -2,7 +2,7 @@ import { ContextMenuItem, ContextMenuShortcut } from "@/components/ui/enhanced-c
 import { Kbd } from "@/components/ui/kbd";
 import { useTranslations } from "next-intl";
 import { FolderInput } from "lucide-react";
-import { platform } from "@tauri-apps/plugin-os";
+import { platform } from "@/lib/platform";
 import { useEffect, useState } from "react";
 
 interface RenameFolderProps {
@@ -23,7 +23,7 @@ export function RenameFolder({ item, onStartRename, shortcut }: RenameFolderProp
       return;
     }
     try {
-      const p = platform();
+      const p = platform.os.platform();
       setRenameKey(p === 'macos' ? 'Enter' : 'F2');
     } catch {
       setRenameKey('F2');

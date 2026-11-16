@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { platform } from '@tauri-apps/plugin-os'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { platform } from '@/lib/platform'
+import type { UnlistenFn } from '@/lib/platform'
 import { isMobileDevice } from '@/lib/check'
 import { Settings, Minus, Square, Copy, X, PanelLeft, PanelRight, SquarePen, Cog, BookOpen } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -105,7 +104,7 @@ export function TitleBar() {
     setIsMobile(isMobileDevice())
     
     try {
-      const p = platform()
+      const p = platform.os.platform()
       if (p === 'macos') {
         setCurrentPlatform('macos')
       } else if (p === 'windows') {
@@ -123,7 +122,7 @@ export function TitleBar() {
   useEffect(() => {
     if (isMobile || (currentPlatform !== 'windows' && currentPlatform !== 'linux')) return
 
-    const window = getCurrentWindow()
+    const window = platform.window.getCurrentWindow()
     let disposed = false
     let unlisten: UnlistenFn | undefined
     let requestId = 0
@@ -161,7 +160,7 @@ export function TitleBar() {
 
   const handleMinimize = async () => {
     try {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       await window.minimize()
     } catch (error) {
       console.error('Error minimizing window:', error)
@@ -170,7 +169,7 @@ export function TitleBar() {
 
   const handleMaximize = async () => {
     try {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       await window.toggleMaximize()
       setIsMaximized(await window.isMaximized())
     } catch (error) {
@@ -180,7 +179,7 @@ export function TitleBar() {
 
   const handleClose = async () => {
     try {
-      const window = getCurrentWindow()
+      const window = platform.window.getCurrentWindow()
       await window.close()
     } catch (error) {
       console.error('Error closing window:', error)

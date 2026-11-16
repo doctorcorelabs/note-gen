@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { platform } from '@/lib/platform'
-import { platform as getRuntimePlatform } from '@tauri-apps/plugin-os'
 import { CircleCheck, Cloud, CloudDownload, Copy, CopyCheck, ExternalLink, FolderSync, LogIn, LogOut, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -246,7 +245,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
     await refreshWorkspaceContent().catch(cause => console.warn('OneDrive view refresh failed', cause))
     await store.delete(PENDING_ONE_DRIVE_CONFIG_KEY).then(() => store.save()).catch(cause => console.warn('OneDrive setup cleanup failed', cause))
     toast({ title: oneDriveT('workspaceReadyTitle') })
-    if (getRuntimePlatform() === 'ios' && previousConfig?.bookmarkBase64) {
+    if (platform.os.platform() === 'ios' && previousConfig?.bookmarkBase64) {
       await setIOSWorkspaceFolderAccess(null).catch(() => undefined)
       await releaseIOSSyncFolder(previousConfig.bookmarkBase64).catch(() => undefined)
     } else if (previousConfig?.path.startsWith('content://') && previousConfig.path !== next.path) {

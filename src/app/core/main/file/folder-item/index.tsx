@@ -858,8 +858,7 @@ export function FolderItem({
   useEffect(() => {
     const detectPlatform = async () => {
       try {
-        const { platform } = await import('@tauri-apps/plugin-os')
-        const p = platform()
+        const p = platform.os.platform()
         if (p === 'macos') {
           setCurrentPlatform('macos')
         } else if (p === 'windows') {

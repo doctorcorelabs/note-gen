@@ -3389,8 +3389,7 @@ async function getAutoDataSyncDeviceId() {
 
 async function getAppVersion() {
   try {
-    const { getVersion } = await import('@tauri-apps/api/app')
-    return await getVersion()
+    return await platform.os.getAppVersion()
   } catch {
     return undefined
   }

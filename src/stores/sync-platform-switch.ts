@@ -855,10 +855,9 @@ export async function recoverSelfHostedSwitchBackup() {
     )
     const { getCurrentWorkspaceRoot } = await import('@/lib/self-hosted-sync/workspaces')
     const activeRoot = await getCurrentWorkspaceRoot()
-    const { platform: switchPlatform } = await import('@tauri-apps/plugin-os')
     const normalizeRoot = (root: string) => {
       const normalized = root.normalize('NFC').replaceAll('\\', '/').replace(/\/+$/, '')
-      return switchPlatform() === 'windows' ? normalized.toLowerCase() : normalized
+      return platform.os.platform() === 'windows' ? normalized.toLowerCase() : normalized
     }
     const activeBinding = bindings.find(binding => normalizeRoot(binding.localRoot) === normalizeRoot(activeRoot))
     const currentLibraries = [

@@ -1,8 +1,6 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
 import { platform } from '@/lib/platform'
-import { emit } from '@tauri-apps/api/event'
 import { create } from 'zustand'
-import { getVersion } from '@tauri-apps/api/app'
 import { AiConfig } from '@/app/core/setting/config'
 import { GitlabInstanceType } from '@/lib/sync/gitlab.types'
 import { GiteaInstanceType } from '@/lib/sync/gitea.types'
@@ -1019,7 +1017,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
   version: '',
   setVersion: async () => {
-    const version = await getVersion()
+    const version = await platform.os.getAppVersion()
     set({ version })
   },
 
@@ -1060,7 +1058,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
     const store = await platform.store.load('store.json')
     await store.set('developerMode', developerMode)
     await store.save()
-    await emit(DEVELOPER_MODE_CHANGED_EVENT, developerMode).catch(() => undefined)
+    await platform.event.emit(DEVELOPER_MODE_CHANGED_EVENT, developerMode).catch(() => undefined)
   },
 
   developerPerformanceInfo: false,
@@ -1824,7 +1822,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
     await store.set('customCss', css)
     await store.save()
     set({ customCss: css })
-    await emit(CUSTOM_CSS_CHANGED_EVENT, css).catch(() => undefined)
+    await platform.event.emit(CUSTOM_CSS_CHANGED_EVENT, css).catch(() => undefined)
   },
 
   // 自定义仓库名称设置

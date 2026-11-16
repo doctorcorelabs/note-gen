@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
 import { platform } from '@/lib/platform'
-import type { UnlistenFn } from '@tauri-apps/api/event'
-import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition } from '@tauri-apps/api/window'
+import type { UnlistenFn } from '@/lib/platform'
 import { Check, Copy, Download, NotebookPen, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -80,7 +79,7 @@ export default function ScreenshotPinPage() {
   const close = useCallback(async () => {
     if (busyRef.current) return
     try {
-      await getCurrentWindow().close()
+      await platform.window.getCurrentWindow().close()
     } catch (cause) {
       console.error('Unable to close pinned screenshot:', cause)
       if (mountedRef.current) setError(t('actionError'))
@@ -113,7 +112,7 @@ export default function ScreenshotPinPage() {
           pendingZoomRef.current = null
           const current = contextRef.current
           if (!current) break
-          const monitor = await currentMonitor()
+          const monitor = await platform.window.currentMonitor()
           const sourceScale = current.scaleFactor > 0 ? current.scaleFactor : 1
           const width = current.imageWidth / sourceScale
           const height = current.imageHeight / sourceScale
@@ -122,21 +121,22 @@ export default function ScreenshotPinPage() {
           const maximumHeight = (monitor?.workArea.size.height || window.screen.availHeight * monitorScale) / monitorScale * 0.95
           const maximumZoom = Math.max(0.01, Math.min(8, (maximumWidth - 2) / width, (maximumHeight - 2) / height))
           const clamped = Math.min(maximumZoom, Math.max(Math.min(0.1, maximumZoom), requested))
-          const pinWindow = getCurrentWindow()
+          const pinWindow = platform.window.getCurrentWindow()
           const position = await pinWindow.outerPosition()
           requestedZoomRef.current = clamped
           zoomRef.current = clamped
-          await pinWindow.setSize(new LogicalSize(
-            Math.max(280, Math.round(width * clamped + 2)),
-            Math.max(120, Math.round(height * clamped + 2)),
-          ))
+          await pinWindow.setSize({
+            type: 'Logical',
+            width: Math.max(280, Math.round(width * clamped + 2)),
+            height: Math.max(120, Math.round(height * clamped + 2)),
+          })
           if (monitor) {
             const size = await pinWindow.outerSize()
             const area = monitor.workArea
             // Keep a growing pin inside the work area, away from the menu bar and Dock/taskbar.
             const x = Math.max(area.position.x, Math.min(position.x, area.position.x + area.size.width - size.width))
             const y = Math.max(area.position.y, Math.min(position.y, area.position.y + area.size.height - size.height))
-            if (x !== position.x || y !== position.y) await pinWindow.setPosition(new PhysicalPosition(x, y))
+            if (x !== position.x || y !== position.y) await pinWindow.setPosition({ type: 'Physical', x, y })
           }
           if (mountedRef.current) updateZoom()
         }
@@ -208,7 +208,7 @@ export default function ScreenshotPinPage() {
           setRecordState(payload.recordState)
           if (payload.recordState === 'unsaved') setError(t('recordSaveFailed'))
           else setError('')
-        }, { kind: 'Window', label: getCurrentWindow().label })
+        }, { kind: 'Window', label: platform.window.getCurrentWindow().label })
         if (disposed) {
           stop()
           return
@@ -289,7 +289,7 @@ export default function ScreenshotPinPage() {
 
   const dragWindow = () => {
     if (busyRef.current) return
-    void getCurrentWindow().startDragging().catch(cause => {
+    void platform.window.getCurrentWindow().startDragging().catch(cause => {
       console.error('Unable to move pinned screenshot:', cause)
       if (mountedRef.current) setError(t('actionError'))
     })
