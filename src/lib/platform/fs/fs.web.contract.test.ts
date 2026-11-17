@@ -1217,14 +1217,57 @@ describe("web FsAdapter watch polling fallback", () => {
     const events: WatchEvent[] = [];
     const unwatch = await fs.watch("", (e) => events.push(e));
     await waitFor(() => fake.requests.length >= 2, "baseline polls");
-    assert.equal(events.length, 0);
+    // Polling start delivers one pathless rescan so writes that
+    // predate the baseline still surface; it is not a file event.
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "any");
+    assert.deepEqual(events[0].paths, []);
     files = [
       entry({ name: "a.md", path: "a.md" }),
       entry({ name: "b.md", path: "b.md", revision: "sha256:b" }),
     ];
-    await waitFor(() => events.length >= 1, "created event for b.md");
-    assert.deepEqual(events[0].type, { create: { kind: "file" } });
-    assert.deepEqual(events[0].paths, ["/appdata/article/b.md"]);
+    await waitFor(() => events.length >= 2, "created event for b.md");
+    assert.deepEqual(events[1].type, { create: { kind: "file" } });
+    assert.deepEqual(events[1].paths, ["/appdata/article/b.md"]);
+    unwatch();
+    const countAfterUnwatch = fake.requests.length;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(fake.requests.length, countAfterUnwatch);
+  });
+
+  it("starts polling when a connected socket stays silent after hello", async () => {
+    FakeWebSocket.reset();
+    const fake = new FakeFetch();
+    let files: Array<Record<string, unknown>> = [entry({ name: "a.md", path: "a.md" })];
+    fake.onPath("GET", "/api/workspace/list", () =>
+      new FakeResponse({ body: { path: "", entries: files, nextCursor: null } }),
+    );
+    const fs = createWebFsAdapter({
+      fetchImpl: fake.fetch,
+      webSocketImpl: fakeSocketCtor,
+      watchPollIntervalMs: 5,
+    });
+    const events: WatchEvent[] = [];
+    const unwatch = await fs.watch("", (e) => events.push(e));
+    assert.equal(FakeWebSocket.instances.length, 1);
+    const socket = FakeWebSocket.instances[0];
+    socket.emitOpen();
+    socket.emitMessage({ type: "hello", lastSeq: 0 });
+    // D-WATCHER: silence after hello must arm polling while the
+    // socket stays connected; baseline polls establish the snapshot.
+    await waitFor(() => fake.requests.length >= 2, "silence polls");
+    assert.equal(socket.closed, false);
+    // The polling-start rescan arrives before any file event.
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "any");
+    assert.deepEqual(events[0].paths, []);
+    files = [
+      entry({ name: "a.md", path: "a.md" }),
+      entry({ name: "b.md", path: "b.md", revision: "sha256:b" }),
+    ];
+    await waitFor(() => events.length >= 2, "created event for b.md");
+    assert.deepEqual(events[1].type, { create: { kind: "file" } });
+    assert.deepEqual(events[1].paths, ["/appdata/article/b.md"]);
     unwatch();
     const countAfterUnwatch = fake.requests.length;
     await new Promise((resolve) => setTimeout(resolve, 40));

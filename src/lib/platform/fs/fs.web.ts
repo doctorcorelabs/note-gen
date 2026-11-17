@@ -65,8 +65,12 @@
 //
 // Watching: watch() translates WebSocket workspace events (V1-09
 // section 9) into Tauri WatchEvent shapes, with a polling snapshot
-// fallback when WebSocket is unavailable or repeatedly fails (AD-09).
-// Event paths are virtual absolute paths under /appdata/article so the
+// fallback when WebSocket is unavailable or repeatedly fails (AD-09),
+// and when a connected socket stays silent: no workspace traffic
+// within one poll interval arms polling alongside the live socket
+// (D-WATCHER; a connected socket that never produces must not
+// suppress the fallback). Event paths are virtual absolute paths
+// under /appdata/article so the
 // existing watcher hook converts them back to workspace-relative paths
 // with the same code it uses on desktop.
 
@@ -1202,10 +1206,17 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
     let socket: WebSocketLike | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let silenceTimer: ReturnType<typeof setTimeout> | null = null;
     let polling = false;
     let pollBackoffMs = 0;
     let snapshot: Map<string, SnapshotEntry> | null = null;
     const delayMs = options?.delayMs ?? 0;
+    // Silence threshold: one visible poll interval with no workspace
+    // traffic proves the socket is not producing, so polling takes
+    // over. Reuses the poll interval dep (default 10000 ms) so tests
+    // control both with one value; it is a watchdog bound, not a
+    // second poll interval.
+    const silenceThresholdMs = deps.watchPollIntervalMs ?? 10000;
     const pending = new Map<string, ReturnType<typeof setTimeout>>();
 
     const deliverNow = (event: WatchEvent): void => {
@@ -1301,20 +1312,23 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
           lastSeq = helloSeq;
         }
         failures = 0;
-        stopPolling();
+        noteWorkspaceTraffic();
         return;
       }
       if (type === "batch" && Array.isArray(parsed.events)) {
+        noteWorkspaceTraffic();
         for (const item of parsed.events) {
           handleServerEvent(item);
         }
         return;
       }
       if (type === "workspace-file-changed") {
+        noteWorkspaceTraffic();
         handleServerEvent(parsed);
         return;
       }
       if (type === "resync-required") {
+        noteWorkspaceTraffic();
         deliver({
           type: "any",
           paths: watched.map((root) => virtualEventPath(root)),
@@ -1437,6 +1451,19 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       }
       polling = true;
       snapshot = null;
+      // The first snapshot after a late polling start baselines the
+      // CURRENT disk state, so writes that landed before the
+      // baseline would never diff (D-WATCHER probe15: the early
+      // write stayed invisible while a post-baseline write
+      // surfaced). Close the gap with one pathless rescan event:
+      // the watcher hook treats a pathless structural event as a
+      // full tree reload, which surfaces every file the baseline
+      // already contains. The rescan carries no paths on purpose:
+      // a root-path event maps to an empty relative path and is
+      // dropped by the hook's hidden/out-of-workspace filter.
+      // Later polls diff against the fresh baseline, so no
+      // duplicate rescan follows.
+      deliver({ type: "any", paths: [], attrs: null });
       void pollOnce();
     }
 
@@ -1447,6 +1474,45 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         clearTimeout(pollTimer);
         pollTimer = null;
       }
+    }
+
+    // Silence watchdog (D-WATCHER): a connected socket that never
+    // delivers workspace traffic must not suppress polling forever.
+    // The hub has no producer until the V3-08b remainder lands, so a
+    // live socket currently stays silent after hello; without this
+    // timer polling is armed only by repeated socket failures and
+    // external writes never surface. The timer is armed when a
+    // socket is opened and re-armed by every hello, batch,
+    // workspace-file-changed, and resync-required message (traffic
+    // proves the producer is alive even when the subtree filter
+    // drops an event). Pong, resync-ok, error, and malformed
+    // messages do not re-arm it: they carry no file-change
+    // evidence. Firing starts polling alongside the live socket
+    // (plus one pathless rescan event from startPolling, closing
+    // the pre-baseline gap); the socket stays connected with seq
+    // tracking intact, and the next workspace message stops
+    // polling again.
+    function clearSilenceTimer(): void {
+      if (silenceTimer) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+      }
+    }
+
+    function armSilenceTimer(): void {
+      clearSilenceTimer();
+      if (disposed) {
+        return;
+      }
+      silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        startPolling();
+      }, Math.max(0, silenceThresholdMs));
+    }
+
+    function noteWorkspaceTraffic(): void {
+      stopPolling();
+      armSilenceTimer();
     }
 
     const scheduleReconnect = (): void => {
@@ -1498,6 +1564,7 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       };
       ws.onclose = (event) => {
         socket = null;
+        clearSilenceTimer();
         if (disposed) {
           return;
         }
@@ -1511,6 +1578,8 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       ws.onerror = () => {
         // A close event normally follows; recovery happens there.
       };
+      // Watch for a socket that connects but never produces.
+      armSilenceTimer();
     };
 
     connect();
@@ -1524,6 +1593,7 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      clearSilenceTimer();
       stopPolling();
       for (const timer of pending.values()) {
         clearTimeout(timer);
