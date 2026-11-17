@@ -178,6 +178,43 @@ function conflictBody(extra: Record<string, unknown> = {}): Record<string, unkno
   });
 }
 
+// Canonical wire shapes (kontrak-api-kanonis.md section 2, W4-DEMO
+// B1): errors nest code/message/requestId under `error` with per-code
+// fields under `error.details`; successes wrap the payload in `data`.
+function nestedErrorBody(
+  code: string,
+  details: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ok: false,
+    error: {
+      code,
+      message: `message for ${code}`,
+      requestId: "req-1",
+      retryable: false,
+      details,
+    },
+  };
+}
+
+function nestedConflictBody(): Record<string, unknown> {
+  return nestedErrorBody("revision_conflict", {
+    path: "x.md",
+    serverRevision: "sha256:server",
+    serverVersion: 11,
+    serverModifiedAt: "2026-11-14T13:08:00.000Z",
+    serverSize: 2048,
+    currentPreview: "first paragraph",
+    previewTruncated: true,
+    suggestedCopyPath: "x (salinan).md",
+    actions: ["reload", "saveAsCopy", "forceOverwrite"],
+  });
+}
+
+function successBody(data: unknown): Record<string, unknown> {
+  return { ok: true, data };
+}
+
 async function rejectsWithCode(
   promise: Promise<unknown>,
   code: string,
@@ -254,6 +291,77 @@ describe("web FsAdapter reads", () => {
     assert.equal(err.status, 404);
     assert.equal(err.requestId, "req-1");
     assert.equal(err.path, "gone.md");
+  });
+
+  it("maps a nested 404 envelope to not_found so exists() returns false (B1)", async () => {
+    const fake = new FakeFetch();
+    fake.onPath("GET", "/api/workspace/stat", () =>
+      new FakeResponse({ status: 404, body: nestedErrorBody("not_found") }),
+    );
+    fake.onPath("GET", "/api/workspace/file", () =>
+      new FakeResponse({ status: 404, body: nestedErrorBody("not_found") }),
+    );
+    const fs = createWebFsAdapter({ fetchImpl: fake.fetch });
+    assert.equal(await fs.exists("gone.md"), false);
+    const err = await rejectsWithCode(fs.readTextFile("gone.md"), "not_found");
+    assert.equal(err.status, 404);
+    assert.equal(err.message, "message for not_found");
+    assert.equal(err.requestId, "req-1");
+  });
+
+  it("maps a nested 412 envelope to revision_conflict with details payload (B1)", async () => {
+    const fake = new FakeFetch();
+    fake.onPath("GET", "/api/workspace/stat", () =>
+      new FakeResponse({ body: successBody(entry({ revision: "sha256:stale" })) }),
+    );
+    fake.onPath("PUT", "/api/workspace/file", () =>
+      new FakeResponse({ status: 412, body: nestedConflictBody() }),
+    );
+    const fs = createWebFsAdapter({ fetchImpl: fake.fetch });
+    const err = await rejectsWithCode(fs.writeTextFile("x.md", "v2"), "revision_conflict");
+    assert.equal(err.status, 412);
+    assert.equal(err.conflict?.serverRevision, "sha256:server");
+    assert.equal(err.conflict?.serverVersion, 11);
+    assert.equal(err.conflict?.suggestedCopyPath, "x (salinan).md");
+    assert.equal(err.conflict?.previewTruncated, true);
+  });
+
+  it("reads diskWritten from nested error details (B1)", async () => {
+    const fake = new FakeFetch();
+    fake.onPath("GET", "/api/workspace/file", () =>
+      new FakeResponse({
+        status: 500,
+        body: nestedErrorBody("index_update_failed", {
+          diskWritten: true,
+          revision: "sha256:new",
+          path: "x.md",
+        }),
+      }),
+    );
+    const fs = createWebFsAdapter({ fetchImpl: fake.fetch });
+    const err = await rejectsWithCode(fs.readTextFile("x.md"), "index_update_failed");
+    assert.equal(err.diskWritten, true);
+  });
+
+  it("unwraps success envelopes for stat and list (B1/B5)", async () => {
+    const fake = new FakeFetch();
+    fake.onPath("GET", "/api/workspace/stat", () =>
+      new FakeResponse({ body: successBody(entry({ revision: "sha256:aaa" })) }),
+    );
+    fake.onPath("GET", "/api/workspace/list", () =>
+      new FakeResponse({
+        body: successBody({
+          path: "",
+          entries: [entry({ name: "notes", path: "notes", isDirectory: true, isFile: false, size: null, revision: null, version: null })],
+          nextCursor: null,
+        }),
+      }),
+    );
+    const fs = createWebFsAdapter({ fetchImpl: fake.fetch });
+    assert.equal(await fs.exists("x.md"), true);
+    const entries = await fs.readDir("");
+    assert.deepEqual(entries.map((e) => e.name), ["notes"]);
+    assert.equal(entries[0].isDirectory, true);
   });
 
   it("maps 415, 401 and 403 codes without rewriting them", async () => {

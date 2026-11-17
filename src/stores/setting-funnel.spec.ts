@@ -66,4 +66,25 @@ describe("F122-Q2 setting funnels", () => {
       "if (key === 'primaryBackupMethod' || key === 'platformSwitchRecovery') continue",
     );
   });
+
+  // W4-DEMO B6: the hydration loop must not abort when the store
+  // rejects a default it cannot hold (server-side secret keys such
+  // as `accessToken` in web mode). Only capability rejections for
+  // that key are skipped; any other failure still aborts init.
+  it("the hydration loop skips capability rejections on default persist, rethrowing the rest", () => {
+    const loop = sliceBetween(
+      "await Promise.all(Object.entries(get())",
+      "await store.save()",
+    );
+    const writeAt = loop.indexOf("await store.set(key, value)");
+    expect(writeAt).toBeGreaterThanOrEqual(0);
+    const tryAt = loop.lastIndexOf("try {", writeAt);
+    expect(tryAt).toBeGreaterThanOrEqual(0);
+    const catchAt = loop.indexOf("} catch (error) {", writeAt);
+    expect(catchAt).toBeGreaterThan(writeAt);
+    const handler = loop.slice(catchAt, catchAt + 200);
+    expect(handler).toContain("if (error instanceof PlatformCapabilityError) return");
+    expect(handler).toContain("throw error");
+    expect(SOURCE).toContain("PlatformCapabilityError } from '@/lib/platform'");
+  });
 });

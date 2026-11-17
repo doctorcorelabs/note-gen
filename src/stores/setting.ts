@@ -1,5 +1,5 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
-import { platform } from '@/lib/platform'
+import { platform, PlatformCapabilityError } from '@/lib/platform'
 import { create } from 'zustand'
 import { AiConfig } from '@/app/core/setting/config'
 import { GitlabInstanceType } from '@/lib/sync/gitlab.types'
@@ -1000,7 +1000,24 @@ const useSettingStore = create<SettingState>((set, get) => ({
         // init; the key simply stays absent, which reads back as
         // undefined anyway. Never delete here either.
         if (value === undefined) return
-        await store.set(key, value)
+        // W4-DEMO B6: a default the store cannot hold must not abort
+        // hydration either. In web mode the store rejects writes for
+        // server-side secret keys (for example `accessToken`, whose
+        // default is '' and whose reads behave as absent) and for
+        // unknown keys with a PlatformCapabilityError. One such
+        // rejection inside Promise.all used to kill the whole init,
+        // leaving every setting at its default after reload and
+        // marking hydration status `error` (which surfaces as
+        // OBS-B2E-1 in the footer). Skip only capability rejections
+        // for this key; any other failure still aborts init, and
+        // direct store.set calls elsewhere still reject as before.
+        // On desktop the set succeeds, so this branch is inert there.
+        try {
+          await store.set(key, value)
+        } catch (error) {
+          if (error instanceof PlatformCapabilityError) return
+          throw error
+        }
       }
     }))
     await store.save()
