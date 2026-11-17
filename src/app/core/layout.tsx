@@ -6,7 +6,7 @@ import { isTauri } from "@/lib/platform/detect"
 import { CloseBehaviorGuard } from "@/components/close-behavior-guard"
 import useSettingStore from "@/stores/setting"
 import { useEffect, useRef, useState } from "react";
-import { initAllDatabases } from "@/db"
+import { getSqlAdapter, initAllDatabases } from "@/db"
 import dayjs from "dayjs"
 import zh from "dayjs/locale/zh-cn";
 import en from "dayjs/locale/en";
@@ -360,6 +360,36 @@ export default function RootLayout({
         // 先完成数据库和默认工作区初始化，避免首次启动时其他逻辑抢先读取空目录或未建表数据库。
         await initAllDatabases()
         if (cancelled) return
+        // Web fork (Fase 1, W4-HOOK, AD-112): H1 test-only boot proof
+        // hook. Runs ONLY when the boot URL carries the test flag
+        // `?e2e-boot-proof=1`. The flag is a test path only: it is
+        // never set by the UI, and without it this block does
+        // nothing and boot behavior is unchanged. With the flag,
+        // one read-only `marks.list` query (limit 1) is issued
+        // through the SQL adapter so a follow-up Playwright spec
+        // can observe a browser-issued POST /api/db/batch carrying
+        // the X-CSRF-Token header, and the outcome is written to
+        // `window.__notegenBootProof` for the spec to read via
+        // page.evaluate. Shape: `{ ok: true, rows: <row count> }`
+        // on success, `{ ok: false }` on any failure. The whole
+        // block is wrapped in try/catch and never throws, so the
+        // hook can never break boot. The optional ready() return
+        // value extension (boote2e gap G2) is NOT implemented
+        // here; see AD-112 (3).
+        if (searchParams.get('e2e-boot-proof') === '1') {
+          try {
+            const hookTarget = window as unknown as {
+              __notegenBootProof?: { ok: boolean; rows?: number }
+            }
+            const rows = await getSqlAdapter().query({ kind: 'marks.list', limit: 1 })
+            hookTarget.__notegenBootProof = { ok: true, rows: rows.length }
+          } catch {
+            const hookTarget = window as unknown as {
+              __notegenBootProof?: { ok: boolean; rows?: number }
+            }
+            hookTarget.__notegenBootProof = { ok: false }
+          }
+        }
         const { resumeWorkspacePathMoves } = await import('@/lib/sync/workspace-path-moves')
         resumeWorkspacePathMoves()
         setPluginsReady(true)
