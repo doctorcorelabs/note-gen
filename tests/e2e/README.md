@@ -59,9 +59,9 @@ Browser: `pnpm exec playwright install chromium` (sekali per mesin/CI).
 | E2E-06 pengaturan bertahan | `settings-persist.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Pembuka Settings masih tanpa hook (R3) dan pilihan pengaturannya masih tertunda; V3-29a/29b mendarat tanpa menyelesaikan keduanya. |
 | E2E-S1 login | `login.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI login SUDAH mendarat (`/login`, V3-03); locator terverifikasi di `harness/selectors.ts` + `harness/login-page.ts`. Menunggu seeding akun + harness backend + jalur melewati perimeter Access. |
 | E2E-S2 hapus catatan (CRUD) | `notes-crud.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Create = E2E-02, Read/Update = E2E-03. |
-| E2E-S3 record + tag | `record-tag.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Komponen inbox V3-26a mendarat tetapi belum terpasang di halaman mana pun (pemasangan = V3-26b); seeding lewat kind layer (D-3D-1). Deskriptor di `harness/seed-data.ts`. |
+| E2E-S3 record + tag | `record-tag.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Komponen inbox V3-26a mendarat tetapi belum terpasang di halaman mana pun (V3-26b mendarat tanpa pemasangan; pemasangan = tindak lanjut); seeding lewat kind layer (D-3D-1). Deskriptor di `harness/seed-data.ts`. |
 | E2E-S4 unduh arsip | `archive-download.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI ekspor belum ada; tanpa locator tebakan. |
-| E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; menunggu pemasangan record (26b) + pilihan E2E-06 + harness backend. |
+| E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; menunggu pemasangan inbox (tindak lanjut) + pilihan E2E-06 + harness backend. |
 | E2E-D2 cek data A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka cek data utuh sesudah restart backend; menunggu kontrol restart harness + database uji persisten. |
 
 ## Alur @scaffold (brief pemulihan): pemetaan dan justifikasi
@@ -185,7 +185,7 @@ TIDAK BISA diverifikasi (tidak ada hook stabil di source):
 | Halaman login (rute, field, tombol) | SUDAH TERATASI di trunk: halaman `/login` mendarat di V3-03 dengan locator terverifikasi (lihat tabel di atas). Baris ini dipertahankan sebagai catatan sejarah; spec `login.spec.ts` kini memakai locator itu. |
 | Pemicu unduh arsip (tombol/halaman ekspor) | Tidak ada UI ekspor web; `backup-settings.tsx` upstream adalah UI direktori lokal desktop (dialog Tauri). Spec `archive-download.spec.ts` tanpa locator sampai UI ekspor dikirim pemilik UI. |
 | Input rename file | Input rename tanpa nama aksesibel (inventaris R1): hanya dapat dipilih lewat konteks baris yang sedang di-rename. Alur buat folder/catatan (E2E-02, E2E-D1) wajib membuktikan input ini di DOM hidup. |
-| Dialog buat record (WebRecordCreate) | Komponen mendarat di V3-26a tetapi tidak terpasang di halaman mana pun di trunk; tidak ada locator sampai V3-26b memasangnya. Jangan menulis locator dari komponen yang tidak terjangkau browser. |
+| Dialog buat record (WebRecordCreate) | Komponen mendarat di V3-26a tetapi tidak terpasang di halaman mana pun di trunk (V3-26b mendarat tanpa pemasangan); tidak ada locator sampai pemasangan tindak lanjut mendarat. Jangan menulis locator dari komponen yang tidak terjangkau browser. |
 
 ## Asumsi yang belum terverifikasi
 

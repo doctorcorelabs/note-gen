@@ -33,9 +33,11 @@
 // 3. Edit and save one note (E2E-03), then reload the page.
 // 4. Create 5 records with 2 tags (harness/seed-data.ts RECORD_SEEDS
 //    and TAG_SEEDS; the WebRecordCreate dialog merged in V3-26a but
-//    is not mounted in any page on trunk, so no creation path is
-//    reachable through the browser until V3-26b mounting lands;
-//    creation goes through the kind-backed client, D-3D-1).
+//    is not mounted in any page on trunk, and V3-26b merged tag
+//    sidebar/validation work without mounting it, so no creation
+//    path is reachable through the browser until inbox mounting
+//    lands as follow-up work; creation goes through the kind-backed
+//    client, D-3D-1).
 // 5. Search a word and open the result (E2E-04).
 // 6. Change 2 settings and reload (E2E-06; the 2 settings are NOT
 //    chosen yet: V3-29 UI merged without recording a choice, see
@@ -62,10 +64,10 @@ import { notYetLanded } from './harness/todo'
 test('E2E-D1 @demo A10 walkthrough: login, folder plus 3 notes, edit, records plus tags, search, 2 settings', async () => {
   notYetLanded(
     'E2E-D1',
-    'record creation mounting (V3-26b) plus the E2E-06 settings ' +
-      'choice plus the backend test harness plus seed wiring have ' +
-      'not landed; the A10 demo sequence cannot run through the ' +
-      'browser yet.',
+    'record creation mounting (inbox follow-up) plus the E2E-06 ' +
+      'settings choice plus the backend test harness plus seed ' +
+      'wiring have not landed; the A10 demo sequence cannot run ' +
+      'through the browser yet.',
   )
 })
 

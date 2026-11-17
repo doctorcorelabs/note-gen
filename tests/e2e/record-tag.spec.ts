@@ -34,9 +34,10 @@
 // - Record CREATION through the UI is out of scope for this spec:
 //   upstream capture controls (control-text.tsx and siblings) are
 //   desktop capture flows. The web creation dialog (WebRecordCreate,
-//   V3-26a) has merged but is not mounted in any page on trunk, so
-//   no creation path is reachable through the browser until V3-26b
-//   mounting lands. The record under test is seeded through the
+//   V3-26a) has merged but is not mounted in any page on trunk, and
+//   V3-26b merged without mounting it, so no creation path is
+//   reachable through the browser until inbox mounting lands as
+//   follow-up work. The record under test is seeded through the
 //   backend harness, which has NOT landed. Seeding goes through the
 //   kind layer (tags.create, then marks.create; D-3D-1): REST
 //   marks/tags routes do not exist on trunk.
@@ -50,8 +51,9 @@
 // 2. Open the record list, find the seeded record (markDetailButton,
 //    UNVERIFIED), and open the tag editor (AppPage.openTagEditor,
 //    "Manage tags" button, VERIFIED in source). The web inbox list
-//    (WebInboxList, V3-26a) is likewise unmounted until V3-26b, so
-//    this step waits on mounting as well as seeding.
+//    (WebInboxList, V3-26a) is likewise unmounted: V3-26b merged
+//    without mounting it, so this step waits on mounting follow-up
+//    as well as seeding.
 // 3. Check the second tag checkbox (tagCheckbox, UNVERIFIED) and
 //    save. Do NOT touch the primary tag checkbox: it is disabled in
 //    source, and the primary tag is changed through Move Tag, not
@@ -81,8 +83,7 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S3 @scaffold record plus tag: assigned tag survives reload', async () => {
   notYetLanded(
     'E2E-S3',
-    'backend record/tag seeding plus the V3-26b inbox mounting and ' +
-      'wiring have not landed; no record can be tagged through the ' +
-      'web UI yet.',
+    'backend record/tag seeding plus inbox mounting and wiring ' +
+      'have not landed; no record can be tagged through the web UI yet.',
   )
 })
