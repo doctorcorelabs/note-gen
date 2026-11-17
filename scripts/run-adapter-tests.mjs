@@ -66,6 +66,7 @@ const ADAPTER_SPECS = [
   "src/lib/platform/event/event.bus.test.ts",
   "src/lib/platform/fs/fs.web.contract.test.ts",
   "src/lib/platform/http/http.web.test.ts",
+  "src/lib/platform/invoke/channel.web.spec.ts",
   "src/lib/platform/invoke/router.spec.ts",
   "src/lib/platform/notification/notification.fallback.test.ts",
   "src/lib/platform/os/os.web.test.ts",
