@@ -20,41 +20,59 @@
  * boot call site itself is owned by the boot/integrator task (N-5);
  * this task adds the module only and edits no boot file.
  *
- * Registered here (19): every factory present at the base, each
+ * Registered here (20): every factory present at the base, each
  * called with no arguments so the adapter reads browser globals and
  * defaults at call time, except the store adapter, which receives
  * its key classifier (and, when boot supplies one, its CSRF token
- * provider) as injected deps. Each adapter is registered for mode
- * "web" only. Tauri implementations, when they exist, are registered
- * by a separate Tauri wiring step; this module never imports a
- * *.tauri.ts file.
+ * provider) as injected deps, and the sql adapter, which receives
+ * its db-client port (and, when boot supplies one, its CSRF token
+ * provider) plus its health probe as injected deps. Each adapter
+ * is registered for mode "web" only. Tauri implementations, when
+ * they exist, are registered by a separate Tauri wiring step; this
+ * module never imports a *.tauri.ts file.
  *
- * NOT registered here (recorded follow-up, no stubs): sql. No web
- * factory exists for it at the base: the sql directory holds only
- * the interface and the ops catalog. The store factory landed
+ * No adapter name stays unregistered: the store factory landed
  * (V3-11) and is registered below with the key-schema classifier;
  * the channel factory landed as a 3D follow-up (C2) in
  * invoke/channel.web.ts and is registered below; the streaming
  * surface on WebInvokeAdapter is a different interface and must
- * never be registered as the channel adapter. When the sql factory
- * lands, the follow-up adds its import plus exactly one
- * registration line inside registerWebAdapters, before the freeze:
+ * never be registered as the channel adapter; the sql factory
+ * landed (V3-14) and is registered below with its real deps:
  *
- *   registerPlatformAdapter("sql", createWebSqlAdapter(), ["web"]);
+ *   registerPlatformAdapter(
+ *     "sql",
+ *     createWebSqlAdapter({
+ *       port: createSqlDbClient({
+ *         getCsrfToken: options.getSqlCsrfToken,
+ *       }),
+ *       health: probeSqlHealth,
+ *     }),
+ *     ["web"],
+ *   );
  *
- * with the factory name adjusted to the name the landing worker
- * actually exports. The follow-up also extends the wiring spec with
- * the new name and re-runs the gates in the spec header.
+ * The no-arg form createWebSqlAdapter() never existed: the factory
+ * requires WebSqlAdapterDeps (sql.web.ts). A future adapter
+ * follow-up extends the wiring spec with the new name and re-runs
+ * the gates in the spec header.
  *
- * Store CSRF seam: registerWebAdapters accepts an optional CSRF
- * token provider, supplied by boot from the one shared V3-30 seam.
+ * Store and SQL CSRF seams: registerWebAdapters accepts an
+ * optional CSRF token provider per adapter, each supplied by boot
+ * from the one shared V3-30 seam.
  * Wiring never imports the web auth layer and never creates a
  * second token store: services arrive as parameters (the
- * dialog-wiring precedent). Without a provider, store mutations go
- * out without the header and the server answers honestly. The fetch
- * transport is deliberately not replaced: the shared ApiClient
- * consumes the envelope, while the store adapter needs the raw
- * response surface for its 409 handling.
+ * dialog-wiring precedent). Without a provider, store mutations
+ * and sql requests go out without the header and the server
+ * answers honestly. The fetch transport is deliberately not
+ * replaced: the shared ApiClient consumes the envelope, while the
+ * store adapter needs the raw response surface for its 409
+ * handling.
+ *
+ * SQL health probe: the sql adapter reports migration currency
+ * from GET /api/health/ready through probeSqlHealth below, in
+ * the probe shape WebSqlAdapterDeps expects (two booleans: ok
+ * and migrationsCurrent). The probe runs only when ready() is
+ * called, never at registration, so registration stays free of
+ * I/O. See the probe for the response mapping.
  *
  * DialogService wiring (N-10) is a separate AD-33 item and is not
  * done here: the dialog adapter is registered with no dialog
@@ -84,6 +102,11 @@ import { createWebPathAdapter } from "./path/path.web";
 import { createWebProcessAdapter } from "./process/process.web";
 import { createWebShellAdapter } from "./shell/shell.web";
 import { createWebShortcutAdapter } from "./shortcut/shortcut.web";
+import { createSqlDbClient, type SqlDbCsrfTokenProvider } from "./sql/db-client";
+import {
+  createWebSqlAdapter,
+  type SqlHealthProbeResult,
+} from "./sql/sql.web";
 import { classifyKey } from "./store/key-schema";
 import {
   createWebStoreAdapter,
@@ -119,14 +142,15 @@ export const REGISTERED_WEB_ADAPTER_NAMES: readonly string[] = [
   "process",
   "shell",
   "shortcut",
+  "sql",
   "store",
   "updater",
   "window",
 ];
 
 /**
- * Optional boot-supplied seams for registration. Only the store
- * adapter takes injected deps today; every other factory is still
+ * Optional boot-supplied seams for registration. The store and
+ * sql adapters take injected deps; every other factory is still
  * called with no arguments.
  */
 export interface WebAdapterWiringOptions {
@@ -138,6 +162,74 @@ export interface WebAdapterWiringOptions {
    * out without the header and the server answers honestly.
    */
   getStoreCsrfToken?: WebStoreAdapterDeps["getCsrfToken"];
+  /**
+   * CSRF token provider for sql requests, from the one shared
+   * V3-30 seam owned by boot. Same contract as
+   * SqlDbClientDeps.getCsrfToken: return null when no token is
+   * available instead of throwing. When absent, sql requests go
+   * out without the header and the server answers honestly.
+   */
+  getSqlCsrfToken?: SqlDbCsrfTokenProvider;
+}
+
+/** Ready path, mirroring HEALTH_READY_PATH in server/src/routes/health.ts. */
+const SQL_HEALTH_READY_PATH = "/api/health/ready";
+
+interface SqlHealthReadyBody {
+  ok?: unknown;
+  checks?: Record<string, { status?: unknown } | undefined>;
+}
+
+/**
+ * Health probe for the web SqlAdapter: one GET to the ready
+ * endpoint, mapped to the two booleans ready() reports. The
+ * endpoint answers the AD-19 non-envelope health shape
+ * (server/src/health/schemas.ts): ok plus per-check statuses of
+ * "ok", "fail", or "skipped". Ready means HTTP 200 with ok true
+ * (the health contract forbids 200 with ok false and 503 with ok
+ * true, and the boot guard classifies the same way). Migration
+ * currency means the migrations check status is exactly "ok": a
+ * "skipped" check means the server check is not configured, which
+ * is unverified rather than current, and a missing or malformed
+ * body is unverified too. The probe never throws: no fetch, a
+ * rejected fetch, or an unparseable body all answer not-ok. It
+ * runs only when ready() calls it, never at registration. No
+ * auth or CSRF header is sent: the health paths require no
+ * application auth (server/src/routes/health.ts). The fetch init
+ * mirrors defaultHealthFetch in src/lib/web/boot-guard.ts.
+ */
+async function probeSqlHealth(): Promise<SqlHealthProbeResult> {
+  const notOk: SqlHealthProbeResult = { ok: false, migrationsCurrent: false };
+  try {
+    const fetchFn = (globalThis as { fetch?: typeof fetch }).fetch;
+    if (typeof fetchFn !== "function") {
+      return notOk;
+    }
+    const response = await fetchFn(SQL_HEALTH_READY_PATH, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    let body: SqlHealthReadyBody;
+    try {
+      body = JSON.parse(await response.text()) as SqlHealthReadyBody;
+    } catch {
+      return notOk;
+    }
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return notOk;
+    }
+    const ok = response.status === 200 && body.ok === true;
+    const migrations = body.checks?.["migrations"];
+    const migrationsCurrent =
+      typeof migrations === "object" &&
+      migrations !== null &&
+      migrations.status === "ok";
+    return { ok, migrationsCurrent };
+  } catch {
+    return notOk;
+  }
 }
 
 /**
@@ -147,6 +239,8 @@ export interface WebAdapterWiringOptions {
  * instances. Production boot calls initializeWebPlatform instead.
  * The store adapter is built with the key-schema classifier; the
  * CSRF provider arrives through options (see the module header).
+ * The sql adapter is built with a db-client port plus the health
+ * probe; its CSRF provider arrives through options the same way.
  */
 export function registerWebAdapters(
   options: WebAdapterWiringOptions = {},
@@ -171,6 +265,14 @@ export function registerWebAdapters(
   registerPlatformAdapter("process", createWebProcessAdapter(), ["web"]);
   registerPlatformAdapter("shell", createWebShellAdapter(), ["web"]);
   registerPlatformAdapter("shortcut", createWebShortcutAdapter(), ["web"]);
+  registerPlatformAdapter(
+    "sql",
+    createWebSqlAdapter({
+      port: createSqlDbClient({ getCsrfToken: options.getSqlCsrfToken }),
+      health: probeSqlHealth,
+    }),
+    ["web"],
+  );
   registerPlatformAdapter(
     "store",
     createWebStoreAdapter({

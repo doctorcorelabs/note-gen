@@ -18,12 +18,12 @@
  *
  * What this spec pins: in web mode the boot call runs the POC
  * cleanup before registration and freezes the registry with the
- * store adapter registered; during SSR (no window) and inside the
- * Tauri shell it does nothing; repeated calls keep the same
- * instances; and the CSRF provider returns null instead of throwing
- * when the token fetch fails. The browser ordering guarantee (root
- * layout module evaluation precedes all effects) is not provable
- * in node and stays a merge-gate browser check.
+ * store and sql adapters registered; during SSR (no window) and
+ * inside the Tauri shell it does nothing; repeated calls keep the
+ * same instances; and each CSRF provider returns null instead of
+ * throwing when the token fetch fails. The browser ordering
+ * guarantee (root layout module evaluation precedes all effects)
+ * is not provable in node and stays a merge-gate browser check.
  */
 
 import assert from "node:assert/strict";
@@ -42,6 +42,7 @@ import {
 } from "../platform/store/poc-cleanup";
 import {
   ensureWebPlatformInitialized,
+  getSqlCsrfTokenFromSharedSeam,
   getStoreCsrfTokenFromSharedSeam,
 } from "./platform-boot";
 
@@ -107,6 +108,9 @@ describe("ensureWebPlatformInitialized", () => {
     assert.equal(isRegistryFrozen(), true);
     assert.equal(hasAdapter("store"), true);
     assert.equal(typeof getPlatformAdapter("store").load, "function");
+    assert.equal(hasAdapter("sql"), true);
+    assert.equal(getPlatformAdapter("sql").mode, "web");
+    assert.equal(typeof getPlatformAdapter("sql").ready, "function");
   });
 
   test("cleanup runs before registration", () => {
@@ -162,6 +166,20 @@ describe("getStoreCsrfTokenFromSharedSeam", () => {
     };
     try {
       assert.equal(await getStoreCsrfTokenFromSharedSeam(), null);
+    } finally {
+      globals()["fetch"] = savedFetch;
+    }
+  });
+});
+
+describe("getSqlCsrfTokenFromSharedSeam", () => {
+  test("returns null instead of throwing when the fetch fails", async () => {
+    const savedFetch = globals()["fetch"];
+    globals()["fetch"] = async () => {
+      throw new Error("network down");
+    };
+    try {
+      assert.equal(await getSqlCsrfTokenFromSharedSeam(), null);
     } finally {
       globals()["fetch"] = savedFetch;
     }
