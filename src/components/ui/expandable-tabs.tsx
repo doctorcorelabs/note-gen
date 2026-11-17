@@ -94,6 +94,12 @@ export function ExpandableTabs({
         }
 
         const Icon = tab.icon;
+        // Accessible name (D-DEMO-7): the title span renders only
+        // for the selected tab, so a collapsed tab would otherwise
+        // be an icon-only button with no accessible name. The
+        // aria-label keeps the name identical in both states; the
+        // title attribute restores the hover tooltip for collapsed
+        // tabs. No visual or behavioral change beyond naming.
         return (
           <motion.button
             key={tab.title}
@@ -103,6 +109,8 @@ export function ExpandableTabs({
             custom={selected === index}
             onClick={() => handleSelect(index)}
             transition={transition}
+            aria-label={tab.title}
+            title={tab.title}
             className={cn(
               "relative flex items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-300",
               selected === index
@@ -110,7 +118,7 @@ export function ExpandableTabs({
                 : "text-muted-foreground hover:bg-muted hover:text-foreground opacity-70"
             )}
           >
-            <Icon size={16} />
+            <Icon size={16} aria-hidden="true" />
             <AnimatePresence initial={false}>
               {selected === index && (
                 <motion.span

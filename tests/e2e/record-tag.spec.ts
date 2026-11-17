@@ -32,8 +32,9 @@
 //    (kind layer, harness/seed-records.ts). The first record
 //    carries only e2e-alpha (its primary tag); the flow assigns
 //    e2e-beta to it. Descriptors: RECORD_SEEDS, TAG_SEEDS.
-// 2. Switch to the Record tab (icon-click workaround, D-DEMO-7:
-//    collapsed tabs have no accessible name) and click the seeded
+// 2. Switch to the Record tab by its accessible name
+//    (AppPage.switchToRecordsTab; the D-DEMO-7 accessible names
+//    retired the icon-click workaround) and click the seeded
 //    record row. Assert the detail dialog opens with the record
 //    content, e2e-alpha checked, e2e-beta unchecked.
 // 3. Check e2e-beta and save through "Save tags". Observe the

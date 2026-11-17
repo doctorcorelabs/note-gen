@@ -26,6 +26,7 @@ import {
   newNoteButton,
   searchNoResults,
   searchResult,
+  sidebarTabButton,
 } from './selectors'
 
 /**
@@ -161,16 +162,15 @@ export class AppPage {
 
   /**
    * Switch the sidebar to the Record (inbox) tab and wait for the
-   * inbox list to render. The collapsed sidebar tabs have no
-   * accessible name (ExpandableTabs renders the title text only for
-   * the selected tab; finding D-DEMO-7), so the switch uses the
-   * icon-click workaround proven by W4-DEMO: a DOM click on the
-   * button containing the lucide-highlighter svg, followed by an
-   * observation wait for #web-inbox. The accessibility fix
-   * (accessible names on collapsed tabs) is follow-up UI work.
-   * Idempotent: when the inbox is already rendered, no click is
-   * performed (a click on the selected tab may toggle the
-   * sidebar closed, and the tab state survives reloads).
+   * inbox list to render. The tab button carries the accessible
+   * name "Record" in every state (ExpandableTabs aria-label,
+   * D-DEMO-7), so the switch is a role-based click, replacing
+   * the icon-click workaround the W4-DEMO run needed. The click
+   * itself waits for the tab bar to mount (post-reload the shell
+   * may still be mounting when this runs). Idempotent: when the
+   * inbox is already rendered, no click is performed (a click on
+   * the selected tab may toggle the sidebar closed, and the tab
+   * state survives reloads).
    */
   async switchToRecordsTab(): Promise<void> {
     // Visibility, not presence: #web-inbox stays mounted (hidden)
@@ -179,35 +179,17 @@ export class AppPage {
     if (await this.page.locator('#web-inbox').isVisible()) {
       return
     }
-    // Wait for the tab bar to exist before evaluating: right
-    // after a reload the shell may still be mounting, and an
-    // immediate evaluate finds no icon button at all (E2E-RELOAD
-    // rerun-3: "no button contains the lucide-files icon").
-    await this.page
-      .locator('button:has(svg.lucide-highlighter)')
-      .first()
-      .waitFor({ state: 'attached', timeout: 10_000 })
-    const clicked = await this.page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button'))
-      const visible = buttons.filter(
-        (button) => button.querySelector('svg.lucide-highlighter') !== null && button.offsetParent !== null,
-      )
-      if (visible.length === 0) return false
-      visible[0].click()
-      return true
-    })
-    if (!clicked) {
-      throw new Error('e2e tab switch failed: no button contains the lucide-highlighter icon.')
-    }
+    await sidebarTabButton(this.page, 'Record').click()
     await expect(this.page.locator('#web-inbox')).toBeVisible({ timeout: 10_000 })
   }
 
   /**
    * Switch the sidebar to the Files (notes tree) tab and wait for
-   * the file tree to render. Same icon-click workaround as
-   * switchToRecordsTab (lucide-files), for the same D-DEMO-7
-   * reason. Idempotent: when the tree is already rendered, no
-   * click is performed.
+   * the file tree to render. Same role-based click as
+   * switchToRecordsTab (D-DEMO-7). The accessible name is
+   * "Notes": the Files tab title is the translated
+   * `navigation.files` key, whose en value is "Notes". Idempotent:
+   * when the tree is already rendered, no click is performed.
    */
   async switchToFilesTab(): Promise<void> {
     // Visibility, not presence: the tree stays mounted (hidden)
@@ -215,25 +197,7 @@ export class AppPage {
     if (await fileTree(this.page).isVisible()) {
       return
     }
-    // Wait for the tab bar to exist before evaluating (see
-    // switchToRecordsTab: post-reload the shell may still be
-    // mounting when this runs).
-    await this.page
-      .locator('button:has(svg.lucide-files)')
-      .first()
-      .waitFor({ state: 'attached', timeout: 10_000 })
-    const clicked = await this.page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button'))
-      const visible = buttons.filter(
-        (button) => button.querySelector('svg.lucide-files') !== null && button.offsetParent !== null,
-      )
-      if (visible.length === 0) return false
-      visible[0].click()
-      return true
-    })
-    if (!clicked) {
-      throw new Error('e2e tab switch failed: no button contains the lucide-files icon.')
-    }
+    await sidebarTabButton(this.page, 'Notes').click()
     await this.waitForFileTree()
   }
 

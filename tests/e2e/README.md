@@ -23,7 +23,7 @@ pnpm build
 pnpm e2e:smoke   # alur @smoke live (12 test: E2E-01, E2E-01b, E2E-01-auth, E2E-02..E2E-06, E2E-RELOAD, E2E-S1, E2E-S1b, E2E-S3)
 pnpm e2e          # semua spec di tests/e2e (termasuk spec @scaffold, @harness, @stall, @demo, @i18n-profile)
 pnpm exec playwright test --grep @scaffold  # spec @scaffold (E2E-S1/S1b, E2E-S3 live; E2E-S2, E2E-S4 TODO)
-pnpm exec playwright test --grep @demo  # hanya 2 kerangka demo @demo (gate A10)
+pnpm exec playwright test --grep @demo  # 2 kerangka demo @demo (gate A10, TODO) + 3 spec demo live (S0, varian image, tab a11y); grep telanjang gagal pada kerangka TODO by design, jalankan spec live per berkas
 pnpm exec playwright test --grep @harness  # bukti harness + bukti hook H1 (butuh Postgres + E2E_PG_ADMIN_URL)
 pnpm exec playwright test --grep @i18n-profile  # pengukuran profil 9.5 en+zh (butuh Postgres + E2E_PG_ADMIN_URL)
 ```
@@ -138,6 +138,9 @@ Browser: `pnpm exec playwright install chromium` (sekali per mesin/CI).
 | I18N-9.5 profil teratentikasi | `i18n-profile.spec.ts` | Pengukuran `@i18n-profile` (ditambah W4-FLOWS, AD-120 Q3): shell teratentikasi diukur di mode en + zh (marker 12+12, CJK, tangkapan shell/editor/Settings); hanya mekanika boot yang di-assert, marker tidak di-gate. Adjudikasi Q3b milik gate penutupan. |
 | E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; tetap TODO di W4-FLOWS (di luar lingkup slot). |
 | E2E-D2 cek data A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka cek data utuh sesudah restart backend; menunggu kontrol restart harness + database uji persisten. Tetap TODO di W4-FLOWS. |
+| E2E-D-S0 boot S0 | `demo-boot.spec.ts` | Nyata `@demo` (ditambah W5-DEMOCODE, D-DEMO-5): gateway `/login` 200 + judul tampil + hidrasi form; artefak spec S0 untuk demo penerimaan. Bukan klaim login/shell. |
+| E2E-D-IMG varian image | `demo-image-variant.spec.ts` | Nyata `@demo` (ditambah W5-DEMOCODE, D-DEMO-6): note image di-seed via API PUT + render media 200 + satu baris image bersih sesudah reload; tanpa bentuk ganda. Bukan klaim ketik visual atau E2E-03. |
+| E2E-D-A11Y tab sidebar | `sidebar-tabs-a11y.spec.ts` | Nyata `@demo` (ditambah W5-DEMOCODE, D-DEMO-7): tab collapse mengekspos nama aksesibel (WCAG 4.1.2) + pindah tab lewat role; sebelum/sesudah terukur di laporan W5-DEMOCODE. |
 
 ## Alur @scaffold (brief pemulihan): pemetaan dan justifikasi
 
@@ -181,6 +184,16 @@ tetap tidak berubah, mengikuti preseden `@scaffold`. E2E-D2 hanya
 mencakup cek data sesudah restart backend lokal yang disebut A10;
 unduh arsip dan ketahanan suspend/resume adalah gate gelombang 4-5 dan
 tidak diklaim di sini.
+
+Tiga spec `@demo` live (W5-DEMOCODE, D-DEMO-5/6/7) memakai justifikasi
+yang sama: masing-masing mencakup satu langkah atau varian dari urutan
+A10 yang sama, bukan keluarga alur baru. E2E-D-S0 (`demo-boot.spec.ts`)
+adalah langkah S0 (boot ke `/login`); E2E-D-IMG
+(`demo-image-variant.spec.ts`) adalah varian image dari langkah S3;
+E2E-D-A11Y (`sidebar-tabs-a11y.spec.ts`) adalah pindah tab langkah S4.
+Ketiganya memakai tag `@demo` agar definisi gate `e2e-smoke` tetap
+tidak berubah; grep `@demo` telanjang tetap gagal pada kerangka TODO
+E2E-D1/E2E-D2 by design, sehingga spec live dijalankan per berkas.
 
 ## Struktur
 
@@ -238,6 +251,7 @@ TERVERIFIKASI (source):
 | [trunk] Langkah TOTP: `getByLabel('Verification code'/'Recovery code')` + tombol "Verify" | `src/app/login/page.tsx`: label terasosiasi + id tetap (`login-code`, `login-recovery-code`); judul langkah "Two-step verification" adalah teks. |
 | [trunk] `getByLabel(...)` + tombol "Create first account" di `/setup` | `src/app/setup/page.tsx` (V3-03): label terasosiasi + id tetap (`setup-token`, `setup-email`, `setup-password`, `setup-confirm-password`, `setup-workspace-name`); judul "Set up NoteGen" adalah teks. |
 | [trunk] `getByTestId('search-input'/'search-clear'/'search-results'/'search-empty'/'search-fuzzy-status')` | `sidebar-search.tsx` (V3-28): atribut `data-testid` literal di source; sesuai usulan inventaris 10.4. Hanya kehadiran + peran `status` baris fuzzy yang dipin; teks persisnya tidak dipin di sini. |
+| `getByRole('button', { name: 'Record'/'Notes' })` untuk tab sidebar | `expandable-tabs.tsx` menetapkan `aria-label` + `title` dari judul tab (D-DEMO-7, W5-DEMOCODE); nama teratasi saat tab terpilih maupun collapse, dibuktikan run E2E-D-A11Y. "Canvas" ambigu: top bar membawa tombol kedua bernama sama yang sudah ada sebelumnya; spec a11y memakai bentuk ter-scope untuk Canvas. |
 
 TIDAK BISA diverifikasi (inference pustaka, butuh run untuk membuktikan):
 
@@ -257,7 +271,6 @@ TIDAK BISA diverifikasi (tidak ada hook stabil di source):
 | Kebutuhan | Alasan |
 |---|---|
 | Tombol pembuka Settings | Tombol di title bar dan app sidebar TIDAK punya `aria-label`; hanya teks tooltip. Membuka Settings lewat role/nama tidak dapat diandalkan sampai pemilik UI menambah nama aksesibel atau `data-testid`. |
-| Pindah tab sidebar (Notes/Record/Canvas) | `expandable-tabs.tsx` hanya merender teks judul saat tab terpilih; tab tak terpilih hanya ikon tanpa nama aksesibel. |
 | Indikator "tersimpan" editor | Tidak ada string status simpan di UI editor (grep atas direktori editor: nihil). E2E-02/E2E-03 wajib menunggu efek simpan lewat polling isi disk, bukan lewat UI. |
 | `data-testid` di luar pencarian | Repo acuan: 0 hasil grep `data-testid` di seluruh `src/`. Di trunk, UI pencarian punya test-id (lihat tabel terverifikasi di atas); halaman login/setup TIDAK punya test-id, dan scaffold ini tidak menambah `data-testid`: perubahan UI milik pemilik UI. |
 | Halaman login (rute, field, tombol) | SUDAH TERATASI di trunk: halaman `/login` mendarat di V3-03 dengan locator terverifikasi (lihat tabel di atas). Baris ini dipertahankan sebagai catatan sejarah; spec `login.spec.ts` kini memakai locator itu. |

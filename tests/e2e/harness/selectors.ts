@@ -70,10 +70,11 @@
 //   Tree items: role "treeitem", aria-label = file name, plus
 //   data-file-manager-item-path. The tree starts COLLAPSED (only
 //   the top folder renders); flows must expand folders first.
-// - Sidebar tab buttons render their title text ONLY when selected
-//   (expandable-tabs.tsx), so unselected tabs have no accessible
-//   name: tab switching uses the visible-icon-button workaround
-//   (AppPage.switchToRecordsTab / switchToFilesTab, D-DEMO-7).
+// - Sidebar tab buttons carry an accessible name in every state
+//   (expandable-tabs.tsx sets aria-label + title from the tab
+//   title, D-DEMO-7): tab switching uses the role-based locator
+//   (sidebarTabButton; AppPage.switchToRecordsTab /
+//   switchToFilesTab). The icon-class workaround is retired.
 // - Tag editing in the WEB flow happens in the WebRecordDetail
 //   dialog (TagChecklist + "Save tags"), NOT through the desktop
 //   "Manage tags" button (MarkDetailPanel is not mounted in the
@@ -400,14 +401,32 @@ export function editorLinkByName(page: Page, linkText: string): Locator {
 }
 
 /**
- * Workaround locator (D-DEMO-7): a button identified by the Lucide
- * icon class of the svg it contains (for example
- * "lucide-highlighter" for the Record tab, "lucide-files" for the
- * Files tab). ExpandableTabs renders the tab title text ONLY for the
- * selected tab, so collapsed tabs have no accessible name and no
- * test id; the icon class is the only stable hook. The accessibility
- * fix (accessible names on collapsed tabs) is follow-up UI work,
- * not part of the E2E slot. Pass the bare icon class without the
+ * VERIFIED (source). One sidebar tab button, by its accessible
+ * name (for example "Record", "Notes", or "Canvas" in the en
+ * locale). ExpandableTabs sets aria-label + title from the tab
+ * title, so the name resolves whether the tab is selected or
+ * collapsed (D-DEMO-7). Names are locale-dependent: the en names
+ * are the harness default, matching the other pinned en strings
+ * here. Prefer this over buttonWithIcon for tab switching.
+ * CAUTION: do not use this helper for "Canvas": the shell top
+ * bar carries a second, pre-existing button named "Canvas", so
+ * an unscoped "Canvas" role query resolves to two buttons (see
+ * sidebar-tabs-a11y.spec.ts for the scoped form). "Record" and
+ * "Notes" resolve uniquely shell-wide.
+ */
+export function sidebarTabButton(page: Page, tabName: string): Locator {
+  return page.getByRole('button', { name: tabName, exact: true })
+}
+
+/**
+ * Legacy workaround locator (D-DEMO-7, retired for tab
+ * switching): a button identified by the Lucide icon class of
+ * the svg it contains (for example "lucide-highlighter" for the
+ * Record tab, "lucide-files" for the Files tab). Sidebar tabs
+ * now carry accessible names (sidebarTabButton), so flows must
+ * not use this locator to switch tabs. No live flow calls it
+ * since the fix; it stays exported pending an E2EDEBT census
+ * decision on removal. Pass the bare icon class without the
  * leading dot.
  */
 export function buttonWithIcon(page: Page, iconClass: string): Locator {
