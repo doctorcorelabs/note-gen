@@ -162,3 +162,69 @@ Errors. V2-04 added no new error taxonomy (`errors.ts` unchanged:
 codes (`VALIDATION`, `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE`,
 `UNKNOWN`) stay until a final taxonomy lands; cases assert codes,
 never message text, except CT-X6.
+
+## E10: the web column uses catalogued S keys (UNKNOWN writes throw)
+
+The web adapter with the production classifier rejects UNKNOWN
+writes by design (`desain-store-adapter.md` section 2.3): `set`
+and `delete` over a key the key schema does not know throw
+`PlatformCapabilityError` (`invalid_argument`,
+`store.setUnknownKey` / `store.deleteUnknownKey`). The fake has no
+key schema and accepts any non-secret key. Cases that write
+arbitrary keys therefore use catalogued S keys in the web column,
+while the fake column keeps its original keys:
+
+| Case | Fake keys | Web keys (all S in key-schema.ts) |
+|---|---|---|
+| CT-02-interim | `to-delete`, `never-existed` | `darkMode`, `centeredContent` |
+| CT-03a | `missing`, `a`, `b` | `primaryModel`, `language`, `editorLineHeight` |
+| CT-03b | `obj` | `language` |
+| CT-03c | `watched`, `other`, `after-reset` | `language`, `editorLineHeight`, `primaryModel` |
+| CT-22 | `keep-me` | `language` |
+
+This is a key renaming, not a weakened assertion: the asserted
+behavior (delete on `undefined`, keys/values/entries consistency,
+deep clone, listeners, `createNew`) is identical in both columns.
+C-ST-02 is unchanged: UNKNOWN reads are tolerant in both columns
+(the web adapter reads UNKNOWN keys from its S cache and reports
+absent keys as `undefined`). The UNKNOWN-write rejection itself is
+covered by the key-schema and adapter specs, not by a contract
+case, because the fake cannot express it.
+
+## E11: cross-handle visibility needs save plus reload (C-ST-03)
+
+The fake shares one backing map, so a write through one handle is
+visible through another immediately. The web adapter holds
+per-handle caches over HTTP: a write is visible to another handle
+only after `save()` (PATCH with the baseRevision guard) and
+`reload()` (refetch). The web column of C-ST-03 therefore saves
+both handles and reloads the asserting handle before reading; the
+fake column keeps immediate visibility. The asserted behavior (the
+store stays readable, last-write-wins per key for the shared key,
+the document stays JSON-serializable) is identical. The save order
+also exercises the 409 path: both handles load at one revision,
+the first save advances it, and the second save retries after a
+`revision_conflict` before the reload reads the merged document.
+
+## E12: web closed-handle and corrupt errors use the real taxonomy
+
+CT-03c. The fake throws scaffold-local `ContractError`
+(`NOT_FOUND`) on closed-handle access (see E6). The web adapter
+throws a plain `Error` with the message `Store handle for
+"<path>" is closed`, because the landed error skeleton has no
+`NOT_FOUND` code yet (`store.web.ts` header, R-03 in
+`fase1/laporan-store-interface.md`). The web column asserts the
+plain-`Error` shape: an `Error` that is neither a `ContractError`
+nor a `StoreWebError`, with a message matching `/is closed/`.
+The message-pattern match is a deliberate, recorded exception to
+the "never message text" rule: a plain `Error` carries no code to
+assert. The exact message is not pinned beyond that pattern.
+
+C-ST-04. The fake-corrupt column throws `ContractError`
+(`UNAVAILABLE`). The web-corrupt column runs the real adapter
+against an unreachable backend and throws `StoreWebError` with
+the client-side code `network_error` (the wire code is carried
+verbatim when the server answers; here no answer arrives). The
+web column asserts `isStoreWebError` plus the code. Neither
+divergence weakens its case: both columns assert a typed failure,
+never a hang or `undefined`.
