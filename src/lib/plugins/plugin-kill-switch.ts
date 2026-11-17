@@ -28,9 +28,10 @@
  * the plugin seam. The direct read keeps this module free of the
  * platform barrel (no import cycle, unit-testable) and is never stale:
  * the marker is fixed before application code runs. In every
- * non-Tauri runtime, phase off means no plugin may run, and any doubt
- * fails closed: a missing or unrecognized phase is treated as off by
- * the strict equality below.
+ * non-Tauri runtime, this build is always OFF: the phase constant is
+ * 'off', and enabling plugins requires a code change to that constant
+ * plus a redeploy. There is no runtime toggle. The phase type is a
+ * closed union, so only a source change can supply another value.
  *
  * Scope limit, stated honestly: this is the build-static layer only.
  * There is no runtime kill that takes effect without a redeploy yet
