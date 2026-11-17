@@ -121,5 +121,4 @@ export class LoginPage {
       { timeout: 10_000 },
     )
   }
-  }
 }
