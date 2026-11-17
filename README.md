@@ -2,6 +2,8 @@
 
 # NoteGen
 
+**Fork notice:** This repository is a modified fork of [codexu/note-gen](https://github.com/codexu/note-gen), based on upstream commit [`4dcaa3f`](https://github.com/codexu/note-gen/commit/4dcaa3f03a661c1259f8dfcdbc4a94c8cba0ffd5) (branch `dev`, 11 November 2026, upstream version 0.39.2). It is licensed under the GNU General Public License v3.0 only (SPDX-License-Identifier: GPL-3.0-only). See [LICENSE](./LICENSE) and [FORK.md](./FORK.md) for the fork identity, modification log, and license determination. This is not an official release of upstream NoteGen.
+
 **Capture first. Organize later.**
 
 A local-first Markdown app that helps you collect scattered information and organize it into clear notes with AI.
