@@ -67,7 +67,10 @@ export const MOCK_TOTAL = 164;
 
 export const DEFAULTS = {
   pgHost: "127.0.0.1",
-  pgPort: 55433,
+  // Persistent Fase 1 cluster (AD-69). The previous default 55433
+  // named the retired throwaway cluster (W4-FAILCLOSED); the gate
+  // moved to 55434. Overridable via WS_REAL_PGPORT/PGPORT below.
+  pgPort: 55434,
   pgUser: "postgres",
   pgDatabase: "v3_04c_ws",
   port: 35531,

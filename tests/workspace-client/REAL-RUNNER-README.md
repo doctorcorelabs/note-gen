@@ -20,7 +20,7 @@ not edited here.
    for the "feature not landed" classification, never runtime proof.
 2. Creates a fresh scratch workspace directory (default under
    `~/workspace/note-gen-fork/scratch/v3-04c/ws`) and a fresh scratch
-   database (default `v3_04c_ws` on `127.0.0.1:55433`, user
+   database (default `v3_04c_ws` on `127.0.0.1:55434`, user
    `postgres`, trust auth). Any previous scratch database with the
    same name is dropped first.
 3. Installs (`pnpm install --frozen-lockfile`) and builds (`pnpm run
@@ -50,10 +50,10 @@ not edited here.
 ## Prerequisites
 
 - Node 24 (the suite uses `node:test` and global `fetch`).
-- `psql` on PATH, able to reach Postgres 17 at `127.0.0.1:55433` as
+- `psql` on PATH, able to reach Postgres 17 at `127.0.0.1:55434` as
   user `postgres` with trust auth, and able to create and drop
   databases. Verify with:
-  `psql -h 127.0.0.1 -p 55433 -U postgres -c 'SELECT version();'`
+  `psql -h 127.0.0.1 -p 55434 -U postgres -c 'SELECT version();'`
 - `pnpm` at `~/.local/bin/pnpm` (or `pnpm` on PATH, or
   `WS_REAL_PNPM`). Installs run inside the backend checkout's
   `server/` directory, which has its own lockfile.
