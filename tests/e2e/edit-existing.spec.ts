@@ -24,31 +24,26 @@
 // harness/seed-data.ts; applyEditToDeepNote is NOT used, because
 // its exact-output contract does not apply to a visual edit.
 //
-// Link contract: the rendered link carries an EMPTY href in the
-// live DOM (W4-FLOWS probe2: href "", text "deep note"), so the
-// flow locates the link by its visible text (editorLinkByName) and
+// Link contract: the rendered link carries its relative href in
+// the live DOM (W4-FIXLINK: a custom isAllowedUri allows
+// scheme-less references, so the anchor renders the full
+// "nested/deep-note.md" href; probe hrefAttr confirmed). The flow
+// locates the link by its visible text (editorLinkByName) and
 // modifier-clicks it (Control on Linux, matching the openLink
 // handler in tiptap-editor.tsx: button 0 plus metaKey or ctrlKey).
 // A plain click opens the link editor instead. Navigation is
 // asserted BY OBSERVATION: the target note's content must appear
 // in the visible editor within 30 seconds.
 //
-// KNOWN PRODUCT DEFECT D-LINK (W4-FLOWS, first conversion run):
-// the link leg FAILS on the current build, and the failure is a
-// product defect, not a spec defect. Both click handlers in
-// tiptap-editor.tsx (handleModifiedMouseDown, handleClick) read
-// the anchor's DOM href attribute and RETURN EARLY when it is
-// empty; the rendered anchor's href IS empty (probe2), so the
-// modifier click can never reach openLink, and the first smoke run
-// observed the editor unchanged after the full 30-second
-// observation. The assertion is kept as written: weakening it to
-// accept an inert link would enshrine the defect. The fix (render
-// the relative href on the anchor, or read the link href from the
-// Tiptap node attributes in the handlers) is proposed to the
-// integrator as a numbered product follow-up in the W4-FLOWS
-// report (P-9). Until it lands, this spec is red on the link leg
-// and the image/edit legs are proven by the run reaching the link
-// step.
+// D-LINK FIXED (W4-FIXLINK, AD-125): the link leg used to fail
+// because the default Tiptap Link validator rejected
+// multi-segment relative references (a character-range quirk in
+// the bundled dist regex), so renderHTML emptied the href and
+// both click handlers returned early before reaching openLink.
+// The fix keeps every schemed URL on the default validator and
+// only newly allows scheme-less references. The assertion is kept
+// as written: weakening it to accept an inert link would enshrine
+// a defect.
 //
 // Steps:
 // 1. Boot through the backend fixture. Observe a 200 response from
