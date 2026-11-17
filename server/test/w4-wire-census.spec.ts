@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
-import { testConfig } from './auth/helpers.js';
+import { makeTestAuth, testConfig } from './auth/helpers.js';
 
 // Increment 1 (adapters 60/70/80): workspace structure (10),
 // reconcile (2), media wildcard (2).
@@ -120,6 +120,55 @@ describe('W4-WIRE route census', () => {
     const built = await censusApp();
     for (const [method, url] of EXCEPTED_ROUTES) {
       const res = await built.inject({ method, url });
+      expect(res.statusCode, `${method} ${url}`).toBe(404);
+    }
+  });
+
+  // Boot-variant stability (V3-41 section 9.1 convention): the
+  // census must be identical with a database URL configured
+  // (adapters build lazy handles), with asset/trash roots
+  // configured, and with a real auth context injected (the
+  // events adapter attaches its upgrade listener). Handles
+  // are lazy, so the placeholder URL never connects.
+  it('registers the same routes with a database URL and asset/trash roots configured', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'w4wire-census-'));
+    const assetRoot = await mkdtemp(join(tmpdir(), 'w4wire-census-assets-'));
+    const trashRoot = await mkdtemp(join(tmpdir(), 'w4wire-census-trash-'));
+    try {
+      app = await buildApp({
+        config: testConfig({
+          workspaceRoot: dir,
+          databaseUrl: 'postgres://placeholder/placeholder',
+          assetRoot,
+          trashRoot,
+        }),
+        pool: null,
+        version: 'test',
+      });
+      for (const [method, url] of EXPECTED_ROUTES) {
+        const res = await app.inject({ method, url });
+        expect(res.statusCode, `${method} ${url}`).toBe(401);
+      }
+      for (const [method, url] of EXCEPTED_ROUTES) {
+        const res = await app.inject({ method, url });
+        expect(res.statusCode, `${method} ${url}`).toBe(404);
+      }
+    } finally {
+      await rm(assetRoot, { recursive: true, force: true });
+      await rm(trashRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('registers the same routes with an auth context injected', async () => {
+    const { auth } = makeTestAuth();
+    dir = await mkdtemp(join(tmpdir(), 'w4wire-census-'));
+    app = await buildApp({ config: testConfig({ workspaceRoot: dir }), pool: null, version: 'test', auth });
+    for (const [method, url] of EXPECTED_ROUTES) {
+      const res = await app.inject({ method, url });
+      expect(res.statusCode, `${method} ${url}`).toBe(401);
+    }
+    for (const [method, url] of EXCEPTED_ROUTES) {
+      const res = await app.inject({ method, url });
       expect(res.statusCode, `${method} ${url}`).toBe(404);
     }
   });
