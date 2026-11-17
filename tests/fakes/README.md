@@ -46,8 +46,8 @@ whose lowercase name contains a sensitive pattern behave as absent
 on every read surface, and `set` over them throws. The full
 key-schema module belongs to the store-interface owner. The `corrupt: true` option makes
 `load()` reject as if the stored document were corrupt, for C-ST-04.
-`set(key, undefined)` deletes the key (interim CT-02 behavior, see
-EXCEPTIONS.md E4).
+`set(key, undefined)` throws a validation error and leaves the key
+unchanged (H3, CT-02, see EXCEPTIONS.md E4).
 
 ### `fake-fs.ts`
 

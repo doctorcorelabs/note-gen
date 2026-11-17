@@ -16,11 +16,10 @@
 //
 // Cases assert observable behavior and error types/codes, never exact
 // message text, except CT-X6 in the SQL suite which pins one upstream
-// message. CT-02 asserts the INTERIM behavior for F1-22
-// (set(key, undefined) deletes the key, matching the POC shim) because
-// the verdict against the Rust implementation is still unconfirmed; the
-// case name says so, and the case must be re-parameterized when the
-// verdict lands. See tests/contract/EXCEPTIONS.md entry E4.
+// message. CT-02 asserts the H3 behavior for F1-22 (AD-106):
+// set(key, undefined) throws a validation error
+// (PlatformCapabilityError, invalid_argument) and leaves the key
+// unchanged. See tests/contract/EXCEPTIONS.md entry E4.
 //
 // C-ST-06 (persistence across restart) runs through factory.reopen(),
 // which returns a new adapter over the same backing. Against the fake
@@ -202,18 +201,50 @@ export function defineStoreCases(
     }
   });
 
-  it("CT-02-interim (F1-22 unconfirmed): set(key, undefined) deletes the key", async () => {
+  it("CT-02 (F1-22 H3, AD-106): set(key, undefined) throws and leaves the key unchanged", async () => {
     const handle = await getImpl().load("store.json");
     // E10: the web column writes catalogued S keys; UNKNOWN writes throw.
     const target = isWeb ? "darkMode" : "to-delete";
     const absent = isWeb ? "centeredContent" : "never-existed";
     await handle.set(target, "value");
     await expect(handle.has(target)).resolves.toBe(true);
-    await handle.set(target, undefined);
-    await expect(handle.get(target)).resolves.toBeUndefined();
-    await expect(handle.has(target)).resolves.toBe(false);
-    await expect(handle.set(absent, undefined)).resolves.toBeUndefined();
+
+    const assertValidationThrow = (thrown: unknown) => {
+      expect(thrown).toBeInstanceOf(PlatformCapabilityError);
+      const capabilityError = thrown as PlatformCapabilityError;
+      expect(capabilityError.code).toBe("invalid_argument");
+      expect(capabilityError.capability).toBe("store.set");
+    };
+
+    let thrownExisting: unknown;
+    try {
+      await handle.set(target, undefined);
+    } catch (error) {
+      thrownExisting = error;
+    }
+    assertValidationThrow(thrownExisting);
+    await expect(handle.get(target)).resolves.toBe("value");
+    await expect(handle.has(target)).resolves.toBe(true);
+    await expect(handle.entries<unknown>()).resolves.toEqual([
+      [target, "value"],
+    ]);
+
+    let thrownAbsent: unknown;
+    try {
+      await handle.set(absent, undefined);
+    } catch (error) {
+      thrownAbsent = error;
+    }
+    assertValidationThrow(thrownAbsent);
     await expect(handle.get(absent)).resolves.toBeUndefined();
+    await expect(handle.has(absent)).resolves.toBe(false);
+    await expect(handle.entries<unknown>()).resolves.toEqual([
+      [target, "value"],
+    ]);
+
+    // The explicit delete() path still removes the key.
+    await expect(handle.delete(target)).resolves.toBe(true);
+    await expect(handle.has(target)).resolves.toBe(false);
   });
 
   it("CT-03a: basic semantics, keys/values/entries/length stay consistent", async () => {

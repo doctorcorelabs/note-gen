@@ -224,23 +224,33 @@ describe("fake store: listeners", () => {
   });
 });
 
-describe("fake store: F1-22 temporary behavior (CT-02, verdict pending)", () => {
-  it("set(key, undefined) deletes an existing key and notifies", async () => {
+describe("fake store: F1-22 H3 behavior (CT-02, AD-106)", () => {
+  it("set(key, undefined) throws and leaves an existing key unchanged, without notifying", async () => {
     const store = await createFakeStoreAdapter().load("store.json");
     await store.set("k", "v");
     const seen: unknown[] = [];
     await store.onKeyChange("k", (value) => {
       seen.push(value);
     });
-    await store.set("k", undefined);
-    assert.equal(await store.get("k"), undefined);
+    await assert.rejects(
+      store.set("k", undefined),
+      (error: unknown) =>
+        isCapabilityError(error, "invalid_argument", "store.set"),
+    );
+    assert.equal(await store.get("k"), "v");
+    assert.equal(await store.has("k"), true);
+    assert.deepEqual(seen, []);
+    assert.equal(await store.delete("k"), true);
     assert.equal(await store.has("k"), false);
-    assert.deepEqual(seen, [undefined]);
   });
 
-  it("set(key, undefined) on a missing key resolves without creating it", async () => {
+  it("set(key, undefined) on a missing key throws without creating it", async () => {
     const store = await createFakeStoreAdapter().load("store.json");
-    await store.set("missing", undefined);
+    await assert.rejects(
+      store.set("missing", undefined),
+      (error: unknown) =>
+        isCapabilityError(error, "invalid_argument", "store.set"),
+    );
     assert.equal(await store.has("missing"), false);
     assert.equal(await store.length(), 0);
   });
