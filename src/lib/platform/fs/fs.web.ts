@@ -54,6 +54,15 @@
 // server-side dedupe. Retry safety is a follow-up for the shared API
 // client in src/lib/web/ (V1-05 section 3.3), which does not exist yet.
 //
+// How responses parse (kontrak-api-kanonis.md section 2, canonical
+// envelope, W4-DEMO B1): success bodies are `{ ok: true, data: ... }`
+// and error bodies are `{ ok: false, error: { code, message,
+// requestId, retryable, details } }`, with per-code fields (conflict
+// payload, diskWritten) inside `error.details`. Both shapes are
+// unwrapped here. A bare body without the envelope (the shape the
+// adapter contract fakes use) is still accepted as a fallback, so
+// the unwrapping never breaks a caller that already worked.
+//
 // Watching: watch() translates WebSocket workspace events (V1-09
 // section 9) into Tauri WatchEvent shapes, with a polling snapshot
 // fallback when WebSocket is unavailable or repeatedly fails (AD-09).
@@ -571,19 +580,38 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         parsed = null;
       }
     }
-    const envelope = isRecord(parsed) ? parsed : null;
-    const rawCode = envelope ? asString(envelope.code) : null;
+    const body = isRecord(parsed) ? parsed : null;
+    // Canonical error envelope (W4-DEMO B1): code/message/requestId
+    // live in the nested `error` object, and per-code fields live in
+    // `error.details`. A flat body keeps working as a fallback.
+    const nested = body !== null && isRecord(body.error) ? body.error : null;
+    const codeSource = nested ?? body;
+    const rawCode = codeSource !== null ? asString(codeSource.code) : null;
     let code = rawCode ?? (res.status >= 500 ? "internal_error" : "unknown");
     const message =
-      (envelope ? asString(envelope.message) : null) ??
+      (codeSource !== null ? asString(codeSource.message) : null) ??
       `Workspace request failed with status ${res.status}`;
-    const requestId = envelope ? asString(envelope.requestId) ?? undefined : undefined;
-    const detail = envelope ? asString(envelope.detail) ?? undefined : undefined;
+    const requestId =
+      codeSource !== null ? (asString(codeSource.requestId) ?? undefined) : undefined;
+    const detail =
+      codeSource !== null ? (asString(codeSource.detail) ?? undefined) : undefined;
+    const detailsRecord =
+      nested !== null && isRecord(nested.details) ? nested.details : null;
     let conflict: FsConflictPayload | undefined;
     if (code === "revision_conflict" || code === "version_conflict") {
       code = "revision_conflict";
-      conflict = parseConflictPayload(envelope, pathForError);
+      // Conflict fields come from error.details on the wire; merge
+      // over the flat body so fields missing from details still fall
+      // back to top-level values (and flat bodies keep working).
+      conflict = parseConflictPayload(
+        { ...(body ?? {}), ...(detailsRecord ?? {}) },
+        pathForError,
+      );
     }
+    const diskWritten =
+      detailsRecord?.diskWritten === true || body?.diskWritten === true
+        ? true
+        : undefined;
     throw new FsAdapterError({
       code,
       status: res.status,
@@ -593,7 +621,7 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       detail,
       conflict,
       retryAfterSeconds: parseRetryAfter(res.headers.get("Retry-After")),
-      diskWritten: envelope?.diskWritten === true ? true : undefined,
+      diskWritten,
     });
   }
 
@@ -641,7 +669,15 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       });
     }
     try {
-      return JSON.parse(text) as T;
+      const parsed: unknown = JSON.parse(text);
+      // Unwrap the canonical success envelope `{ ok: true, data }`
+      // (W4-DEMO B1/B5: without this, stat/list callers read the
+      // envelope itself and see no entry). Bare bodies without the
+      // envelope pass through unchanged as a fallback.
+      if (isRecord(parsed) && parsed.ok === true && "data" in parsed) {
+        return parsed.data as T;
+      }
+      return parsed as T;
     } catch {
       throw new FsAdapterError({
         code: "invalid_response",
