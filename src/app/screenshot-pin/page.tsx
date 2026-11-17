@@ -10,7 +10,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { listenTauriEvent } from '@/lib/tauri-event-listener'
 import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
 import { cn } from '@/lib/utils'
 
@@ -201,7 +200,7 @@ export default function ScreenshotPinPage() {
     let unlisten: UnlistenFn | undefined
     void (async () => {
       try {
-        const stop = await listenTauriEvent<RecordStateEvent>('pinned-screenshot-record-state', ({ payload }) => {
+        const stop = await platform.event.listen<RecordStateEvent>('pinned-screenshot-record-state', ({ payload }) => {
           const current = contextRef.current
           if (disposed || !mountedRef.current || (current && current.pinId !== payload.pinId)) return
           if (recordStateRef.current === 'saved' && payload.recordState !== 'saved') return
@@ -211,7 +210,7 @@ export default function ScreenshotPinPage() {
           setRecordState(payload.recordState)
           if (payload.recordState === 'unsaved') setError(t('recordSaveFailed'))
           else setError('')
-        }, { kind: 'Window', label: platform.window.getCurrentWindow().label })
+        }, { target: { kind: 'Window', label: platform.window.getCurrentWindow().label } })
         if (disposed) {
           stop()
           return

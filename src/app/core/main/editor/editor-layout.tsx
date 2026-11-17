@@ -23,7 +23,6 @@ import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
 import { checkIsTauri } from '@/lib/check'
-import { listenTauriEvent } from '@/lib/tauri-event-listener'
 import emitter, { type Events } from '@/lib/emitter'
 import useArticleStore, { findFolderInTree, type DirTree } from '@/stores/article'
 import useMarkStore from '@/stores/mark'
@@ -1120,7 +1119,7 @@ export function EditorLayout() {
     if (!checkIsTauri()) return
 
     let disposed = false
-    const unlistenPromise = listenTauriEvent('editor-close-tab-requested', () => {
+    const unlistenPromise = platform.event.listen('editor-close-tab-requested', () => {
       if (disposed) return
       const currentLayout = layoutRef.current
       const group = currentLayout.groups[currentLayout.activeGroupId]
@@ -1329,7 +1328,7 @@ export function EditorLayout() {
     if (!layoutReady || !checkIsTauri()) return
     let disposed = false
     let unlisten: (() => void) | undefined
-    void listenTauriEvent<BrowserNewWindow>('browser:new-window', event => {
+    void platform.event.listen<BrowserNewWindow>('browser:new-window', event => {
       if (disposed) return
       const { sourceTabId, url } = event.payload
       try {

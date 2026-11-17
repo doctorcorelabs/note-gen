@@ -20,7 +20,6 @@ import { recognizeImageWithFallback } from '@/lib/image-recognition'
 import { getImageRecognitionProgressText } from '@/lib/image-recognition-progress'
 import { getDefaultRecordSaveTagId } from '@/lib/record-save-target'
 import { notifyScreenshotResult } from '@/lib/screenshot-notification'
-import { listenTauriEvent } from '@/lib/tauri-event-listener'
 import useMarkStore from '@/stores/mark'
 import useSettingStore from '@/stores/setting'
 import useTagStore from '@/stores/tag'
@@ -325,10 +324,10 @@ export function DesktopScreenshotBridge({ ready }: { ready: boolean }) {
 
     const register = async () => {
       const currentWindow = platform.window.getCurrentWindow()
-      const unlistenResult = await listenTauriEvent<DesktopScreenshotResult>(
+      const unlistenResult = await platform.event.listen<DesktopScreenshotResult>(
         'desktop-screenshot-completed',
         event => acceptResultRef.current(event.payload),
-        { kind: 'Window', label: currentWindow.label },
+        { target: { kind: 'Window', label: currentWindow.label } },
       )
       if (cancelled) {
         unlistenResult()
@@ -336,10 +335,10 @@ export function DesktopScreenshotBridge({ ready }: { ready: boolean }) {
       }
       unlisteners.push(unlistenResult)
 
-      const unlistenError = await listenTauriEvent<DesktopScreenshotError>(
+      const unlistenError = await platform.event.listen<DesktopScreenshotError>(
         'desktop-screenshot-error',
         event => { void showCaptureErrorRef.current(event.payload) },
-        { kind: 'Window', label: currentWindow.label },
+        { target: { kind: 'Window', label: currentWindow.label } },
       )
       if (cancelled) {
         unlistenError()

@@ -158,19 +158,12 @@ else
 fi
 
 # Check 3: direct implementation imports outside registry.ts and tests.
-# Exception (G2 merge; deletion deferred to 3D by AD-91): the transitional
-# re-export src/lib/tauri-event-listener.ts (deleted at 3D when the
-# registry-surface decision for listenTauriEvent lands) necessarily
-# imports the relocated *.tauri implementation.
-# 3D MUST remove this exclusion together with the file (AD-91 replaces
-# the earlier G4 obligation recorded at the G2 merge).
 echo "check 3: direct adapter implementation imports"
 direct=$(grep -rn --include='*.ts' --include='*.tsx' -E \
   "from ['\"][^'\"]*\.(tauri|web)['\"]|import\(['\"][^'\"]*\.(tauri|web)['\"]\)" \
   src 2>/dev/null | grep -v 'src/lib/platform/registry.ts' |
   grep -v 'src/lib/platform/wiring.ts' |
   grep -v 'src/lib/platform/dialog/dialog-wiring.ts' |
-  grep -v 'src/lib/tauri-event-listener.ts' |
   grep -v 'src/lib/platform/__tests__/' |
   grep -v -E '^[^:]*\.(test|spec)\.tsx?:' || true)
 if [ -n "$direct" ]; then
