@@ -367,7 +367,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
           const s3Config = await store.get<S3Config>('s3SyncConfig')
           logPerf('loadProviderModule', { module: 's3', hasConfig: Boolean(s3Config) })
           if (!s3Config) {
-            throw new Error('S3 配置未找到')
+            throw new Error(t('settings.sync.s3ConfigNotFound'))
           }
           // S3 上传文件
           const result = await s3Module.s3Upload(s3Config, activeFilePath, content, undefined, undefined, undefined, beforeWrite)
@@ -392,7 +392,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
           })
           if (Array.isArray(fileInfo)) {
-            throw new Error(`${activeFilePath} 是目录，无法推送`)
+            throw new Error(t('settings.sync.pathIsDirectoryCannotPush', { path: activeFilePath }))
           }
           const result = await githubModule.uploadFile({
             file: content,
@@ -429,7 +429,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
           })
           if (Array.isArray(fileInfo)) {
-            throw new Error(`${activeFilePath} 是目录，无法推送`)
+            throw new Error(t('settings.sync.pathIsDirectoryCannotPush', { path: activeFilePath }))
           }
           const result = await giteeModule.uploadFile({
             file: content,
@@ -466,7 +466,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
           })
           if (Array.isArray(fileInfo)) {
-            throw new Error(`${activeFilePath} 是目录，无法推送`)
+            throw new Error(t('settings.sync.pathIsDirectoryCannotPush', { path: activeFilePath }))
           }
           const result = await gitlabModule.uploadFile({
             file: content,
@@ -499,7 +499,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
           })
           if (Array.isArray(fileInfo)) {
-            throw new Error(`${activeFilePath} 是目录，无法推送`)
+            throw new Error(t('settings.sync.pathIsDirectoryCannotPush', { path: activeFilePath }))
           }
           const result = await giteaModule.uploadFile({
             file: content,
@@ -532,7 +532,7 @@ export function usePushSync({ getMarkdown, prepareExternalAction }: PushSyncOpti
           const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
           logPerf('loadProviderModule', { module: 'webdav', hasConfig: Boolean(webdavConfig) })
           if (!webdavConfig) {
-            throw new Error('WebDAV 配置未找到')
+            throw new Error(t('settings.sync.webdavConfigNotFound'))
           }
           const result = await webdavModule.webdavUpload(webdavConfig, activeFilePath, content, undefined, undefined, undefined, beforeWrite)
           logPerf('uploadFile', {
@@ -607,6 +607,7 @@ export function SyncButton(props: PushSyncOptions) {
     lastPushTime,
     push: handlePush,
   } = usePushSync(props)
+  const t = useTranslations()
 
   if (!isConfigured || !activeFilePath) return null
 
@@ -621,7 +622,7 @@ export function SyncButton(props: PushSyncOptions) {
       {isLoading && (
         <span className="text-xs text-muted-foreground flex items-center gap-1">
           <Loader2 size={12} className="animate-spin" />
-          上传中
+          {t('article.footer.sync.syncing')}
         </span>
       )}
 
@@ -637,7 +638,7 @@ export function SyncButton(props: PushSyncOptions) {
       {showError && !isLoading && (
         <span className="text-xs text-red-500 flex items-center gap-1">
           <XCircle size={12} />
-          上传失败
+          {t('article.footer.sync.syncFailed')}
         </span>
       )}
 
@@ -649,10 +650,10 @@ export function SyncButton(props: PushSyncOptions) {
           className={cn(
             'p-0.5 rounded transition-colors flex items-center gap-1 text-muted-foreground hover:text-foreground hover:bg-muted'
           )}
-          title={isLoading ? '上传中...' : '点击推送'}
+          title={isLoading ? t('article.footer.sync.syncing') : t('article.footer.sync.clickToPush')}
         >
           <ArrowUpCircle size={14} />
-          <span className="text-xs">推送</span>
+          <span className="text-xs">{t('article.footer.sync.push')}</span>
         </button>
       )}
     </div>

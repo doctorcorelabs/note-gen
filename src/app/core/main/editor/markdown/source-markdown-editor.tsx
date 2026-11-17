@@ -232,7 +232,7 @@ class RemoteCursorWidget extends WidgetType {
     const cursor = document.createElement('span')
     cursor.className = 'cm-self-hosted-remote-cursor'
     cursor.style.borderLeftColor = this.color
-    cursor.setAttribute('aria-label', `${this.label} 的光标`)
+    cursor.setAttribute('aria-label', `${this.label}'s cursor`)
 
     const label = document.createElement('span')
     label.className = 'cm-self-hosted-remote-cursor-label'
@@ -252,7 +252,7 @@ function createRemoteCursorDecorations(
     const anchor = Math.max(0, Math.min(cursor.anchor, documentLength))
     const head = Math.max(0, Math.min(cursor.head, documentLength))
     const color = remoteCursorColor(cursor.deviceId)
-    const label = cursor.label.trim() || '其他设备'
+    const label = cursor.label.trim() || 'Other device'
     if (anchor !== head) {
       decorations.push(Decoration.mark({
         class: 'cm-self-hosted-remote-selection',

@@ -206,7 +206,7 @@ export async function getImageFiles({ path }: { path: string }) {
   } catch (error) {
     if ((error as GithubError).status !== 404) {
       toast({
-        title: '查询失败',
+        title: 'Query failed',
         description: (error as GithubError).message,
         variant: 'destructive',
       })

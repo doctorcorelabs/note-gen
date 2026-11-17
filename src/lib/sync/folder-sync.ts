@@ -69,7 +69,7 @@ export class FolderSync {
           totalFiles: 0,
           successCount: 0,
           failedCount: 0,
-          message: '当前文件夹下没有 Markdown 文件'
+          message: 'No Markdown files in the current folder'
         }
       }
 
@@ -147,7 +147,7 @@ export class FolderSync {
             totalFiles: markdownFiles.length,
             successCount: 0,
             failedCount: markdownFiles.length,
-            message: `不支持的平台: ${this.platform}`
+            message: `Unsupported platform: ${this.platform}`
           }
       }
 
@@ -157,7 +157,7 @@ export class FolderSync {
           totalFiles: markdownFiles.length,
           successCount: markdownFiles.length,
           failedCount: 0,
-          message: `成功同步 ${markdownFiles.length} 个文件`
+          message: `Successfully synced ${markdownFiles.length} files`
         }
       } else {
         return {
@@ -165,7 +165,7 @@ export class FolderSync {
           totalFiles: markdownFiles.length,
           successCount: 0,
           failedCount: markdownFiles.length,
-          message: '同步失败'
+          message: 'Sync failed'
         }
       }
     } catch (error) {

@@ -2,7 +2,7 @@ import type { AgentTool, AgentUserQuestion } from '../types'
 
 export const askUserQuestionTool: AgentTool = {
   name: 'ask_user_question',
-  title: '询问用户',
+  title: 'Ask user',
   description: 'AskUserQuestion: use only when the user needs to choose between concrete options. Ask 1–4 concise single-choice or multiple-choice questions, each with 2–6 distinct options. For open-ended clarification, ask in your normal chat response and wait for the next user message instead. No free-text or Other option. Never use this for permission approval or answer on behalf of the user.',
   category: 'chat',
   risk: 'read',

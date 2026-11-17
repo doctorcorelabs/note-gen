@@ -1086,16 +1086,16 @@ async function webdavMovePathRaw(
   // the caller replaces its settings object while requests are in flight.
   config = { ...config }
   const failure = (stage: string, detail: string) => new Error(
-    `WebDAV 路径迁移失败（${source} → ${target}，${stage}）：${detail}`,
+    `WebDAV path migration failed (${source} -> ${target}, ${stage}): ${detail}`,
   )
   const validPath = (path: string) => Boolean(path) && !path.includes('\\') && !/^[a-z]:/i.test(path)
     && path.split('/').every(part => part && part !== '.' && part !== '..')
   if (!validPath(source) || !validPath(target) || source === target
     || source.startsWith(`${target}/`) || target.startsWith(`${source}/`)) {
-    throw failure('校验路径', '源路径和目标路径无效或互相包含')
+    throw failure('Validate paths', 'Source and target paths are invalid or nested within each other')
   }
   const current = async () => {
-    if (!await assertCurrent()) throw failure('校验上下文', '同步配置或本地迁移状态已变化，待办已保留')
+    if (!await assertCurrent()) throw failure('Validate context', 'Sync configuration or local migration state changed; the pending task was kept')
   }
   const strongEtag = (value: string | null | undefined): string | undefined => {
     const trimmed = value?.trim()
@@ -1121,7 +1121,7 @@ async function webdavMovePathRaw(
     const prepare = async () => {
       await current()
       if (shouldSkipForTemporaryBlock(config, 'movePath', { source, target })) {
-        throw failure(stage, '服务端暂时限制请求，待办已保留')
+        throw failure(stage, 'Server temporarily rate-limited the request; the pending task was kept')
       }
       clearTimeout(timeout)
       controller = new AbortController()
@@ -1151,7 +1151,7 @@ async function webdavMovePathRaw(
           if (!redirected || redirected.origin !== original.origin
             || redirected.pathname.replace(/\/+$/, '') !== original.pathname.replace(/\/+$/, '')
             || redirected.search || redirected.hash || redirected.username || redirected.password) {
-            throw failure(stage, '服务端返回了不同路径的重定向，待办已保留')
+            throw failure(stage, 'Server returned a redirect to a different path; the pending task was kept')
           }
           await current()
           response = await platform.http.fetch(redirected.toString(), {
@@ -1173,9 +1173,9 @@ async function webdavMovePathRaw(
         // Native transport failures can contain proxy credentials or server
         // response bodies. Only surface our own path/stage description.
         if (isRemoteConnectionError(error)) {
-          throw new RemoteMutationTransportError(failure(stage, '网络请求失败或超时，待办已保留').message)
+          throw new RemoteMutationTransportError(failure(stage, 'Network request failed or timed out; the pending task was kept').message)
         }
-        throw failure(stage, '网络请求失败、重定向无效或超时，待办已保留')
+        throw failure(stage, 'Network request failed, redirect invalid, or timed out; the pending task was kept')
       }
     } finally {
       clearTimeout(timeout)
@@ -1190,7 +1190,7 @@ async function webdavMovePathRaw(
     const document = new DOMParser().parseFromString(xml, 'application/xml')
     if (document.getElementsByTagNameNS('*', 'parsererror').length
       || document.documentElement.localName !== 'multistatus'
-      || document.documentElement.namespaceURI !== 'DAV:') throw failure('读取资源信息', 'WebDAV 响应格式无效')
+      || document.documentElement.namespaceURI !== 'DAV:') throw failure('Read resource info', 'Invalid WebDAV response format')
     const children = (element: Element, name: string) => Array.from(element.children)
       .filter(child => child.namespaceURI === 'DAV:' && child.localName === name)
     const text = (element: Element, name: string) => children(element, name)[0]?.textContent?.trim() || ''
@@ -1201,24 +1201,24 @@ async function webdavMovePathRaw(
     const resources: Resource[] = []
     for (const response of children(document.documentElement, 'response')) {
       const resourceStatus = status(text(response, 'status'))
-      if (resourceStatus >= 400) throw failure('读取资源信息', `目录成员请求失败（HTTP ${resourceStatus}）`)
+      if (resourceStatus >= 400) throw failure('Read resource info', `Directory member request failed (HTTP ${resourceStatus})`)
       const properties = children(response, 'propstat')
         .filter(propstat => {
           const code = status(text(propstat, 'status'))
           return code >= 200 && code < 300
         }).flatMap(propstat => children(propstat, 'prop'))
       const resourceTypes = properties.flatMap(prop => children(prop, 'resourcetype'))
-      if (!resourceTypes.length) throw failure('读取资源信息', '资源类型缺失，无法确认完整目录')
+      if (!resourceTypes.length) throw failure('Read resource info', 'Resource type missing; cannot confirm the complete directory')
       const href = text(response, 'href')
-      if (!href) throw failure('读取资源信息', '目录成员缺少路径')
+      if (!href) throw failure('Read resource info', 'Directory member is missing its path')
       const actual = new URL(href, `${url.replace(/\/+$/, '')}/`)
       const actualPath = decodeURIComponent(actual.pathname).replace(/\/+$/, '')
-      if (actual.origin !== requested.origin) throw failure('读取资源信息', '目录成员来源异常')
+      if (actual.origin !== requested.origin) throw failure('Read resource info', 'Directory member came from an unexpected origin')
       const relative = actualPath === requestedPath ? '' : actualPath.startsWith(`${requestedPath}/`)
         ? actualPath.slice(requestedPath.length + 1) : null
       if (relative === null || relative.includes('/') || (depth === '0' && relative)
         || relative === '.' || relative === '..' || seen.has(relative)) {
-        throw failure('读取资源信息', '目录成员路径重复或超出请求范围')
+        throw failure('Read resource info', 'Directory member paths are duplicated or outside the requested scope')
       }
       seen.add(relative)
       const etag = strongEtag(properties.map(prop => text(prop, 'getetag')).find(Boolean))
@@ -1228,17 +1228,17 @@ async function webdavMovePathRaw(
         etag,
       })
     }
-    if (!seen.has('')) throw failure('读取资源信息', '响应缺少请求资源，无法确认路径状态')
+    if (!seen.has('')) throw failure('Read resource info', 'Response is missing the requested resource; cannot confirm path status')
     return resources
   }
   const properties = '<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getetag/></d:prop></d:propfind>'
   const readResources = async (key: string, depth: '0' | '1') => {
     const url = buildWebDAVUrl(config, key)
-    const response = await request(url, 'PROPFIND', '读取资源信息', {
+    const response = await request(url, 'PROPFIND', 'Read resource info', {
       Depth: depth, 'Content-Type': 'application/xml; charset=utf-8',
     }, properties)
     if (response.status === 404) return null
-    if (!isPropfindSuccess(response.status)) throw failure('读取资源信息', `请求被拒绝（HTTP ${response.status}）`)
+    if (!isPropfindSuccess(response.status)) throw failure('Read resource info', `Request rejected (HTTP ${response.status})`)
     return parseResources(response.text, url, key, depth)
   }
   const snapshot = async (key: string): Promise<WebDAVPathIdentity | null> => {
@@ -1249,14 +1249,14 @@ async function webdavMovePathRaw(
     const entries: Array<[string, 'file' | 'directory', string?]> = []
     const visited = new Set<string>()
     const collect = async (entry: Resource): Promise<void> => {
-      if (visited.has(entry.key) || visited.size >= 100_000) throw failure('读取目录快照', '目录成员重复或数量过多')
+      if (visited.has(entry.key) || visited.size >= 100_000) throw failure('Read directory snapshot', 'Duplicate directory members or too many members')
       visited.add(entry.key)
       const relative = entry.key === key ? '' : entry.key.slice(key.length + 1)
       if (entry.type === 'file') {
-        const response = await request(buildWebDAVUrl(config, entry.key), 'GET', '读取文件快照',
+        const response = await request(buildWebDAVUrl(config, entry.key), 'GET', 'Read file snapshot',
           entry.etag ? { 'If-Match': entry.etag } : {})
         if (response.status !== 200 || !response.bytes || (entry.etag && response.etag && entry.etag !== response.etag)) {
-          throw failure('读取文件快照', `文件已变化或请求失败（HTTP ${response.status}）`)
+          throw failure('Read file snapshot', `File changed or request failed (HTTP ${response.status})`)
         }
         const digest = await hash(response.bytes)
         files.push({ path: relative, digest, etag: response.etag })
@@ -1265,7 +1265,7 @@ async function webdavMovePathRaw(
         entries.push([relative, 'directory'])
         const listing = await readResources(entry.key, '1')
         if (!listing || listing.find(item => item.key === entry.key)?.type !== 'directory') {
-          throw failure('读取目录快照', '目录已变化，无法确认完整内容')
+          throw failure('Read directory snapshot', 'Directory changed; cannot confirm complete contents')
         }
         for (const child of listing) if (child.key !== entry.key) await collect(child)
       }
@@ -1298,14 +1298,14 @@ async function webdavMovePathRaw(
     if (targetEntry && expected && targetEntry.type === expected.type && targetEntry.digest === expected.digest) {
       return { status: 'moved', entry: expected, files: versionMappings(expected, targetEntry) }
     }
-    if (targetEntry) throw failure('校验迁移结果', '源路径不存在但目标已存在，无法确认先前迁移结果')
-    if (expected) throw failure('校验迁移结果', '已记录的远端源路径和目标路径均不存在，无法确认迁移结果')
+    if (targetEntry) throw failure('Verify migration result', 'Source path does not exist but the target already exists; cannot confirm the previous migration result')
+    if (expected) throw failure('Verify migration result', 'Both recorded remote source and target paths are missing; cannot confirm the migration result')
     return { status: 'missing' }
   }
-  if (targetEntry) throw failure('校验目标路径', '目标已存在，未覆盖任何远端内容')
+  if (targetEntry) throw failure('Validate target path', 'Target already exists; no remote content was overwritten')
   if (expected && (sourceEntry.type !== expected.type || sourceEntry.digest !== expected.digest
     || (expected.etag && sourceEntry.etag !== expected.etag))) {
-    throw failure('校验源版本', '远端源内容已变化，待办已保留')
+    throw failure('Validate source version', 'Remote source content changed; the pending task was kept')
   }
   const identity = expected || sourceEntry
   if (!expected) await rememberSource(identity)
@@ -1319,30 +1319,30 @@ async function webdavMovePathRaw(
   for (let index = 1; index <= parentParts.length; index++) {
     const fullPath = parentParts.slice(0, index).join('/')
     const url = `${buildWebDAVBaseUrl(config)}/${buildRepoContentPath({ path: fullPath })}`
-    const existing = await request(url, 'PROPFIND', '校验目标父目录', {
+    const existing = await request(url, 'PROPFIND', 'Validate target parent directory', {
       Depth: '0', 'Content-Type': 'application/xml; charset=utf-8',
     }, properties)
     if (isPropfindSuccess(existing.status)) {
-      if (!isCollectionResponse(existing.text, url)) throw failure('校验目标父目录', '目标父路径不是目录')
+      if (!isCollectionResponse(existing.text, url)) throw failure('Validate target parent directory', 'Target parent path is not a directory')
       continue
     }
-    if (existing.status !== 404) throw failure('校验目标父目录', `请求被拒绝（HTTP ${existing.status}）`)
-    const created = await request(url, 'MKCOL', '创建目标父目录', {}, undefined, async () => {
-      const remote = await recoverRemoteRead(() => request(url, 'PROPFIND', '核对目标父目录', {
+    if (existing.status !== 404) throw failure('Validate target parent directory', `Request rejected (HTTP ${existing.status})`)
+    const created = await request(url, 'MKCOL', 'Create target parent directory', {}, undefined, async () => {
+      const remote = await recoverRemoteRead(() => request(url, 'PROPFIND', 'Verify target parent directory', {
         Depth: '0', 'Content-Type': 'application/xml; charset=utf-8',
       }, properties))
       if (remote.status === 404) return { state: 'unchanged' }
       if (isPropfindSuccess(remote.status) && isCollectionResponse(remote.text, url)) {
         return { state: 'applied', value: new Response(null, { status: 201 }) }
       }
-      throw failure('核对目标父目录', '无法确认目录创建结果，待办已保留')
+      throw failure('Verify target parent directory', 'Cannot confirm the directory creation result; the pending task was kept')
     })
-    if (created.status !== 201 && created.status !== 405) throw failure('创建目标父目录', `请求被拒绝（HTTP ${created.status}）`)
-    const verified = await request(url, 'PROPFIND', '确认目标父目录', {
+    if (created.status !== 201 && created.status !== 405) throw failure('Create target parent directory', `Request rejected (HTTP ${created.status})`)
+    const verified = await request(url, 'PROPFIND', 'Confirm target parent directory', {
       Depth: '0', 'Content-Type': 'application/xml; charset=utf-8',
     }, properties)
     if (!isPropfindSuccess(verified.status) || !isCollectionResponse(verified.text, url)) {
-      throw failure('确认目标父目录', '目标父目录未创建成功')
+      throw failure('Confirm target parent directory', 'Target parent directory was not created')
     }
   }
   const collectionSuffix = sourceEntry.type === 'directory' ? '/' : ''
@@ -1353,7 +1353,7 @@ async function webdavMovePathRaw(
   if (sourceEntry.type === 'directory') moveHeaders.Depth = 'infinity'
   else if (sourceEntry.etag) moveHeaders['If-Match'] = sourceEntry.etag
   const moved = await request(
-    `${buildWebDAVUrl(config, source)}${collectionSuffix}`, 'MOVE', '远端重命名', moveHeaders, undefined, async () => {
+    `${buildWebDAVUrl(config, source)}${collectionSuffix}`, 'MOVE', 'Remote rename', moveHeaders, undefined, async () => {
       const remaining = await recoverRemoteRead(() => snapshot(source))
       const destination = await recoverRemoteRead(() => snapshot(target))
       if (!remaining && destination?.type === identity.type && destination.digest === identity.digest) {
@@ -1361,21 +1361,21 @@ async function webdavMovePathRaw(
       }
       if (destination || !remaining || remaining.type !== identity.type || remaining.digest !== identity.digest
         || (identity.etag && remaining.etag !== identity.etag)) {
-        throw failure('核对重命名结果', '源路径或目标路径已变化，待办已保留')
+        throw failure('Verify rename result', 'Source or target path changed; the pending task was kept')
       }
       // Only a file with a frozen strong ETag can protect an automatic replay.
       // Directory MOVE has no atomic validator for all descendants.
       if (identity.type !== 'file' || !moveHeaders['If-Match']) {
-        throw failure('核对重命名结果', '服务端无法保护重发时的完整源版本，待办已保留')
+        throw failure('Verify rename result', 'Server cannot protect the full source version on retry; the pending task was kept')
       }
       return { state: 'unchanged' }
     },
   )
   if (moved.status !== 201 && moved.status !== 204) {
-    const detail = moved.status === 207 ? '部分目录成员未迁移，待办已保留'
-      : moved.status === 405 || moved.status === 501 ? '服务端不支持 MOVE，待办已保留'
-      : `请求被拒绝（HTTP ${moved.status}），待办已保留`
-    throw failure('远端重命名', detail)
+    const detail = moved.status === 207 ? 'Some directory members were not migrated; the pending task was kept'
+      : moved.status === 405 || moved.status === 501 ? 'Server does not support MOVE; the pending task was kept'
+      : `Request rejected (HTTP ${moved.status}); the pending task was kept`
+    throw failure('Remote rename', detail)
   }
   await current()
   // The server has confirmed MOVE. A later edit at the destination must not

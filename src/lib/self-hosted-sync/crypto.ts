@@ -62,7 +62,7 @@ export async function decryptPackedJson<T>(
 
 export async function loadWorkspaceKey(workspaceId: string, keyVersion: number) {
   const key = await secureGet(`workspace.${workspaceId}.key.${keyVersion}`)
-  if (!key) throw new Error(`工作区密钥不可用：${workspaceId} v${keyVersion}`)
+  if (!key) throw new Error(`Workspace key unavailable: ${workspaceId} v${keyVersion}`)
   return key
 }
 

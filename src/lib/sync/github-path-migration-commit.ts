@@ -54,14 +54,14 @@ export async function moveGithubPath({
   source, target, expected, rememberSource, assertCurrent,
 }: MoveGithubPathOptions): Promise<MoveGithubPathResult> {
   const failure = (stage: string, detail: string) => new Error(
-    `GitHub 路径迁移失败（${source} → ${target}，${stage}）：${detail}`,
+    `GitHub path migration failed (${source} -> ${target}, ${stage}): ${detail}`,
   )
   if (!validPath(source) || !validPath(target) || source === target
     || source.startsWith(`${target}/`) || target.startsWith(`${source}/`)) {
-    throw failure('校验迁移记录', '路径无效或互相包含，远端文件未迁移')
+    throw failure('Validate migration record', 'Paths are invalid or nested; remote files were not migrated')
   }
   const current = async (): Promise<void> => {
-    if (!await assertCurrent()) throw failure('校验迁移上下文', '工作区或迁移状态已变化，迁移记录已保留')
+    if (!await assertCurrent()) throw failure('Validate migration context', 'Workspace or migration state changed; the migration record was kept')
   }
   const pathEntry = (entry: GitTreeEntry | GitPathEntry): GitPathEntry => {
     if (SHA_PATTERN.test(entry.sha)) {
@@ -72,7 +72,7 @@ export async function moveGithubPath({
         return { sha: entry.sha.toLowerCase(), type: 'blob', mode: entry.mode }
       }
     }
-    throw failure('校验文件类型', '源路径不是普通文件或目录，远端文件未迁移')
+    throw failure('Validate file type', 'Source path is not a regular file or directory; remote files were not migrated')
   }
   let captured = expected === undefined ? undefined : pathEntry(expected)
   const matches = (entry: GitTreeEntry, identity: GitPathEntry): boolean => entry.sha === identity.sha
@@ -86,7 +86,7 @@ export async function moveGithubPath({
     store.get<string>('proxy'),
   ])
   await current()
-  if (!token || !owner || !repo) throw failure('读取配置', 'GitHub 同步未配置')
+  if (!token || !owner || !repo) throw failure('Read configuration', 'GitHub sync is not configured')
   const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
   const baseUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
   const headers = {
@@ -105,13 +105,13 @@ export async function moveGithubPath({
           method: 'GET', headers, proxy, signal: controller.signal,
         })
       } catch {
-        throw failure('确认空仓库', '网络请求失败或超时，迁移记录已保留')
+        throw failure('Confirm empty repository', 'Network request failed or timed out; the migration record was kept')
       }
-      if (!response.ok) throw failure('确认空仓库', `请求被拒绝（HTTP ${response.status}）`)
+      if (!response.ok) throw failure('Confirm empty repository', `Request rejected (HTTP ${response.status})`)
       let branches: unknown
       try { branches = await readSyncResponseJson(response, `github / ${source} / branches`) }
-      catch { throw failure('确认空仓库', '响应格式无效或读取超时，迁移记录已保留') }
-      if (!Array.isArray(branches)) throw failure('确认空仓库', '分支列表格式无效，迁移记录已保留')
+      catch { throw failure('Confirm empty repository', 'Invalid response format or read timeout; the migration record was kept') }
+      if (!Array.isArray(branches)) throw failure('Confirm empty repository', 'Invalid branch list format; the migration record was kept')
       return branches.length === 0
     } finally {
       clearTimeout(requestTimeout)
@@ -144,7 +144,7 @@ export async function moveGithubPath({
       } catch (error) {
         // Native transport errors may include proxy credentials. Keep only our
         // own source/stage context; neither tokens nor raw response bodies escape.
-        const message = failure(stage, '网络请求失败或超时，迁移记录已保留').message
+        const message = failure(stage, 'Network request failed or timed out; the migration record was kept').message
         if (method === 'PATCH' && (controller.signal.aborted || isRemoteConnectionError(error))) {
           throw new RemoteMutationTransportError(message)
         }
@@ -173,20 +173,20 @@ export async function moveGithubPath({
           const permission = /permission|not permitted|not allowed|resource not accessible|workflow scope|refusing to allow|bad credentials/.test(reason)
             || response.status === 401 || (response.status === 403 && !limited && !protectedBranch)
           const concurrent = /not a fast.?forward|reference update failed|reference has changed/.test(reason)
-          const detail = protectedBranch ? '远端分支保护或仓库规则拒绝更新'
-            : limited ? 'GitHub 请求受到频率限制，请稍后重试'
-              : permission ? 'GitHub 令牌权限不足，无法更新远端分支'
-                : concurrent ? '远端分支被其他同步更新，迁移待办已保留'
-                  : 'GitHub 拒绝更新分支引用，迁移待办已保留'
+          const detail = protectedBranch ? 'Remote branch protection or repository rules rejected the update'
+            : limited ? 'GitHub requests are rate-limited; please try again later'
+              : permission ? 'GitHub token permissions are insufficient; cannot update the remote branch'
+                : concurrent ? 'Remote branch was updated by another sync; the migration task was kept'
+                  : 'GitHub refused to update the branch reference; the migration task was kept'
           throw new GithubRefUpdateError(failure(stage, `${detail}（HTTP ${response.status}）`).message,
             [409, 412, 422].includes(response.status) && !protectedBranch && !permission && !limited)
         }
-        throw failure(stage, `请求被拒绝（HTTP ${response.status}），迁移记录已保留`)
+        throw failure(stage, `Request rejected (HTTP ${response.status}); the migration record was kept`)
       }
       try {
         return remoteRecord(await readSyncResponseJson(response, `github / ${source} / ${stage}`))
       } catch {
-        throw failure(stage, '响应格式无效或读取超时，迁移记录已保留')
+        throw failure(stage, 'Invalid response format or read timeout; the migration record was kept')
       }
     } finally {
       clearTimeout(requestTimeout)
@@ -194,46 +194,46 @@ export async function moveGithubPath({
   }
   const readSha = (value: unknown, stage: string): string => {
     if (typeof value !== 'string' || !SHA_PATTERN.test(value)) {
-      throw failure(stage, 'Git 对象版本无效，已保留旧文件')
+      throw failure(stage, 'Invalid Git object version; old files were kept')
     }
     return value.toLowerCase()
   }
   const readObject = (value: unknown, stage: string): Record<string, unknown> => {
     try { return remoteRecord(value) }
-    catch { throw failure(stage, 'Git 对象格式无效，已保留旧文件') }
+    catch { throw failure(stage, 'Invalid Git object format; old files were kept') }
   }
 
   return withGithubRepoWriteLock(owner, repo, async (): Promise<MoveGithubPathResult> => {
     await current()
-    const repository = await request('', '读取默认分支')
+    const repository = await request('', 'Read default branch')
     if (typeof repository.default_branch !== 'string' || !repository.default_branch) {
       if (await repositoryIsEmpty()) {
         await current()
-        if (captured) throw failure('校验迁移结果', '已记录迁移快照的远端分支不存在，迁移记录已保留')
+        if (captured) throw failure('Verify migration result', 'Remote branch from the recorded migration snapshot does not exist; the migration record was kept')
         return { status: 'missing' }
       }
-      throw failure('读取默认分支', '仓库没有有效默认分支，已保留旧文件')
+      throw failure('Read default branch', 'Repository has no valid default branch; old files were kept')
     }
     const branch = repository.default_branch
     const reference = `refs/heads/${branch}`
     const refResource = `/git/refs/heads/${encodeURIComponent(branch)}`
     const attemptMove = async (attempt: number, verifyOnly = false): Promise<MoveGithubPathResult> => {
-      const head = await request(`/git/ref/heads/${encodeURIComponent(branch)}`, '读取分支版本')
+      const head = await request(`/git/ref/heads/${encodeURIComponent(branch)}`, 'Read branch version')
       if (head.empty === true) {
         await current()
-        if (captured) throw failure('校验迁移结果', '已记录迁移快照的远端分支不存在，迁移记录已保留')
+        if (captured) throw failure('Verify migration result', 'Remote branch from the recorded migration snapshot does not exist; the migration record was kept')
         return { status: 'missing' }
       }
-      const headObject = readObject(head.object, '读取分支版本')
+      const headObject = readObject(head.object, 'Read branch version')
       if (head.ref !== reference || headObject.type !== 'commit') {
-        throw failure('读取分支版本', '默认分支未指向提交，已保留旧文件')
+        throw failure('Read branch version', 'Default branch does not point to a commit; old files were kept')
       }
-      const parent = readSha(headObject.sha, '读取分支版本')
-      const commit = await request(`/git/commits/${parent}`, '读取提交快照')
-      if (readSha(commit.sha, '读取提交快照') !== parent) {
-        throw failure('读取提交快照', '提交版本不一致，已保留旧文件')
+      const parent = readSha(headObject.sha, 'Read branch version')
+      const commit = await request(`/git/commits/${parent}`, 'Read commit snapshot')
+      if (readSha(commit.sha, 'Read commit snapshot') !== parent) {
+        throw failure('Read commit snapshot', 'Commit version mismatch; old files were kept')
       }
-      const baseTree = readSha(readObject(commit.tree, '读取提交快照').sha, '读取提交快照')
+      const baseTree = readSha(readObject(commit.tree, 'Read commit snapshot').sha, 'Read commit snapshot')
       const trees = new Map<string, Promise<GitTreeEntry[]>>()
       const readTree = (treeSha: string): Promise<GitTreeEntry[]> => {
         const cached = trees.get(treeSha)
@@ -241,23 +241,23 @@ export async function moveGithubPath({
         const pending = (async () => {
           // Read each immutable directory separately: never accept a truncated
           // recursive tree as evidence that a file is missing.
-          const data = await request(`/git/trees/${treeSha}`, '读取目录快照')
-          if (readSha(data.sha, '读取目录快照') !== treeSha
+          const data = await request(`/git/trees/${treeSha}`, 'Read directory snapshot')
+          if (readSha(data.sha, 'Read directory snapshot') !== treeSha
             || data.truncated !== false || !Array.isArray(data.tree)) {
-            throw failure('读取目录快照', '目录快照不完整，已保留旧文件')
+            throw failure('Read directory snapshot', 'Incomplete directory snapshot; old files were kept')
           }
           const seen = new Set<string>()
           return data.tree.map((value: unknown) => {
-            const entry = readObject(value, '读取目录快照')
+            const entry = readObject(value, 'Read directory snapshot')
             if (typeof entry.path !== 'string' || !entry.path || entry.path.includes('/')
               || entry.path === '.' || entry.path === '..' || seen.has(entry.path)
               || typeof entry.mode !== 'string' || typeof entry.type !== 'string') {
-              throw failure('读取目录快照', '目录条目无效，已保留旧文件')
+              throw failure('Read directory snapshot', 'Invalid directory entry; old files were kept')
             }
             seen.add(entry.path)
             return {
               path: entry.path, mode: entry.mode, type: entry.type,
-              sha: readSha(entry.sha, '读取目录快照'),
+              sha: readSha(entry.sha, 'Read directory snapshot'),
             }
           })
         })()
@@ -273,7 +273,7 @@ export async function moveGithubPath({
           if (!entry) return null
           if (depth === segments.length - 1) return entry
           if (entry.type !== 'tree' || entry.mode !== '040000') {
-            throw failure('校验父目录', `路径经过非目录对象，已保留旧文件：${path}`)
+            throw failure('Validate parent directory', `Path passes through a non-directory object; old files were kept: ${path}`)
           }
           treeSha = entry.sha
         }
@@ -289,61 +289,61 @@ export async function moveGithubPath({
         if (targetEntry && captured && matches(targetEntry, captured)) {
           return { status: 'moved', entry: captured }
         }
-        if (targetEntry) throw failure('校验目标路径', '源路径不存在但目标已存在，无法确认先前迁移结果')
-        if (captured) throw failure('校验迁移结果', '已记录的远端源和目标均不存在，无法确认迁移结果')
+        if (targetEntry) throw failure('Validate target path', 'Source path does not exist but the target already exists; cannot confirm the previous migration result')
+        if (captured) throw failure('Verify migration result', 'Both recorded remote source and target are missing; cannot confirm the migration result')
         return { status: 'missing' }
       }
       const entry = pathEntry(sourceEntry)
       if (captured && !matches(sourceEntry, captured)) {
-        throw failure('校验源路径', '远端源文件或目录在上次尝试后发生变化，迁移记录已保留')
+        throw failure('Validate source path', 'Remote source file or directory changed since the last attempt; the migration record was kept')
       }
-      if (targetEntry) throw failure('校验目标路径', '远端目标路径已存在，原有内容已保留')
-      if (verifyOnly) throw failure('确认迁移结果', '已达到安全重试次数，迁移记录已保留')
+      if (targetEntry) throw failure('Validate target path', 'Remote target path already exists; existing content was kept')
+      if (verifyOnly) throw failure('Confirm migration result', 'Safe retry limit reached; the migration record was kept')
       await rememberSource(entry)
       // Keep the first identity across retries, including a first attempt without
       // a pre-existing journal snapshot. Unrelated commits may change; these bytes may not.
       captured = entry
       await current()
-      const newTree = await request('/git/trees', '创建迁移目录', 'POST', {
+      const newTree = await request('/git/trees', 'Create migration tree', 'POST', {
         base_tree: baseTree,
         tree: [
           { path: target, mode: entry.mode, type: entry.type, sha: entry.sha },
           { path: source, mode: entry.mode, type: entry.type, sha: null },
         ],
       })
-      const newTreeSha = readSha(newTree.sha, '创建迁移目录')
+      const newTreeSha = readSha(newTree.sha, 'Create migration tree')
       await current()
-      const newCommit = await request('/git/commits', '创建迁移提交', 'POST', {
+      const newCommit = await request('/git/commits', 'Create migration commit', 'POST', {
         message: `Move ${source} to ${target}`,
         tree: newTreeSha,
         parents: [parent],
       })
-      const newCommitSha = readSha(newCommit.sha, '创建迁移提交')
+      const newCommitSha = readSha(newCommit.sha, 'Create migration commit')
       // If a competing writer advanced the branch, this commit is not a descendant
       // of its new head. GitHub rejects the non-fast-forward update atomically.
       await current()
-      const latestRepository = await request('', '校验默认分支')
-      if (latestRepository.default_branch !== branch) throw failure('校验默认分支', '默认分支已变化，迁移记录已保留')
+      const latestRepository = await request('', 'Validate default branch')
+      if (latestRepository.default_branch !== branch) throw failure('Validate default branch', 'Default branch changed; the migration record was kept')
       let updated: Record<string, unknown>
       try {
-        updated = await request(refResource, '应用迁移提交', 'PATCH', {
+        updated = await request(refResource, 'Apply migration commit', 'PATCH', {
           sha: newCommitSha, force: false,
         })
       } catch (error) {
         if (error instanceof RemoteMutationTransportError) {
           await current()
-          const repository = await request('', '确认断线后的默认分支')
-          if (repository.default_branch !== branch) throw failure('校验默认分支', '默认分支已变化，迁移记录已保留')
+          const repository = await request('', 'Confirm default branch after disconnect')
+          if (repository.default_branch !== branch) throw failure('Validate default branch', 'Default branch changed; the migration record was kept')
           // Re-read the immutable tree even after the final failed PATCH.
           // Source absence plus the saved target identity confirms completion.
           return attemptMove(attempt + 1, attempt >= 2)
         }
         if (error instanceof GithubRefUpdateError && error.canCheckConcurrentUpdate && attempt < 2) {
           await current()
-          const latestHead = await request(`/git/ref/heads/${encodeURIComponent(branch)}`, '确认分支并发更新')
+          const latestHead = await request(`/git/ref/heads/${encodeURIComponent(branch)}`, 'Confirm concurrent branch update')
           if (latestHead.ref === reference) {
-            const latestObject = readObject(latestHead.object, '确认分支并发更新')
-            if (latestObject.type === 'commit' && readSha(latestObject.sha, '确认分支并发更新') !== parent) {
+            const latestObject = readObject(latestHead.object, 'Confirm concurrent branch update')
+            if (latestObject.type === 'commit' && readSha(latestObject.sha, 'Confirm concurrent branch update') !== parent) {
               // Re-read the new immutable tree and verify source/target again.
               // An unchanged head means rejection, not a reason to retry blindly.
               return attemptMove(attempt + 1)
@@ -352,10 +352,10 @@ export async function moveGithubPath({
         }
         throw error
       }
-      const updatedObject = readObject(updated.object, '应用迁移提交')
+      const updatedObject = readObject(updated.object, 'Apply migration commit')
       if (updated.ref !== reference || updatedObject.type !== 'commit'
-        || readSha(updatedObject.sha, '应用迁移提交') !== newCommitSha) {
-        throw failure('应用迁移提交', '无法确认分支更新结果，迁移记录已保留')
+        || readSha(updatedObject.sha, 'Apply migration commit') !== newCommitSha) {
+        throw failure('Apply migration commit', 'Cannot confirm the branch update result; the migration record was kept')
       }
       return { status: 'moved', entry }
     }

@@ -72,7 +72,7 @@ function scopedPath(key: string, context: MetadataContext): string | null {
 
 function readValues(value: unknown, name: MetadataStoreName): Record<string, MetadataValue> {
   if (value === null || value === undefined) return {}
-  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`同步元数据无效：${name}`)
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`Sync metadata is invalid: ${name}`)
   // Validate only this move's namespace; leave unrelated legacy values intact.
   return { ...value as Record<string, MetadataValue> }
 }
@@ -84,7 +84,7 @@ function captureValues(
   const result: Record<string, MetadataValue> = Object.create(null)
   const add = (path: string, value: MetadataValue) => {
     if (name === 'syncedFileShas' ? typeof value !== 'string'
-      : typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`同步元数据无效：${path}`)
+      : typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Sync metadata is invalid: ${path}`)
     result[path] = value
   }
   if (context.workspaceKey === '__default__') {
@@ -117,18 +117,18 @@ function validateMetadata(metadata: PathMoveMetadata): void {
         || typeof context.identity !== 'string' || !context.identity
       : (context.provider !== undefined && context.provider !== 'github')
         || !context.repo || typeof context.owner !== 'string' || !context.owner)) {
-    throw new Error('路径迁移元数据无效')
+    throw new Error('Path migration metadata is invalid')
   }
   for (const name of METADATA_STORES) {
     const snapshot = metadata.stores[name]
-    if (!snapshot || typeof snapshot !== 'object') throw new Error('路径迁移元数据无效')
+    if (!snapshot || typeof snapshot !== 'object') throw new Error('Path migration metadata is invalid')
     for (const side of ['source', 'target'] as const) {
       const values = snapshot[side]
-      if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('路径迁移元数据无效')
+      if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('Path migration metadata is invalid')
       for (const [path, value] of Object.entries(values)) {
         if (!validPath(path) || !includesPath(metadata[side], path)
           || (name === 'syncedFileShas' ? typeof value !== 'string'
-            : typeof value !== 'number' || !Number.isFinite(value))) throw new Error('路径迁移元数据无效')
+            : typeof value !== 'number' || !Number.isFinite(value))) throw new Error('Path migration metadata is invalid')
       }
     }
   }
@@ -153,7 +153,7 @@ async function assertContext(store: StoreHandle, metadata: PathMoveMetadata): Pr
 /** Capture before moving locally. Never accept a newly observed remote version. */
 export async function capturePathMoveMetadata(source: string, target: string): Promise<PathMoveMetadata> {
   if (!validPath(source) || !validPath(target) || includesPath(source, target) || includesPath(target, source)) {
-    throw new Error('路径迁移元数据的路径无效')
+    throw new Error('Path migration metadata has an invalid path')
   }
   const store = await platform.store.load('store.json')
   const current = await getCurrentSyncContext()
@@ -213,7 +213,7 @@ export async function applyPathMoveMetadata(metadata: PathMoveMetadata): Promise
   const currentTarget = captureValues(baselines, metadata.context, metadata.target, 'syncedFileShas')
   if ((!sameValues(currentSource, snapshot.source) || !sameValues(currentTarget, snapshot.target))
     && (!sameValues(currentSource, {}) || !sameValues(currentTarget, mapped))) {
-    throw new Error('路径迁移期间同步版本发生变化，已保留当前同步元数据')
+    throw new Error('Sync version changed during path migration; current sync metadata was kept')
   }
   for (const name of METADATA_STORES) {
     const values = name === 'syncedFileShas' ? baselines : readValues(await store.get(name), name)
@@ -245,7 +245,7 @@ export async function rebindPathMoveMetadata(
   metadata: PathMoveMetadata, versions: PathMoveRemoteVersion[], finalTarget = metadata.target,
 ): Promise<void> {
   validateMetadata(metadata)
-  if (!validPath(finalTarget)) throw new Error('路径迁移元数据无效')
+  if (!validPath(finalTarget)) throw new Error('Path migration metadata is invalid')
   const store = await platform.store.load('store.json')
   await assertContext(store, metadata)
   const values = readValues(await store.get('syncedFileShas'), 'syncedFileShas')
@@ -257,7 +257,7 @@ export async function rebindPathMoveMetadata(
       || entry.target !== `${metadata.target}${entry.source.slice(metadata.source.length)}`
       || (entry.localTarget !== undefined && !validPath(entry.localTarget))
       || typeof entry.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sourceHash)
-      || entry.sourceHash !== entry.targetHash || seen.has(entry.source)) throw new Error('远端重命名内容验证无效')
+      || entry.sourceHash !== entry.targetHash || seen.has(entry.source)) throw new Error('Remote rename content validation failed')
     seen.add(entry.source)
     const captured = metadata.stores.syncedFileShas.source[entry.source]
     const sourceVersion = normalizeRemoteVersion(entry.sourceVersion)

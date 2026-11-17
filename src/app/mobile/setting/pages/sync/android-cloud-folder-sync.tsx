@@ -219,7 +219,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
   async function activateWorkspace(next: CloudFolderConfig, strategy: OneDriveWorkspaceStrategy) {
     if (usePlatformSwitchStore.getState().platform) throw new Error('SYNC_SWITCH_STALE')
     if (!await prepareWorkspaceSwitch()) {
-      throw new Error('无法在切换工作区前保存当前编辑内容')
+      throw new Error(t('saveBeforeSwitchFailed'))
     }
     const preparationStartedAt = Date.now()
     const preparation = await prepareOneDriveWorkspace(next, workspacePath || undefined, strategy)

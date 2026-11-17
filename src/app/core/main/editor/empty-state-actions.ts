@@ -9,12 +9,12 @@ export async function createNewNoteFromEmptyState({
   await newFile()
 }
 
-export const ONBOARDING_SAMPLE_RECORD = `这是我在 NoteGen 里的第一条记录。
+export const ONBOARDING_SAMPLE_RECORD = `This is my first record in NoteGen.
 
-我可以先把零散想法快速记下来，不用一开始就整理结构。
-后面可以把这些记录整理成一篇正式笔记，再继续编辑。
-如果觉得内容不够通顺，还可以用 AI 帮我润色、改写或补充重点。
-写完之后，笔记会保存在本地 Markdown 文件里，也方便后续查找和管理。`
+I can quickly jot down scattered ideas here without organizing them first.
+Later I can organize these records into a proper note and keep editing.
+If the content does not read smoothly enough, I can use AI to polish, rewrite, or highlight key points.
+Once written, notes are saved as local Markdown files, making them easy to find and manage later.`
 
 export async function startCreateRecordOnboardingStep({
   setLeftSidebarTab,
@@ -85,7 +85,7 @@ function computedOnboardingPath(node: OnboardingFileTreeNode): string {
 function getPathPriority(path: string) {
   const name = path.split('/').pop() || path
 
-  if (/^整理笔记_\d+\.md$/i.test(name)) {
+  if (/^(整理笔记|Organized Notes)_\d+\.md$/i.test(name)) {
     return 2
   }
 

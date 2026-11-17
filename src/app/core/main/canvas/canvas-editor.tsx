@@ -1219,8 +1219,8 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
 
       const sourceExtension = imageName.split('.').pop()?.toLowerCase()
       const extension = sourceExtension === 'jpeg' ? 'jpg' : sourceExtension || 'png'
-      const relativePath = `画布资源/${crypto.randomUUID()}.${extension}`
-      const directoryOptions = await getFilePathOptions('画布资源')
+      const relativePath = `Canvas Resources/${crypto.randomUUID()}.${extension}`
+      const directoryOptions = await getFilePathOptions('Canvas Resources')
       await platform.fs.mkdir(
         directoryOptions.path,
         directoryOptions.baseDir ? { baseDir: directoryOptions.baseDir, recursive: true } : { recursive: true }
@@ -1422,8 +1422,8 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       event.preventDefault()
       try {
         const extension = image.type.split('/')[1]?.replace('svg+xml', 'svg') || 'png'
-        const relativePath = `画布资源/${crypto.randomUUID()}.${extension}`
-        const directoryOptions = await getFilePathOptions('画布资源')
+        const relativePath = `Canvas Resources/${crypto.randomUUID()}.${extension}`
+        const directoryOptions = await getFilePathOptions('Canvas Resources')
         await platform.fs.mkdir(
           directoryOptions.path,
           directoryOptions.baseDir ? { baseDir: directoryOptions.baseDir, recursive: true } : { recursive: true }

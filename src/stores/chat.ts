@@ -358,7 +358,7 @@ const useChatStore = create<ChatState>((set, get) => ({
     if (!conversationId) {
       // 没有当前会话，创建一个新会话
       const { createConversation } = await import('@/db/conversations')
-      conversationId = await createConversation('新对话')
+      conversationId = await createConversation('New Chat')
       // 设置为当前会话并刷新会话列表
       set({ currentConversationId: conversationId })
       await get().initConversations()
@@ -577,7 +577,7 @@ const useChatStore = create<ChatState>((set, get) => ({
     set({ conversations })
   },
 
-  createConversation: async (title = '新对话') => {
+  createConversation: async (title = 'New Chat') => {
     const { createConversation: createConv } = await import('@/db/conversations')
     const id = await createConv(title)
     // 设置为当前会话并刷新会话列表

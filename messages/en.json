@@ -593,7 +593,20 @@
       "ragDescription": "Optional enhancement. Build vector indexes of original material for semantic search across larger collections. Works independently of LLM Wiki.",
       "optionalEnhancement": "Enable when needed",
       "disabledDescription": "No vector model is needed while disabled. LLM Wiki organization and reading remain available.",
-      "ragAdvanced": "RAG advanced settings, retrieval tests, and maintenance"
+      "ragAdvanced": "RAG advanced settings, retrieval tests, and maintenance",
+      "ragErrorTitle": "RAG Error",
+      "embeddingIncomplete": "Embedding returned incomplete results",
+      "processFileFailed": "Failed to process file {name}",
+      "processWorkspaceFilesFailed": "Failed to process workspace Markdown files",
+      "fuzzySearchFailed": "Fuzzy search failed",
+      "vectorSearchFailed": "Vector search failed",
+      "bm25SearchFailed": "BM25 search failed",
+      "queryContextFailed": "Failed to get query context",
+      "folderQueryContextFailed": "Failed to get folder query context",
+      "updateFileVectorsFailed": "Failed to update vectors for file {filePath}",
+      "embeddingCheckFailed": "Embedding model check failed",
+      "vectorDatabaseUpdateTitle": "Vector database update",
+      "unnamedFile": "Unnamed file"
     },
     "mcp": {
       "title": "MCP",
@@ -2079,7 +2092,8 @@
         "presenceDeviceMobile": "Mobile",
         "presenceDeviceDesktop": "Desktop",
         "errors": {
-          "SELF_HOSTED_SYNC_CONFIG_MISSING": "The self-hosted sync configuration does not exist."
+          "SELF_HOSTED_SYNC_CONFIG_MISSING": "The self-hosted sync configuration does not exist.",
+          "workspaceKeyUnavailable": "Workspace key unavailable: {workspaceId} v{keyVersion}"
         }
       },
       "connectionTab": "Connection",
@@ -2285,7 +2299,8 @@
         "selecting": "Choosing",
         "accessFailedTitle": "Folder unavailable",
         "accessFailedDescription": "Choose a writable cloud-drive folder and try again.",
-        "clear": "Clear"
+        "clear": "Clear",
+        "saveBeforeSwitchFailed": "Could not save the current edits before switching workspaces"
       },
       "oneDrive": {
         "title": "OneDrive",
@@ -2805,7 +2820,205 @@
       "remoteUploadUnsupported": "The current sync method does not support remote workspace upload.",
       "platformUploadFailed": "{effectivePlatform} upload failed.",
       "cloudFolderNotConfigured": "The cloud folder is not configured.",
-      "canvasConflictCopyTitle": "{title} (Sync conflict, {origin} copy)"
+      "canvasConflictCopyTitle": "{title} (Sync conflict, {origin} copy)",
+      "s3ConfigNotFound": "S3 configuration not found",
+      "webdavConfigNotFound": "WebDAV configuration not found",
+      "pathIsDirectoryCannotPush": "{path} is a directory and cannot be pushed",
+      "folderSync": {
+        "noMarkdownFiles": "No Markdown files in the current folder",
+        "unsupportedPlatform": "Unsupported platform: {platform}",
+        "syncSuccess": "Successfully synced {count} files",
+        "syncFailed": "Sync failed"
+      },
+      "pathMove": {
+        "stage": {
+          "validateRecord": "Validate record",
+          "readFullDirectorySnapshot": "Read full directory snapshot",
+          "submitRemoteRename": "Submit remote rename",
+          "validateSnapshot": "Validate snapshot",
+          "readRepository": "Read repository",
+          "readSourceDirectory": "Read source directory",
+          "readSourcePath": "Read source path",
+          "readFileVersion": "Read file version",
+          "validateSourceDirectory": "Validate source directory",
+          "validateOriginalFileCommit": "Validate original file commit",
+          "confirmBranchAfterDisconnect": "Confirm branch after disconnect",
+          "confirmRetryBranch": "Confirm retry branch",
+          "validateRetryBranch": "Validate retry branch",
+          "validateFinalPath": "Validate final path",
+          "readImmutableBody": "Read immutable body",
+          "validateBody": "Validate body",
+          "readPostRenameVersion": "Read post-rename version",
+          "readRemoteSnapshot": "Read remote snapshot",
+          "readGitResponse": "Read Git response",
+          "submitGitRename": "Submit Git rename",
+          "validateGitObject": "Validate Git object",
+          "readGitBranch": "Read Git branch",
+          "validateDirectorySnapshot": "Validate directory snapshot",
+          "validateMigrationManifest": "Validate migration manifest",
+          "generateDirectory": "Generate directory",
+          "readCommitIdentity": "Read commit identity",
+          "validateMigrationRecord": "Validate migration record",
+          "validateMigrationContext": "Validate migration context",
+          "validateFileType": "Validate file type",
+          "readConfiguration": "Read configuration",
+          "confirmEmptyRepository": "Confirm empty repository",
+          "confirmMigrationResult": "Confirm migration result",
+          "readDefaultBranch": "Read default branch",
+          "validateDefaultBranch": "Validate default branch",
+          "readBranchVersion": "Read branch version",
+          "readCommitSnapshot": "Read commit snapshot",
+          "validateParentDirectory": "Validate parent directory",
+          "validateSourcePath": "Validate source path",
+          "createMigrationTree": "Create migration tree",
+          "createMigrationCommit": "Create migration commit",
+          "applyMigrationCommit": "Apply migration commit",
+          "confirmDefaultBranchAfterDisconnect": "Confirm default branch after disconnect",
+          "confirmConcurrentBranchUpdate": "Confirm concurrent branch update",
+          "validatePaths": "Validate paths",
+          "validateContext": "Validate context",
+          "verifyMigrationResult": "Verify migration result",
+          "readDirectorySnapshot": "Read directory snapshot",
+          "validateTargetPath": "Validate target path",
+          "validateSourceVersion": "Validate source version",
+          "readResourceInfo": "Read resource info",
+          "readFileSnapshot": "Read file snapshot",
+          "validateTargetParentDirectory": "Validate target parent directory",
+          "createTargetParentDirectory": "Create target parent directory",
+          "verifyTargetParentDirectory": "Verify target parent directory",
+          "confirmTargetParentDirectory": "Confirm target parent directory",
+          "remoteRename": "Remote rename",
+          "verifyRenameResult": "Verify rename result"
+        },
+        "detail": {
+          "sourceDirUnsupportedTypesOriginalKept": "Source directory contains links, submodules, or unsupported file types; original files were kept",
+          "sourceUnsupportedTypeOriginalKept": "Source path is a link, submodule, or unsupported file type; original files were kept",
+          "sourceMissingTargetExistsUnknown": "Source path does not exist but the target already exists; cannot confirm the migration result",
+          "workspacePlatformStateChangedRecordKept": "Workspace, platform, or migration state changed; the record was kept",
+          "sourceLastCommitChanged": "Last commit of the source file changed; the new source version was not accepted",
+          "targetSnapshotMismatchRecordKept": "Target does not match the original snapshot; the migration record was kept",
+          "repositoryEmptiedPreviousUnknown": "Repository was emptied; cannot confirm the previous migration result",
+          "defaultBranchChangedOriginalRecordKept": "Default branch changed; the original migration record was kept",
+          "remoteSourceChangedRecordKept": "Remote source content changed; the migration record was kept",
+          "remoteBodyVersionMismatch": "Remote body does not match the Git object version",
+          "remoteTargetExistsOriginalKept": "Remote target already exists; original content was kept",
+          "oldPathStillHasFilesRecordKept": "Old path still has files; the migration record was kept",
+          "responseInvalidRecordKept": "Invalid response format; the migration record was kept",
+          "parentIsFileRecordKept": "Parent path is a file; the migration record was kept",
+          "sourceListingSnapshotMismatch": "Source directory listing does not match the persisted snapshot",
+          "directoryListTruncatedOrInvalid": "Directory list truncated or invalid format",
+          "sourceDirNoMigratableFiles": "Source directory has no migratable regular files",
+          "fileVersionSnapshotMismatch": "File version does not match the directory snapshot",
+          "pathsOrSnapshotInvalid": "Paths or the persisted migration snapshot are invalid",
+          "directoryEntriesDuplicatedOrInvalid": "Directory contains duplicate or invalid entries",
+          "remoteBodyInvalid": "Invalid remote body format or version",
+          "base64BodyInvalid": "Invalid Base64 body",
+          "gitObjectVersionInvalid": "Invalid Git object version",
+          "remoteObjectInvalid": "Invalid remote object format",
+          "noValidDefaultBranch": "No valid default branch",
+          "directoryEntryCountInvalid": "Invalid total directory entry count",
+          "targetContentChanged": "Target content changed",
+          "syncNotFullyConfigured": "Sync is not fully configured",
+          "commitMismatch": "Commit version mismatch",
+          "directoryListMissingPages": "Directory list is missing pages",
+          "serverRejectedGitRequestRecordKept": "Server rejected the Git protocol request (HTTP {status}); the record was kept",
+          "requestRejectedHttpRecordKept2": "Request rejected (HTTP {status}); the record was kept",
+          "gitBranchChangedOrRejectedOriginalsKept": "Git branch changed or the server rejected the commit; remote original files and the record were kept",
+          "sourceMissingTargetUnconfirmedRecordKept": "Source path missing and target cannot be confirmed as part of the previous migration; the record was kept",
+          "networkFailedPendingRecordKept": "Network request failed or timed out; result pending confirmation, migration record kept",
+          "manifestSnapshotMismatchRecordKept": "Persisted file manifest does not match the immutable directory snapshot; the record was kept",
+          "gitBranchResponseInvalidRecordKept": "Invalid Git branch response or read failure; the record was kept",
+          "responseInterruptedPendingRecordKept": "Response interrupted; result pending confirmation, migration record kept",
+          "noDefaultBranchRecordKept": "Repository has no valid default branch; the record was kept",
+          "directoryContentVersionMismatch": "Directory contents do not match the Git version",
+          "remoteSourceChangedRecordKept2": "Remote source content changed; the record was kept",
+          "remoteBranchMissingRecordKept": "Remote branch does not exist; the record was kept",
+          "serverNoCommitConfirmation": "Server does not support confirming the commit result",
+          "sourceNotFileOrDir": "Source path is not a regular file or directory",
+          "responseInvalidRecordKept2": "Invalid response format; the record was kept",
+          "fileModeTypeMismatch": "File mode does not match its type",
+          "directoryEntriesOrModesInvalid": "Invalid directory entries or modes",
+          "snapshotIncomplete": "Incomplete directory snapshot",
+          "parentNotDirectory": "Parent path is not a directory",
+          "objectVersionInvalid": "Invalid object version",
+          "directoryEntryInvalid": "Invalid directory entry",
+          "responseNoBody": "Response has no body",
+          "userIdentityInvalid": "Invalid user identity",
+          "responseBodyTooLarge": "Response body too large",
+          "requestRejectedHttpRecordKept": "Request rejected (HTTP {status}); the migration record was kept",
+          "remoteSourceChangedSinceAttemptRecordKept": "Remote source file or directory changed since the last attempt; the migration record was kept",
+          "pathThroughNonDirectoryOldKept": "Path passes through a non-directory object; old files were kept: {path}",
+          "githubRefusedRefUpdateTaskKept": "GitHub refused to update the branch reference; the migration task was kept",
+          "snapshotBranchMissingRecordKept": "Remote branch from the recorded migration snapshot does not exist; the migration record was kept",
+          "recordedSourceTargetMissing": "Both recorded remote source and target are missing; cannot confirm the migration result",
+          "githubTokenInsufficient": "GitHub token permissions are insufficient; cannot update the remote branch",
+          "githubRateLimited": "GitHub requests are rate-limited; please try again later",
+          "sourceNotFileOrDirRemoteNotMigrated": "Source path is not a regular file or directory; remote files were not migrated",
+          "workspaceStateChangedRecordKept": "Workspace or migration state changed; the migration record was kept",
+          "responseInvalidOrTimeoutRecordKept": "Invalid response format or read timeout; the migration record was kept",
+          "branchUpdatedByOtherSyncTaskKept": "Remote branch was updated by another sync; the migration task was kept",
+          "branchUpdateUnconfirmedRecordKept": "Cannot confirm the branch update result; the migration record was kept",
+          "pathsInvalidRemoteNotMigrated": "Paths are invalid or nested; remote files were not migrated",
+          "networkFailedRecordKept": "Network request failed or timed out; the migration record was kept",
+          "gitObjectVersionInvalidOldKept": "Invalid Git object version; old files were kept",
+          "gitObjectFormatInvalidOldKept": "Invalid Git object format; old files were kept",
+          "noDefaultBranchOldKept": "Repository has no valid default branch; old files were kept",
+          "remoteTargetExistsContentKept": "Remote target path already exists; existing content was kept",
+          "retryLimitReachedRecordKept": "Safe retry limit reached; the migration record was kept",
+          "branchListInvalidRecordKept": "Invalid branch list format; the migration record was kept",
+          "defaultBranchNoCommitOldKept": "Default branch does not point to a commit; old files were kept",
+          "branchProtectionRejectedUpdate": "Remote branch protection or repository rules rejected the update",
+          "defaultBranchChangedRecordKept": "Default branch changed; the migration record was kept",
+          "commitMismatchOldKept": "Commit version mismatch; old files were kept",
+          "snapshotIncompleteOldKept": "Incomplete directory snapshot; old files were kept",
+          "directoryEntryInvalidOldKept": "Invalid directory entry; old files were kept",
+          "githubSyncNotConfigured": "GitHub sync is not configured",
+          "fileChangedOrRequestFailed": "File changed or request failed (HTTP {status})",
+          "requestRejectedHttpTodoKept": "Request rejected (HTTP {status}); the pending task was kept",
+          "directoryMemberRequestFailed": "Directory member request failed (HTTP {resourceStatus})",
+          "requestRejectedHttp": "Request rejected (HTTP {status})",
+          "recordedPathsMissing": "Both recorded remote source and target paths are missing; cannot confirm the migration result",
+          "sourceMissingTargetExistsPreviousUnknown": "Source path does not exist but the target already exists; cannot confirm the previous migration result",
+          "serverCannotProtectSourceVersionTodoKept": "Server cannot protect the full source version on retry; the pending task was kept",
+          "networkOrRedirectFailedTodoKept": "Network request failed, redirect invalid, or timed out; the pending task was kept",
+          "configChangedTodoKept": "Sync configuration or local migration state changed; the pending task was kept",
+          "redirectDifferentPathTodoKept": "Server returned a redirect to a different path; the pending task was kept",
+          "responseMissingResource": "Response is missing the requested resource; cannot confirm path status",
+          "pathsChangedTodoKept": "Source or target path changed; the pending task was kept",
+          "serverNoMoveTodoKept": "Server does not support MOVE; the pending task was kept",
+          "directoryCreationUnconfirmedTodoKept": "Cannot confirm the directory creation result; the pending task was kept",
+          "pathsInvalidOrNested": "Source and target paths are invalid or nested within each other",
+          "serverRateLimitedTodoKept": "Server temporarily rate-limited the request; the pending task was kept",
+          "networkFailedTodoKept": "Network request failed or timed out; the pending task was kept",
+          "resourceTypeMissing": "Resource type missing; cannot confirm the complete directory",
+          "directoryMemberPathsDuplicatedOrOutOfScope": "Directory member paths are duplicated or outside the requested scope",
+          "targetExistsNothingOverwritten": "Target already exists; no remote content was overwritten",
+          "partialMembersMigratedTodoKept": "Some directory members were not migrated; the pending task was kept",
+          "directoryChanged": "Directory changed; cannot confirm complete contents",
+          "remoteSourceChangedTodoKept": "Remote source content changed; the pending task was kept",
+          "webdavResponseInvalid": "Invalid WebDAV response format",
+          "directoryMembersDuplicatedOrTooMany": "Duplicate directory members or too many members",
+          "targetParentNotCreated": "Target parent directory was not created",
+          "targetParentNotDirectory": "Target parent path is not a directory",
+          "directoryMemberMissingPath": "Directory member is missing its path",
+          "directoryMemberUnexpectedOrigin": "Directory member came from an unexpected origin",
+          "defaultBranchChangedRecordKept2": "Default branch changed, record kept"
+        },
+        "failureTemplate": {
+          "gitPlatform": "{providerName} path migration failed ({source} -> {target}, {stage}): {detail}",
+          "gitee": "Gitee path migration failed ({source} -> {target}, {stage}): {detail}",
+          "github": "GitHub path migration failed ({source} -> {target}, {stage}): {detail}",
+          "webdav": "WebDAV path migration failed ({source} -> {target}, {stage}): {detail}"
+        },
+        "metadata": {
+          "invalidName": "Sync metadata is invalid: {name}",
+          "invalidPath": "Sync metadata is invalid: {path}",
+          "migrationInvalid": "Path migration metadata is invalid",
+          "migrationPathInvalid": "Path migration metadata has an invalid path",
+          "syncVersionChanged": "Sync version changed during path migration; current sync metadata was kept",
+          "renameContentInvalid": "Remote rename content validation failed"
+        }
+      }
     },
     "imageHosting": {
       "title": "Image Storage",
@@ -2883,7 +3096,8 @@
         },
         "createNewRepo": "Create New Repository",
         "recheckRepo": "Recheck",
-        "recheckingRepo": "Checking..."
+        "recheckingRepo": "Checking...",
+        "queryFailed": "Query failed"
       },
       "s3": {
         "title": "Object Storage",
@@ -3045,7 +3259,8 @@
         "unknownVersion": "Unknown version",
         "ready": "Available",
         "unavailable": "Unavailable",
-        "provider": "Current engine"
+        "provider": "Current engine",
+        "timeout": "OCR recognition timed out"
       },
       "vlm": {
         "title": "VLM Enhancement (Optional)",
@@ -3968,7 +4183,11 @@
         "tag": "Tag",
         "discardTitle": "Discard unsaved changes?",
         "discardDescription": "Your changes will not be kept after leaving this page.",
-        "discard": "Discard changes"
+        "discard": "Discard changes",
+        "statusLabel": "Status",
+        "charLineCount": "{charCount} characters · {lineCount} lines",
+        "emptyContent": "Empty content",
+        "titleLabel": "Title"
       },
       "type": {
         "scan": "Scan",
@@ -4769,7 +4988,9 @@
                 "title": "Auto edit",
                 "description": "Edit local content automatically; deletions, scripts, skill installation, and other sensitive actions still require approval."
               }
-            }
+            },
+            "externalModifyDenied": "Read-only mode is on, so operations that might modify external data cannot run.",
+            "modifyDenied": "Read-only mode is on. Switch permission modes before running modification operations."
           },
           "autoFinal": {
             "createNote": "Created note \"{name}\".",
@@ -5008,6 +5229,40 @@
             "web": {
               "searchTitle": "Search the internet",
               "readPageTitle": "Read web page"
+            },
+            "askUser": {
+              "title": "Ask user"
+            },
+            "chat": {
+              "readFound": "Found {count} chat records",
+              "readFailed": "Failed to read chat records: {error}",
+              "createSuccess": "Chat record created successfully, ID: {lastInsertId}",
+              "createFailed": "Failed to create chat record: {error}",
+              "notFound": "No chat record found with ID {id}",
+              "updateSuccess": "Chat record updated successfully, ID: {id}",
+              "updateFailed": "Failed to update chat record: {error}",
+              "deleteSuccess": "Chat record deleted successfully, ID: {id}",
+              "deleteFailed": "Failed to delete chat record: {error}",
+              "clearByTagSuccess": "All chat records under tag {tagId} cleared successfully",
+              "clearFailed": "Failed to clear chat records: {error}",
+              "searchFound": "Found {count} matching chat records",
+              "searchFailed": "Failed to search chat records: {error}",
+              "chatsParamRequired": "Parameter chats must be a non-empty array",
+              "batchCreateSuccess": "Successfully batch-created {count} chat records",
+              "batchCreateFailed": "Failed to batch-create chat records: {error}",
+              "batchUpdateSuccess": "Successfully batch-updated {count} chat records",
+              "batchUpdateFailed": "Failed to batch-update chat records: {error}",
+              "idsParamRequired": "Parameter ids must be a non-empty array",
+              "batchDeleteSuccess": "Successfully batch-deleted {count} chat records",
+              "batchDeleteFailed": "Failed to batch-delete chat records: {error}"
+            },
+            "image": {
+              "inspectTitle": "Inspect image in depth",
+              "notAvailable": "The image does not exist or is no longer accessible in this round.",
+              "promptRequired": "A specific image inspection question must be provided.",
+              "noValidContent": "Image re-inspection returned no valid content.",
+              "reinspected": "Re-inspected image {name}.",
+              "reinspectFailed": "Image re-inspection failed: {error}"
             }
           }
         },
@@ -5264,7 +5519,54 @@
       "timeline": "Timeline",
       "quadrant": "Four quadrants",
       "kanban": "Kanban",
-      "swot": "SWOT analysis"
+      "swot": "SWOT analysis",
+      "content": {
+        "flowchart": {
+          "start": "Start",
+          "process": "Process step",
+          "decision": "Decision condition",
+          "end": "End",
+          "decisionEnd": "Yes"
+        },
+        "mindmap": {
+          "topic": "Central topic",
+          "branchOne": "Branch one",
+          "branchTwo": "Branch two",
+          "branchThree": "Branch three"
+        },
+        "timeline": {
+          "phaseOne": "Phase one",
+          "phaseOneDesc": "Goals and preparation",
+          "phaseTwo": "Phase two",
+          "phaseTwoDesc": "Execution and validation",
+          "phaseThree": "Phase three",
+          "phaseThreeDesc": "Review and delivery"
+        },
+        "quadrant": {
+          "urgentImportant": "Urgent and important",
+          "importantNotUrgent": "Important but not urgent",
+          "urgentNotImportant": "Urgent but not important",
+          "neitherUrgentNorImportant": "Neither urgent nor important"
+        },
+        "kanban": {
+          "todoColumn": "To do",
+          "doingColumn": "In progress",
+          "doneColumn": "Done",
+          "todoCard": "Organize tasks",
+          "doingCard": "Advance work",
+          "doneCard": "Completed items"
+        },
+        "swot": {
+          "strengths": "Strengths",
+          "strengthsDesc": "What are we good at?",
+          "weaknesses": "Weaknesses",
+          "weaknessesDesc": "What needs improvement?",
+          "opportunities": "Opportunities",
+          "opportunitiesDesc": "What external opportunities exist?",
+          "threats": "Threats",
+          "threatsDesc": "What external risks exist?"
+        }
+      }
     },
     "import": {
       "action": "Import canvas or Mermaid",
@@ -5808,7 +6110,8 @@
             "title": "Use the Agent on the note you just created here",
             "desc": "Insert the sample prompt into chat and send it. The Agent will generate a bilingual version based on the current note."
           }
-        }
+        },
+        "sampleRecord": "This is my first record in NoteGen.\n\nI can quickly jot down scattered ideas here without organizing them first.\nLater I can organize these records into a proper note and keep editing.\nIf the content does not read smoothly enough, I can use AI to polish, rewrite, or highlight key points.\nOnce written, notes are saved as local Markdown files, making them easy to find and manage later."
       }
     },
     "unsupportedFile": {
@@ -6255,7 +6558,8 @@
         "syncing": "Pushing",
         "syncFailed": "Push Failed",
         "checkNetworkOrToken": "Please check network connection or token",
-        "quickSync": "Quick Sync"
+        "quickSync": "Quick Sync",
+        "clickToPush": "Click to push"
       },
       "history": {
         "loadingHistory": "Loading history",
@@ -6440,7 +6744,18 @@
     "tableToolbar": {
       "row": "Row",
       "column": "Column",
-      "alignment": "Alignment"
+      "alignment": "Alignment",
+      "insertTable": "Insert table",
+      "addColumnBefore": "Insert column left",
+      "addColumnAfter": "Insert column right",
+      "addRowBefore": "Insert row above",
+      "addRowAfter": "Insert row below",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right",
+      "deleteColumn": "Delete column",
+      "deleteRow": "Delete row",
+      "deleteTable": "Delete table"
     },
     "codeBlockPreview": {
       "findPlugin": "Search plugins",
@@ -6618,7 +6933,10 @@
       "reject": "Reject",
       "undo": "Undo",
       "generating": "Generating...",
-      "abort": "Abort"
+      "abort": "Abort",
+      "header": "AI suggestions",
+      "selectHint": "↑↓ Select",
+      "thinking": "Thinking..."
     },
     "canvasDrop": {
       "hint": "Drop to insert canvas image",
@@ -6946,6 +7264,28 @@
         "mermaidEr": "ER diagram",
         "mermaidJourney": "User journey",
         "backToRootMenu": "Back to main menu"
+      },
+      "contextBar": {
+        "undo": "Undo",
+        "redo": "Redo",
+        "bold": "Bold",
+        "highlight": "Highlight",
+        "more": "More",
+        "italic": "Italic",
+        "underline": "Underline",
+        "strike": "Strikethrough",
+        "code": "Inline code",
+        "blockquote": "Blockquote",
+        "bulletList": "Bullet list",
+        "orderedList": "Ordered list",
+        "taskList": "Task list",
+        "codeBlock": "Code block",
+        "imageSrc": "Address",
+        "imageAlt": "Description",
+        "deleteImage": "Delete",
+        "addRow": "Add row",
+        "addColumn": "Add column",
+        "align": "Align"
       }
     },
     "syncHistory": {
@@ -6961,6 +7301,27 @@
       "restoreThisVersion": "Restore this version",
       "restoring": "Restoring...",
       "restore": "Restore"
+    },
+    "mathEditor": {
+      "title": "Insert formula",
+      "formulaLabel": "LaTeX formula",
+      "placeholder": "Enter a LaTeX formula, e.g. \\frac{a}{b}",
+      "previewLabel": "Preview",
+      "examplesLabel": "Common formula examples:",
+      "fraction": "Fraction:",
+      "superscript": "Superscript:",
+      "subscript": "Subscript:",
+      "squareRoot": "Square root:",
+      "summation": "Summation:",
+      "integral": "Integral:",
+      "limit": "Limit:",
+      "greekLetters": "Greek letters:",
+      "cancel": "Cancel",
+      "insert": "Insert"
+    },
+    "remoteCursor": {
+      "cursorLabel": "{label}'s cursor",
+      "otherDevice": "Other device"
     }
   },
   "editorWindow": {

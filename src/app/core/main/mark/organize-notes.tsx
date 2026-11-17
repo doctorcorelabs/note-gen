@@ -93,7 +93,7 @@ const ORGANIZE_STEP_ORDER: OrganizeStep[] = ['template', 'records', 'settings']
 
 function sanitizeMarkdownTitle(title: string) {
   const sanitized = title.trim().replace(/[\/\\:*?"<>|]/g, '_').substring(0, 50)
-  return sanitized || '整理笔记'
+  return sanitized || 'Organized Notes'
 }
 
 function normalizeOutputFolder(folderValue: string) {
@@ -525,7 +525,7 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
     const outputFolder = normalizeOutputFolder(outputFolderValue)
     const preferredTitle = outputTitle.trim()
     const extraRequirement = additionalRequirement.trim()
-    const fileName = `整理笔记_${timestamp}.md`
+    const fileName = `Organized Notes_${timestamp}.md`
     const filePath = buildOutputPath(outputFolder, fileName)
 
     try {
