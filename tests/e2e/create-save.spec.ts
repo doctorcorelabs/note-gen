@@ -72,8 +72,16 @@ backendTest(
 
     await fileTreeItemByName(page, 'notes').click({ button: 'right' })
     await newFileMenuItem(page).click()
+    await expect(renameInput(page)).toBeVisible({ timeout: 10_000 })
     await renameInput(page).fill('e2e-created-note.md')
-    await renameInput(page).press('Enter')
+    // Commit with the keyboard, not locator.press: the input is
+    // detached and re-mounted by React after fill (rerun-1 call
+    // log: "element was detached from the DOM, retrying"), so a
+    // locator press waits for a stable element that never settles
+    // and starves the test. The input holds focus after fill, so
+    // the keyboard Enter reaches it regardless of re-mounts.
+    await page.keyboard.press('Enter')
+    await expect(renameInput(page)).toHaveCount(0, { timeout: 10_000 })
     await expect(visibleVisualEditor(page)).toBeVisible({ timeout: 10_000 })
 
     await viewModeToggleToSource(page).click()

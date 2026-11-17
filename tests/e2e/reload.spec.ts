@@ -58,6 +58,7 @@ backendTest(
     const before = await getSettingsDocument(page.request, backend.apiBaseUrl)
 
     await app.reloadHome()
+    await app.switchToFilesTab()
     await app.expectBooted()
 
     await app.ensureFolderExpanded('notes', SEARCH_TERMS.uniqueTermFileName)

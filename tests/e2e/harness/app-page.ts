@@ -168,8 +168,15 @@ export class AppPage {
    * button containing the lucide-highlighter svg, followed by an
    * observation wait for #web-inbox. The accessibility fix
    * (accessible names on collapsed tabs) is follow-up UI work.
+   * Idempotent: when the inbox is already rendered, no click is
+   * performed (a click on the selected tab may toggle the
+   * sidebar closed, and the tab state survives reloads).
    */
   async switchToRecordsTab(): Promise<void> {
+    if ((await this.page.locator('#web-inbox').count()) > 0) {
+      await expect(this.page.locator('#web-inbox')).toBeVisible({ timeout: 10_000 })
+      return
+    }
     const clicked = await this.page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'))
       const visible = buttons.filter(
@@ -189,9 +196,14 @@ export class AppPage {
    * Switch the sidebar to the Files (notes tree) tab and wait for
    * the file tree to render. Same icon-click workaround as
    * switchToRecordsTab (lucide-files), for the same D-DEMO-7
-   * reason.
+   * reason. Idempotent: when the tree is already rendered, no
+   * click is performed.
    */
   async switchToFilesTab(): Promise<void> {
+    if ((await fileTree(this.page).count()) > 0) {
+      await expect(fileTree(this.page)).toBeVisible({ timeout: 10_000 })
+      return
+    }
     const clicked = await this.page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'))
       const visible = buttons.filter(
