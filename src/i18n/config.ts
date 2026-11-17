@@ -5,6 +5,15 @@ export const SUPPORTED_LOCALES = ['en', 'zh'] as const;
 export type SupportedLocale = string;
 
 export const DEFAULT_LOCALE: SupportedLocale = 'en';
+// Total budget for one message catalog load in NextIntlProvider
+// (mitigation M1 for F1-59, wave 4). The provider gates every route:
+// without a bound, a catalog chunk that never settles leaves a blank
+// page forever with no message, because the boot guard below the gate
+// never mounts. When the budget expires the provider shows a visible
+// error screen with retry instead of rendering null without a bound.
+// The value matches the boot guard total budget (BOOT_GUARD_TIMEOUT_MS),
+// so a stalled catalog fails on the same timescale as a stalled guard.
+export const I18N_LOAD_TIMEOUT_MS = 15000;
 // The zh catalog is the source of truth for message fallback: keys missing
 // from any locale resolve to zh strings. Keep this separate from
 // DEFAULT_LOCALE so changing the default UI language never changes which

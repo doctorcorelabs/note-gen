@@ -16,6 +16,11 @@
 // screen with one clear action and a retry button. The guard never
 // redirects on failure, because a blind redirect would move the
 // failure into initializeApp, where it is only logged to the console.
+// The navigation itself is also bounded (BOOT_NAVIGATION_TIMEOUT_MS):
+// if the URL has not reached the target when the timer fires, the
+// spinner is replaced by a visible navigation timeout error with
+// retry, so a stalled router.push can never spin without a bound
+// (mitigation M2 for F1-59, wave 4).
 //
 // Desktop behavior is preserved: inside the Tauri shell the page runs
 // the same Store reads and the same redirect decision as upstream,
@@ -32,6 +37,7 @@ import { isTauri } from '@/lib/platform/detect'
 import {
   BOOT_FAILURE_MESSAGES,
   BOOT_GUARD_TIMEOUT_MS,
+  BOOT_NAVIGATION_TIMEOUT_MS,
   resolveRedirectTarget,
   runBootGuard,
   type BootGuardFailure,
@@ -82,6 +88,35 @@ export default function Home() {
     const isCurrent = () => attemptRef.current === attemptId && !controller.signal.aborted
     setState({ kind: 'checking', step: 'guard' })
 
+    // Navigation budget (M2, F1-59): the guard budget ends when
+    // runBootGuard resolves, so router.push below needs its own
+    // timer. A committed navigation unmounts this page and the
+    // effect cleanup clears the timer. If the timer fires while
+    // this page is still mounted and the URL has not reached the
+    // target, the navigation stalled and a visible error screen
+    // with retry replaces the spinner instead of spinning
+    // without a bound.
+    let navigationTimer: ReturnType<typeof setTimeout> | undefined
+    function beginNavigation(target: string) {
+      setState({ kind: 'redirecting' })
+      router.push(target)
+      navigationTimer = setTimeout(() => {
+        if (!isCurrent()) {
+          return
+        }
+        if (typeof window !== 'undefined' && window.location.pathname !== target) {
+          setState({
+            kind: 'error',
+            failure: {
+              code: 'BOOT_NAVIGATION_TIMEOUT',
+              step: 'guard',
+              detail: 'NAVIGATION_TIMEOUT',
+            },
+          })
+        }
+      }, BOOT_NAVIGATION_TIMEOUT_MS)
+    }
+
     async function runWebAttempt() {
       const outcome = await runBootGuard(
         {
@@ -116,8 +151,7 @@ export default function Home() {
         // memory and is refetched after a reload by the auth
         // client; nothing is seeded or stored here.
         getSharedAuthSessionClient().resetSessionStatus()
-        setState({ kind: 'redirecting' })
-        router.push(outcome.target)
+        beginNavigation(outcome.target)
       } else if (outcome.status === 'failed') {
         if (outcome.failure.code === 'BOOT_SESSION_EXPIRED') {
           // A rejected session must never keep a stale CSRF token
@@ -156,8 +190,7 @@ export default function Home() {
           return
         }
         settled = true
-        setState({ kind: 'redirecting' })
-        router.push(target)
+        beginNavigation(target)
       } catch {
         if (settled || !isCurrent()) {
           return
@@ -182,6 +215,7 @@ export default function Home() {
       void runWebAttempt()
     }
     return () => {
+      clearTimeout(navigationTimer)
       controller.abort()
     }
   }, [attempt, router])

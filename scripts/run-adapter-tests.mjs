@@ -87,6 +87,7 @@ const ADAPTER_SPECS = [
 // directories.
 const WEB_NODE_SPECS = [
   "src/lib/web/api-client.spec.ts",
+  "src/lib/web/boot-guard.spec.ts",
   "src/lib/web/errors.spec.ts",
   "src/lib/web/platform-boot.spec.ts",
   "src/lib/web/search-client.spec.ts",

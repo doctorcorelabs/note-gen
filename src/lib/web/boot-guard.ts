@@ -32,6 +32,20 @@ import {
 /** Total budget for one guard attempt, from the first check to the redirect decision. */
 export const BOOT_GUARD_TIMEOUT_MS = 15000;
 
+/**
+ * Budget for the client navigation that follows a ready guard outcome
+ * (mitigation M2 for F1-59, wave 4). The guard budget above ends when
+ * runBootGuard resolves, so it cannot bound router.push: the RSC
+ * payload and the /core/main chunks load after the guard is done. The
+ * page component enforces this budget with a timer that shows a
+ * visible error screen when the URL has not reached the target in
+ * time. 30 seconds matches the boot spec URL bound and leaves margin
+ * over the slowest healthy navigation observed under load (17.6
+ * seconds in the F1-59 harness verification); a navigation slower
+ * than this bound is treated as stalled, not waited on silently.
+ */
+export const BOOT_NAVIGATION_TIMEOUT_MS = 30000;
+
 export type BootStep = "session" | "live" | "ready" | "store" | "workspace" | "guard";
 
 export type BootFailureCode =
@@ -41,6 +55,7 @@ export type BootFailureCode =
   | "BOOT_WORKSPACE_NOT_FOUND"
   | "BOOT_NETWORK_UNREACHABLE"
   | "BOOT_TIMEOUT"
+  | "BOOT_NAVIGATION_TIMEOUT"
   | "BOOT_STORE_UNAVAILABLE"
   | "BOOT_UNKNOWN";
 
@@ -104,6 +119,11 @@ export const BOOT_FAILURE_MESSAGES: Record<BootFailureCode, BootGuardMessage> = 
   BOOT_TIMEOUT: {
     title: "NoteGen is taking too long to start.",
     body: "The server did not respond in time. Your notes are safe. Try again.",
+    action: "retry",
+  },
+  BOOT_NAVIGATION_TIMEOUT: {
+    title: "NoteGen is taking too long to open your workspace.",
+    body: "The workspace did not finish loading in time. Your notes are safe. Try again.",
     action: "retry",
   },
   BOOT_STORE_UNAVAILABLE: {
