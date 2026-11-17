@@ -27,27 +27,23 @@ import {
  * on the `SqlDbClient` interface defined here; this module must never
  * import the adapter, so the dependency points one way only.
  *
- * SEAM (V3-30 unification): at this base there is no centralized API
- * client module in the tree (V3-30a/b land on branches web-api-client
- * and web-api-csrf, not yet merged), so this module carries a minimal
- * typed fetch of its own: exactly two fixed relative paths, JSON
- * bodies, cookie credentials, an injected CSRF token provider, and
- * envelope parsing. It deliberately duplicates none of the V3-30a
- * client: no timeout budget, no abort race, no 401 seam, no request
- * id generation, no path validation beyond the two fixed constants.
- * When V3-30 lands, the integrator replaces the fetch call inside
- * `postAttempt` with `ApiClient.requestJson` (same paths, same bodies,
- * same idempotency-key header, CSRF from the V3-30b provider) and
- * keeps validation, chunking, the retry wrapper, and error mapping
- * unchanged. The error type below mirrors the V3-30a `ApiError`
- * fields (`code` flat alias of `wireCode`, `status`, `retryable`,
- * `requestId`, frozen `details`, message built from codes and status
- * only) so that replacement is mechanical: catch `ApiError`, feed its
- * fields to `sqlDbErrorFromWire`, and throw the result. One seam
- * limit: `ApiClient.requestJson` does not surface response headers,
- * so `Retry-After` honoring in the retry wrapper falls back to the
- * default delay after unification unless the seam surfaces that
- * header; the retry budget and triggers stay the same either way.
+ * SEAM (V3-30 unification): the centralized API client and CSRF
+ * seam have landed (src/lib/web/api-client.ts, csrf.ts), and this
+ * module deliberately still carries a minimal typed fetch of its
+ * own: exactly two fixed relative paths, JSON bodies, cookie
+ * credentials, an injected CSRF token provider plus an injected
+ * token refresher, and envelope parsing. It stays standalone
+ * because the retry wrapper needs the `Retry-After` header and
+ * the CSRF refresh branch, which `ApiClient.requestJson` does
+ * not surface, and because every transaction call carries an
+ * idempotency key the centralized client does not manage. The
+ * error type below mirrors the V3-30a `ApiError` fields (`code`
+ * flat alias of `wireCode`, `status`, `retryable`, `requestId`,
+ * frozen `details`, message built from codes and status only).
+ * The CSRF provider and refresher arrive through deps from the
+ * one shared token store owned by boot (see wiring.ts and
+ * platform-boot.ts); a request without a token is sent without
+ * the header and the server answers honestly.
  *
  * Server semantics this client matches (server/src/services/db/):
  * - Request limits: at most 50 operations per request, body at most
@@ -82,22 +78,31 @@ import {
  * Retry policy (kontrak 2.2 K-07, kontrak 6.2, kontrak 1.2 butir 6):
  * each chunk request gets at most one retry (two attempts total).
  * The retry fires only when (a) no response was received at all (a
- * rejected fetch: a network failure), or (b) the response is 429 or
- * 503 and its envelope does not say `retryable: false`. Rule (b) is
- * the contract's `retryable` semantics: K-07 makes `retryable: true`
- * mean the exact same request may be repeated, and the 6.2 catalog
- * marks exactly `rate_limited`, `service_unavailable`, and
- * `write_queue_timeout` (429/503) retryable. Every other HTTP
- * response is never retried: 409 conflicts (including
- * `revision_conflict`) need a new guard or a user decision, never a
- * blind repeat, and 400/401/403/404/410/413/500/501 responses cannot
- * succeed by repetition. The retry reuses the same body and the same
- * idempotency key (desain-sql-adapter 4.3 rule 6: keys exist so
- * network retries cannot double-write), waits out a backoff delay
- * first (the `Retry-After` delta-seconds value on 429/503 when the
+ * rejected fetch: a network failure), (b) the response is 429 or
+ * 503 and its envelope does not say `retryable: false`, or (c) the
+ * response is 403 `csrf_invalid` and a `refreshCsrfToken` dep is
+ * injected: the token is refreshed once and the same request is
+ * retried once with rebuilt headers (same body, same idempotency
+ * key, freshly read token). Rule (b) is the contract's `retryable`
+ * semantics: K-07 makes `retryable: true` mean the exact same
+ * request may be repeated, and the 6.2 catalog marks exactly
+ * `rate_limited`, `service_unavailable`, and `write_queue_timeout`
+ * (429/503) retryable. The CSRF branch (c) shares the single retry
+ * budget: whichever trigger fires first consumes it, a second
+ * `csrf_invalid` throws, and a failed refresh surfaces the
+ * original `csrf_invalid` error. Every other HTTP response is
+ * never retried: 409 conflicts (including `revision_conflict`)
+ * need a new guard or a user decision, never a blind repeat, and
+ * 400/401/403/404/410/413/500/501 responses cannot succeed by
+ * repetition (the one 403 exception is the CSRF branch above).
+ * Every retry reuses the same body and the same idempotency key
+ * (desain-sql-adapter 4.3 rule 6: keys exist so network retries
+ * cannot double-write). Triggers (a) and (b) wait out a backoff
+ * delay first (the `Retry-After` delta-seconds value on 429/503 when the
  * server sends one, capped; else a 500 ms default taken from the
- * 6.2 `write_queue_timeout` backoff ladder), and never fires on a
- * caller abort. This is a deliberate, narrow difference from the
+ * 6.2 `write_queue_timeout` backoff ladder). The CSRF branch (c)
+ * waits for the refresh fetch instead of a backoff delay. No
+ * retry ever fires on a caller abort. This is a deliberate, narrow difference from the
  * V3-30a client, which never retries anything: the centralized
  * client carries no idempotency keys, so a blind repeat could
  * double-write, while every transaction call here carries a key and
@@ -986,6 +991,14 @@ export type SqlDbCsrfTokenProvider = () =>
   | undefined
   | Promise<string | null | undefined>;
 
+/**
+ * CSRF token refresher, from the same shared seam as the provider:
+ * refresh the cached token so the next `getCsrfToken` call reads a
+ * fresh one (mirrors `CsrfTokenStore.refreshToken`). The return
+ * value is ignored; a throw leaves the original error to surface.
+ */
+export type SqlDbCsrfTokenRefresher = () => Promise<unknown>;
+
 export interface SqlDbClientDeps {
   /** Fetch implementation. Defaults to the global fetch, resolved per request. */
   fetchImpl?: SqlDbFetchLike;
@@ -996,6 +1009,13 @@ export interface SqlDbClientDeps {
    * is then sent without the header.
    */
   getCsrfToken?: SqlDbCsrfTokenProvider;
+  /**
+   * CSRF token refresher. Called at most once per chunk request,
+   * only after the server answers 403 `csrf_invalid`; the request
+   * is then retried once with rebuilt headers (see postWithRetry).
+   * When absent, a stale token fails with the server error.
+   */
+  refreshCsrfToken?: SqlDbCsrfTokenRefresher;
   /** Idempotency-key generator. Defaults to `createIdempotencyKey`. Injectable for tests. */
   generateIdempotencyKey?: () => string;
   /**
@@ -1240,10 +1260,14 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
 
   /**
    * POST with the retry policy from the module header: at most one
-   * retry, after a backoff delay, reusing the same headers (hence
-   * the same idempotency key) and the same body. The retry fires
-   * only when no response was received (a rejected fetch) or when
-   * the response is a retryable 429/503. Every other response
+   * retry, reusing the same body and the same idempotency key. The
+   * retry fires only when no response was received (a rejected
+   * fetch, after a backoff delay), when the response is a
+   * retryable 429/503 (after a backoff delay), or when the
+   * response is 403 `csrf_invalid` and a refresher is injected
+   * (after a token refresh, with headers rebuilt through
+   * `rebuildHeaders` so the retry carries the fresh token). The
+   * three triggers share one retry budget. Every other response
    * (409, 400/401/403/404, and the rest) throws on the first
    * attempt. A caller abort is never retried.
    */
@@ -1253,12 +1277,14 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
     headers: Record<string, string>,
     signal: AbortSignal | undefined,
     fetchImpl: SqlDbFetchLike,
+    rebuildHeaders: () => Promise<Record<string, string>>,
   ): Promise<{ status: number; data: unknown }> {
     let attemptedRetry = false;
+    let attemptHeaders = headers;
     for (;;) {
       let result: PostAttemptResult;
       try {
-        result = await postAttempt(path, body, headers, signal, fetchImpl);
+        result = await postAttempt(path, body, attemptHeaders, signal, fetchImpl);
       } catch (error) {
         if (signal?.aborted === true || errorNameOf(error) === "AbortError") {
           throwAborted();
@@ -1292,6 +1318,16 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
       const error = result.error;
       const retryableResponse =
         (error.status === 429 || error.status === 503) && error.retryable;
+      if (!attemptedRetry && error.code === "csrf_invalid" && deps.refreshCsrfToken !== undefined) {
+        attemptedRetry = true;
+        try {
+          await deps.refreshCsrfToken();
+        } catch {
+          throw error;
+        }
+        attemptHeaders = await rebuildHeaders();
+        continue;
+      }
       if (attemptedRetry || !retryableResponse) {
         throw error;
       }
@@ -1390,6 +1426,7 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
           headers,
           options.signal,
           fetchImpl,
+          () => buildHeaders(chunkKey),
         ));
       } catch (error) {
         if (error instanceof SqlDbClientError) {
@@ -1438,6 +1475,7 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
           headers,
           options.signal,
           fetchImpl,
+          () => buildHeaders(null),
         ));
       } catch (error) {
         if (error instanceof SqlDbClientError) {

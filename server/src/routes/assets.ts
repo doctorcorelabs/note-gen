@@ -34,16 +34,13 @@
 // generic 404 not_found on both routes (AD-08): no workspace and a
 // denied workspace are indistinguishable to the caller.
 //
-// Wiring (integrator, NOT in this branch): this module is registered
-// by adding one commented block in buildApp (AD-40 pattern, contract
-// order), constructing a FilesystemAssetStore rooted OUTSIDE the
-// workspace file tree under /data, an AssetService over it, and the
-// database-backed workspace resolver. No ServerConfig field for the
-// asset root exists yet; the integrator defines the root (a dedicated
-// configuration value is preferred over deriving it from the
-// workspace root) when the block lands. Until then, these routes are
-// unregistered in the production app and are exercised directly by
-// the spec in test/assets/.
+// Wiring (W4-WIRE): the assets registration adapter (rank 130,
+// routes/assets.registration.ts) constructs a
+// FilesystemAssetStore rooted OUTSIDE the workspace file tree
+// under /data from the dedicated config value assetRoot
+// (ASSET_ROOT), an AssetService over it, and the database-backed
+// workspace resolver. When ASSET_ROOT is unset, the adapter
+// wires a fail-closed store that answers 503 per request.
 //
 // Serve response (V1-14 4.2): raw bytes with Content-Type from the
 // type validated at upload, Content-Disposition inline for display

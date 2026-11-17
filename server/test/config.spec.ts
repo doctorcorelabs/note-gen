@@ -251,3 +251,23 @@ describe('JWT audience', () => {
     expect(loadConfig({ JWT_AUDIENCE: 'notegen-web' }).jwtAudience).toBe('notegen-web');
   });
 });
+
+describe('optional deployment roots (W4-WIRE)', () => {
+  it('leaves assetRoot and trashRoot undefined when unset', () => {
+    const config = loadConfig({});
+    expect(config.assetRoot).toBeUndefined();
+    expect(config.trashRoot).toBeUndefined();
+  });
+
+  it('reads ASSET_ROOT and TRASH_ROOT verbatim when set', () => {
+    const config = loadConfig({ ASSET_ROOT: '/data/assets', TRASH_ROOT: '/data/trash' });
+    expect(config.assetRoot).toBe('/data/assets');
+    expect(config.trashRoot).toBe('/data/trash');
+  });
+
+  it('treats blank roots as unset', () => {
+    const config = loadConfig({ ASSET_ROOT: '   ', TRASH_ROOT: '' });
+    expect(config.assetRoot).toBeUndefined();
+    expect(config.trashRoot).toBeUndefined();
+  });
+});

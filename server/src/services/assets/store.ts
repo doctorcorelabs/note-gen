@@ -84,6 +84,12 @@ export interface AssetStore {
   save(input: AssetSaveInput): Promise<'saved' | 'exists'>;
   load(workspaceId: string, assetKey: string): Promise<StoredAsset | null>;
   loadMetadata(workspaceId: string, assetKey: string): Promise<AssetMetadata | null>;
+  // Removes the byte file and the metadata file. Returns true when
+  // at least one of the two existed. Idempotent: deleting a
+  // missing key returns false, never an error. Callers that
+  // delete on permanent record removal must check reference
+  // counts first: one key may be referenced by several records.
+  delete(workspaceId: string, assetKey: string): Promise<boolean>;
 }
 
 const WORKSPACE_ID_PATTERN =
@@ -241,6 +247,24 @@ export class FilesystemAssetStore implements AssetStore {
       throw error;
     }
     return parseMetadata(raw, workspaceId, assetKey);
+  }
+
+  async delete(workspaceId: string, assetKey: string): Promise<boolean> {
+    if (!isValidWorkspaceId(workspaceId) || !isValidAssetKey(assetKey)) {
+      return false;
+    }
+    let removed = false;
+    for (const suffix of ['.bin', '.json']) {
+      try {
+        await unlink(join(this.#root, workspaceId, `${assetKey}${suffix}`));
+        removed = true;
+      } catch (error) {
+        if (!isErrorWithCode(error, 'ENOENT') && !isErrorWithCode(error, 'ENOTDIR')) {
+          throw error;
+        }
+      }
+    }
+    return removed;
   }
 }
 

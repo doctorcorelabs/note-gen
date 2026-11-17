@@ -1413,6 +1413,98 @@ describe("web store: queue, flush, and revision guard", () => {
     await store.close();
   });
 
+  it("a stale CSRF token refreshes once and the flush retries with the fresh token", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    let token = "STALE-TOKEN";
+    let refreshes = 0;
+    const { store } = await openStore(server, storage, {
+      getCsrfToken: () => token,
+      refreshCsrfToken: async () => {
+        refreshes += 1;
+        token = "FRESH-TOKEN";
+      },
+    });
+    await store.set("k", "v");
+    server.failNext = { status: 403, code: "csrf_invalid" };
+    await store.save();
+    assert.equal(refreshes, 1);
+    assert.equal(server.patchRequests().length, 2);
+    assert.equal(
+      server.patchRequests()[0]?.headers["X-CSRF-Token"],
+      "STALE-TOKEN",
+    );
+    assert.equal(
+      server.patchRequests()[1]?.headers["X-CSRF-Token"],
+      "FRESH-TOKEN",
+    );
+    assert.equal(
+      server.patchRequests()[0]?.headers["Idempotency-Key"],
+      server.patchRequests()[1]?.headers["Idempotency-Key"],
+    );
+    assert.equal(store.pendingCount(), 0);
+    await store.close();
+  });
+
+  it("a second csrf_invalid after refresh surfaces and keeps the queue", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    let refreshes = 0;
+    const { store } = await openStore(server, storage, {
+      getCsrfToken: () => "STALE-TOKEN",
+      refreshCsrfToken: async () => {
+        refreshes += 1;
+        server.failNext = { status: 403, code: "csrf_invalid" };
+      },
+    });
+    await store.set("k", "v");
+    server.failNext = { status: 403, code: "csrf_invalid" };
+    await assert.rejects(
+      store.save(),
+      (error: unknown) => isWebErrorCode(error, "csrf_invalid"),
+    );
+    assert.equal(refreshes, 1);
+    assert.equal(server.patchRequests().length, 2);
+    assert.equal(store.pendingCount(), 1);
+    await store.close();
+  });
+
+  it("a failed CSRF refresh surfaces the original csrf_invalid error", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const { store } = await openStore(server, storage, {
+      getCsrfToken: () => "STALE-TOKEN",
+      refreshCsrfToken: async () => {
+        throw new Error("refresh failed");
+      },
+    });
+    await store.set("k", "v");
+    server.failNext = { status: 403, code: "csrf_invalid" };
+    await assert.rejects(
+      store.save(),
+      (error: unknown) => isWebErrorCode(error, "csrf_invalid"),
+    );
+    assert.equal(server.patchRequests().length, 1);
+    assert.equal(store.pendingCount(), 1);
+    await store.close();
+  });
+
+  it("without a refresher a csrf_invalid fails the flush with no retry", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const { store } = await openStore(server, storage, {
+      getCsrfToken: () => "STALE-TOKEN",
+    });
+    await store.set("k", "v");
+    server.failNext = { status: 403, code: "csrf_invalid" };
+    await assert.rejects(
+      store.save(),
+      (error: unknown) => isWebErrorCode(error, "csrf_invalid"),
+    );
+    assert.equal(server.patchRequests().length, 1);
+    await store.close();
+  });
+
   it("queue bound flushes before accepting more entries", async () => {
     const server = new FakeSettingsServer();
     const storage = new FakeStorage();

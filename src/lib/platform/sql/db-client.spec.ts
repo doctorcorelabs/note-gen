@@ -1258,6 +1258,87 @@ describe("transport details", () => {
     expect(headerOf(calls[0], "X-CSRF-Token")).toBeUndefined();
   });
 
+  it("refreshes once after csrf_invalid and retries with the fresh token", async () => {
+    let token = "stale-token";
+    let refreshes = 0;
+    const success = autoSuccessHandler();
+    let attempts = 0;
+    const { fetchImpl, calls } = recordingFetch((call) => {
+      attempts += 1;
+      if (attempts === 1) {
+        return fakeResponse(403, errorBody("csrf_invalid"));
+      }
+      return success(call);
+    });
+    const client = createSqlDbClient({
+      fetchImpl,
+      getCsrfToken: () => token,
+      refreshCsrfToken: async () => {
+        refreshes += 1;
+        token = "fresh-token";
+      },
+      delayImpl: async () => {},
+    });
+    await client.executeTransaction(writeOps(1));
+    expect(refreshes).toBe(1);
+    expect(calls).toHaveLength(2);
+    expect(headerOf(calls[0], "X-CSRF-Token")).toBe("stale-token");
+    expect(headerOf(calls[1], "X-CSRF-Token")).toBe("fresh-token");
+    expect(headerOf(calls[0], "Idempotency-Key")).toBe(
+      headerOf(calls[1], "Idempotency-Key"),
+    );
+  });
+
+  it("a second csrf_invalid after refresh throws and consumes the retry budget", async () => {
+    let refreshes = 0;
+    const { fetchImpl, calls } = recordingFetch(() =>
+      fakeResponse(403, errorBody("csrf_invalid")),
+    );
+    const client = createSqlDbClient({
+      fetchImpl,
+      getCsrfToken: () => "stale-token",
+      refreshCsrfToken: async () => {
+        refreshes += 1;
+      },
+      delayImpl: async () => {},
+    });
+    const error = await expectClientError(client.executeBatch(readOps(1)));
+    expect(error.code).toBe("csrf_invalid");
+    expect(refreshes).toBe(1);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a failed CSRF refresh surfaces the original csrf_invalid error", async () => {
+    const { fetchImpl, calls } = recordingFetch(() =>
+      fakeResponse(403, errorBody("csrf_invalid")),
+    );
+    const client = createSqlDbClient({
+      fetchImpl,
+      getCsrfToken: () => "stale-token",
+      refreshCsrfToken: async () => {
+        throw new Error("refresh failed");
+      },
+      delayImpl: async () => {},
+    });
+    const error = await expectClientError(client.executeBatch(readOps(1)));
+    expect(error.code).toBe("csrf_invalid");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("without a refresher a csrf_invalid is never retried", async () => {
+    const { fetchImpl, calls } = recordingFetch(() =>
+      fakeResponse(403, errorBody("csrf_invalid")),
+    );
+    const client = createSqlDbClient({
+      fetchImpl,
+      getCsrfToken: () => "stale-token",
+      delayImpl: async () => {},
+    });
+    const error = await expectClientError(client.executeBatch(readOps(1)));
+    expect(error.code).toBe("csrf_invalid");
+    expect(calls).toHaveLength(1);
+  });
+
   it("remaps a later-chunk failure to the global operation index", async () => {
     let attempts = 0;
     const { fetchImpl, calls } = recordingFetch((call) => {

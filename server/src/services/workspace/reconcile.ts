@@ -366,9 +366,19 @@ export interface ReconcileJobRecord {
 // integrator MUST share one registry instance between the POST
 // route in this slice and the future GET status route, or the GET
 // route will see an empty registry.
+//
+// W4-WIRE addition: the registry also keeps the two most recent
+// finished records plus the consecutive-failure streak, so the GET
+// status route can evaluate the desain 4.5 alert rules that span
+// runs (same path drifting in two consecutive full scans, two
+// total failures in a row). The history is additive: tryStart,
+// complete, fail, running, lastRecord, lastReport, and waitForIdle
+// keep their exact prior behavior.
 export class ReconcileJobRegistry {
   private runningJob: ReconcileJobRecord | null = null;
   private lastFinished: ReconcileJobRecord | null = null;
+  private finishedRecords: ReconcileJobRecord[] = [];
+  private failureStreak = 0;
   private idleWaiters: Array<() => void> = [];
 
   tryStart(jobId: string, full: boolean, dryRun: boolean, startedAt: Date): ReconcileJobRecord | null {
@@ -397,6 +407,8 @@ export class ReconcileJobRegistry {
     this.runningJob.report = report;
     this.lastFinished = this.runningJob;
     this.runningJob = null;
+    this.recordFinished(this.lastFinished);
+    this.failureStreak = 0;
     this.notifyIdle();
   }
 
@@ -408,7 +420,16 @@ export class ReconcileJobRegistry {
     this.runningJob.finishedAt = finishedAt.toISOString();
     this.lastFinished = this.runningJob;
     this.runningJob = null;
+    this.recordFinished(this.lastFinished);
+    this.failureStreak += 1;
     this.notifyIdle();
+  }
+
+  private recordFinished(record: ReconcileJobRecord): void {
+    this.finishedRecords.unshift(record);
+    if (this.finishedRecords.length > 2) {
+      this.finishedRecords.length = 2;
+    }
   }
 
   running(): ReconcileJobRecord | null {
@@ -421,6 +442,32 @@ export class ReconcileJobRegistry {
 
   lastReport(): ReconcileReport | null {
     return this.lastFinished?.report ?? null;
+  }
+
+  // The two most recent finished records, most recent first. An
+  // empty array means no job has finished yet. Failed records are
+  // included with a null report; callers that need reports filter
+  // by status.
+  finishedHistory(): readonly ReconcileJobRecord[] {
+    return [...this.finishedRecords];
+  }
+
+  // The newest completed report, skipping a failed tail: a failed
+  // run has no report, but the last completed scan still describes
+  // the known drift state. Null when no job has completed yet.
+  lastCompletedReport(): ReconcileReport | null {
+    for (const record of this.finishedRecords) {
+      if (record.status === 'completed' && record.report !== null) {
+        return record.report;
+      }
+    }
+    return null;
+  }
+
+  // Consecutive total failures, reset by the next completed run.
+  // Two in a row is a critical alert (desain 4.5 alert table).
+  consecutiveFailures(): number {
+    return this.failureStreak;
   }
 
   waitForIdle(): Promise<void> {

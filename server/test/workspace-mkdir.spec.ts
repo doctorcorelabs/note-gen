@@ -12,9 +12,10 @@
 // accepts only the token "good-csrf"; the Origin check uses the
 // default verifier against the canonical test origin.
 //
-// The mkdir route is not wired into app.ts yet (integrator block,
-// no AppDeps change); these tests register it directly, so they
-// stay green before and after the wiring lands.
+// The mkdir route is wired into buildApp by the workspace
+// structure adapter (rank 60, W4-WIRE); these tests register
+// it directly on a standalone app, so they stay green
+// independent of the wiring.
 
 import { lstat, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

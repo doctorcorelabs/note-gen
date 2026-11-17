@@ -37,11 +37,14 @@
  * `GET /api/health/ready` (design 3.2). That endpoint answers the
  * AD-19 non-envelope health shape, which the batch/transaction port
  * does not speak, so the factory takes an optional `health` probe
- * supplied by wiring (V3-11/AD-33) from the health client. Without
- * a probe, `ready()` falls back to an empty batch call for
- * liveness and reports `migrationsCurrent: false` (unverified, not
- * known-drifted). `ready()` never throws; a failed probe answers
- * not-ok. See divergence D-6 in the task report.
+ * supplied by wiring (V3-11/AD-33) from the probe in `wiring.ts`.
+ * SQL-2 (W4-WIRE): wiring.ts is the probe's final home; no
+ * health-client module exists, and relocating the probe without
+ * a behavior change would be churn. Without a probe, `ready()`
+ * falls back to an empty batch call for liveness and reports
+ * `migrationsCurrent: false` (unverified, not known-drifted).
+ * `ready()` never throws; a failed probe answers not-ok. See
+ * divergence D-6 in the task report.
  *
  * DIVERGENCES, documented for the integrator and for v3b-14d (the
  * reconciliation owner). None of these forks a fourth form; all

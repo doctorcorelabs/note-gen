@@ -41,10 +41,14 @@
  * - Transport arrives through `fetchImpl`, a minimal fetch surface.
  *   The default uses the global fetch with same-origin credentials
  *   and attaches X-CSRF-Token from the injected `getCsrfToken`
- *   provider on mutations. The V3-30a/b API client and CSRF wiring
- *   are unmerged, so this module deliberately does NOT import any
- *   shared client; the integrator replaces fetchImpl/getCsrfToken
- *   with the shared client when it lands. Endpoint paths, the
+ *   provider on mutations. The V3-30 CSRF seam has landed (the
+ *   shared token store in src/lib/web/csrf.ts, owned by boot):
+ *   wiring injects its provider plus the `refreshCsrfToken` dep,
+ *   and this module retries a mutation once after a refresh when
+ *   the server answers 403 `csrf_invalid` (see requestData). This
+ *   module deliberately does NOT import the shared client: the
+ *   injected fetch/CSRF deps stay the seam, so tests can drive
+ *   the adapter without the auth session. Endpoint paths, the
  *   Idempotency-Key header, and the success/error envelope shapes
  *   follow the canonical contract and the landed server routes.
  * - Storage arrives through `storage`, a minimal localStorage
@@ -325,13 +329,23 @@ export interface WebStoreAdapterDeps {
    * CSRF token provider for mutations. Return null/undefined when
    * no token is available; the request is then sent without the
    * header and the server answers 403 honestly. Wiring seam for
-   * the V3-30a/b auth client, which is unmerged.
+   * the shared V3-30 CSRF token store owned by boot.
    */
   getCsrfToken?: () =>
     | string
     | null
     | undefined
     | Promise<string | null | undefined>;
+  /**
+   * CSRF token refresher, from the same shared seam as
+   * `getCsrfToken`. Called at most once per request, only after
+   * the server answers 403 `csrf_invalid` on a mutation; the
+   * request is then retried once with a freshly read token (see
+   * requestData). When absent, a stale token fails the request
+   * with the server error, as before. A refresher that throws
+   * leaves the original `csrf_invalid` error to surface.
+   */
+  refreshCsrfToken?: () => Promise<unknown>;
   /** Key classifier. Defaults to createDefaultStoreKeyClassifier(). */
   classifyKey?: StoreKeyClassifier;
   /**
@@ -1621,8 +1635,8 @@ class WebStoreAdapter implements StoreAdapter {
 
 /**
  * Creates a web StoreAdapter. See the module header for the injected
- * ports and the seams the integrator must wire (key-schema
- * classifier, shared API client/CSRF provider).
+ * ports and the seams wiring must inject (key-schema classifier,
+ * CSRF provider plus refresher from the shared seam owned by boot).
  */
 export function createWebStoreAdapter(
   deps: WebStoreAdapterDeps = {},
@@ -1703,64 +1717,88 @@ export function createWebStoreAdapter(
         });
       }
     }
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (encoded !== undefined) {
-      headers["Content-Type"] = "application/json";
-    }
-    if (opts.idempotencyKey !== undefined) {
-      headers[IDEMPOTENCY_HEADER] = opts.idempotencyKey;
-    }
-    Object.assign(headers, await csrfHeader(opts.mutating));
-    let res: StoreWebFetchResponse;
-    try {
-      res = await fetchImpl(url, {
-        method,
-        headers,
-        body: encoded,
-        credentials: "same-origin",
-      });
-    } catch (err) {
-      if (err instanceof StoreWebError) {
-        throw err;
+    // One CSRF refresh plus one retry, mutations only (STORE-1):
+    // a stale cached token must not fail every later flush until
+    // reload. The retry reuses the same body and idempotency key
+    // and rebuilds the headers, so the retried request carries
+    // the freshly read token. A second `csrf_invalid`, a failed
+    // refresh, or any non-CSRF failure surfaces unchanged.
+    let refreshed = false;
+    for (;;) {
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (encoded !== undefined) {
+        headers["Content-Type"] = "application/json";
       }
-      throw new StoreWebError({
-        code: "network_error",
-        status: 0,
-        message: `Settings request failed: ${messageOf(err)}`,
-        retryable: true,
-      });
-    }
-    let text = "";
-    try {
-      text = await res.text();
-    } catch (err) {
-      throw new StoreWebError({
-        code: "invalid_response",
-        status: res.status,
-        message: `Could not read settings response body: ${messageOf(err)}`,
-        retryable: false,
-      });
-    }
-    let parsed: unknown = null;
-    if (text !== "") {
+      if (opts.idempotencyKey !== undefined) {
+        headers[IDEMPOTENCY_HEADER] = opts.idempotencyKey;
+      }
+      Object.assign(headers, await csrfHeader(opts.mutating));
+      let res: StoreWebFetchResponse;
       try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = null;
+        res = await fetchImpl(url, {
+          method,
+          headers,
+          body: encoded,
+          credentials: "same-origin",
+        });
+      } catch (err) {
+        if (err instanceof StoreWebError) {
+          throw err;
+        }
+        throw new StoreWebError({
+          code: "network_error",
+          status: 0,
+          message: `Settings request failed: ${messageOf(err)}`,
+          retryable: true,
+        });
       }
+      let text = "";
+      try {
+        text = await res.text();
+      } catch (err) {
+        throw new StoreWebError({
+          code: "invalid_response",
+          status: res.status,
+          message: `Could not read settings response body: ${messageOf(err)}`,
+          retryable: false,
+        });
+      }
+      let parsed: unknown = null;
+      if (text !== "") {
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = null;
+        }
+      }
+      if (!res.ok) {
+        const error = errorFromEnvelope(res.status, parsed);
+        if (
+          opts.mutating &&
+          !refreshed &&
+          deps.refreshCsrfToken !== undefined &&
+          error.code === "csrf_invalid"
+        ) {
+          refreshed = true;
+          try {
+            await deps.refreshCsrfToken();
+          } catch {
+            throw error;
+          }
+          continue;
+        }
+        throw error;
+      }
+      if (!isRecord(parsed) || parsed["ok"] !== true || !("data" in parsed)) {
+        throw new StoreWebError({
+          code: "invalid_response",
+          status: res.status,
+          message: "Settings response is not a success envelope",
+          retryable: false,
+        });
+      }
+      return parsed["data"];
     }
-    if (!res.ok) {
-      throw errorFromEnvelope(res.status, parsed);
-    }
-    if (!isRecord(parsed) || parsed["ok"] !== true || !("data" in parsed)) {
-      throw new StoreWebError({
-        code: "invalid_response",
-        status: res.status,
-        message: "Settings response is not a success envelope",
-        retryable: false,
-      });
-    }
-    return parsed["data"];
   }
 
   const transport: Transport = {
