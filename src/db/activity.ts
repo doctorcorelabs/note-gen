@@ -1,8 +1,5 @@
-import { getDb } from './index'
-import { getAllChats } from './chats'
-import { getCanvasProjects } from './canvases'
-import { getAllMarks } from './marks'
-import { getAllMarkdownFiles } from '@/lib/files'
+import { getSqlAdapter } from './index'
+import type { SqlActivitySource } from '../lib/platform/sql/ops-catalog'
 import { shouldCreateWritingSession, truncateActivityText } from '@/lib/activity/events'
 
 export type ActivityEventSource = 'record' | 'chat' | 'writing' | 'canvas'
@@ -28,97 +25,78 @@ interface InsertActivityEventInput {
   createdAt?: number
 }
 
-export async function initActivityDb() {
-  const db = await getDb()
+const ACTIVITY_PAGE_LIMIT = 200
 
-  await db.execute(`
-    create table if not exists activity_events (
-      id integer primary key autoincrement,
-      source text not null,
-      title text not null,
-      description text default null,
-      path text default null,
-      tagId integer default null,
-      dedupeKey text default null,
-      createdAt integer not null
-    )
-  `)
-
-  try {
-    await db.execute(`
-      create unique index if not exists idx_activity_events_dedupe
-      on activity_events(dedupeKey)
-      where dedupeKey is not null
-    `)
-  } catch {
+// The `activity.list` cursor is "<createdAtMs>:<id>" over
+// createdAt-descending order. Page until a short page.
+async function listActivityEvents(source?: SqlActivitySource): Promise<ActivityEvent[]> {
+  const events: ActivityEvent[] = []
+  let cursor: string | undefined
+  for (;;) {
+    const page = await getSqlAdapter().query({
+      kind: 'activity.list',
+      ...(source === undefined ? {} : { source }),
+      ...(cursor === undefined ? {} : { cursor }),
+      limit: ACTIVITY_PAGE_LIMIT,
+    })
+    events.push(...page)
+    if (page.length < ACTIVITY_PAGE_LIMIT) return events
+    const last = page[page.length - 1]
+    cursor = `${last.createdAt}:${last.id}`
   }
+}
 
-  await db.execute(`
-    create index if not exists idx_activity_events_created_at
-    on activity_events(createdAt desc)
-  `)
-
-  await db.execute(`
-    create index if not exists idx_activity_events_source_path_created_at
-    on activity_events(source, path, createdAt desc)
-  `)
-
-  await backfillActivityEvents()
+// The list has no path filter, so the latest event for one path
+// is the first page match in createdAt-descending order. Paging
+// stops at the first match.
+async function getLatestEventTimestamp(source: SqlActivitySource, path: string): Promise<number | undefined> {
+  let cursor: string | undefined
+  for (;;) {
+    const page = await getSqlAdapter().query({
+      kind: 'activity.list',
+      source,
+      ...(cursor === undefined ? {} : { cursor }),
+      limit: ACTIVITY_PAGE_LIMIT,
+    })
+    const match = page.find((event) => event.path === path)
+    if (match !== undefined) return match.createdAt
+    if (page.length < ACTIVITY_PAGE_LIMIT) return undefined
+    const last = page[page.length - 1]
+    cursor = `${last.createdAt}:${last.id}`
+  }
 }
 
 export async function insertActivityEvent(event: InsertActivityEventInput) {
-  const db = await getDb()
-  const createdAt = event.createdAt ?? Date.now()
-
-  return await db.execute(
-    `insert or ignore into activity_events
-      (source, title, description, path, tagId, dedupeKey, createdAt)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      event.source,
-      event.title,
-      event.description ?? null,
-      event.path ?? null,
-      event.tagId ?? null,
-      event.dedupeKey ?? null,
-      createdAt,
-    ]
-  )
+  // Migrated to kind `activity.insert` in wave 4 (W4-CODEMOD).
+  // The handler uses ON CONFLICT DO NOTHING on `dedupeKey`,
+  // matching upstream `insert or ignore`; a repeat insert
+  // reports affected 0 instead of throwing.
+  return await getSqlAdapter().execute({
+    kind: 'activity.insert',
+    event: {
+      source: event.source,
+      title: event.title,
+      description: event.description ?? null,
+      path: event.path ?? null,
+      tagId: event.tagId ?? null,
+      dedupeKey: event.dedupeKey ?? null,
+      createdAt: event.createdAt,
+    },
+  })
 }
 
-export async function getAllActivityEvents() {
-  const db = await getDb()
-  return await db.select<ActivityEvent[]>(`
-    select id, source, title, description, path, tagId, dedupeKey, createdAt
-    from activity_events
-    order by createdAt desc
-  `)
+export async function getAllActivityEvents(): Promise<ActivityEvent[]> {
+  // Migrated to kind `activity.list` in wave 4 (W4-CODEMOD),
+  // paged to the end: upstream returned every row.
+  return await listActivityEvents()
 }
 
 async function getLatestWritingEventTimestamp(path: string) {
-  const db = await getDb()
-  const result = await db.select<{ createdAt: number }[]>(
-    `select createdAt from activity_events
-     where source = 'writing' and path = $1
-     order by createdAt desc
-     limit 1`,
-    [path]
-  )
-
-  return result[0]?.createdAt
+  return await getLatestEventTimestamp('writing', path)
 }
 
 async function getLatestCanvasEventTimestamp(path: string) {
-  const db = await getDb()
-  const result = await db.select<{ createdAt: number }[]>(
-    `select createdAt from activity_events
-     where source = 'canvas' and path = $1
-     order by createdAt desc
-     limit 1`,
-    [path]
-  )
-
-  return result[0]?.createdAt
+  return await getLatestEventTimestamp('canvas', path)
 }
 
 export async function recordWritingActivity(params: {
@@ -168,66 +146,7 @@ export async function recordCanvasActivity(params: {
   })
 }
 
-async function backfillActivityEvents() {
-  const [marks, chats, files, canvases] = await Promise.all([
-    getAllMarks(),
-    getAllChats(),
-    getAllMarkdownFiles(true),
-    getCanvasProjects(),
-  ])
-
-  for (const mark of marks) {
-    if (mark.deleted === 1) continue
-
-    const preview = truncateActivityText(mark.desc || mark.content || mark.url || '', 140)
-
-    await insertActivityEvent({
-      source: 'record',
-      title: preview || mark.type,
-      description: preview || mark.type,
-      tagId: mark.tagId,
-      dedupeKey: `record:${mark.id}`,
-      createdAt: mark.createdAt,
-    })
-  }
-
-  for (const chat of chats) {
-    if (chat.role !== 'user' || !chat.content?.trim()) continue
-
-    const preview = truncateActivityText(chat.content, 140)
-
-    await insertActivityEvent({
-      source: 'chat',
-      title: truncateActivityText(chat.content, 64),
-      description: preview,
-      tagId: chat.tagId,
-      dedupeKey: `chat:${chat.id}`,
-      createdAt: chat.createdAt,
-    })
-  }
-
-  for (const file of files) {
-    const modifiedAt = file.metadata?.modifiedAt?.getTime()
-    if (!modifiedAt) continue
-
-    await insertActivityEvent({
-      source: 'writing',
-      title: truncateActivityText(file.name, 64),
-      description: truncateActivityText(file.relativePath, 140),
-      path: file.relativePath,
-      dedupeKey: `writing-backfill:${file.relativePath}:${modifiedAt}`,
-      createdAt: modifiedAt,
-    })
-  }
-
-  for (const canvas of canvases) {
-    await insertActivityEvent({
-      source: 'canvas',
-      title: truncateActivityText(canvas.title, 64),
-      description: truncateActivityText(canvas.title, 140),
-      path: canvas.id,
-      dedupeKey: `canvas:${canvas.id}:${canvas.updatedAt}`,
-      createdAt: canvas.updatedAt,
-    })
-  }
-}
+// `initActivityDb` (DDL plus a backfill over unmigrated readers)
+// had zero callers and was deleted in wave 4 (W4-CODEMOD). The
+// table is server-owned (migrations). No backfill runs: activity
+// history starts empty on the server.
