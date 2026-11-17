@@ -2873,6 +2873,21 @@ export function TipTapEditor({
       Link.configure({
         openOnClick: false,
         protocols: ['file'],
+        // Relative note links such as "nested/deep-note.md" carry no
+        // scheme, but the default validator rejects multi-segment
+        // relative references, so the rendered anchor got an empty
+        // href and the link could never be opened by clicking
+        // (D-LINK). Allow only scheme-less references here: strip
+        // whitespace first so an obfuscated scheme such as
+        // "java\tscript:" still fails the scheme test, and keep
+        // protocol-relative URLs on the default path. Every URL
+        // with a scheme still goes through defaultValidate, so
+        // javascript:/data: links stay rejected exactly as before.
+        isAllowedUri: (url, { defaultValidate }) => {
+          if (defaultValidate(url)) return true
+          const compacted = url.trim().replace(/\s/g, '')
+          return !compacted.startsWith('//') && !/^[a-z][a-z0-9+.-]*:/i.test(compacted)
+        },
       }),
       TaskList,
       MarkdownTaskItem.configure({
