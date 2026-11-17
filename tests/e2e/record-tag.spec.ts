@@ -138,7 +138,11 @@ backendTest(
 
     await page.keyboard.press('Escape')
     await app.reloadHome()
-    await app.expectBooted()
+    // No expectBooted here: the reload restores the Record tab,
+    // so the file tree is not rendered (same restore behavior
+    // E2E-RELOAD handles by switching to Files first). The
+    // Records-tab switch below waits for the inbox surface, and
+    // the dialog assertions prove the post-reload state.
     await app.switchToRecordsTab()
     await webInboxRecordButton(page, record.content).click()
     await expect(recordDetailDialog(page, record.content)).toBeVisible({ timeout: 10_000 })

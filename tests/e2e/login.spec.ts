@@ -49,7 +49,6 @@
 import { expect, sessionlessBackendTest } from './harness/backend-fixture'
 import { AppPage } from './harness/app-page'
 import { LoginPage } from './harness/login-page'
-import { loginErrorByTestId } from './harness/selectors'
 
 sessionlessBackendTest(
   'E2E-S1 @scaffold login: seeded account signs in and reaches the app',
@@ -100,7 +99,6 @@ sessionlessBackendTest(
     await login.gotoLogin(sessionlessBackend.pageUrl)
     await login.signInWithPassword(sessionlessBackend.credentials.email, 'wrong-password-e2e')
     await login.expectAlert('Email or password is incorrect.')
-    await expect(loginErrorByTestId(page)).toContainText('Email or password is incorrect.')
     expect(page.url(), 'failed login must stay on /login').toContain('/login')
   },
 )

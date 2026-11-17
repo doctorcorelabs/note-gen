@@ -25,8 +25,8 @@
 import { expect, type Page } from '@playwright/test'
 
 import {
-  loginAlertByText,
   loginEmailInput,
+  loginErrorByTestId,
   loginPasswordInput,
   loginSubmitButton,
   loginTitleText,
@@ -95,9 +95,19 @@ export class LoginPage {
     await loginVerifyButton(this.page).click()
   }
 
-  /** Assert a login alert carrying the given exact text is visible. */
+  /**
+   * Assert the login error alert shows the given text. Anchored
+   * on the auth-error test-id, NOT on the alert role: W4-FLOWS
+   * probe14 proved getByRole('alert', {name, exact}) resolves
+   * ZERO elements on this page even while the alert is rendered
+   * with exactly that text (two role="alert" nodes exist and the
+   * accessible-name computation does not yield the visible
+   * text). The test-id plus text containment is the robust
+   * anchor; the role form is a known-bad locator for this
+   * element and must not be reintroduced.
+   */
   async expectAlert(text: string): Promise<void> {
-    await expect(loginAlertByText(this.page, text)).toBeVisible()
+    await expect(loginErrorByTestId(this.page)).toContainText(text)
   }
 
   /**

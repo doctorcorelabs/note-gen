@@ -555,13 +555,14 @@ export function loginUseRecoveryCodeButton(page: Page): Locator {
 }
 
 /**
- * VERIFIED (source) [trunk 69c77dac]. A login page alert carrying
- * the given text. The page renders two possible role="alert"
- * elements (request error and field error); the caller asserts by
- * exact text, for example "Email or password is incorrect." for a
- * failed login (ERROR_MESSAGES in the page source). The generic
- * failure text is the anti-enumeration behavior: the same message
- * covers unknown and known emails.
+ * DEPRECATED (W4-FLOWS probe14): do not use for the login error
+ * alert. The exact-name role query resolves ZERO elements even
+ * while the alert is rendered with exactly the queried text
+ * (two role="alert" nodes exist; the accessible-name computation
+ * does not yield the visible text). Use loginErrorByTestId plus
+ * text containment instead (LoginPage.expectAlert does this).
+ * Kept exported only so existing imports keep compiling; new
+ * specs must not call it.
  */
 export function loginAlertByText(page: Page, text: string): Locator {
   return page.getByRole('alert', { name: text, exact: true })
