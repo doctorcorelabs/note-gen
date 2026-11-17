@@ -5,8 +5,9 @@
 // (AD-36; finding T1 in fase1/audit-workflow-ci.md).
 //
 // The 15 TypeScript spec/test files under src/lib/platform and the
-// 2 under src/lib/web (V3-30a) use node:test, not Vitest. Vitest
-// collects the *.spec.ts files but counts 0 tests from them, and
+// 3 under src/lib/web (V3-30a plus the V3-28 search client) use
+// node:test, not Vitest. Vitest collects the *.spec.ts files but
+// counts 0 tests from them, and
 // its unit project does not include the *.test.ts files at all, so
 // `vitest run --project unit --passWithNoTests` used to exit 0
 // with "no tests" while proving nothing. This runner closes that
@@ -20,7 +21,7 @@
 // src/lib/web/csrf.spec.ts, which this runner must never execute
 // (it would fail on the wrong runner, not on the code). It runs in
 // the Vitest leg of `pnpm test:unit`; VITEST_SPECS below keeps the
-// discovery guard from flagging it. The two node:test suites under
+// discovery guard from flagging it. The three node:test suites under
 // src/lib/web run here like the platform suites: leaving them out
 // would orphan their counted tests from `pnpm test`.
 //
@@ -85,6 +86,7 @@ const ADAPTER_SPECS = [
 const WEB_NODE_SPECS = [
   "src/lib/web/api-client.spec.ts",
   "src/lib/web/errors.spec.ts",
+  "src/lib/web/search-client.spec.ts",
 ];
 
 // Vitest-style suites, run by `vitest run --project unit` (the second
