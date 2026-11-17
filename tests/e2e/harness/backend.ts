@@ -60,8 +60,8 @@
 // E2E_PG_ADMIN_URL variable, and a reachable scratch cluster. This
 // module has no silent defaults for any of them.
 //
-// Anti-flaky rules (desain-pengujian 4.3): no fixed sleeps, no
-// waitForTimeout. Readiness is polled by observation (the ready
+// Anti-flaky rules (desain-pengujian 4.3): no fixed sleeps and no
+// fixed-duration waits. Readiness is polled by observation (the ready
 // endpoint answering ok) with a deadline; the poll interval is not
 // a timing assertion. A backend that exits early fails the wait
 // immediately with its stderr tail instead of burning the deadline.

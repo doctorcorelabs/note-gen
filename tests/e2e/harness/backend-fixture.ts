@@ -39,7 +39,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, type Page } from '@playwright/test'
 
 import {
   allocateFreePort,
@@ -194,7 +194,10 @@ async function establishSession(page: Page, pageUrl: string, backend: StartedBac
 }
 
 export const backendTest = base.extend<{ backend: BackendContext }>({
-  backend: async ({ page }, use, testInfo) => {
+  // The second fixture argument is named runTest (not the usual
+  // Playwright `use`) so the React Hooks lint rule does not mistake
+  // the fixture callback for a Hook; the behavior is identical.
+  backend: async ({ page }, runTest, testInfo) => {
     const repoRoot = process.cwd()
     const adminUrl = readPgAdminUrl()
     const seed: SeedWorkspace = await prepareSeedWorkspace()
@@ -254,7 +257,7 @@ export const backendTest = base.extend<{ backend: BackendContext }>({
           )
         },
       }
-      await use(context)
+      await runTest(context)
     } finally {
       if (gateway !== undefined) {
         try {
