@@ -26,19 +26,26 @@ import {
   type SqlTagRow,
   type SqlWikiCommitResult,
 } from "./ops-catalog";
-import type { SqlAdapter } from "./interface";
+import { SqlAdapterError, type SqlAdapter, type SqlErrorCode } from "./interface";
+import type { SqlDbClient } from "./db-client";
 import {
   SQL_WEB_FORBIDDEN_OPERATION_FIELDS,
   SQL_WEB_MAX_OPERATIONS_PER_REQUEST,
-  SqlAdapterError,
   createWebSqlAdapter,
   isSqlDbPortError,
   sqlErrorCodeFromWireCode,
   type SqlBatchResult,
   type SqlDbPort,
-  type SqlErrorCode,
   type SqlTransactionResult,
 } from "./sql.web";
+
+// Wiring proof: the db-client satisfies the adapter port
+// structurally, so wiring may pass a SqlDbClient where the adapter
+// asks for a SqlDbPort. A mismatch fails typecheck here.
+type AssertTrue<T extends true> = T;
+export type SqlDbClientPortConformance = AssertTrue<
+  SqlDbClient extends SqlDbPort ? true : false
+>;
 
 // ---------------------------------------------------------------------------
 // Fakes and helpers
@@ -209,18 +216,19 @@ function errorDetails(error: SqlAdapterError): Record<string, unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Construction and stub compatibility
+// Construction and surface
 // ---------------------------------------------------------------------------
 
 describe("WebSqlAdapter construction", () => {
-  it("reports mode web and carries the stub marker for today's SqlAdapter type", () => {
+  it("reports mode web, satisfies SqlAdapter, and carries no stub marker", () => {
     const adapter = createWebSqlAdapter({ port: new FakePort() });
     expect(adapter.mode).toBe("web");
-    expect(adapter.__sqlAdapterStub).toBe(true);
-    // Assignability to the marker-only stub type (deleted at W23
-    // with the interface replacement; see D-6 in sql.web.ts).
-    const asStub: SqlAdapter = adapter;
-    expect(asStub.__sqlAdapterStub).toBe(true);
+    // Assignability to the real SqlAdapter surface (W23/3E fold;
+    // see D-6 in sql.web.ts). The AD-26 stub marker must never
+    // return: its presence would mean the stub type came back.
+    const asAdapter: SqlAdapter = adapter;
+    expect(asAdapter.mode).toBe("web");
+    expect("__sqlAdapterStub" in adapter).toBe(false);
   });
 
   it("rejects construction without a conforming port", () => {

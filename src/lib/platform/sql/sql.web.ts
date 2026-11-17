@@ -17,21 +17,21 @@
  * is restated here, so a catalog amendment flows through with no
  * change to this file.
  *
- * PORT SEAM (read before integrating): this module defines the port
- * interface `SqlDbPort` and consumes it. The port implementation is
- * owned by sibling worker v3b-14c in `db-client.ts` on another
- * branch (`SqlDbClient`, fetch + CSRF + envelope + idempotency keys
- * + retry policy). The port types below deliberately mirror the
- * 14c shapes (same method names, same result shapes, same error
- * fields) so the swap is mechanical: at integration the integrator
- * DELETES the port section of this file, imports the 14c types from
- * `./db-client`, and passes a `SqlDbClient` where this module asks
- * for a `SqlDbPort` (a 14c client satisfies this port structurally:
- * its extra optional `signal` options do not break assignability).
- * The adapter itself never touches fetch, headers, cookies, or
- * envelopes. Auth and CSRF are the port's job (AD-40); the adapter
- * only validates operations, chunks read batches, maps errors, and
- * narrows rows per kind.
+ * PORT SEAM: this module defines the port interface `SqlDbPort`
+ * and consumes it. The port implementation lives in `db-client.ts`
+ * (`SqlDbClient`, fetch + CSRF + envelope + idempotency keys +
+ * retry policy). The port types below mirror the client shapes
+ * (same method names, same result shapes, same error fields), and
+ * a `SqlDbClient` satisfies this port structurally: its extra
+ * optional `signal` options do not break assignability (pinned by
+ * a type-level check in the spec). The seam is retained
+ * deliberately at the 3E fold so the dependency still points one
+ * way: this module never imports the port implementation file.
+ * Wiring passes a `SqlDbClient` where this module asks for a
+ * `SqlDbPort`. The adapter itself never touches fetch, headers,
+ * cookies, or envelopes. Auth and CSRF are the port's job (AD-40);
+ * the adapter only validates operations, chunks read batches, maps
+ * errors, and narrows rows per kind.
  *
  * HEALTH SEAM: `ready()` reads migration currency from
  * `GET /api/health/ready` (design 3.2). That endpoint answers the
@@ -48,12 +48,10 @@
  * follow the catalog and name the exact point where the reconciled
  * design and this implementation differ:
  *
- * - D-1 `messages.get`: the server kind mirror already carries this
- *   74th kind (AD-44, G-04) and sibling v3b-14b owns the catalog
- *   amendment, but the catalog at this base lists 73 kinds. This
- *   adapter follows the catalog: `messages.get` is rejected as an
- *   unknown kind until the amendment lands, then admitted with no
- *   code change here. The spec pins both states.
+ * - D-1 `messages.get`: CLOSED. The catalog amendment (AD-44,
+ *   G-04) has landed, so the catalog lists 74 kinds and this
+ *   adapter admits `messages.get` with no code change here, as
+ *   designed. The spec still pins the catalog-following behavior.
  * - D-2 Read chunking vs one snapshot: design 3.2 says `queryMany`
  *   runs in one consistent read snapshot, and the reconciled design
  *   says the adapter rejects batches over 50 locally. This module
@@ -77,20 +75,15 @@
  *   (the server-only exposure check). Metadata is static catalog
  *   data, not I/O, so injection buys nothing here; no wave or
  *   exposure list is restated.
- * - D-5 Error and health types live here for now: `SqlErrorCode`,
- *   `SqlAdapterError`, `SqlHealth`, `SqlMode`, `WriteResult`, and
- *   `SqlTransactionOptions` are the design 3.2 / reconciled names,
- *   defined in this file only because `interface.ts` is still the
- *   AD-26 marker stub and this task may not edit it. At W23
- *   integration these definitions fold into `interface.ts` next to
- *   the reconciled surface (14d's `SqlAdapterError` interface pins
- *   the same fields this class provides) and this file imports
- *   them; the two definitions must never coexist.
- * - D-6 `__sqlAdapterStub`: the class carries the stub marker
- *   property so it satisfies today's marker-only `SqlAdapter`
- *   type. It is deleted in the same commit that replaces
- *   `interface.ts` with the real surface (the spec pins its
- *   presence so the removal is not forgotten silently).
+ * - D-5 Error and health types: CLOSED at the W23/3E fold. The
+ *   definitions moved to `interface.ts` next to the reconciled
+ *   surface (the reconciled `SqlAdapterError` interface pins the
+ *   same fields the class provides); this file imports them and
+ *   defines none of them. The two definitions must never coexist.
+ * - D-6 `__sqlAdapterStub`: CLOSED at the W23/3E fold. The marker
+ *   is deleted with the `interface.ts` replacement, and the class
+ *   implements the real `SqlAdapter` surface. The spec pins the
+ *   marker's absence so it is never reintroduced silently.
  *
  * Validation order mirrors the server (services/db/validation.ts)
  * and the 14c client: array shape, request size (transactions
@@ -115,6 +108,14 @@
  */
 
 import {
+  SqlAdapterError,
+  type SqlAdapter,
+  type SqlErrorCode,
+  type SqlHealth,
+  type SqlTransactionOptions,
+  type WriteResult,
+} from "./interface";
+import {
   SQL_OP_KINDS,
   SQL_OP_METADATA,
   SQL_READ_OP_KINDS,
@@ -128,7 +129,6 @@ import {
   type SqlWikiCommitResult,
   type SqlWriteOpKind,
   type SqlWriteOperationByKind,
-  type SqlWriteResult,
   type SqlWriteResultFor,
 } from "./ops-catalog";
 
@@ -171,83 +171,22 @@ const READ_KIND_SET: ReadonlySet<string> = new Set(SQL_READ_OP_KINDS);
 const WRITE_KIND_SET: ReadonlySet<string> = new Set(SQL_WRITE_OP_KINDS);
 const KNOWN_KIND_SET: ReadonlySet<string> = new Set(SQL_OP_KINDS);
 
-// ---------------------------------------------------------------------------
-// Adapter surface types (design 3.2; fold into interface.ts at W23, D-5)
-// ---------------------------------------------------------------------------
-
-/** Production adapter modes. `"fake"` is never a member here. */
-export type SqlMode = "tauri" | "web";
-
-/** Adapter health, from design 3.2. */
-export interface SqlHealth {
-  ok: boolean;
-  mode: SqlMode;
-  /** Web: from /api/health/ready. False means unverified when no health probe is wired. */
-  migrationsCurrent: boolean;
-}
-
-/** Adapter error codes, from design 3.2. */
-export type SqlErrorCode =
-  | "VALIDATION"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "UNAUTHORIZED"
-  | "FORBIDDEN"
-  | "UNAVAILABLE"
-  | "UNKNOWN";
-
-/**
- * The single error type thrown by the web adapter. Fields match the
- * reconciled `SqlAdapterError` interface (code, retryable flag, and
- * optional details that never carry SQL text, secrets, or absolute
- * paths). `details` for port failures is the envelope details
- * object plus correlation keys (`wireCode`, `status`, `requestId`);
- * for local validation failures it carries the wire code the
- * server would answer plus the failing operation identity, in the
- * same shapes the server uses (`operationIndex`/`kind`, or
- * `fields` for shape failures).
- */
-export class SqlAdapterError extends Error {
-  readonly code: SqlErrorCode;
-  readonly retryable: boolean;
-  readonly details?: unknown;
-
-  constructor(
-    code: SqlErrorCode,
-    message: string,
-    options?: { retryable?: boolean; details?: unknown },
-  ) {
-    super(message);
-    this.name = "SqlAdapterError";
-    this.code = code;
-    this.retryable = options?.retryable ?? false;
-    this.details = options?.details;
-  }
-}
-
-/**
- * Write result shape, aliased from the catalog (D-10). There is no
- * second definition. Only `wiki.commitRevision` returns the
- * extended `SqlWikiCommitResult`, through `execute`; `transaction`
- * returns the general shape for every entry.
- */
-export type WriteResult = SqlWriteResult;
-
-/** Options for `transaction`: the idempotency key only. */
-export interface SqlTransactionOptions {
-  idempotencyKey?: string;
-}
+// Adapter surface types (`SqlAdapter`, `SqlAdapterError`,
+// `SqlErrorCode`, `SqlHealth`, `WriteResult`,
+// `SqlTransactionOptions`) live in `./interface.ts` (D-5 closed at
+// the W23/3E fold) and are imported above. They must never be
+// redefined here.
 
 // ---------------------------------------------------------------------------
 // Port: batch/transaction HTTP client (14c owns the implementation)
 // ---------------------------------------------------------------------------
 
 /**
- * TEMPORARY PORT DEFINITION. Delete this whole section at
- * integration and import the same-named shapes from `./db-client`
- * (v3b-14c). The names and shapes mirror 14c exactly so the swap
- * touches imports only. This module must never import the port
- * implementation file, so the dependency points one way only.
+ * PORT DEFINITION. The names and shapes mirror `./db-client`
+ * exactly, and `SqlDbClient` satisfies `SqlDbPort` structurally
+ * (pinned by a type-level check in the spec). This module must
+ * never import the port implementation file, so the dependency
+ * points one way only; wiring supplies the client.
  */
 
 /**
@@ -894,18 +833,11 @@ function toGeneralWriteResult(entry: SqlTransactionResultEntry): WriteResult {
  * with no exposed begin/commit/rollback. There is no row cache:
  * every `query` reads current state through the port.
  *
- * The class carries the AD-26 stub marker (`__sqlAdapterStub`) so
- * it satisfies today's marker-only `SqlAdapter` type; delete the
- * marker in the same commit that replaces `interface.ts` with the
- * real surface (D-6). Wiring and registration are owned by V3-11
- * (AD-33), not by this module: nothing here registers itself in
- * the platform registry.
+ * Wiring and registration are owned by V3-11 (AD-33), not by this
+ * module: nothing here registers itself in the platform registry.
  */
-export class WebSqlAdapter {
+export class WebSqlAdapter implements SqlAdapter {
   readonly mode = "web" as const;
-
-  // TODO(W23): delete with the interface.ts replacement (D-6).
-  readonly __sqlAdapterStub = true as const;
 
   private readonly port: SqlDbPort;
   private readonly healthProbe?: SqlHealthProbe;
