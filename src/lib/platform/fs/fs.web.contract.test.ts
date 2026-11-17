@@ -1217,14 +1217,18 @@ describe("web FsAdapter watch polling fallback", () => {
     const events: WatchEvent[] = [];
     const unwatch = await fs.watch("", (e) => events.push(e));
     await waitFor(() => fake.requests.length >= 2, "baseline polls");
-    assert.equal(events.length, 0);
+    // Polling start delivers one pathless rescan so writes that
+    // predate the baseline still surface; it is not a file event.
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "any");
+    assert.deepEqual(events[0].paths, []);
     files = [
       entry({ name: "a.md", path: "a.md" }),
       entry({ name: "b.md", path: "b.md", revision: "sha256:b" }),
     ];
-    await waitFor(() => events.length >= 1, "created event for b.md");
-    assert.deepEqual(events[0].type, { create: { kind: "file" } });
-    assert.deepEqual(events[0].paths, ["/appdata/article/b.md"]);
+    await waitFor(() => events.length >= 2, "created event for b.md");
+    assert.deepEqual(events[1].type, { create: { kind: "file" } });
+    assert.deepEqual(events[1].paths, ["/appdata/article/b.md"]);
     unwatch();
     const countAfterUnwatch = fake.requests.length;
     await new Promise((resolve) => setTimeout(resolve, 40));
@@ -1253,14 +1257,17 @@ describe("web FsAdapter watch polling fallback", () => {
     // socket stays connected; baseline polls establish the snapshot.
     await waitFor(() => fake.requests.length >= 2, "silence polls");
     assert.equal(socket.closed, false);
-    assert.equal(events.length, 0);
+    // The polling-start rescan arrives before any file event.
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "any");
+    assert.deepEqual(events[0].paths, []);
     files = [
       entry({ name: "a.md", path: "a.md" }),
       entry({ name: "b.md", path: "b.md", revision: "sha256:b" }),
     ];
-    await waitFor(() => events.length >= 1, "created event for b.md");
-    assert.deepEqual(events[0].type, { create: { kind: "file" } });
-    assert.deepEqual(events[0].paths, ["/appdata/article/b.md"]);
+    await waitFor(() => events.length >= 2, "created event for b.md");
+    assert.deepEqual(events[1].type, { create: { kind: "file" } });
+    assert.deepEqual(events[1].paths, ["/appdata/article/b.md"]);
     unwatch();
     const countAfterUnwatch = fake.requests.length;
     await new Promise((resolve) => setTimeout(resolve, 40));

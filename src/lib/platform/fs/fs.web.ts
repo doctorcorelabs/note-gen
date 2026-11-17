@@ -1451,6 +1451,19 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       }
       polling = true;
       snapshot = null;
+      // The first snapshot after a late polling start baselines the
+      // CURRENT disk state, so writes that landed before the
+      // baseline would never diff (D-WATCHER probe15: the early
+      // write stayed invisible while a post-baseline write
+      // surfaced). Close the gap with one pathless rescan event:
+      // the watcher hook treats a pathless structural event as a
+      // full tree reload, which surfaces every file the baseline
+      // already contains. The rescan carries no paths on purpose:
+      // a root-path event maps to an empty relative path and is
+      // dropped by the hook's hidden/out-of-workspace filter.
+      // Later polls diff against the fresh baseline, so no
+      // duplicate rescan follows.
+      deliver({ type: "any", paths: [], attrs: null });
       void pollOnce();
     }
 
@@ -1474,9 +1487,11 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
     // proves the producer is alive even when the subtree filter
     // drops an event). Pong, resync-ok, error, and malformed
     // messages do not re-arm it: they carry no file-change
-    // evidence. Firing starts polling alongside the live socket;
-    // the socket stays connected with seq tracking intact, and
-    // the next workspace message stops polling again.
+    // evidence. Firing starts polling alongside the live socket
+    // (plus one pathless rescan event from startPolling, closing
+    // the pre-baseline gap); the socket stays connected with seq
+    // tracking intact, and the next workspace message stops
+    // polling again.
     function clearSilenceTimer(): void {
       if (silenceTimer) {
         clearTimeout(silenceTimer);
