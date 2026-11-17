@@ -39,7 +39,8 @@
     "close": "关闭贴图",
     "copied": "已复制图片",
     "zoomLabel": "缩放 {percent}%",
-    "hint": "拖动顶部栏移动；滚轮缩放；Esc 关闭"
+    "hint": "拖动顶部栏移动；滚轮缩放；Esc 关闭",
+    "webUnavailable": "Pinned screenshots are not available in the web version."
   },
   "screenshotEditor": {
     "title": "桌面截图",
@@ -78,7 +79,8 @@
     "addText": "添加文字",
     "discardText": "取消文字",
     "pixelSize": "{width} × {height} px",
-    "retry": "重试"
+    "retry": "重试",
+    "webUnavailable": "Desktop screenshot capture is not available in the web version."
   },
   "appLock": {
     "title": "启动密码锁",
@@ -181,7 +183,8 @@
         "autostart": {
           "title": "开机启动",
           "desc": "登录系统后自动启动 NoteGen",
-          "error": "无法更新开机启动设置"
+          "error": "无法更新开机启动设置",
+          "desktopOnly": "Desktop only"
         },
         "autostartMinimized": {
           "title": "自启后隐藏主窗口",
@@ -1924,7 +1927,8 @@
           "buttonName": "讨论",
           "desc": "参与交流讨论。"
         }
-      }
+      },
+      "webUpdateNotice": "In the web version, updates are installed on the server. There is nothing to download here."
     },
     "sync": {
       "title": "同步配置",
@@ -3964,7 +3968,8 @@
       "conflictGlobal": "与全局快捷键「{name}」冲突",
       "globalShortcuts": {
         "title": "全局快捷键",
-        "desc": "这些快捷键由系统注册，NoteGen 不在前台时也可能触发。"
+        "desc": "这些快捷键由系统注册，NoteGen 不在前台时也可能触发。",
+        "webUnavailable": "Global shortcuts are only available in the desktop app. In the browser, shortcuts cannot capture keys pressed outside this tab."
       },
       "editorShortcuts": {
         "title": "编辑器快捷键",

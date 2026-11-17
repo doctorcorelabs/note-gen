@@ -39,7 +39,8 @@
     "close": "Close pinned image",
     "copied": "Image copied",
     "zoomLabel": "Zoom {percent}%",
-    "hint": "Drag the top bar to move; scroll to zoom; Esc to close"
+    "hint": "Drag the top bar to move; scroll to zoom; Esc to close",
+    "webUnavailable": "Pinned screenshots are not available in the web version."
   },
   "screenshotEditor": {
     "title": "Desktop screenshot",
@@ -78,7 +79,8 @@
     "addText": "Add text",
     "discardText": "Discard text",
     "pixelSize": "{width} × {height} px",
-    "retry": "Retry"
+    "retry": "Retry",
+    "webUnavailable": "Desktop screenshot capture is not available in the web version."
   },
   "appLock": {
     "title": "Startup password lock",
@@ -181,7 +183,8 @@
         "autostart": {
           "title": "Launch at startup",
           "desc": "Start NoteGen automatically after you sign in",
-          "error": "Could not update the startup setting"
+          "error": "Could not update the startup setting",
+          "desktopOnly": "Desktop only"
         },
         "autostartMinimized": {
           "title": "Hide window after startup launch",
@@ -1658,7 +1661,8 @@
           "buttonName": "Discuss",
           "desc": "Join community discussions."
         }
-      }
+      },
+      "webUpdateNotice": "In the web version, updates are installed on the server. There is nothing to download here."
     },
     "memories": {
       "title": "Memory Management",
@@ -3964,7 +3968,8 @@
       "conflictGlobal": "Conflicts with global shortcut \"{name}\"",
       "globalShortcuts": {
         "title": "Global shortcuts",
-        "desc": "These shortcuts are registered by the system and can work when NoteGen is not focused."
+        "desc": "These shortcuts are registered by the system and can work when NoteGen is not focused.",
+        "webUnavailable": "Global shortcuts are only available in the desktop app. In the browser, shortcuts cannot capture keys pressed outside this tab."
       },
       "editorShortcuts": {
         "title": "Editor shortcuts",
