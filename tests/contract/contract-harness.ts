@@ -8,11 +8,12 @@
 // between cases or implementations. A case receives the implementation
 // through getImpl() so the same case body serves every factory.
 //
-// Current factories: fake only. Web and Tauri factories are registered by
-// the integrator in tests/contract/implementations/ once the adapters
-// land; the Tauri column runs only with CONTRACT_TAURI=1 and must never
-// block PRs. This harness does not invent factories for implementations
-// that do not exist yet.
+// Factories are registered per suite in the `*.contract.ts`
+// entries: fake everywhere, plus web factories where the real
+// adapter exists (Store, SQL) and an env-gated Postgres factory
+// for SQL. The Tauri column runs only with CONTRACT_TAURI=1 and
+// must never block PRs. This harness does not invent factories
+// for implementations that do not exist yet.
 
 import { afterEach, beforeEach, describe } from "vitest";
 

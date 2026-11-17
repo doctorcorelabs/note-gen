@@ -21,12 +21,20 @@ integrator must reconcile at merge time (see EXCEPTIONS.md E9).
 
 Scaffold state: fake column for every suite, plus the Store web
 column (`tests/contract/implementations/web.ts`, running the real
-web adapter over a fake settings server). The Tauri factory does
-not exist yet. The suite proves the cases are runnable and can
-detect violations (see Negative control). The web column proves
-adapter behavior over the fake transport; it does not prove
-anything about a real backend, a real database, or a real
-filesystem.
+web adapter over a fake settings server) and the SQL web column
+(`tests/contract/implementations/web-sql.ts`, running the real
+web SQL adapter plus the real transport over a fake DB endpoint)
+with an env-gated Postgres column
+(`tests/contract/implementations/postgres.ts`, running the real
+server dispatch over Postgres when `SQL_CONTRACT_DATABASE_URL`
+is set; absent otherwise, never silently skipped). The Tauri
+factory does not exist yet. The suite proves the cases are
+runnable and can detect violations (see Negative control). The
+web columns prove adapter behavior over the fake transport; they
+do not prove anything about a real backend, a real database, or
+a real filesystem. The Postgres column is registered but
+live-unverified in this workspace (see E14); its first live run
+belongs to CI or the merge gate.
 
 What this scaffold deliberately does NOT do (integrator follow-ups,
 not oversights):
@@ -36,8 +44,9 @@ not oversights):
 - No AI transport cases (C-AI-01 to C-AI-06) and no event/cache cases
   (C-EV-01 to C-EV-04). Those belong to later scaffold work, not to
   this store/filesystem/SQL scaffold.
-- No Postgres, no network, no real filesystem in any case in this
-  scaffold. Cases that need them are listed as deferred below and
+- No Postgres, no network, no real filesystem in any case in
+  this scaffold except through the env-gated SQL Postgres
+  column. Cases that need them are listed as deferred below and
   must fail explicitly (not skip silently) if wired to an
   implementation that cannot run them.
 
@@ -95,7 +104,7 @@ entry.
 | `tests/contract/sql-cases.ts` | `defineSqlCases` |
 | `tests/contract/store.contract.ts` | Store entry: fake factory + corrupt-backing suite |
 | `tests/contract/fs.contract.ts` | Filesystem entry: fake factory + `writeExternally` |
-| `tests/contract/sql.contract.ts` | SQL entry: fake factory |
+| `tests/contract/sql.contract.ts` | SQL entry: fake + web factories, Postgres factory when `SQL_CONTRACT_DATABASE_URL` is set |
 | `tests/contract/EXCEPTIONS.md` | Documented divergences (E1 to E9); silent `it.skip` is forbidden |
 | `tests/contract/implementations/README.md` | Factory contract for web/Tauri/Postgres factories (no factories yet) |
 | `tests/fakes/fake-store.ts` | Independent in-memory `StoreAdapter` |
@@ -167,74 +176,62 @@ Two related items the integrator must still resolve:
   to the store-interface owner and the real adapter. Cases CT-05 to CT-08 need it and are
   deferred (see below).
 
-### SQL: mirror is a subset, with four flagged divergences
+### SQL: mirror folded into the canonical surface (F6, wave 4)
 
-The `SqlAdapter` shape (mode, `ready`, `query`, `queryOne`,
-`queryMany`, `execute`, `transaction`, `close`) matches
-`fase1/desain-sql-adapter.md` section 3.2. It does NOT match the
-canonical V2-04 `SqlAdapter`, which is the narrow raw shim
-(`load(path)` returning `execute(query, bindValues)` /
-`select(query, bindValues)` / `close()`) for the legacy `src/db`
-callers. The contract cases bind the typed-operation catalog, not
-the raw shim; no case sends raw SQL, and the raw shim must never
-become a contract surface (see EXCEPTIONS.md E9 and CT-S5/C-SQ-08).
-The operation catalog is a subset: 12 read kinds and 18 write kinds, covering only the
-operations exercised by the contract cases plus their minimal
-neighbors. The full MVP catalog in section 3.4 (conversations,
-messages, notes, compactions, activity, memories, policy, image
-cache, wiki pages/jobs/segments) is not mirrored; the typed-catalog
-owner (branch `web-sql-ops-catalog`) defines it.
+The SQL section of `contract-types.ts` is now a re-export of the
+canonical surface, not a mirror: `SqlAdapter` and its error
+taxonomy from `src/lib/platform/sql/interface.ts`, the 74-kind
+typed operation catalog from `ops-catalog.ts`, and the row types
+from `src/types/`. The cases bind the typed-operation catalog,
+not the raw shim; no case sends raw SQL, and the raw shim must
+never become a contract surface (see EXCEPTIONS.md E9 and
+CT-S5/C-SQ-08). The Store and Filesystem mirrors in the same
+file are untouched by the fold.
 
-Divergences the integrator must resolve (do not silently "fix" the
-cases to match one side without recording the decision):
+The five scaffold divergences recorded here are RESOLVED by the
+fold, each as follows:
 
-1. `WriteResult` in the mirror adds `duplicate?: boolean` (marks
-   create with a known `sourceId`) and `committed?: boolean` (wiki
-   commit with a stale version). The section 3.2 sketch has only
-   `affected`, `id`, and `version`. The duplicate flag carries the
-   `insertExternalMark` idempotency semantics from section 3.4 and
-   C-SQ-05; the committed flag carries the "return false on
-   conflict, do not throw" semantics of `commitWikiSourceRevision`
-   in section 3.4. The typed-catalog owner must confirm the field names or rename
-   them in the cases and the fake together.
-2. `SqlHealth.mode` and `SqlAdapter.mode` in the mirror allow
-   `"fake"` in addition to `"tauri" | "web"`. Production interfaces
-   keep only `"tauri" | "web"`; the integrator removes `"fake"`
-   from the production type and keeps it only on the fake class if
-   the real type does not allow it.
-3. Knowledge operation names in the mirror (`registerSource`,
-   `claimSource`, `completeSource`, `failSource`, `retrySource`)
-   follow the hash-machine vocabulary of section 1.7 and CT-H1 to
-   CT-H6. The section 3.4 table names different operations
-   (`knowledge.upsertSource`, `knowledge.updateStatus`,
-   `knowledge.removeSource`). The typed-catalog owner must confirm the canonical
-   names; whichever wins, the cases and the fake change together.
-4. `vector.insertChunk` exists in the mirror only to test the
-   unique-chunk-key behavior (CT-K4/C-SQ-06a) at adapter level.
-   Section 3.4 says chunk writes are worker-only (W2) and "TIDAK
-   diekspos ke SqlAdapter web". The integrator may need to move
-   CT-K4 to the worker/handler level once the real adapter lands;
-   until then the case runs against the fake through this
-   scaffold-only surface. `vector.replaceChunks` is likewise
-   worker-only in the design and is mirrored for the same reason.
-5. `marks.create` in the mirror omits the `activity` input shown in
-   the section 3.3 example, and `marks.list` omits the `cursor`
-   field. No case asserts activity rows or cursor pagination; the
-   typed-catalog owner adds them to the real catalog without changing these cases.
-   `marks.create` also omits the `ON CONFLICT` wording: see E7 for
-   the `tags.create` duplicate conflict, and the CT-K2 note below.
+1. `duplicate?: boolean` is gone: the canonical `SqlWriteResult`
+   carries only `affected`, `id`, and `version`. First-write-wins
+   on a duplicate `sourceId` is observed as `affected: 0` plus
+   the existing id (CT-K2). `committed?: boolean` survives only
+   on the extended `SqlWikiCommitResult` returned by
+   `wiki.commitRevision` (CT-X4, fake-only; see E14).
+2. The `"fake"` mode value is gone: `SqlMode` is
+   `"tauri" | "web"`, the fake reports `"web"`, and no case
+   asserts the mode value.
+3. The canonical knowledge names won: `knowledge.upsertSource`,
+   `knowledge.updateStatus`, `knowledge.removeSource`. The
+   hash-machine vocabulary (`registerSource`, `claimSource`,
+   `completeSource`, `failSource`, `retrySource`) was ghost
+   surface with no catalog entry and is gone; the status machine
+   runs on guarded `updateStatus` transitions (CT-H1 to CT-H6).
+4. `vector.insertChunk` was a ghost kind and CT-K4/C-SQ-06a was
+   deleted with no canonical replacement: duplicate-chunk-key
+   behavior has no observable canonical form.
+   `vector.replaceChunks` is canonical but stubbed 410 by the
+   server in Fase 1, so the cases that seed chunks run
+   fake-only (see E14).
+5. `marks.create` carries the canonical `activity` input and
+   `marks.list` carries cursor pagination in the catalog; no
+   case asserts activity rows. `tags.create` duplicate semantics
+   follow the server handler (existing tag, `affected: 0`); see
+   E7 and the CT-K2 note below.
 
 CT-K2 reading (recorded so the integrator does not "correct" it
 backwards): section 6 states a duplicate `source_id` is "ditolak
 partial unique" at database level, while section 3.4 states a
 `marks.create` with an already-known `sourceId` "mengembalikan
 baris yang sama (idempotensi `insertExternalMark`)" at adapter
-level, and C-SQ-05 requires the `{ mark, duplicate: true }` shape.
-The fake implements the adapter-level reading: duplicate returns
-the existing row with `duplicate: true` and no new row. The
-database constraint still rejects a raw duplicate insert; the
-adapter is what turns it into idempotency. Null `sourceId` values
-stay independent (partial unique index ignores nulls).
+level. The canonical reading, implemented by the server handler
+and the fake alike: duplicate returns the existing row with
+`affected: 0` and no flag. The database constraint still rejects
+a raw duplicate insert; the adapter is what turns it into
+idempotency. Omitted `sourceId` values stay independent (the
+server mints a UUID per row; the partial unique index ignores
+nulls). `sourceId` is immutable after create: `SqlMarkPatch`
+has no `sourceId` field, so no case updates onto a used
+`sourceId`.
 
 ### Filesystem: mirror names are scaffold inventions (unverified)
 
@@ -269,15 +266,15 @@ Two design points are only partly testable through the mirror:
 
 ### Error taxonomy mapping
 
-- `ContractError` (`contract-errors.ts`) mirrors the
-  `SqlErrorCode` set in `fase1/desain-sql-adapter.md` section 3.2
-  (`VALIDATION`, `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE`, `UNKNOWN`).
-  It omits `UNAUTHORIZED` and `FORBIDDEN`: the fake has no auth
-  surface, and cases CT-S1 to CT-S4 that need those codes are
-  deferred to the server level. V2-04 added no further error
-  taxonomy (`errors.ts` unchanged); when a final taxonomy lands,
-  the integrator rewires the codes to it;
-  cases assert codes, never message text, except CT-X6.
+- SQL cases assert the canonical `SqlAdapterError` /
+  `SqlErrorCode` from `src/lib/platform/sql/interface.ts`
+  (`VALIDATION`, `NOT_FOUND`, `CONFLICT`, `UNAUTHORIZED`,
+  `FORBIDDEN`, `UNAVAILABLE`, `UNKNOWN`). Cases assert codes,
+  never message text: the web adapter rebuilds messages from
+  wire codes, so message text is not adapter-observable (see
+  E14). `ContractError` (`contract-errors.ts`) remains the
+  scaffold-local error type for the Store and Filesystem
+  suites only.
 - Store cases assert `PlatformCapabilityError` for removed store
   files, secret-key writes, and custom serializers, using the real
   class from `src/lib/platform/errors.ts` through the
@@ -301,7 +298,10 @@ Two design points are only partly testable through the mirror:
   50 accepted). The 1 MB body half of CT-X5 is server-level and
   deferred.
 - `TAG_GUARD_CONFLICT_MESSAGE` is pinned verbatim from upstream
-  (CT-X6). Do not reword it.
+  and asserted by the server spec
+  `server/test/db-handlers-records-tags.spec.ts`. CT-X6 asserts
+  the guard details, not the message (see E14). Do not reword
+  the constant.
 
 ## Cases that run against the fake
 
@@ -354,36 +354,40 @@ them for the full design:
   `set` over them throws. Server-side log/snapshot scanning belongs
   to the API cases (CT-11/CT-12) and is deferred.
 
-### SQL: CT-K/T/H/X/I/S/P subset plus C-SQ aliases (27 tests)
+### SQL: CT-K/T/H/X/I/S/P subset plus C-SQ aliases (28 tests on the fake leg, 24 on the web leg)
+
+Rows marked "(fake only)" run only when the factory is the fake;
+the server behavior they need is stubbed 410 in Fase 1 (see
+E14). CT-K4 was deleted in the F6 remap: `vector.insertChunk`
+is a ghost kind with no canonical operation.
 
 | ID | Behavior |
 |---|---|
 | C-SQ-01 | `ready()` is idempotent and preserves data |
 | C-SQ-03 | Creating a mark writes its `mark_tags` rows together |
 | CT-K1 | A mark referencing a nonexistent tag is rejected |
-| CT-K2/C-SQ-05 | Duplicate `sourceId` returns the existing row; null `sourceId` values stay independent; update onto a used `sourceId` conflicts |
-| CT-K3 | Tag names are unique and case-sensitive (see E7) |
-| CT-K4/C-SQ-06a | A duplicate vector chunk key is rejected |
-| C-SQ-06b | `replaceChunks` is all-or-nothing when one chunk is invalid |
+| CT-K2/C-SQ-05 | Duplicate `sourceId` returns the existing row with `affected: 0`; omitted `sourceId` values stay independent |
+| CT-K3 | Duplicate tag names return the existing tag; names are case-sensitive (see E7) |
+| C-SQ-06b | `replaceChunks` is all-or-nothing when one chunk is invalid (fake only) |
 | CT-T1/C-SQ-04a | Moving the primary tag keeps extra tags |
 | CT-T2/C-SQ-04b | Permanent delete cascades; soft delete keeps tags and restore returns them |
 | CT-T3 | Deleting a used tag fails without `reassignTo` and never discards records |
 | CT-T4 | `updateTags` replaces the set, creates new tags, and enforces the guard |
 | CT-T5 | The primary invariant holds after a mixed scenario |
-| CT-H1/C-SQ-07 | Register, claim, complete drives pending to ready with matching hashes |
+| CT-H1/C-SQ-07 | Upsert plus guarded status updates drives pending to ready with matching hashes |
 | CT-H2 | New content returns a ready source to pending, keeping the old `indexedHash` |
 | CT-H3 | Illegal status transitions are rejected |
-| CT-H4 | Two claims over one pending source, exactly one wins (sequential against the fake; true concurrency is a Postgres property) |
-| CT-H5 | A failed chunk write cancels the status change |
+| CT-H4 | Two guarded claims over one pending source, exactly one wins (sequential against the fake; true concurrency is a Postgres property) |
+| CT-H5 | A failed chunk write cancels the status change (fake only) |
 | CT-H6 | A failed source retries to pending with the error cleared |
 | CT-X1 | A transaction with a failing operation leaves nothing behind |
 | CT-X2/C-SQ-10 | Two guarded writers, one wins; retry with fresh state succeeds (sequential against the fake) |
 | CT-X3 | Canvas save with a stale version conflicts; force succeeds |
-| CT-X4 | Wiki commit with a stale version does not commit; the correct version commits |
-| CT-X5 | A transaction over the operation limit is rejected (op-count half only) |
-| CT-X6 | The tag guard conflict uses the pinned upstream message |
+| CT-X4 | Wiki commit with a stale version does not commit; the correct version commits (fake only) |
+| CT-X5 | A transaction over the operation limit is rejected (op-count half only; runs on every leg, see E13) |
+| CT-X6 | The tag guard conflict reports the current tag set in its details |
 | CT-S5/C-SQ-08 | Injection strings are data; unknown kinds and removed tables are rejected; no raw SQL path |
-| CT-S6 | Responses never carry embeddings |
+| CT-S6 | Responses never carry embeddings (fake only) |
 | CT-I1/CT-I2 | An idempotency key replays identical results and rejects a different body |
 | CT-P2-shape | Query results use stable fields and epoch millisecond timestamps (shape half of CT-P2 only) |
 | (unnamed) | `queryMany`: batch reads keep order and fail as a batch on an unknown kind; `queryOne` returns null when empty |
@@ -482,6 +486,6 @@ failures here together.
 ## Exceptions
 
 Divergences that are intentional, and divergences forced by missing
-implementations, are recorded in `EXCEPTIONS.md` (E1 to E9) and
+implementations, are recorded in `EXCEPTIONS.md` (E1 to E14) and
 asserted as the expected divergent behavior where a case covers
 them. A divergence without an entry there is a review failure.
