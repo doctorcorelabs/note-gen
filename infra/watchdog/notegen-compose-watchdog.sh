@@ -501,13 +501,10 @@ classify_exec_failure() {
       return 0
       ;;
   esac
-  case "$lower" in
-    *quota_exceeded*|*"http error 429"*|*"too many requests"*|*operation_conflict*|*"http error 409"*)
-      EXEC_CLASS="transient"
-      EXEC_EXIT=1
-      return 0
-      ;;
-  esac
+  # Bukan kredensial: tanyakan keadaan mesin sekali (seksi 5.2) untuk
+  # membedakan VM tidak terjangkau dari kegagalan eksekusi. Keadaan mesin
+  # didahulukan atas kata kunci error, karena kode yang sama (mis. 409)
+  # dapat berarti konflik operasi ATAU mesin tidak jalan.
   local get_err_tmp="" get_err_lower=""
   get_err_tmp="$STATE_DIR/.last-get-stderr.$$"
   get_out="$(python3 "$IB_PY" get --id "$MUSE2_ID" 2>"$get_err_tmp")"
@@ -536,6 +533,16 @@ classify_exec_failure() {
       return 0
     fi
   fi
+  # Get gagal atau keadaannya tidak dikenal: pakai kata kunci error sebagai
+  # cadangan. Batas API/konflik operasi berarti transient; sisanya
+  # dilaporkan sebagai VM tidak terjangkau (seksi 5.2).
+  case "$lower" in
+    *quota_exceeded*|*"http error 429"*|*"too many requests"*|*operation_conflict*)
+      EXEC_CLASS="transient"
+      EXEC_EXIT=1
+      return 0
+      ;;
+  esac
   EXEC_CLASS="unreachable"
   EXEC_EXIT=3
   return 0
