@@ -10,10 +10,27 @@
 // parity between the two copies is maintained by review in the same
 // patch. These tests pin the snapshot twin's behavior.
 //
+// Alias note: Vitest in this repo does not resolve the `@/` alias
+// for transitive imports (no other unit suite imports a module with
+// `@/` imports; see vitest.config.ts). The vi.mock calls below do
+// NOT stub behavior: each one re-exports the real dependency module
+// through a relative path so the module under test can load. If
+// alias resolution is fixed globally, these mocks can be deleted
+// without changing any test.
+//
 // Runner: Vitest, unit project (vitest run --project unit). Pure
 // function; no DOM, no network.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/speech/preferences", async () => await import("../speech/preferences"));
+vi.mock("@/config/sync-exclusions", async () => await import("../../config/sync-exclusions"));
+vi.mock("@/lib/editor-layout-styles", async () => await import("../editor-layout-styles"));
+vi.mock("@/lib/outline-preferences", async () => await import("../outline-preferences"));
+vi.mock("@/lib/record-display-preferences", async () => await import("../record-display-preferences"));
+vi.mock("@/lib/record-save-preferences", async () => await import("../record-save-preferences"));
+vi.mock("@/lib/canvas/preferences", async () => await import("../canvas/preferences"));
+vi.mock("@/lib/ai/system-prompt", async () => await import("../ai/system-prompt"));
 
 import { normalizeSettingsSnapshot } from "./settings-snapshot";
 

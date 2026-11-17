@@ -175,8 +175,8 @@ Tanpa bukti build, K-12 tidak dapat diputus.
 docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW password_encryption;" -c "SHOW hba_file;"
 
 # Verifier password berbentuk SCRAM (boolean saja; JANGAN pernah
-# mencetak kolom rolpassword itu sendiri).
-docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT usename, rolpassword LIKE 'SCRAM-SHA-256\$%' AS is_scram FROM pg_shadow;"
+# mencetak kolom passwd itu sendiri).
+docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT usename, passwd LIKE 'SCRAM-SHA-256\$%' AS is_scram FROM pg_shadow;"
 
 # Autentikasi password lewat TCP berhasil; tanpa password ditolak.
 PGPASSWORD='<password-dari-postgres.env>' psql -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1;"
