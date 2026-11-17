@@ -202,16 +202,16 @@ export async function ensureSafeWorkspaceRelativePath(relativePath: string): Pro
   const normalized = await normalizeWorkspaceRelativePath(relativePath)
 
   if (!normalized) {
-    throw new Error('路径不能为空')
+    throw new Error('Path must not be empty')
   }
 
   if (normalized.startsWith('/')) {
-    throw new Error('不允许使用绝对路径')
+    throw new Error('Absolute paths are not allowed')
   }
 
   const segments = normalized.split('/').filter(Boolean)
   if (segments.some(segment => segment === '..')) {
-    throw new Error('路径不能包含 ..')
+    throw new Error('Path must not contain ..')
   }
 
   return normalized

@@ -57,7 +57,7 @@ function readMoves(value: unknown): PathMove[] {
     return typeof item.id === 'string' && typeof item.source === 'string' && isWorkspacePath(item.source)
       && typeof item.target === 'string' && isWorkspacePath(item.target)
       && typeof item.ready === 'boolean' && item.metadata && typeof item.metadata === 'object'
-  })) throw new Error('远端重命名记录无效，已停止远端操作')
+  })) throw new Error('Remote rename record is invalid; remote operations stopped')
   return value as PathMove[]
 }
 
@@ -124,7 +124,7 @@ async function reportMove(context: MoveContext, path: string, error?: unknown): 
   emitter.emit('sync-directory-completed', {
     path, workspacePath, provider: context.provider, success: error === undefined,
     error: error === undefined ? undefined
-      : `本地已重命名，${context.provider} 远端重命名待重试：${error instanceof Error ? error.message : String(error)}`,
+      : `Renamed locally; ${context.provider} remote rename pending retry: ${error instanceof Error ? error.message : String(error)}`,
   })
 }
 
@@ -230,8 +230,8 @@ export function retryWorkspacePathMoves(): Promise<void> {
           await journal.save()
           continue
         }
-        if (!targetExists) throw new Error(`本地重命名目标已不存在，已保留远端原路径：${entry.source} → ${finalTarget}`)
-        if (sourceExists && finalTarget !== entry.source) throw new Error(`本地原路径和新路径同时存在，未覆盖或删除任何文件：${entry.source} → ${finalTarget}`)
+        if (!targetExists) throw new Error(`Local rename target no longer exists; remote original path kept: ${entry.source} -> ${finalTarget}`)
+        if (sourceExists && finalTarget !== entry.source) throw new Error(`Local old and new paths both exist; nothing overwritten or deleted: ${entry.source} -> ${finalTarget}`)
         if (!entry.ready) {
           await applyPathMoveMetadata(entry.metadata)
           entry.ready = true
@@ -261,35 +261,35 @@ export function retryWorkspacePathMoves(): Promise<void> {
         }
         if (context.provider === 'github') {
           if (entry.expected !== undefined && (!entry.expected || typeof entry.expected !== 'object' || !('sha' in entry.expected))) {
-            throw new Error('GitHub 重命名版本记录无效')
+            throw new Error('GitHub rename version record is invalid')
           }
           await moveGithubPath({
             source: entry.source, target: entry.target, expected: entry.expected as GitPathEntry | undefined,
             rememberSource, assertCurrent,
           })
         } else if (context.provider === 'gitee' || context.provider === 'gitlab' || context.provider === 'gitea') {
-          if (entry.expected !== undefined && !isGitPlatformPathSnapshot(entry.expected)) throw new Error('Git 重命名版本记录无效')
+          if (entry.expected !== undefined && !isGitPlatformPathSnapshot(entry.expected)) throw new Error('Git rename version record is invalid')
           await moveGitPlatformPath(context.provider, entry.source, entry.target, {
             expected: entry.expected, rememberSource, assertCurrent,
           })
         } else if (context.provider === 'webdav') {
           if (entry.expected !== undefined && (!entry.expected || typeof entry.expected !== 'object' || !('digest' in entry.expected))) {
-            throw new Error('WebDAV 重命名版本记录无效')
+            throw new Error('WebDAV rename version record is invalid')
           }
-          if (!context.webdav) throw new Error('WebDAV 同步未配置')
+          if (!context.webdav) throw new Error('WebDAV sync is not configured')
           const result = await webdavMovePath(context.webdav, entry.source, entry.target, {
             expected: entry.expected as WebDAVPathIdentity | undefined, rememberSource, assertCurrent,
           }, context.proxy)
           if (result.status === 'moved') await rebindPathMoveMetadata(entry.metadata, (result.files || []).map(mapVersion), finalTarget)
         } else if (context.provider === 's3') {
-          if (!context.s3) throw new Error('S3 同步未配置')
+          if (!context.s3) throw new Error('S3 sync is not configured')
           const result = await s3MovePath(context.s3, entry.source, entry.target, {
             expected: entry.expected as S3PathIdentity | undefined, rememberSource, assertCurrent,
           }, context.proxy)
           if (result.status === 'moved') await rebindPathMoveMetadata(entry.metadata, (result.files || []).map(mapVersion), finalTarget)
         } else if (context.provider === 'cloudFolder') {
           if (!context.cloudFolder || (entry.expected !== undefined && typeof entry.expected !== 'string')) {
-            throw new Error('云文件夹重命名记录无效')
+            throw new Error('Cloud folder rename record is invalid')
           }
           const acceptedVersions = Object.fromEntries(Object.entries(entry.metadata.stores.syncedFileShas.source)
             .filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
@@ -327,7 +327,7 @@ export async function prepareWorkspacePathUpload(path: string): Promise<void> {
   await retryWorkspacePathMoves()
   // A queued upload for an old path must not recreate it after a rename.
   if (await getWorkspacePathMoveContext() && !await localExists(path)) {
-    throw new Error(`本地路径已变化，已取消上传：${path}`)
+    throw new Error(`Local path changed; upload cancelled: ${path}`)
   }
 }
 

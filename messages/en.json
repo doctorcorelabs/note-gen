@@ -6213,7 +6213,8 @@
         "openWorkspace": {
           "title": "Open Workspace",
           "desc": "Select or switch workspace directory"
-        }
+        },
+        "selectWorkspaceDialogTitle": "Select workspace directory"
       },
       "onboarding": {
         "title": "Onboarding",
@@ -6284,7 +6285,8 @@
           }
         },
         "sampleRecord": "This is my first record in NoteGen.\n\nI can quickly jot down scattered ideas here without organizing them first.\nLater I can organize these records into a proper note and keep editing.\nIf the content does not read smoothly enough, I can use AI to polish, rewrite, or highlight key points.\nOnce written, notes are saved as local Markdown files, making them easy to find and manage later."
-      }
+      },
+      "viewDocs": "View the documentation:"
     },
     "unsupportedFile": {
       "title": "Cannot Preview This File",
@@ -6522,7 +6524,11 @@
         "autoCalcEnabled": "Auto vector calculation enabled",
         "autoCalcDisabled": "Auto vector calculation disabled",
         "settingFailed": "Setting failed",
-        "confirmDeleteVectors": "Are you sure you want to delete vectors for {count} files?"
+        "confirmDeleteVectors": "Are you sure you want to delete vectors for {count} files?",
+        "notDirectory": "Not a directory",
+        "notDirectoryDesc": "Batch vector calculation can only run on directories",
+        "vectorProcessing": "Vector processing",
+        "embeddingModelUnavailable": "No embedding model is configured or the model is unavailable. Please configure an embedding model in AI settings"
       },
       "folderView": {
         "vectorDbNotEnabled": "Vector database not enabled",
@@ -6575,7 +6581,8 @@
       },
       "error": {
         "fileExists": "That name already exists",
-        "invalidName": "Names cannot contain slashes, backslashes, or control characters"
+        "invalidName": "Names cannot contain slashes, backslashes, or control characters",
+        "selectExistingMarkdown": "Please select an existing Markdown file"
       },
       "clipboard": {
         "copied": "Copied to clipboard",
@@ -7696,7 +7703,21 @@
     "retry": "Retry"
   },
   "editorImage": {
-    "changedOnDisk": "The image was updated by sync or another operation. Reopen it before editing and saving again."
+    "changedOnDisk": "The image was updated by sync or another operation. Reopen it before editing and saving again.",
+    "loadFailed": "Failed to load image",
+    "saveSuccess": "Saved successfully",
+    "imageSaved": "Image saved",
+    "saveFailed": "Failed to save",
+    "loading": "Loading...",
+    "cannotLoadImage": "Cannot load image",
+    "cropMode": "Crop mode",
+    "rotate": "Rotate",
+    "flipHorizontal": "Flip horizontally",
+    "flipVertical": "Flip vertically",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "reset": "Reset",
+    "save": "Save"
   },
   "wiki": {
     "title": "Knowledge base",

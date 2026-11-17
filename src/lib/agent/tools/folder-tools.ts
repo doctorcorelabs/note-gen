@@ -8,7 +8,7 @@ import { prepareActiveEditorPathMutationDurably } from '@/lib/editor-deactivatio
 function activeEditorMutationBlockedResult(): ToolResult {
   return {
     success: false,
-    error: '当前编辑器正在处理异步内容，文件操作已取消',
+    error: 'The current editor is processing async content; the file operation was cancelled',
   }
 }
 
@@ -81,8 +81,8 @@ export const checkFolderExistsTool: Tool = {
           fullPath,
         },
         message: folderExists
-          ? `文件夹 "${normalizedFolderPath}" 存在`
-          : `文件夹 "${normalizedFolderPath}" 不存在`,
+          ? `The folder "${normalizedFolderPath}" exists`
+          : `The folder "${normalizedFolderPath}" does not exist`,
       }
     } catch (error) {
       console.error('[check_folder_exists] 检查失败', {
@@ -92,7 +92,7 @@ export const checkFolderExistsTool: Tool = {
       })
       return {
         success: false,
-        error: `检查文件夹失败: ${error}`,
+        error: `Failed to check folder: ${error}`,
       }
     }
   },
@@ -117,7 +117,7 @@ export const createFolderTool: Tool = {
       if (!params.folderPath || typeof params.folderPath !== 'string') {
         return {
           success: false,
-          error: '缺少必需参数 folderPath 或参数类型错误',
+          error: 'Missing required parameter folderPath or wrong parameter type',
         }
       }
 
@@ -136,7 +136,7 @@ export const createFolderTool: Tool = {
           return {
             success: true,
             data: { folderPath: normalizedFolderPath, alreadyExists: true },
-            message: `文件夹已存在: ${normalizedFolderPath}`,
+            message: `Folder already exists: ${normalizedFolderPath}`,
           }
         }
 
@@ -153,7 +153,7 @@ export const createFolderTool: Tool = {
           return {
             success: true,
             data: { folderPath: normalizedFolderPath, alreadyExists: true },
-            message: `文件夹已存在: ${normalizedFolderPath}`,
+            message: `Folder already exists: ${normalizedFolderPath}`,
           }
         }
 
@@ -171,12 +171,12 @@ export const createFolderTool: Tool = {
       return {
         success: true,
         data: { folderPath: normalizedFolderPath },
-        message: `成功创建文件夹: ${normalizedFolderPath}`,
+        message: `Folder created successfully: ${normalizedFolderPath}`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `创建文件夹失败: ${error}`,
+        error: `Failed to create folder: ${error}`,
       }
     }
   },
@@ -201,7 +201,7 @@ export const deleteFolderTool: Tool = {
       if (!params.folderPath || typeof params.folderPath !== 'string') {
         return {
           success: false,
-          error: '缺少必需参数 folderPath 或参数类型错误',
+          error: 'Missing required parameter folderPath or wrong parameter type',
         }
       }
 
@@ -255,13 +255,13 @@ export const deleteFolderTool: Tool = {
         success: true,
         data: { folderPath: normalizedFolderPath, alreadyAbsent: !folderExists },
         message: folderExists
-          ? `成功删除文件夹: ${normalizedFolderPath}`
-          : `文件夹已不存在，无需重复删除: ${normalizedFolderPath}`,
+          ? `Folder deleted successfully: ${normalizedFolderPath}`
+          : `Folder no longer exists, no need to delete again: ${normalizedFolderPath}`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `删除文件夹失败: ${error}`,
+        error: `Failed to delete folder: ${error}`,
       }
     }
   },
@@ -300,7 +300,7 @@ export const listFoldersTool: Tool = {
         if (!pathExists) {
           return {
             success: false,
-            error: `路径不存在: ${normalizedFolderPath || '根目录'}`,
+            error: `Path does not exist: ${normalizedFolderPath || 'root directory'}`,
           }
         }
 
@@ -318,7 +318,7 @@ export const listFoldersTool: Tool = {
         return {
           success: true,
           data: folders,
-          message: `找到 ${folders.length} 个文件夹`,
+          message: `Found ${folders.length} folders`,
         }
       } else {
         // 默认工作区：使用 baseDir
@@ -330,7 +330,7 @@ export const listFoldersTool: Tool = {
         if (!pathExists) {
           return {
             success: false,
-            error: `路径不存在: ${normalizedFolderPath || '根目录'}`,
+            error: `Path does not exist: ${normalizedFolderPath || 'root directory'}`,
           }
         }
 
@@ -348,7 +348,7 @@ export const listFoldersTool: Tool = {
         return {
           success: true,
           data: folders,
-          message: `找到 ${folders.length} 个文件夹`,
+          message: `Found ${folders.length} folders`,
         }
       }
     } catch (error) {
@@ -358,7 +358,7 @@ export const listFoldersTool: Tool = {
       })
       return {
         success: false,
-        error: `列出文件夹失败: ${error}`,
+        error: `Failed to list folders: ${error}`,
       }
     }
   },
@@ -382,7 +382,7 @@ export const createFoldersBatchTool: Tool = {
       if (!Array.isArray(params.folderPaths) || params.folderPaths.length === 0) {
         return {
           success: false,
-          error: '参数 folderPaths 必须是非空数组',
+          error: 'Parameter folderPaths must be a non-empty array',
         }
       }
 
@@ -399,7 +399,7 @@ export const createFoldersBatchTool: Tool = {
             const fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
             const folderExists = await platform.fs.exists(fullPath)
             if (folderExists) {
-              skipped.push({ path: normalizedFolderPath, reason: '文件夹已存在' })
+              skipped.push({ path: normalizedFolderPath, reason: 'Folder already exists' })
               continue
             }
             await platform.fs.mkdir(fullPath, { recursive: true })
@@ -407,7 +407,7 @@ export const createFoldersBatchTool: Tool = {
             const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
             const folderExists = await platform.fs.exists(path, { baseDir })
             if (folderExists) {
-              skipped.push({ path: normalizedFolderPath, reason: '文件夹已存在' })
+              skipped.push({ path: normalizedFolderPath, reason: 'Folder already exists' })
               continue
             }
             await platform.fs.mkdir(path, { baseDir, recursive: true })
@@ -433,13 +433,13 @@ export const createFoldersBatchTool: Tool = {
           errorCount: errors.length,
         },
         message: errors.length === 0
-          ? `创建 ${created.length} 个，跳过 ${skipped.length} 个`
-          : `部分失败：创建 ${created.length} 个，跳过 ${skipped.length} 个，${errors.length} 个失败`,
+          ? `Created ${created.length}, skipped ${skipped.length}`
+          : `Partial failure: created ${created.length}, skipped ${skipped.length}, ${errors.length} failed`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `批量创建文件夹失败: ${error}`,
+        error: `Failed to batch-create folders: ${error}`,
       }
     }
   },
@@ -463,7 +463,7 @@ export const deleteFoldersBatchTool: Tool = {
       if (!Array.isArray(params.folderPaths) || params.folderPaths.length === 0) {
         return {
           success: false,
-          error: '参数 folderPaths 必须是非空数组',
+          error: 'Parameter folderPaths must be a non-empty array',
         }
       }
 
@@ -490,7 +490,7 @@ export const deleteFoldersBatchTool: Tool = {
             const fullPath = await platform.path.join(workspace.path, normalizedFolderPath)
             const folderExists = await platform.fs.exists(fullPath)
             if (!folderExists) {
-              errors.push({ path: normalizedFolderPath, error: '文件夹不存在' })
+              errors.push({ path: normalizedFolderPath, error: 'Folder does not exist' })
               continue
             }
             await platform.fs.remove(fullPath, { recursive: true })
@@ -498,7 +498,7 @@ export const deleteFoldersBatchTool: Tool = {
             const { path, baseDir } = await getFilePathOptions(normalizedFolderPath)
             const folderExists = await platform.fs.exists(path, { baseDir })
             if (!folderExists) {
-              errors.push({ path: normalizedFolderPath, error: '文件夹不存在' })
+              errors.push({ path: normalizedFolderPath, error: 'Folder does not exist' })
               continue
             }
             await platform.fs.remove(path, { baseDir, recursive: true })
@@ -526,13 +526,13 @@ export const deleteFoldersBatchTool: Tool = {
           failCount: errors.length,
         },
         message: errors.length === 0
-          ? `成功删除 ${results.length} 个文件夹`
-          : `部分失败：成功删除 ${results.length} 个文件夹，${errors.length} 个失败`,
+          ? `Successfully deleted ${results.length} folders`
+          : `Partial failure: successfully deleted ${results.length} folders, ${errors.length} failed`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `批量删除文件夹失败: ${error}`,
+        error: `Failed to batch-delete folders: ${error}`,
       }
     }
   },

@@ -255,7 +255,7 @@ export function buildMessagesWithHistory(
   if (options?.conversationSummary) {
     messages.push({
       role: 'system',
-      content: `以下是较早对话的锚定摘要，仅用于恢复上下文。摘要可能省略细节；如果它与最近原始消息冲突，以最近原始消息为准。
+      content: `Below is an anchor summary of the earlier conversation, for context recovery only. The summary may omit details; if it conflicts with the most recent original messages, the most recent original messages take precedence.
 
 <conversation-summary>
 ${options.conversationSummary}

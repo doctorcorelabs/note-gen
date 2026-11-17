@@ -142,7 +142,7 @@ export async function pasteIntoFolder({
     if (clipboardOperation === 'cut') {
       for (const item of itemsToPaste) {
         if (item.isDirectory && (targetDir === item.path || targetDir.startsWith(`${item.path}/`))) {
-          throw new Error('不能将目录移动到自身内部')
+          throw new Error('A directory cannot be moved into itself')
         }
         const name = item.isDirectory ? await generateCopyFoldername(targetDir, item.name)
           : await generateCopyFilename(targetDir, item.name)

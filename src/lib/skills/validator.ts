@@ -36,13 +36,13 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
   if (!metadata.name || metadata.name.trim().length === 0) {
     errors.push({
       field: 'name',
-      message: 'name 字段不能为空',
+      message: 'The name field must not be empty',
       severity: 'error',
     })
   } else if (!isValidSkillName(metadata.name)) {
     errors.push({
       field: 'name',
-      message: 'name 必须是 1-64 字符，只能包含小写字母、数字和连字符，不能以连字符开头或结尾，不能包含连续连字符',
+      message: 'name must be 1-64 characters, only lowercase letters, digits, and hyphens; it must not start or end with a hyphen or contain consecutive hyphens',
       severity: 'error',
     })
   }
@@ -51,13 +51,13 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
   if (!metadata.description || metadata.description.trim().length === 0) {
     errors.push({
       field: 'description',
-      message: 'description 字段不能为空',
+      message: 'The description field must not be empty',
       severity: 'error',
     })
   } else if (!isValidSkillDescription(metadata.description)) {
     errors.push({
       field: 'description',
-      message: 'description 必须是 1-1024 字符',
+      message: 'description must be 1-1024 characters',
       severity: 'error',
     })
   }
@@ -67,7 +67,7 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
     if (metadata.license.length > 200) {
       warnings.push({
         field: 'license',
-        message: 'license 建议不超过 200 个字符',
+        message: 'license should be at most 200 characters',
         severity: 'warning',
       })
     }
@@ -78,7 +78,7 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
     if (metadata.compatibility.length > 500) {
       errors.push({
         field: 'compatibility',
-        message: 'compatibility 不能超过 500 个字符',
+        message: 'compatibility must be at most 500 characters',
         severity: 'error',
       })
     }
@@ -90,14 +90,14 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
       if (key.length > 50) {
         warnings.push({
           field: 'metadata',
-          message: `metadata 键名 "${key}" 过长，建议不超过 50 个字符`,
+          message: `metadata key "${key}" is too long; keep it under 50 characters`,
           severity: 'warning',
         })
       }
       if (value.length > 500) {
         warnings.push({
           field: 'metadata',
-          message: `metadata "${key}" 的值过长，建议不超过 500 个字符`,
+          message: `The value of metadata "${key}" is too long; keep it under 500 characters`,
           severity: 'warning',
         })
       }
@@ -115,7 +115,7 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
     if (tools.length === 0) {
       warnings.push({
         field: 'allowedTools',
-        message: 'allowedTools 为空，建议移除此字段或添加工具',
+        message: 'allowedTools is empty; remove this field or add tools',
         severity: 'warning',
       })
     }
@@ -125,7 +125,7 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
     if (invalidTools.length > 0) {
       errors.push({
         field: 'allowedTools',
-        message: `无效的工具名称: ${invalidTools.join(', ')}`,
+        message: `Invalid tool names: ${invalidTools.join(', ')}`,
         severity: 'error',
       })
     }
@@ -135,7 +135,7 @@ export function validateSkillYamlMetadata(metadata: SkillYamlMetadata): Validati
   if (metadata.version && !isValidVersion(metadata.version)) {
     warnings.push({
       field: 'version',
-      message: 'version 格式无效，应为 semver 格式 (如: 1.0.0)',
+      message: 'Invalid version format; use semver format (e.g. 1.0.0)',
       severity: 'warning',
     })
   }
@@ -177,7 +177,7 @@ export function validateSkillContent(skill: SkillContent): ValidationResult {
   if (!isValidSkillId(skill.metadata.id)) {
     errors.push({
       field: 'id',
-      message: 'Skill ID 格式无效，必须与目录名匹配，且符合 name 字段格式要求',
+      message: 'Invalid Skill ID format; it must match the directory name and follow the name field format requirements',
       severity: 'error',
     })
   }
@@ -186,7 +186,7 @@ export function validateSkillContent(skill: SkillContent): ValidationResult {
   if (skill.metadata.id !== skill.metadata.name) {
     warnings.push({
       field: 'id',
-      message: 'Skill ID 应与 name 字段保持一致 (官方规范建议)',
+      message: 'The Skill ID should match the name field (recommended by the official spec)',
       severity: 'warning',
     })
   }
@@ -195,7 +195,7 @@ export function validateSkillContent(skill: SkillContent): ValidationResult {
   if (!skill.instructions || skill.instructions.trim().length === 0) {
     errors.push({
       field: 'instructions',
-      message: '指令内容不能为空',
+      message: 'Instruction content must not be empty',
       severity: 'error',
     })
   } else {
@@ -203,7 +203,7 @@ export function validateSkillContent(skill: SkillContent): ValidationResult {
     if (skill.instructions.length > 10000) {
       warnings.push({
         field: 'instructions',
-        message: '指令内容超过 10000 字符，建议将详细文档移到 references/ 目录',
+        message: 'Instruction content exceeds 10000 characters; move detailed docs to the references/ directory',
         severity: 'warning',
       })
     }
@@ -211,7 +211,7 @@ export function validateSkillContent(skill: SkillContent): ValidationResult {
     if (skill.instructions.length < 50) {
       warnings.push({
         field: 'instructions',
-        message: '指令内容过短，建议提供更详细的说明',
+        message: 'Instruction content is too short; provide more detailed instructions',
         severity: 'warning',
       })
     }
@@ -274,20 +274,20 @@ export function formatValidationResult(result: ValidationResult): string {
   const lines: string[] = []
 
   if (result.valid) {
-    lines.push('✓ 验证通过')
+    lines.push('✓ Validation passed')
   } else {
-    lines.push('✗ 验证失败')
+    lines.push('✗ Validation failed')
   }
 
   if (result.errors.length > 0) {
-    lines.push('\n错误:')
+    lines.push('\nErrors:')
     for (const error of result.errors) {
       lines.push(`  - ${error.field}: ${error.message}`)
     }
   }
 
   if (result.warnings.length > 0) {
-    lines.push('\n警告:')
+    lines.push('\nWarnings:')
     for (const warning of result.warnings) {
       lines.push(`  - ${warning.field}: ${warning.message}`)
     }
@@ -304,7 +304,7 @@ export function formatValidationResult(result: ValidationResult): string {
  */
 export function getValidationSummary(result: ValidationResult): string {
   if (result.valid) {
-    return '验证通过'
+    return 'Validation passed'
   }
 
   const errorCount = result.errors.length
@@ -312,11 +312,11 @@ export function getValidationSummary(result: ValidationResult): string {
 
   const parts: string[] = []
   if (errorCount > 0) {
-    parts.push(`${errorCount} 个错误`)
+    parts.push(`${errorCount} errors`)
   }
   if (warningCount > 0) {
-    parts.push(`${warningCount} 个警告`)
+    parts.push(`${warningCount} warnings`)
   }
 
-  return `验证失败: ${parts.join(', ')}`
+  return `Validation failed: ${parts.join(', ')}`
 }

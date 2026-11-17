@@ -342,7 +342,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
       return {
         shouldUpdate: true,
         action: 'pull',
-        reason: '远程文件已更新（SHA 不匹配），需要拉取更新'
+        reason: 'Remote file updated (SHA mismatch), pull needed'
       }
     }
 
@@ -354,7 +354,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
       return {
         shouldUpdate: false,
         action: 'none',
-        reason: 'SHA 匹配，文件已同步'
+        reason: 'SHA matches, file is synced'
       }
     }
   }
@@ -365,7 +365,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
       return {
         shouldUpdate: true,
         action: 'pull',
-        reason: '本地文件不存在，需要从远程拉取'
+        reason: 'Local file does not exist, pull from remote needed'
       }
     }
     return { shouldUpdate: false, action: 'none' }
@@ -377,7 +377,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
       return {
         shouldUpdate: true,
         action: 'push',
-        reason: '远程文件不存在，需要推送到远程'
+        reason: 'Remote file does not exist, push to remote needed'
       }
     }
     return { shouldUpdate: false, action: 'none' }
@@ -392,7 +392,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'conflict',
-      reason: '无法确定文件更新时间，需要手动处理'
+      reason: 'Cannot determine file update time, manual handling needed'
     }
   }
 
@@ -401,7 +401,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'pull',
-      reason: '无法确定远程文件更新时间，拉取远程版本'
+      reason: 'Cannot determine remote file update time, pulling remote version'
     }
   }
 
@@ -410,7 +410,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'push',
-      reason: '无法确定本地文件更新时间，推送本地版本'
+      reason: 'Cannot determine local file update time, pushing local version'
     }
   }
 
@@ -425,7 +425,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
       return {
         shouldUpdate: false,
         action: 'none',
-        reason: '刚完成同步或恢复，处于缓冲期内，不触发推送'
+        reason: 'Sync or restore just completed, within buffer period, no push triggered'
       }
     }
   }
@@ -434,13 +434,13 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'pull',
-      reason: '远程文件较新，需要拉取更新'
+      reason: 'Remote file is newer, pull needed'
     }
   } else if (localTime > remoteTime) {
     return {
       shouldUpdate: true,
       action: 'push',
-      reason: '本地文件较新，需要推送更新'
+      reason: 'Local file is newer, push needed'
     }
   }
 
@@ -448,7 +448,7 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
   return {
     shouldUpdate: false,
     action: 'none',
-    reason: '文件修改时间相同，认为已同步'
+    reason: 'File modification times match, considered synced'
   }
 }
 
@@ -536,7 +536,7 @@ export async function pullRemoteFile(path: string): Promise<string> {
     throw error
   }
 
-  throw new Error('无法获取远程文件内容')
+  throw new Error('Cannot fetch remote file content')
 }
 
 function requireSyncText(path: string, bytes: Uint8Array): string {
@@ -722,8 +722,8 @@ export async function autoSyncIfNeeded(path: string, options: {
       const lockInfo = await checkFileLock(path)
       if (lockInfo) {
         toast({
-          title: '文件锁定',
-          description: `文件正在被 ${lockInfo.userName} 在其他设备上编辑`,
+          title: 'File locked',
+          description: `File is being edited by ${lockInfo.userName} on another device`,
           variant: 'destructive'
         })
         return null
@@ -853,28 +853,28 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
         case 'keep_local':
           finalContent = localContent
           toast({
-            title: '冲突处理',
-            description: '保留本地版本'
+            title: 'Conflict handling',
+            description: 'Kept local version'
           })
           break
         case 'keep_remote':
           finalContent = remoteContent
           toast({
-            title: '冲突处理',
-            description: '使用远程版本'
+            title: 'Conflict handling',
+            description: 'Using remote version'
           })
           break
         case 'merge':
           finalContent = mergeSimpleContent(localContent, remoteContent)
           toast({
-            title: '冲突处理',
-            description: '自动合并成功'
+            title: 'Conflict handling',
+            description: 'Auto-merge succeeded'
           })
           break
         case 'manual':
           toast({
-            title: '需要手动处理',
-            description: '冲突较复杂，请手动处理',
+            title: 'Manual handling needed',
+            description: 'Conflict is complex, please handle manually',
             variant: 'destructive'
           })
           return null
@@ -1104,7 +1104,7 @@ export async function compareS3FileVersions(path: string): Promise<SyncResult> {
   const store = await getStore()
   const config = await store.get<S3Config>('s3SyncConfig')
   if (!config) {
-    return { shouldUpdate: false, action: 'none', reason: 'S3 未配置' }
+    return { shouldUpdate: false, action: 'none', reason: 'S3 is not configured' }
   }
 
   // 获取 proxy
@@ -1126,7 +1126,7 @@ export async function compareS3FileVersions(path: string): Promise<SyncResult> {
       return {
         shouldUpdate: true,
         action: 'push',
-        reason: '远程文件不存在，需要推送到远程'
+        reason: 'Remote file does not exist, push to remote needed'
       }
     }
     return { shouldUpdate: false, action: 'none' }
@@ -1137,7 +1137,7 @@ export async function compareS3FileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'pull',
-      reason: '本地文件不存在，需要从远程拉取'
+      reason: 'Local file does not exist, pull from remote needed'
     }
   }
 
@@ -1147,7 +1147,7 @@ export async function compareS3FileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'pull',
-      reason: '远程文件已更新（ETag 不匹配），需要拉取更新'
+      reason: 'Remote file updated (ETag mismatch), pull needed'
     }
   }
 
@@ -1156,7 +1156,7 @@ export async function compareS3FileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: false,
       action: 'none',
-      reason: 'ETag 匹配，文件已同步'
+      reason: 'ETag matches, file is synced'
     }
   }
 
@@ -1169,14 +1169,14 @@ export async function compareS3FileVersions(path: string): Promise<SyncResult> {
     return {
       shouldUpdate: true,
       action: 'push',
-      reason: '本地文件较新，需要推送'
+      reason: 'Local file is newer, push needed'
     }
   }
 
   return {
     shouldUpdate: true,
     action: 'pull',
-    reason: '远程文件较新，需要拉取'
+    reason: 'Remote file is newer, pull needed'
   }
 }
 
@@ -1189,7 +1189,7 @@ export async function compareWebDAVFileVersions(path: string): Promise<SyncResul
   const store = await getStore()
   const config = await store.get<WebDAVConfig>('webdavSyncConfig')
   if (!config) {
-    return { shouldUpdate: false, action: 'none', reason: 'WebDAV 未配置' }
+    return { shouldUpdate: false, action: 'none', reason: 'WebDAV is not configured' }
   }
 
   // 获取 proxy
@@ -1211,7 +1211,7 @@ export async function compareWebDAVFileVersions(path: string): Promise<SyncResul
       return {
         shouldUpdate: true,
         action: 'push',
-        reason: '远程文件不存在，需要推送到远程'
+        reason: 'Remote file does not exist, push to remote needed'
       }
     }
     return { shouldUpdate: false, action: 'none' }
@@ -1222,7 +1222,7 @@ export async function compareWebDAVFileVersions(path: string): Promise<SyncResul
     return {
       shouldUpdate: true,
       action: 'pull',
-      reason: '本地文件不存在，需要从远程拉取'
+      reason: 'Local file does not exist, pull from remote needed'
     }
   }
 
@@ -1232,7 +1232,7 @@ export async function compareWebDAVFileVersions(path: string): Promise<SyncResul
     return {
       shouldUpdate: true,
       action: 'pull',
-      reason: '远程文件已更新（ETag 不匹配），需要拉取更新'
+      reason: 'Remote file updated (ETag mismatch), pull needed'
     }
   }
 
@@ -1241,7 +1241,7 @@ export async function compareWebDAVFileVersions(path: string): Promise<SyncResul
     return {
       shouldUpdate: false,
       action: 'none',
-      reason: 'ETag 匹配，文件已同步'
+      reason: 'ETag matches, file is synced'
     }
   }
 
@@ -1254,13 +1254,13 @@ export async function compareWebDAVFileVersions(path: string): Promise<SyncResul
     return {
       shouldUpdate: true,
       action: 'push',
-      reason: '本地文件较新，需要推送'
+      reason: 'Local file is newer, push needed'
     }
   }
 
   return {
     shouldUpdate: true,
     action: 'pull',
-    reason: '远程文件较新，需要拉取'
+    reason: 'Remote file is newer, pull needed'
   }
 }

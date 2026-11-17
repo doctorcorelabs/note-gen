@@ -287,7 +287,7 @@ function classifyImageAnalysisError(error: unknown): {
     return { code: 'aborted', message }
   }
   if (/VISION_MODEL_NOT_CONFIGURED/.test(rawMessage)) {
-    return { code: 'not_configured', message: '尚未配置图片识别模型。' }
+    return { code: 'not_configured', message: 'No image recognition model has been configured.' }
   }
   if (status === 401 || status === 403 || /401|403|unauthorized|forbidden|api.?key|authentication/i.test(rawMessage)) {
     return { code: 'auth', message }
@@ -756,7 +756,7 @@ export async function inspectChatImage(
   ])
   throwIfAborted(signal)
   if (!visualAnalysis.trim() && !visualFailure) {
-    visualFailure = { code: 'empty_response', message: '图片识别模型返回了空分析内容。' }
+    visualFailure = { code: 'empty_response', message: 'The image recognition model returned empty analysis content.' }
   }
   const method = recognitionMethod(ocrText.trim(), visualAnalysis.trim())
   return {

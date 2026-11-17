@@ -204,7 +204,7 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
       await store.set('ragIndexNeedsRebuild', true);
     } catch (error) {
       toast({
-        title: '重置 RAG 设置失败',
+        title: 'Failed to reset RAG settings',
         description: error as string,
         variant: 'destructive',
       });

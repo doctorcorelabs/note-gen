@@ -6213,7 +6213,8 @@
         "openWorkspace": {
           "title": "打开工作区",
           "desc": "选择或切换工作区目录"
-        }
+        },
+        "selectWorkspaceDialogTitle": "选择工作区目录"
       },
       "onboarding": {
         "title": "新手引导",
@@ -6284,7 +6285,8 @@
           }
         },
         "sampleRecord": "这是我在 NoteGen 里的第一条记录。\n\n我可以先把零散想法快速记下来，不用一开始就整理结构。\n后面可以把这些记录整理成一篇正式笔记，再继续编辑。\n如果觉得内容不够通顺，还可以用 AI 帮我润色、改写或补充重点。\n写完之后，笔记会保存在本地 Markdown 文件里，也方便后续查找和管理。"
-      }
+      },
+      "viewDocs": "查看使用文档："
     },
     "unsupportedFile": {
       "title": "无法预览此文件",
@@ -6522,7 +6524,11 @@
         "autoCalcEnabled": "已启用自动向量计算",
         "autoCalcDisabled": "已禁用自动向量计算",
         "settingFailed": "设置失败",
-        "confirmDeleteVectors": "确定要删除 {count} 个文件的向量吗？"
+        "confirmDeleteVectors": "确定要删除 {count} 个文件的向量吗？",
+        "notDirectory": "不是目录",
+        "notDirectoryDesc": "只能对目录进行批量向量计算",
+        "vectorProcessing": "向量处理",
+        "embeddingModelUnavailable": "未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型"
       },
       "folderView": {
         "vectorDbNotEnabled": "向量数据库未启用",
@@ -6575,7 +6581,8 @@
       },
       "error": {
         "fileExists": "名称已存在",
-        "invalidName": "名称不能包含斜杠、反斜杠或控制字符"
+        "invalidName": "名称不能包含斜杠、反斜杠或控制字符",
+        "selectExistingMarkdown": "请选择存在的 Markdown 文件"
       },
       "clipboard": {
         "copied": "已复制到剪贴板",
@@ -7696,7 +7703,21 @@
     "retry": "重试"
   },
   "editorImage": {
-    "changedOnDisk": "图片已被同步或其他操作更新。请重新打开图片后再编辑保存。"
+    "changedOnDisk": "图片已被同步或其他操作更新。请重新打开图片后再编辑保存。",
+    "loadFailed": "加载图片失败",
+    "saveSuccess": "保存成功",
+    "imageSaved": "图片已保存",
+    "saveFailed": "保存失败",
+    "loading": "加载中...",
+    "cannotLoadImage": "无法加载图片",
+    "cropMode": "裁切模式",
+    "rotate": "旋转",
+    "flipHorizontal": "水平翻转",
+    "flipVertical": "垂直翻转",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "reset": "重置",
+    "save": "保存"
   },
   "wiki": {
     "title": "知识库",

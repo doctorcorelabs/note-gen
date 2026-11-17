@@ -280,14 +280,14 @@ export function CodeBlockView({ editor, node, updateAttributes, getPos, element,
       if (!isCurrent()) return
       setCopied(true)
       toast({
-        title: '复制成功',
-        description: '已复制代码块内容',
+        title: 'Copied successfully',
+        description: 'Code block content copied',
       })
     } catch {
       if (!isCurrent()) return
       toast({
-        title: '复制失败',
-        description: '无法复制代码块内容',
+        title: 'Copy failed',
+        description: 'Unable to copy code block content',
         variant: 'destructive',
       })
     } finally {
@@ -305,7 +305,7 @@ export function CodeBlockView({ editor, node, updateAttributes, getPos, element,
           onPointerDown={(event) => event.stopPropagation()}
         >
           <ResponsiveSelect
-            title="选择代码块语言"
+            title="Select code block language"
             value={selectedLanguageValue}
             onValueChange={handleLanguageChange}
             className="code-block-language-trigger"
@@ -324,8 +324,8 @@ export function CodeBlockView({ editor, node, updateAttributes, getPos, element,
           <button
             type="button"
             className="code-block-copy-button"
-            title={copied ? '已复制' : '复制代码块'}
-            aria-label={copied ? '已复制代码块' : '复制代码块'}
+            title={copied ? 'Copied' : 'Copy code block'}
+            aria-label={copied ? 'Code block copied' : 'Copy code block'}
             onMouseDown={(event) => event.preventDefault()}
             onClick={handleCopy}
           >

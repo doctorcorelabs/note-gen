@@ -29,8 +29,8 @@ export function FolderVectorMenu({ item }: FolderVectorMenuProps) {
     // 检查是否真的是目录（防止误将文件当作目录处理）
     if (!item.isDirectory) {
       toast({
-        title: '不是目录',
-        description: '只能对目录进行批量向量计算',
+        title: t('context.notDirectory'),
+        description: t('context.notDirectoryDesc'),
         variant: 'destructive'
       });
       return;
@@ -69,8 +69,8 @@ export function FolderVectorMenu({ item }: FolderVectorMenuProps) {
 
       if (!result.embeddingModelAvailable) {
         toast({
-          title: '向量处理',
-          description: '未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型',
+          title: t('context.vectorProcessing'),
+          description: t('context.embeddingModelUnavailable'),
           variant: 'destructive'
         });
         setVectorCalcStatus(path, 'idle');

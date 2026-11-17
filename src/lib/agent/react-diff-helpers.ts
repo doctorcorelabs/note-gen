@@ -24,7 +24,7 @@ export function replaceLinesInRange(
 
   // 验证行号范围
   if (startIndex < 0 || endIndex >= lines.length) {
-    throw new Error(`无效的行号范围: ${startLine}-${endLine}，文件共 ${lines.length} 行`)
+    throw new Error(`Invalid line range: ${startLine}-${endLine}; the file has ${lines.length} lines`)
   }
 
   // 替换指定行
@@ -58,7 +58,7 @@ export function searchReplaceContent(
 
     return content.replace(regex, replacement)
   } catch (error) {
-    throw new Error(`搜索替换失败: ${error}`)
+    throw new Error(`Search and replace failed: ${error}`)
   }
 }
 
@@ -75,7 +75,7 @@ export function insertLinesAtPosition(
 
   // 验证行号
   if (afterLine < 0 || afterLine > lines.length) {
-    throw new Error(`无效的行号: ${afterLine}，文件共 ${lines.length} 行`)
+    throw new Error(`Invalid line number: ${afterLine}; the file has ${lines.length} lines`)
   }
 
   // 在指定行后插入内容
@@ -110,7 +110,7 @@ export function deleteLinesInRange(
 
   // 验证行号范围
   if (startIndex < 0 || endIndex >= lines.length) {
-    throw new Error(`无效的行号范围: ${startLine}-${endLine}，文件共 ${lines.length} 行`)
+    throw new Error(`Invalid line range: ${startLine}-${endLine}; the file has ${lines.length} lines`)
   }
 
   // 删除指定行

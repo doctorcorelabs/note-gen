@@ -119,7 +119,7 @@ function ColorInput({ label, value, defaultColor, onChange }: ColorInputProps) {
         value={hexValue}
         onChange={handleColorChange}
         className="w-8 h-8 rounded cursor-pointer border-2 border-border hover:border-primary transition-colors shrink-0"
-        title="点击选择颜色"
+        title="Click to choose a color"
       />
 
       {/* 标签 */}
@@ -141,7 +141,7 @@ function ColorInput({ label, value, defaultColor, onChange }: ColorInputProps) {
             size="sm"
             className="h-6 w-6 p-0"
             onClick={handleReset}
-            title="恢复默认值"
+            title="Restore defaults"
           >
             <RotateCcw className="h-3 w-3" />
           </Button>

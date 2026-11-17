@@ -164,7 +164,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
     } catch (error) {
       console.error('Failed to load image:', error)
       toast({
-        title: '加载图片失败',
+        title: t('loadFailed'),
         description: String(error),
         variant: 'destructive'
       })
@@ -337,13 +337,13 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
       await loadFileTree()
 
       toast({
-        title: '保存成功',
-        description: '图片已保存'
+        title: t('saveSuccess'),
+        description: t('imageSaved')
       })
     } catch (error) {
       console.error('Failed to save image:', error)
       toast({
-        title: '保存失败',
+        title: t('saveFailed'),
         description: String(error),
         variant: 'destructive'
       })
@@ -441,7 +441,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center h-full bg-background">
-        <p className="text-muted-foreground">加载中...</p>
+        <p className="text-muted-foreground">{t('loading')}</p>
       </div>
     )
   }
@@ -449,7 +449,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
   if (!imageSrc) {
     return (
       <div className="flex-1 flex items-center justify-center h-full bg-background">
-        <p className="text-muted-foreground">无法加载图片</p>
+        <p className="text-muted-foreground">{t('cannotLoadImage')}</p>
       </div>
     )
   }
@@ -461,7 +461,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         <Toggle
           pressed={cropMode}
           onPressedChange={setCropMode}
-          aria-label="裁切模式"
+          aria-label={t('cropMode')}
           size="sm"
         >
           <Crop className="h-4 w-4" />
@@ -471,7 +471,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         
         <TooltipButton
           icon={<RotateCw className="h-4 w-4" />}
-          tooltipText="旋转"
+          tooltipText={t('rotate')}
           onClick={handleRotate}
           size="sm"
           side="bottom"
@@ -479,7 +479,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         
         <TooltipButton
           icon={<FlipHorizontal className="h-4 w-4" />}
-          tooltipText="水平翻转"
+          tooltipText={t('flipHorizontal')}
           onClick={handleFlipHorizontal}
           size="sm"
           side="bottom"
@@ -487,7 +487,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         
         <TooltipButton
           icon={<FlipVertical className="h-4 w-4" />}
-          tooltipText="垂直翻转"
+          tooltipText={t('flipVertical')}
           onClick={handleFlipVertical}
           size="sm"
           side="bottom"
@@ -497,7 +497,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         
         <TooltipButton
           icon={<ZoomIn className="h-4 w-4" />}
-          tooltipText="放大"
+          tooltipText={t('zoomIn')}
           onClick={handleZoomIn}
           size="sm"
           side="bottom"
@@ -505,7 +505,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
         
         <TooltipButton
           icon={<ZoomOut className="h-4 w-4" />}
-          tooltipText="缩小"
+          tooltipText={t('zoomOut')}
           onClick={handleZoomOut}
           size="sm"
           side="bottom"
@@ -521,7 +521,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
               onClick={handleReset}
             >
               <Undo className="h-4 w-4 mr-1" />
-              重置
+              {t('reset')}
             </Button>
             
             <Button
@@ -530,7 +530,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
               onClick={handleSave}
             >
               <Save className="h-4 w-4 mr-1" />
-              保存
+              {t('save')}
             </Button>
           </>
         )}

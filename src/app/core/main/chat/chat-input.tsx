@@ -639,7 +639,7 @@ export const ChatInput = React.memo(function ChatInput() {
       const url = currentBrowserTab.url!
       setLockedBrowserPages(current => [...current, {
         id, url, name,
-        context: `## 当前浏览器网页\n网址：${url}\n网页快照尚未完成，请告知用户稍后重试。\n`,
+        context: `## Current browser page\nURL: ${url}\nThe page snapshot is not ready yet; please tell the user to retry later.\n`,
       }])
       void buildBrowserPageContext(id, url).then(context => {
         setLockedBrowserPages(current => current.map(page => page.id === id && page.url === url
@@ -1328,20 +1328,20 @@ export const ChatInput = React.memo(function ChatInput() {
           const numberedLines = editorContent.numberedLines.split('\n')
           const previewLines = numberedLines.slice(0, 100)
           const totalLines = editorContent.totalLines || numberedLines.length
-          const truncatedNote = totalLines > 100 ? `\n... (共 ${totalLines} 行，后 ${totalLines - 100} 行省略)` : ''
+          const truncatedNote = totalLines > 100 ? `\n... (total ${totalLines} lines; last ${totalLines - 100} lines omitted)` : ''
 
-          return `已关联当前编辑器文件：${filePath.split('/').pop() || filePath}
-你可以直接基于下面的行号和版本使用 editor_replace_lines。
+          return `Linked the current editor file: ${filePath.split('/').pop() || filePath}
+You can use editor_replace_lines directly based on the line numbers and version below.
 
-编辑器版本：v${editorContent.version}
-行号预览：
+Editor version: v${editorContent.version}
+Line number preview:
 \`\`\`
 ${previewLines.join('\n')}
 \`\`\`${truncatedNote}
 
-优先使用：
-- 修改某个区块/列表：editor_replace_lines({startLine: 4, endLine: 5, replaceContent: "新内容", version: ${editorContent.version}})
-- 仅在有精确选区位置时才使用 from/to
+Prefer:
+- To edit a block/list: editor_replace_lines({startLine: 4, endLine: 5, replaceContent: "new content", version: ${editorContent.version}})
+- Only use from/to when you have an exact selection position
 `
         }
       }
@@ -1352,7 +1352,7 @@ ${previewLines.join('\n')}
         : await platform.fs.exists(filePath, { baseDir: BaseDirectory.AppData })
 
       if (!fileExists) {
-        return `文件 ${filePath.split('/').pop() || filePath} 不存在或已被删除`
+        return `File ${filePath.split('/').pop() || filePath} does not exist or has been deleted`
       }
 
       let content: string
@@ -1370,23 +1370,23 @@ ${previewLines.join('\n')}
       })
 
       const totalLines = lines.length
-      const truncatedNote = totalLines > 100 ? `\n... (共 ${totalLines} 行，后 ${totalLines - 100} 行省略)` : ''
+      const truncatedNote = totalLines > 100 ? `\n... (total ${totalLines} lines; last ${totalLines - 100} lines omitted)` : ''
 
-      return `已关联文件：${filePath.split('/').pop() || filePath}
-如需修改这个非当前编辑器文件，请基于完整内容生成更新后的 Markdown，并使用 note_update_file 写入。
+      return `Linked file: ${filePath.split('/').pop() || filePath}
+To edit this file, which is not the current editor file, generate the updated Markdown from the full content and write it with note_update_file.
 
-行号预览：
+Line number preview:
 \`\`\`
 ${previewLines.join('\n')}
 \`\`\`${truncatedNote}
 
-使用示例：
-- 更新文件：note_update_file({filePath: "${filePath}", content: "完整更新后的 Markdown"})
+Usage example:
+- Update the file: note_update_file({filePath: "${filePath}", content: "fully updated Markdown"})
 `
     } catch (error) {
       console.error('生成文件预览失败:', error)
-      return `已关联文件：${filePath.split('/').pop() || filePath}
-（无法读取文件内容）`
+      return `Linked file: ${filePath.split('/').pop() || filePath}
+(Unable to read the file content)`
     }
   }
 

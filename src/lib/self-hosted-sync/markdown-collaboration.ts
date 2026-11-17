@@ -158,7 +158,7 @@ export async function openMarkdownCollaboration(
       await transport.initialize(initializationUpdate)
       const receivedAuthoritativeBaseline = await consumeRemoteUpdates(true)
       if (!receivedAuthoritativeBaseline || !isV3Initialized()) {
-        throw new Error('协作文档初始化后未能读取服务端权威基线')
+        throw new Error('The authoritative server baseline could not be read after the collaborative document was initialized')
       }
     }
 

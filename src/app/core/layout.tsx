@@ -119,8 +119,8 @@ export default function RootLayout({
 
       if (openedCount === 0) {
         toast({
-          title: '无法打开文件',
-          description: '请选择存在的 Markdown 文件',
+          title: t('record.chat.artifacts.openFailed'),
+          description: t('article.file.error.selectExistingMarkdown'),
           variant: 'destructive',
         })
       }

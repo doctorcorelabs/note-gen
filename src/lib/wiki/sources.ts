@@ -104,7 +104,7 @@ export async function getWikiSourceDocument(sourceKey: string): Promise<WikiSour
     const nodeTexts = nodes.map(node => ({ id: node.id, text: [
       `- [${node.id}] ${node.data.label || node.id}（${node.type}）${node.data.description ? `：${node.data.description}` : ''}`,
       ...project.document.edges.filter(edge => edge.source === node.id || edge.target === node.id)
-        .map(edge => `- ${nodeName(edge.source)} --${edge.label || '连接'}--> ${nodeName(edge.target)}`),
+        .map(edge => `- ${nodeName(edge.source)} --${edge.label || 'Connection'}--> ${nodeName(edge.target)}`),
     ].join('\n') }))
     return {
       source: {

@@ -37,7 +37,7 @@ const useRecordingStore = create<RecordingState>((set, get) => ({
   startRecording: async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('当前环境不支持麦克风录音，请检查 Android WebView 或应用权限配置')
+        throw new Error('The current environment does not support microphone recording; check the Android WebView or app permission configuration')
       }
 
       // 请求麦克风权限
@@ -100,15 +100,15 @@ const useRecordingStore = create<RecordingState>((set, get) => ({
       // 根据错误类型提供更具体的错误信息
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError') {
-          throw new Error('麦克风权限被拒绝，请在系统设置中允许 NoteGen 访问麦克风')
+          throw new Error('Microphone permission was denied; allow NoteGen to access the microphone in system settings')
         } else if (error.name === 'NotFoundError') {
-          throw new Error('未检测到麦克风设备，请连接麦克风后重试')
+          throw new Error('No microphone device detected; connect a microphone and retry')
         } else if (error.name === 'NotReadableError') {
-          throw new Error('麦克风正在被其他应用使用，请关闭其他应用后重试')
+          throw new Error('The microphone is in use by another app; close the other app and retry')
         }
       }
       
-      throw new Error('无法启动录音，请检查麦克风设备和权限设置')
+      throw new Error('Unable to start recording; check the microphone device and permission settings')
     }
   },
 
