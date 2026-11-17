@@ -313,14 +313,14 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
 export async function compareFileVersions(path: string): Promise<SyncResult> {
   // 检查当前平台是否是 S3
   const store = await getStore()
-  const platform = await store.get<string>('primaryBackupMethod')
+  const primaryBackupMethod = await store.get<string>('primaryBackupMethod')
   await retryWorkspacePathMoves()
 
-  if (platform === 's3') {
+  if (primaryBackupMethod === 's3') {
     return compareS3FileVersions(path)
   }
 
-  if (platform === 'webdav') {
+  if (primaryBackupMethod === 'webdav') {
     return compareWebDAVFileVersions(path)
   }
 
