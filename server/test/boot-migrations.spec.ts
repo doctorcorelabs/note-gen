@@ -369,18 +369,19 @@ describe('runStartupMigrationStep', () => {
     expect(outcome.message).not.toContain('marks');
   });
 
-  it('never logs SQL from a real drizzle apply error, but keeps the code and the failing migration (F-01, K4(c) shape)', async () => {
+  it('never logs SQL from a real drizzle apply error, keeps only the code, and claims no migration tag (F-01, K4(c) shape)', async () => {
     // The exact PREDEPLOY K4(c) shape: a real DrizzleQueryError whose
     // message embeds the failing statement, with no top-level code;
-    // the driver code lives on the cause, and the failing tag is
-    // supplied by the migrator wrapper as a structured property.
+    // the driver code lives on the cause, and no migration tag is
+    // carried: the apply wrapper claims no tag, because the
+    // post-failure journal state does not identify the failing
+    // migration. The log line must carry the code only.
     const cause = codedError('relation "nonexistent_table_k4c" does not exist', '42P01');
     const drizzleError = new DrizzleQueryError(
       'ALTER TABLE "nonexistent_table_k4c" ADD COLUMN "x" integer',
       [],
       cause,
     );
-    (drizzleError as unknown as Record<string, unknown>).migrationTag = '0002_m8-tighten';
     const runners = recordingRunners({
       runMigrations: async () => {
         throw drizzleError;
@@ -398,16 +399,20 @@ describe('runStartupMigrationStep', () => {
     }
     expect(outcome.kind).toBe('migration-failed');
     expect(outcome.message).toContain('42P01');
-    expect(outcome.message).toContain('0002_m8-tighten');
+    expect(outcome.message).toContain('database error 42P01');
+    // No tag claim: the fixed template word is "migrations", so a
+    // "migration " segment would only come from a tag claim.
+    expect(outcome.message).not.toContain('migration ');
     expect(outcome.message).not.toContain('ALTER TABLE');
     expect(outcome.message).not.toContain('nonexistent_table_k4c');
     expect(outcome.message).not.toContain('Failed query');
     expect(outcome.message).not.toContain('params:');
   });
 
-  it('keeps the failing migration when a drizzle apply error carries no code at all', async () => {
+  it('uses a fixed message with no tag claim when a drizzle apply error carries no code and no tag', async () => {
+    // No code on the cause chain and no carried tag: the wrapper
+    // supplies neither, and no tag is guessed from journal state.
     const drizzleError = new DrizzleQueryError('CREATE TABLE "audit_events" ("id" text)', [], undefined);
-    (drizzleError as unknown as Record<string, unknown>).migrationTag = '0000_init';
     const runners = recordingRunners({
       runMigrations: async () => {
         throw drizzleError;
@@ -424,9 +429,12 @@ describe('runStartupMigrationStep', () => {
       throw new Error('unreachable');
     }
     expect(outcome.kind).toBe('migration-failed');
-    expect(outcome.message).toContain('0000_init');
+    expect(outcome.message).toContain('unknown reason');
+    expect(outcome.message).not.toContain('migration ');
     expect(outcome.message).not.toContain('CREATE TABLE');
     expect(outcome.message).not.toContain('audit_events');
+    expect(outcome.message).not.toContain('Failed query');
+    expect(outcome.message).not.toContain('params:');
   });
 
   it('uses a fixed message for a codeless error whose message carries SQL', async () => {

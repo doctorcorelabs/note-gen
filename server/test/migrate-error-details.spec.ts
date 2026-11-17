@@ -6,33 +6,25 @@
 // (db/migrate.ts; PREDEPLOY finding F-01, AD-131). The boot log may
 // carry only validated codes, families, and migration tags, never
 // an error message: these tests pin the reader that extracts those
-// details from an error and its cause chain, the helper that
-// identifies the failing migration from journal state, and the
-// machine codes the manifest reader attaches to its own failures.
-// Live-database proof that a failed apply run wraps with the right
-// tag belongs to the merge gate on muse-2, which has Postgres; no
-// database runs in this file.
+// details from an error and its cause chain, and the machine codes
+// the manifest reader attaches to its own failures. The apply
+// wrapper claims no migration tag (the post-failure journal state
+// does not identify the failing migration), so no helper derives
+// one. Live-database proof that a failed apply run logs the driver
+// code with no tag claim and no SQL belongs to the merge gate on
+// muse-2, which has Postgres; no database runs in this file.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  firstUnappliedTag,
   isSafeMigrationErrorCode,
   isSafeMigrationTag,
   MIGRATION_MANIFEST_CODE,
   readMigrationErrorDetails,
   readMigrationManifest,
-  type MigrationManifest,
 } from '../src/db/migrate.js';
-
-function fakeManifest(tags: string[]): MigrationManifest {
-  return {
-    folder: 'fake-migrations',
-    entries: tags.map((tag, idx) => ({ idx, tag, hash: `hash-${tag}` })),
-  };
-}
 
 describe('readMigrationErrorDetails', () => {
   it('reads a top-level code and tag', () => {
@@ -83,26 +75,6 @@ describe('readMigrationErrorDetails', () => {
     expect(readMigrationErrorDetails('a string')).toEqual({});
     expect(readMigrationErrorDetails(null)).toEqual({});
     expect(readMigrationErrorDetails(undefined)).toEqual({});
-  });
-});
-
-describe('firstUnappliedTag', () => {
-  it('returns the first entry whose digest is not applied', () => {
-    const manifest = fakeManifest(['0000_init', '0001_m8-expand', '0002_m8-tighten']);
-    expect(firstUnappliedTag(manifest, [])).toBe('0000_init');
-    expect(firstUnappliedTag(manifest, ['hash-0000_init'])).toBe('0001_m8-expand');
-    expect(firstUnappliedTag(manifest, ['hash-0000_init', 'hash-0001_m8-expand'])).toBe('0002_m8-tighten');
-  });
-
-  it('returns undefined when every entry applied or the manifest is empty', () => {
-    const manifest = fakeManifest(['0000_init']);
-    expect(firstUnappliedTag(manifest, ['hash-0000_init'])).toBeUndefined();
-    expect(firstUnappliedTag(fakeManifest([]), [])).toBeUndefined();
-  });
-
-  it('returns undefined rather than an unsafe tag', () => {
-    const manifest = fakeManifest(['../escape']);
-    expect(firstUnappliedTag(manifest, [])).toBeUndefined();
   });
 });
 

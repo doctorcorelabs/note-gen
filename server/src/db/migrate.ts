@@ -57,10 +57,14 @@
 // failing SQL verbatim ("Failed query: ..."), with the driver code
 // only on the error cause. This module never lets such a message
 // reach a log line unmediated: apply failures are wrapped here with
-// a message that names only the failing migration tag, and the
-// driver code plus the tag travel as validated properties that the
-// server entrypoint reads through readMigrationErrorDetails. The
-// original error stays reachable as the wrapper cause for
+// the fixed message "Migration apply failed.", and the driver code
+// travels as a validated property that the server entrypoint reads
+// through readMigrationErrorDetails. The wrapper claims no
+// migration tag: the journal state left behind by a failed run
+// does not identify the failing migration, because the apply is
+// atomic and a mid-run failure leaves no migration applied, so
+// deriving a tag from that state would name the wrong migration.
+// The original error stays reachable as the wrapper cause for
 // programmatic inspection only; nothing that logs the wrapper may
 // log its cause, its message, or its query/params. Manifest, lock,
 // and drift failures carry their own machine codes plus migration
@@ -166,26 +170,6 @@ export function readMigrationErrorDetails(error: unknown): MigrationErrorDetails
     current = holder.cause;
   }
   return details;
-}
-
-// The first journal entry, in journal order, whose digest is not in
-// the applied set. The drizzle migrator applies pending migrations
-// sequentially and stops at the first failure, so after a failed
-// apply run this entry is the migration that failed: entries before
-// it applied in this run (or earlier), and it did not. Returns
-// undefined when every entry applied, when the manifest is empty,
-// or when the failing tag fails validation (fail safe, not sorry).
-export function firstUnappliedTag(
-  manifest: MigrationManifest,
-  appliedHashes: readonly string[],
-): string | undefined {
-  const applied = new Set(appliedHashes);
-  for (const entry of manifest.entries) {
-    if (!applied.has(entry.hash)) {
-      return isSafeMigrationTag(entry.tag) ? entry.tag : undefined;
-    }
-  }
-  return undefined;
 }
 
 // One journal entry: the tag names the SQL file (tag + '.sql'), and the
@@ -438,31 +422,16 @@ async function acquireMigrationLock(
 
 // Wraps a failed drizzle apply run. The thrown error's message
 // embeds the failing SQL verbatim and must never be logged; the
-// wrapper message names only the failing migration tag (derived
-// from the journal state left behind, see firstUnappliedTag), the
-// driver code travels as a validated property, and the original
-// error stays reachable as cause for programmatic inspection only.
-// When the journal cannot be re-read (the connection died with the
-// failure), the wrapper carries no tag rather than a guessed one.
-async function wrapMigrationApplyError(
-  error: unknown,
-  manifest: MigrationManifest,
-  client: Sql,
-): Promise<Error> {
+// wrapper carries the fixed message "Migration apply failed." plus
+// the driver code as a validated property, and the original error
+// stays reachable as cause for programmatic inspection only. The
+// wrapper claims no migration tag: no journal re-read can identify
+// the failing migration after an atomic apply run fails, so the
+// wrapper does not guess one.
+function wrapMigrationApplyError(error: unknown): Error {
   const details = readMigrationErrorDetails(error);
-  let failingTag: string | undefined;
-  try {
-    failingTag = firstUnappliedTag(manifest, await readAppliedHashes(client));
-  } catch {
-    failingTag = undefined;
-  }
-  if (failingTag === undefined) {
-    failingTag = details.migrationTag;
-  }
-  const wrapped = new Error(
-    failingTag !== undefined ? `Migration apply failed for migration ${failingTag}.` : 'Migration apply failed.',
-  );
-  attachMigrationErrorDetails(wrapped, { code: details.code, migrationTag: failingTag });
+  const wrapped = new Error('Migration apply failed.');
+  attachMigrationErrorDetails(wrapped, { code: details.code });
   (wrapped as unknown as { cause?: unknown }).cause = error;
   return wrapped;
 }
@@ -491,7 +460,7 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<RunM
     try {
       await migrate(handle.db, { migrationsFolder: manifest.folder });
     } catch (error: unknown) {
-      throw await wrapMigrationApplyError(error, manifest, handle.client);
+      throw wrapMigrationApplyError(error);
     }
     const afterHashes = await readAppliedHashes(handle.client);
     const appliedTags = manifest.entries

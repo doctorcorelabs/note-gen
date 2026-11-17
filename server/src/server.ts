@@ -169,9 +169,12 @@ const DATABASE_UNREACHABLE_CODES = new Set([
 // embeds the failing SQL verbatim in its message with no top-level
 // code (PREDEPLOY finding F-01, AD-131), and quoting any message
 // would put that SQL in the boot log. The driver code, when one
-// exists, is recovered from the cause chain by the reader; the
-// failing migration tag is supplied by the migrator wrapper in
-// db/migrate.ts. Every branch below composes its message from fixed
+// exists, is recovered from the cause chain by the reader; a
+// migration tag appears only when the error itself legitimately
+// carries one (manifest and drift failures), never from the apply
+// wrapper, which claims no tag because the post-failure journal
+// state does not identify the failing migration. Every branch
+// below composes its message from fixed
 // templates plus validated tokens, so no log line from this
 // function can contain SQL, a URL, or credential material.
 function toFailedMigrationOutcome(error: unknown): Extract<StartupMigrationOutcome, { status: 'failed' }> {
