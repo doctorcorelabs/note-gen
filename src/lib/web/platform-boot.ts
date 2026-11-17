@@ -11,8 +11,9 @@
  *    is read. The cleanup runs regardless of auth status and never
  *    throws; on a browser without POC keys it finds nothing.
  * 2. initializeWebPlatform, which registers every web adapter and
- *    freezes the registry. The store adapter receives its CSRF
- *    token provider from the one shared V3-30 seam (see below).
+ *    freezes the registry. The store and sql adapters receive
+ *    their CSRF token providers from the one shared V3-30 seam
+ *    (see below).
  *
  * Call site: the root layout module scope (src/app/layout.tsx),
  * which wraps every route, so module evaluation precedes all
@@ -30,16 +31,18 @@
  * is idempotent through the registry freeze, so repeated calls
  * (dev re-run, strict re-mount) are safe.
  *
- * CSRF seam: the provider resolves the shared auth session lazily
+ * CSRF seam: each provider resolves the shared auth session lazily
  * on each call and returns null on any failure, honoring the
- * WebStoreAdapterDeps contract (a mutation without a token is sent
- * without the header and the server answers honestly). Boot never
- * creates a second token store: the session, its seam, and its
- * in-memory token stay the single instance owned by auth-client.
- * A stale cached token is not refreshed on this path: the store
- * adapter has no csrf_invalid retry, so a stale token fails every
- * later flush until reload. That refresh belongs to a flush
- * behavior change and is recorded as an open item, not fixed here.
+ * store and sql adapter dep contracts (a request without a token
+ * is sent without the header and the server answers honestly).
+ * Boot never creates a second token store: the session, its seam,
+ * and its in-memory token stay the single instance owned by
+ * auth-client. A stale cached token is not refreshed on this
+ * path: the store adapter has no csrf_invalid retry and the sql
+ * db-client retries only network and 429/503 failures, so a stale
+ * token fails every later flush and every later sql request until
+ * reload. That refresh belongs to a flush behavior change and is
+ * recorded as an open item, not fixed here.
  */
 
 import { isTauri } from "../platform/detect";
@@ -48,21 +51,43 @@ import { initializeWebPlatform } from "../platform/wiring";
 import { getSharedAuthSession } from "./auth-client";
 
 /**
- * CSRF token provider for store mutations, from the one shared
- * V3-30 seam. The seam getToken fetches when no token is cached
- * and throws when the session is dead or the fetch fails; this
+ * Read one CSRF token from the shared V3-30 seam, lazily on each
+ * call. The seam getToken fetches when no token is cached and
+ * throws when the session is dead or the fetch fails; this
  * wrapper converts every failure to null, per the adapter dep
- * contract. Exported for the boot spec; production code reaches it
- * only through ensureWebPlatformInitialized.
+ * contracts. The per-adapter providers below share this one
+ * reader, so there is still exactly one token store.
  */
-export async function getStoreCsrfTokenFromSharedSeam(): Promise<
-  string | null
-> {
+async function getCsrfTokenFromSharedSeam(): Promise<string | null> {
   try {
     return await getSharedAuthSession().seam.csrf.getToken();
   } catch {
     return null;
   }
+}
+
+/**
+ * CSRF token provider for store mutations, from the one shared
+ * V3-30 seam (see getCsrfTokenFromSharedSeam). Exported for the
+ * boot spec; production code reaches it only through
+ * ensureWebPlatformInitialized.
+ */
+export async function getStoreCsrfTokenFromSharedSeam(): Promise<
+  string | null
+> {
+  return getCsrfTokenFromSharedSeam();
+}
+
+/**
+ * CSRF token provider for sql requests, from the one shared
+ * V3-30 seam (see getCsrfTokenFromSharedSeam). Exported for the
+ * boot spec; production code reaches it only through
+ * ensureWebPlatformInitialized.
+ */
+export async function getSqlCsrfTokenFromSharedSeam(): Promise<
+  string | null
+> {
+  return getCsrfTokenFromSharedSeam();
 }
 
 /**
@@ -81,5 +106,6 @@ export function ensureWebPlatformInitialized(): void {
   runPocCleanupOnce();
   initializeWebPlatform({
     getStoreCsrfToken: getStoreCsrfTokenFromSharedSeam,
+    getSqlCsrfToken: getSqlCsrfTokenFromSharedSeam,
   });
 }
