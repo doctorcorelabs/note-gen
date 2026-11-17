@@ -120,6 +120,24 @@
           }
         ]
       }
+    },
+    {
+      "files": [
+        "src/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Literal[value='terminal.open']",
+            "message": "Forbidden literal: terminal execution is removed permanently from the web fork (AD-14, AD-109, W4-SEC). Do not name this permission in src/; assemble the name at runtime in a test only when a regression test must reference it, following src/lib/platform/invoke/router.spec.ts."
+          },
+          {
+            "selector": "Literal[value=/^plugin_terminal_/]",
+            "message": "Forbidden literal: terminal backend commands are removed permanently from the web fork (AD-14, AD-109, W4-SEC). Do not name a plugin_terminal_* command in src/; assemble the name at runtime in a test only when a regression test must reference it, following src/lib/platform/invoke/router.spec.ts."
+          }
+        ]
+      }
     }
   ]
 }

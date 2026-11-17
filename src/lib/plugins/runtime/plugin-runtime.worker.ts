@@ -772,7 +772,7 @@ async function initialize(message: Extract<PluginHostToWorkerMessage, { type: 'i
       id: message.manifest.id,
       version: message.manifest.version,
       apiVersion: PLUGIN_API_VERSION,
-      capabilities: message.surface === 'editor-window' ? ['document-rendering', 'html-export', 'html-copy', 'clipboard-write', 'file-export', 'editor-styles'] : ['embedded-views', 'workspace-views', 'contextual-views', 'editor-actions', 'records', 'chat-draft', 'ai-generation', 'ui-prompts', 'document-rendering', 'document-preview', 'html-export', 'html-copy', 'clipboard-write', 'file-export', 'editor-styles', 'terminal', 'related-notes-search'],
+      capabilities: message.surface === 'editor-window' ? ['document-rendering', 'html-export', 'html-copy', 'clipboard-write', 'file-export', 'editor-styles'] : ['embedded-views', 'workspace-views', 'contextual-views', 'editor-actions', 'records', 'chat-draft', 'ai-generation', 'ui-prompts', 'document-rendering', 'document-preview', 'html-export', 'html-copy', 'clipboard-write', 'file-export', 'editor-styles', 'related-notes-search'],
     },
     commands: (message.manifest.contributes.commands ?? []).map((command) => command.id),
     statusItems: (message.manifest.contributes.statusBar ?? []).map((item) => item.id),

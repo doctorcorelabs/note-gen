@@ -6,6 +6,7 @@ import {
   type PluginPlatform,
 } from '@notegen/plugin-api'
 import { checkIsTauri } from '@/lib/check'
+import { assertPluginsEnabled } from '@/lib/plugins/plugin-kill-switch'
 import type {
   InstalledPlugin,
   PluginMarketCatalog,
@@ -47,6 +48,13 @@ export async function invokePluginBackend<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
+  // G3 (W4-SEC): this function is the single seam for every plugin
+  // backend operation (host state, packages, install, import, reads,
+  // broker storage and notes). While the kill switch is active it
+  // rejects before any invoke, so no plugin command can reach the
+  // invoke router, a handler, or HTTP. The check sits outside the
+  // try below so the kill-switch error propagates unchanged.
+  assertPluginsEnabled()
   try {
     return await platform.invoke.invoke<T>(command, args)
   } catch (error) {

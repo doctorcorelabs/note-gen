@@ -15,7 +15,16 @@
  * English fallback text below until the keys land in the catalogs. Do not
  * edit messages/*.json from this module; catalog work stays with the i18n
  * owner so en/zh key parity is kept in one place.
+ *
+ * The plugins entry is the one flag with an enforcement consumer: its
+ * enabled value derives from the single plugin phase constant
+ * (PLUGIN_WEB_PHASE in src/lib/plugins/plugin-web-phase.ts), the same
+ * value the plugin kill switch enforces at the host, broker, and seam.
+ * The other entries stay plain literals until their features gain an
+ * enforcement owner of their own.
  */
+
+import { PLUGIN_WEB_PHASE } from '@/lib/plugins/plugin-web-phase'
 
 export type WebFeatureId =
   | 'ai-chat'
@@ -116,7 +125,7 @@ export const WEB_FEATURE_FLAGS: Record<WebFeatureId, WebFeatureFlag> = {
   },
   plugins: {
     id: 'plugins',
-    enabled: false,
+    enabled: PLUGIN_WEB_PHASE !== 'off',
     targetPhase: 'Phase 3b',
     labelKey: 'settings.plugins.title',
     fallbackLabel: 'Plugins',
