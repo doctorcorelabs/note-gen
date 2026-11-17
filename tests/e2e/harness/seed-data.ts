@@ -28,9 +28,12 @@
 // content, desc, url, tagIds, sourceId), executed through the
 // marks.create / tags.create kinds of the SqlAdapter kind layer
 // (D-3D-1, src/lib/web/records-kind-client.ts). REST routes
-// POST /api/marks and POST /api/tags do NOT exist on trunk: there is
-// no marks.ts/tags.ts route file and nothing registers those paths,
-// so a seeder must not assume them. The descriptors below stay
+// POST /api/marks and POST /api/tags EXIST on trunk since W4-WIRE
+// (server/src/routes/records-marks.ts, records-tags.ts; AD-122
+// S5-Q2: REST is the transport of the canonical contract), and the
+// kind surface remains alongside them. The seeder in
+// ./seed-records.ts still uses the kind layer by design (the same
+// path the shipped inbox client uses); the descriptors below stay
 // transport-neutral on purpose: the 3E seeder resolves tag names to
 // ids after creating the tags, then creates each record with its
 // resolved tag ids. Tags are referenced by NAME here because tag ids
@@ -41,17 +44,13 @@
 // the same sourceId in a reused database answers duplicate instead
 // of creating a fresh row, by contract design.
 //
-// Settings seed: DELIBERATELY ABSENT. No setting key or value is fixed
-// here. E2E-06 and the A10 demo step "ubah 2 pengaturan" still wait
-// for the settings choice (an observable setting with a verified
-// read-back path). V3-29 settings UI has merged (29a gating, 29b
-// TOTP/sessions) without recording such a choice, so the choice is
-// still pending with the coordinator/3E; inventing a key now would
-// bake a guess into every flow. The choice is recorded as pending in
-// settings-persist.spec.ts and demo.spec.ts instead. The inventory
-// recommends theme as the strongest candidate (inventaris-selector-e2e
-// 7.3), but a recommendation is not a choice: do not bake it in here
-// until the owner decides.
+// Settings seed: recorded by W4-FLOWS under AD-113 (E2E-06 setting
+// is darkMode) and AD-123 (11) (no UI control references darkMode;
+// drive it programmatically, never claim a UI read-back). The key
+// and value live in SETTINGS_SEED below. The seed value is the
+// target value E2E-06 writes through the settings API and reads
+// back after reload; it is not a UI default and no flow may assert
+// a visible theme effect from it.
 //
 // Relative paths below resolve against the seed layout in ./seed.ts:
 // seed notes live under notes/, the pixel image at
@@ -59,6 +58,17 @@
 // adjust the relative references, not reuse these constants blindly.
 
 import { SEED_CONTENTS } from './seed'
+
+// E2E-06: the setting under test (AD-113) and the value the flow
+// writes and reads back (AD-123 (11): programmatic drive only).
+// darkMode is a class-S key accepted by the settings route
+// (key-schema.ts); the zustand default is 'system' and no UI
+// component references the key, so 'dark' is always a change on a
+// fresh settings document and the read-back is API-level only.
+export const SETTINGS_SEED = {
+  key: 'darkMode',
+  value: 'dark',
+} as const
 
 // E2E-02: the note created through the UI. The fixture exercises every
 // construction desain-pengujian 4.2 names: heading, list, code block,

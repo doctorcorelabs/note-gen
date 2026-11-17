@@ -70,10 +70,11 @@
 // environment noise, not an application failure; any other early
 // exit fails at once.
 //
-// LIVE STATUS: UNPROVEN. No live run has exercised this module yet:
-// the Postgres cluster on the authoring VM is down, and the first
-// live run is the merge gate on muse-2. Do not claim a green browser
-// run until that gate reports one.
+// LIVE STATUS: PROVEN. Live runs exercise this module at every
+// merge gate on muse-2 (2 @harness specs green per gate) and in
+// every backendTest flow since; the W4-FLOWS conversion runs on
+// trunk 3b9a8809 re-proved it (see
+// laporan-3e-w4-flows-r12.md for tallies).
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomBytes } from 'node:crypto'

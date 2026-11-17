@@ -44,28 +44,31 @@
 //      with kind marks.list.
 //
 // What is deliberately NOT claimed here:
-//   - No browser adapter transaction is observed. No shipped UI
-//     calls the SQL adapter transaction or query path:
-//     getSqlAdapter has no production caller outside
-//     src/db/index.ts itself (readiness only),
-//     src/lib/web/records-kind-client.ts has no importer, and
-//     the inbox components have no mounting. Step 4 therefore
-//     drives the same endpoints, the same CSRF header, and the
-//     same envelope through page.request, reusing the harness
+//   - No browser adapter transaction is observed BY THIS SPEC.
+//     Since W4-HOOK (AD-112) exactly one flag-gated production
+//     caller exists: the H1 boot proof hook in the core layout
+//     (src/app/core/layout.tsx), which issues one read-only
+//     marks.list query through the SQL adapter ONLY when the boot
+//     URL carries ?e2e-boot-proof=1, and writes the outcome to
+//     window.__notegenBootProof. Without the flag the hook block
+//     does nothing, and this spec boots unflagged, so step 4
+//     still drives the same endpoints, the same CSRF header, and
+//     the same envelope through page.request, reusing the harness
 //     helpers and the read-back shape proven by the @harness
 //     spec. It proves the server kind layer and the live
-//     database, not a browser adapter call. A browser
-//     adapter-issued request carrying the CSRF header needs a
-//     production hook or a mounted inbox driver; that gap is
-//     recorded in the slot report, not papered over here.
+//     database, not a browser adapter call. The browser proof of
+//     the hook (flagged deep link, proof value, CSRF-carrying
+//     POST /api/db/batch) lives in boot-hook.spec.ts (E2E-HOOK),
+//     added by W4-FLOWS; the gap this header used to record is
+//     closed there, not papered over here.
 //   - No PATCH /api/settings is asserted. On a fresh settings
 //     document the guard has nothing to persist (no rewrite),
 //     and the shell save paths run on user or tray events,
 //     not on boot. A browser CSRF header on a store flush is
 //     therefore not observable in this flow either.
 //   - No specific setting key or value is asserted: the E2E-06
-//     settings choice is still pending with the coordinator,
-//     and no key is baked in here.
+//     settings choice (darkMode, AD-113) is covered by
+//     settings-persist.spec.ts, not by this boot proof.
 //   - Console errors other than the registry text are not
 //     asserted. Legacy database paths may log failures during
 //     shell init; only the exact "not registered" text fails
@@ -315,8 +318,9 @@ test('E2E-BOOT-SQL-PROOF @harness boot proof: shell, SQL probe, store load, and 
   await test.step('kind write reads back through the kind layer', async () => {
     // Server kind layer through page.request, reusing the harness
     // helpers and the read-back shape of backend-harness.spec.ts.
-    // This step does not claim a browser adapter call: no shipped
-    // UI drives the adapter transaction path (see the header).
+    // This step does not claim a browser adapter call: this spec
+    // boots unflagged, so the flag-gated H1 hook does not fire
+    // (see the header); the browser hook proof is E2E-HOOK.
     const csrfToken = await fetchCsrfToken(page.request, backend.pageUrl)
     const tagResults = await runKindTransaction(page.request, backend.pageUrl, csrfToken, [
       { kind: 'tags.create', name: BOOT_PROOF_TAG_NAME },

@@ -25,8 +25,8 @@
 import { expect, type Page } from '@playwright/test'
 
 import {
-  loginAlertByText,
   loginEmailInput,
+  loginErrorByTestId,
   loginPasswordInput,
   loginSubmitButton,
   loginTitleText,
@@ -35,14 +35,42 @@ import {
   loginVerifyButton,
   setupTitleText,
 } from './selectors'
+import { assertGatewayOrigin } from './app-page'
 
 export class LoginPage {
   constructor(private readonly page: Page) {}
 
-  /** Open /login and wait for the sign-in form to appear. */
-  async gotoLogin(): Promise<void> {
-    await this.page.goto('/login')
+  /**
+   * Open /login at the given gateway origin and wait for the
+   * sign-in form to appear AND hydrate. The origin is required
+   * for the same reason as AppPage.gotoHome: the config baseURL
+   * is static-only and the session lives on the fixture gateway
+   * origin. Pass backend.pageUrl from the backend fixture.
+   *
+   * The hydration wait is load-bearing (D-DEMO-5): the title
+   * text renders in SSR HTML before React attaches handlers, so
+   * waiting for the title alone lets a fill-and-click land on an
+   * unhydrated form whose submit does nothing (E2E-S1b failed
+   * twice this way while a probe with a later click passed).
+   * Hydration is observed through the React fiber key on the
+   * submit button, which exists only after React attaches. If
+   * the key never appears, the page never hydrated and the wait
+   * fails loudly instead of letting a dead click through.
+   */
+  async gotoLogin(pageUrl: string): Promise<void> {
+    await this.page.goto(`${assertGatewayOrigin(pageUrl)}/login`)
     await expect(loginTitleText(this.page)).toBeVisible()
+    await this.page.waitForFunction(
+      () => {
+        const button = document.querySelector('[data-testid="auth-submit"]')
+        if (button === null) return false
+        return Object.keys(button).some(
+          (key) => key.startsWith('__reactFiber') || key.startsWith('__reactProps'),
+        )
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
   }
 
   /**
@@ -67,14 +95,40 @@ export class LoginPage {
     await loginVerifyButton(this.page).click()
   }
 
-  /** Assert a login alert carrying the given exact text is visible. */
+  /**
+   * Assert the login error alert shows the given text. Anchored
+   * on the auth-error test-id, NOT on the alert role: W4-FLOWS
+   * probe14 proved getByRole('alert', {name, exact}) resolves
+   * ZERO elements on this page even while the alert is rendered
+   * with exactly that text (two role="alert" nodes exist and the
+   * accessible-name computation does not yield the visible
+   * text). The test-id plus text containment is the robust
+   * anchor; the role form is a known-bad locator for this
+   * element and must not be reintroduced.
+   */
   async expectAlert(text: string): Promise<void> {
-    await expect(loginAlertByText(this.page, text)).toBeVisible()
+    await expect(loginErrorByTestId(this.page)).toContainText(text)
   }
 
-  /** Open /setup and wait for the first-account form to appear. */
-  async gotoSetup(): Promise<void> {
-    await this.page.goto('/setup')
+  /**
+   * Open /setup at the given gateway origin and wait for the
+   * first-account form to appear AND hydrate. See gotoLogin for
+   * why the origin is required and why the hydration wait is
+   * load-bearing (same SSR-before-handlers race).
+   */
+  async gotoSetup(pageUrl: string): Promise<void> {
+    await this.page.goto(`${assertGatewayOrigin(pageUrl)}/setup`)
     await expect(setupTitleText(this.page)).toBeVisible()
+    await this.page.waitForFunction(
+      () => {
+        const button = document.querySelector('[data-testid="auth-setup-submit"]')
+        if (button === null) return false
+        return Object.keys(button).some(
+          (key) => key.startsWith('__reactFiber') || key.startsWith('__reactProps'),
+        )
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
   }
 }

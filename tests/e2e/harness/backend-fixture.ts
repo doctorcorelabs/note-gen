@@ -25,6 +25,19 @@
 // fail-closed boot guard in the no-backend condition. Tests that
 // need a backend go through backend.pageUrl explicitly; tests
 // that use the config baseURL keep the static-only behavior.
+// Page objects take the gateway origin as a required parameter
+// (AppPage.gotoHome, LoginPage.gotoLogin); navigating to a relative
+// path resolves against the static-only baseURL and always lands
+// on the guard screen (finding T-8, W4-FLOWS).
+//
+// Sibling fixture sessionlessBackendTest (below) boots the same
+// backend + gateway but seeds the account WITHOUT logging the
+// browser in, for flows whose subject IS the login UI (E2E-S1).
+// Driving the login UI from an already authenticated context would
+// prove nothing, so the sessionless variant exposes the generated
+// credentials (in memory only, never logged) and leaves the
+// browser unauthenticated. It seeds no tags/records: kind seeding
+// needs a session.
 //
 // Prerequisites and failure honesty come from harness/backend.ts:
 // the built server, the server dependencies, E2E_PG_ADMIN_URL, and
@@ -32,9 +45,11 @@
 // with a named error; there is no skip and no fallback to a shared
 // backend.
 //
-// LIVE STATUS: UNPROVEN. No live run has exercised this fixture
-// yet (see harness/backend.ts). The first live run is the merge
-// gate on muse-2, through tests/e2e/backend-harness.spec.ts.
+// LIVE STATUS: PROVEN. Live runs exercise this fixture at every
+// merge gate on muse-2 (2 @harness specs green per gate) and in
+// every backendTest flow since; the W4-FLOWS conversion runs on
+// trunk 3b9a8809 re-proved it (see
+// laporan-3e-w4-flows-r12.md for tallies).
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
@@ -48,7 +63,7 @@ import {
   waitForCondition,
   type StartedBackend,
 } from './backend'
-import { fetchSession, loginViaApi, setupFirstAccount } from './auth'
+import { fetchSession, loginViaApi, setupFirstAccount, type TestCredentials } from './auth'
 import { prepareSeedWorkspace, removeSeedWorkspace, type SeedWorkspace } from './seed'
 import { seedTagsAndRecords, type SeededTagsAndRecords } from './seed-records'
 
@@ -224,6 +239,135 @@ export const backendTest = base.extend<{ backend: BackendContext }>({
         databaseName: backend.databaseName,
         workspaceDir: seed.dir,
         seed: seeded,
+        readWorkspaceFile: async (relativePath: string): Promise<string> => {
+          const target = resolveInsideWorkspace(seed.dir, relativePath)
+          try {
+            return await readFile(target, 'utf8')
+          } catch {
+            throw new Error(
+              `e2e workspace read failed: "${relativePath}" could not be read from the test workspace.`,
+            )
+          }
+        },
+        waitForWorkspaceFileContent: async (
+          relativePath: string,
+          expectedContent: string,
+          timeoutMs: number,
+        ): Promise<void> => {
+          const target = resolveInsideWorkspace(seed.dir, relativePath)
+          await waitForCondition(
+            async () => {
+              try {
+                return (await readFile(target, 'utf8')) === expectedContent
+              } catch {
+                return false
+              }
+            },
+            {
+              timeoutMs,
+              onExhausted: () =>
+                `Waited ${timeoutMs} ms for workspace file "${relativePath}" to hold the expected content; ` +
+                'it never did. The save effect was not observed on disk.',
+            },
+          )
+        },
+      }
+      await runTest(context)
+    } finally {
+      if (gateway !== undefined) {
+        try {
+          await gateway.stop()
+        } catch (error) {
+          teardownProblems.push((error as Error).message)
+        }
+      }
+      if (backend !== undefined) {
+        try {
+          await backend.stop()
+        } catch (error) {
+          teardownProblems.push((error as Error).message)
+        }
+      }
+      try {
+        await removeSeedWorkspace(seed)
+      } catch (error) {
+        teardownProblems.push((error as Error).message)
+      }
+      if (teardownProblems.length > 0) {
+        throw new Error(`e2e backend fixture teardown failed: ${teardownProblems.join('; ')}`)
+      }
+    }
+  },
+})
+
+export interface SessionlessBackendContext {
+  /** Gateway origin: the single origin for browser pages and API calls. */
+  pageUrl: string
+  /** Same as pageUrl: API calls go through the gateway, same-origin. */
+  apiBaseUrl: string
+  /** Direct backend origin, for diagnostics only; the browser never uses it. */
+  backendUrl: string
+  /** Scratch database name (name only; the URL is never exposed). */
+  databaseName: string
+  /** Seed workspace directory on disk (the backend WORKSPACE_ROOT). */
+  workspaceDir: string
+  /**
+   * Generated test account credentials (in memory only, never
+   * logged). The account exists (setup ran) but the browser holds
+   * no session: the flow under test performs the login itself.
+   */
+  credentials: TestCredentials
+  /** Read a workspace file as UTF-8; rejects path traversal out of the workspace. */
+  readWorkspaceFile(relativePath: string): Promise<string>
+  /** Wait by observation until a workspace file holds the expected content. */
+  waitForWorkspaceFileContent(
+    relativePath: string,
+    expectedContent: string,
+    timeoutMs: number,
+  ): Promise<void>
+}
+
+/**
+ * Sessionless backend fixture: one isolated backend + gateway per
+ * test, account seeded, browser NOT logged in. For E2E-S1 (the
+ * login UI itself) and any future flow that must start
+ * unauthenticated. Teardown mirrors backendTest exactly (gateway,
+ * backend + scratch database, workspace directory).
+ */
+export const sessionlessBackendTest = base.extend<{ sessionlessBackend: SessionlessBackendContext }>({
+  sessionlessBackend: async ({ page }, runTest, testInfo) => {
+    const repoRoot = process.cwd()
+    const adminUrl = readPgAdminUrl()
+    const seed: SeedWorkspace = await prepareSeedWorkspace()
+    const gatewayPort = await allocateFreePort()
+    const pageUrl = `http://127.0.0.1:${gatewayPort}`
+    let backend: StartedBackend | undefined
+    let gateway: StartedGateway | undefined
+    const teardownProblems: string[] = []
+    try {
+      backend = await startBackend({
+        repoRoot,
+        workerIndex: testInfo.workerIndex,
+        workspaceDir: seed.dir,
+        gatewayOrigin: pageUrl,
+        adminUrl,
+      })
+      gateway = await startGateway(repoRoot, gatewayPort, backend.apiBaseUrl)
+      await setupFirstAccount(page.request, pageUrl, backend.credentials, backend.setupToken)
+      const probe = await fetchSession(page.request, pageUrl)
+      if (probe.authenticated) {
+        throw new Error(
+          'e2e sessionless fixture failed: the session probe reports authenticated ' +
+            'before any login; the browser context must start unauthenticated.',
+        )
+      }
+      const context: SessionlessBackendContext = {
+        pageUrl,
+        apiBaseUrl: pageUrl,
+        backendUrl: backend.apiBaseUrl,
+        databaseName: backend.databaseName,
+        workspaceDir: seed.dir,
+        credentials: backend.credentials,
         readWorkspaceFile: async (relativePath: string): Promise<string> => {
           const target = resolveInsideWorkspace(seed.dir, relativePath)
           try {

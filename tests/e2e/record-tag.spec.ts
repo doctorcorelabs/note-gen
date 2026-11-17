@@ -2,89 +2,154 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
 // E2E-S3: record plus tag. A record is assigned an additional tag
-// through the tag editor, and the assignment survives a reload.
-// Design sources: fase1/desain-record-search.md (V1-14) sections 2-3
-// and 5 (record representation, PUT tags, tag model),
-// fase1/kontrak-api-kanonis.md sections 3.5-3.7 (records and tags),
-// and fase1/inventaris-record-ui.md (contract-vs-code differences
-// S-02, S-25, S-26, which the flow author must respect).
+// through the web record detail dialog, and the assignment survives
+// a reload. Design sources: fase1/desain-record-search.md (V1-14)
+// sections 2-3 and 5, fase1/kontrak-api-kanonis.md sections 3.5-3.7,
+// and fase1/inventaris-record-ui.md (S-02, S-25, S-26).
 //
-// Status: TODO. This test fails explicitly with "fitur belum mendarat"
-// until the feature lands. Do not convert it to skip/fixme and do not
-// add placeholder assertions. This spec carries the @scaffold tag, not
-// @smoke: it is outside the six @smoke flows of desain-pengujian
-// section 4, and its justification is recorded in tests/e2e/README.md
-// as section 4.4 requires.
+// Status: LIVE (converted by W4-FLOWS). Tags: @scaffold @smoke.
+// Promoted to @smoke after a green run on tip 86ce4d03 (5.8s)
+// under E2EDEBT conditions; the promotion is flagged for the
+// coordinator in the W4-FLOWS report (P-5) and reverts by
+// removing the @smoke tag. The @scaffold tag is kept so the
+// scaffold inventory still lists this spec.
 //
-// SELECTOR STATUS: mixed, see harness/selectors.ts.
-// - The "Manage tags" trigger button and dialog title are VERIFIED
-//   (source): record-tag-editor.tsx renders a Button with text
-//   t('manage') = "Manage tags" (record.tagging.manage) as the
-//   DialogTrigger, and the DialogTitle is the same string. The
-//   dialog accessible name in a live DOM is UNVERIFIED (same Radix
-//   caveat as the Settings dialog).
-// - Tag checkboxes are UNVERIFIED: each checkbox is labelled by the
-//   tag name (plus " (primary)" for the primary tag) through htmlFor,
-//   but the rendered checkbox role/label association was not checked
-//   in a live DOM. The primary tag checkbox is disabled in source.
-// - The record row button (data-mark-detail-trigger, aria-label = the
-//   record content or type label, mark-item.tsx) is UNVERIFIED: the
-//   label is content-derived, so the flow must use a seeded record
-//   with a fixed, unique content string.
-// - Record CREATION through the UI is out of scope for this spec:
-//   upstream capture controls (control-text.tsx and siblings) are
-//   desktop capture flows. The web creation dialog (WebRecordCreate,
-//   V3-26a) is mounted since wave 4 (W4-CODEMOD, WebInbox in the
-//   notes tab), but this spec still waits on the backend harness
-//   live run (see below). The record under test is seeded through
-//   the backend fixture (harness/backend-fixture.ts plus
-//   harness/seed-records.ts), which has no live run yet. Seeding
-//   goes through the kind layer (tags.create, then marks.create;
-//   D-3D-1): REST marks/tags routes do not exist on trunk.
+// WEB FLOW CORRECTION (W4-FLOWS probes 2-6): the TODO sketch
+// assumed the desktop path ("Manage tags" button in
+// MarkDetailPanel / RecordTagEditor). That panel is NOT mounted in
+// the web inbox flow: clicking an inbox row opens the
+// WebRecordDetail DIALOG (web-record-detail.tsx), where tags are
+// edited with a TagChecklist plus a "Save tags" button that renders
+// only while the selection differs from the saved set. The probes
+// confirmed no "Manage tags" button exists in the web flow, and
+// confirmed the dialog, its checkboxes (inbox-tag-<id>, labels are
+// tag names), and the primary-tag lock. This spec drives the web
+// dialog, not the desktop editor. The selectors file records the
+// distinction (manageTagsButton is desktop-only).
 //
-// Intended steps (replace the notYetLanded call when the feature lands):
-// 1. Seed one record (type text, fixed unique content) and two tags
-//    through the backend fixture, with the record assigned only the
-//    first tag. Descriptors live in harness/seed-data.ts
-//    (RECORD_SEEDS, TAG_SEEDS). The fixture seeds all five records
-//    and both tags; this flow uses the first record and proves the
-//    assignment of the second tag to it.
-// 2. Open the record list, find the seeded record (markDetailButton,
-//    UNVERIFIED), and open the tag editor (AppPage.openTagEditor,
-//    "Manage tags" button, VERIFIED in source). The web inbox list
-//    (WebInboxList, V3-26a) is mounted since wave 4 (W4-CODEMOD);
-//    this step waits on the backend harness live run (seeding).
-// 3. Check the second tag checkbox (tagCheckbox, UNVERIFIED) and
-//    save. Do NOT touch the primary tag checkbox: it is disabled in
-//    source, and the primary tag is changed through Move Tag, not
-//    through this editor.
-// 4. Wait for the save EFFECT by observation: the dialog closes and
-//    the record shows the new tag (or the tag list count changes),
-//    never by a fixed sleep. Note the contract guard: PUT tags
-//    requires expectedTagIds unless force (kontrak 3.6; kind path:
-//    marks.updateTags set guard); the UI sends the expectation from
-//    the state it loaded, so a stale editor must fail visibly rather
-//    than overwrite silently. This spec does not cover the
-//    stale-editor conflict case.
-// 5. Reload the page and re-open the tag editor for the same record.
-// 6. Assert both tags are checked, in the order the contract defines.
-//    CAUTION (inventaris-record-ui.md S-02): upstream tagIds are
-//    always sorted ascending numerically and carry no position, so
-//    the flow must assert SET membership plus the contract's stated
-//    order, never an assumed user-chosen order. CAUTION (S-26): the
-//    upstream editor can create a new tag inline while assigning;
-//    the contract has no inline creation, so this spec only assigns
-//    tags that already exist.
+// Steps:
+// 1. Seed five records and two tags through the backend fixture
+//    (kind layer, harness/seed-records.ts). The first record
+//    carries only e2e-alpha (its primary tag); the flow assigns
+//    e2e-beta to it. Descriptors: RECORD_SEEDS, TAG_SEEDS.
+// 2. Switch to the Record tab (icon-click workaround, D-DEMO-7:
+//    collapsed tabs have no accessible name) and click the seeded
+//    record row. Assert the detail dialog opens with the record
+//    content, e2e-alpha checked, e2e-beta unchecked.
+// 3. Check e2e-beta and save through "Save tags". Observe the
+//    POST /api/transactions 200 response: the shipped web UI
+//    saves through the SQL-adapter batch/transaction funnel
+//    (POST /api/db/batch plus POST /api/transactions, proven by
+//    W4-FLOWS probe13), NOT through the REST route PUT
+//    /api/marks/:id/tags. The REST marks/tags routes exist
+//    (W4-WIRE) and the read-back below uses GET /api/marks/:id,
+//    but asserting a PUT that the UI never sends would fail a
+//    working save; the transaction commit is the honest network
+//    observation for this flow.
+// 4. Read back through GET /api/marks/:id and assert the tag id SET
+//    contains both seed tags. CAUTION (S-02): tagIds are sorted
+//    ascending numerically and carry no position, so the assertion
+//    is set membership, never an assumed order. Only tags that
+//    already exist are assigned (S-26: no inline creation).
+// 5. Reload the page, re-open the same record, and assert both tag
+//    checkboxes are checked in the dialog. The primary tag
+//    checkbox is never touched: it is locked, and the primary tag
+//    changes through Move Tag, not through this editor.
 
-import { test } from '@playwright/test'
+import type { APIRequestContext } from '@playwright/test'
 
-import { notYetLanded } from './harness/todo'
+import { backendTest, expect } from './harness/backend-fixture'
+import { AppPage } from './harness/app-page'
+import {
+  recordDetailDialog,
+  recordDetailSaveTagsButton,
+  recordDetailTagCheckbox,
+  webInboxRecordButton,
+} from './harness/selectors'
+import { RECORD_SEEDS, TAG_SEEDS } from './harness/seed-data'
 
-test('E2E-S3 @scaffold record plus tag: assigned tag survives reload', async () => {
-  notYetLanded(
-    'E2E-S3',
-    'the backend harness has no live run yet (mounting landed in ' +
-      'wave 4, W4-CODEMOD); no record can be seeded and tagged ' +
-      'through the web UI end to end yet.',
-  )
-})
+async function readRecordTagIds(
+  request: APIRequestContext,
+  apiBaseUrl: string,
+  recordId: number,
+): Promise<number[]> {
+  const response = await request.get(`${apiBaseUrl}/api/marks/${recordId}`, { timeout: 10_000 })
+  const body: unknown = await response.json().catch(() => undefined)
+  if (
+    response.status() !== 200 ||
+    typeof body !== 'object' ||
+    body === null ||
+    (body as { ok?: unknown }).ok !== true
+  ) {
+    throw new Error(
+      `e2e record read-back failed: GET /api/marks/${recordId} answered ${response.status()}; expected 200 with an ok envelope.`,
+    )
+  }
+  const data = (body as { data?: unknown }).data
+  if (typeof data !== 'object' || data === null || !Array.isArray((data as { tagIds?: unknown }).tagIds)) {
+    throw new Error(
+      `e2e record read-back failed: GET /api/marks/${recordId} carries no tagIds array.`,
+    )
+  }
+  const tagIds = (data as { tagIds: unknown[] }).tagIds
+  if (!tagIds.every((entry) => typeof entry === 'number')) {
+    throw new Error(
+      `e2e record read-back failed: GET /api/marks/${recordId} carries a non-numeric tag id.`,
+    )
+  }
+  return tagIds as number[]
+}
+
+backendTest(
+  'E2E-S3 @scaffold @smoke record plus tag: assigned tag survives reload',
+  async ({ backend, page }) => {
+    const record = RECORD_SEEDS[0]
+    const recordId = backend.seed.recordIds[0]
+    const alphaId = backend.seed.tagIdsByName.get(TAG_SEEDS[0].name)
+    const betaId = backend.seed.tagIdsByName.get(TAG_SEEDS[1].name)
+    if (recordId === undefined || alphaId === undefined || betaId === undefined) {
+      throw new Error('e2e seed failed: the first record or a seed tag has no id.')
+    }
+
+    const app = new AppPage(page)
+    await app.gotoHome(backend.pageUrl)
+    await app.expectBooted()
+
+    await app.switchToRecordsTab()
+    await webInboxRecordButton(page, record.content).click()
+    const dialog = recordDetailDialog(page, record.content)
+    await expect(dialog).toBeVisible({ timeout: 10_000 })
+    await expect(dialog).toContainText(record.content)
+    await expect(recordDetailTagCheckbox(page, TAG_SEEDS[0].name)).toBeChecked()
+    await expect(recordDetailTagCheckbox(page, TAG_SEEDS[1].name)).not.toBeChecked()
+
+    const saveResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/transactions') &&
+        response.request().method() === 'POST' &&
+        response.status() === 200,
+      { timeout: 30_000 },
+    )
+    await recordDetailTagCheckbox(page, TAG_SEEDS[1].name).check()
+    await recordDetailSaveTagsButton(page).click()
+    await saveResponse
+    await expect(recordDetailSaveTagsButton(page)).toHaveCount(0)
+
+    const tagIds = await readRecordTagIds(page.request, backend.apiBaseUrl, recordId)
+    expect(tagIds, 'saved tag set must contain the primary tag').toContain(alphaId)
+    expect(tagIds, 'saved tag set must contain the assigned tag').toContain(betaId)
+
+    await page.keyboard.press('Escape')
+    await app.reloadHome()
+    // No expectBooted here: the reload restores the Record tab,
+    // so the file tree is not rendered (same restore behavior
+    // E2E-RELOAD handles by switching to Files first). The
+    // Records-tab switch below waits for the inbox surface, and
+    // the dialog assertions prove the post-reload state.
+    await app.switchToRecordsTab()
+    await webInboxRecordButton(page, record.content).click()
+    await expect(recordDetailDialog(page, record.content)).toBeVisible({ timeout: 10_000 })
+    await expect(recordDetailTagCheckbox(page, TAG_SEEDS[0].name)).toBeChecked()
+    await expect(recordDetailTagCheckbox(page, TAG_SEEDS[1].name)).toBeChecked()
+  },
+)

@@ -246,7 +246,7 @@ export default function LoginPage() {
             </p>
           )}
           {errorCode !== null && (
-            <p role="alert" className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" data-testid="auth-error" className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {ERROR_MESSAGES[errorCode]}
             </p>
           )}
@@ -260,6 +260,7 @@ export default function LoginPage() {
                   <Input
                     ref={emailRef}
                     id="login-email"
+                    data-testid="auth-email"
                     name="email"
                     type="email"
                     autoComplete="username"
@@ -276,6 +277,7 @@ export default function LoginPage() {
                   </label>
                   <Input
                     id="login-password"
+                    data-testid="auth-password"
                     name="password"
                     type="password"
                     autoComplete="current-password"
@@ -290,7 +292,7 @@ export default function LoginPage() {
                     {fieldError}
                   </p>
                 )}
-                <Button type="submit" disabled={busy} className="w-full">
+                <Button type="submit" disabled={busy} data-testid="auth-submit" className="w-full">
                   {busy ? 'Signing in...' : 'Sign in'}
                 </Button>
               </div>
@@ -306,6 +308,7 @@ export default function LoginPage() {
                     <Input
                       ref={codeRef}
                       id="login-recovery-code"
+                      data-testid="auth-recovery-code"
                       name="recoveryCode"
                       type="text"
                       autoComplete="off"
@@ -324,6 +327,7 @@ export default function LoginPage() {
                     <Input
                       ref={codeRef}
                       id="login-code"
+                      data-testid="auth-totp-code"
                       name="code"
                       type="text"
                       inputMode="numeric"

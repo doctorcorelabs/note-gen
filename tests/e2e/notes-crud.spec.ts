@@ -11,51 +11,64 @@
 // fase1/kontrak-api-kanonis.md workspace/files group (trash and
 // restore endpoints).
 //
-// Status: TODO. This test fails explicitly with "fitur belum mendarat"
-// until the feature lands. Do not convert it to skip/fixme and do not
-// add placeholder assertions. This spec carries the @scaffold tag, not
-// @smoke: it is outside the six @smoke flows of desain-pengujian
-// section 4, and its justification is recorded in tests/e2e/README.md
-// as section 4.4 requires.
+// Status: TODO, BLOCKED BY A PRODUCT GAP (W4-FLOWS finding, probes
+// 8-9, 17 Nov 2026). This test fails explicitly with "fitur belum
+// mendarat" until the gap is wired. Do not convert it to skip/fixme
+// and do not add placeholder assertions. This spec carries the
+// @scaffold tag, not @smoke.
 //
-// SELECTOR STATUS: mixed, see harness/selectors.ts deleteMenuItem.
-// The menu text "Delete" is VERIFIED (source) in the English catalog
-// (article.file.context.delete), and the deletion handler exists in
-// file-item.tsx (useFileDeletion, handleDeleteFile, plus the
-// 'filemanager-delete' window event). But the context menu container
-// role, the menuitem role, and the trigger mechanism (right-click
-// target and menu opener) were NOT traced to a component, so the
-// locator is UNVERIFIED and the flow author must prove the menu opens
-// and the item is clickable in a live DOM before relying on it. Do
-// not drive deletion through the 'filemanager-delete' window event:
-// that bypasses the UI the user actually uses.
+// THE BLOCKER: file deletion cannot complete in web mode because
+// the confirmation step has no dialog service. Deletion runs
+// through use-file-deletion.ts, which awaits platform.dialog.ask()
+// before deleting anything. In web mode the dialog adapter is
+// registered with NO dialog service (src/lib/platform/wiring.ts
+// header: "confirm/ask/message/prompt methods throw the documented
+// unavailable error until the service wiring lands"; AD-33), and no
+// production code installs one (installHostDialogService has no
+// production caller; the mounted WebDialogHost is a generic info
+// dialog, not wired to the adapter seam). The ask() call therefore
+// throws, the deletion catch shows a failure toast, and the file
+// stays. W4-FLOWS probes confirmed the live behavior: right-click
+// Delete on a seed file produced 0 alertdialogs and 0 dialogs, the
+// file stayed on disk (70 bytes, unchanged), and the treeitem
+// stayed. The context menu itself WORKS (11 items including
+// "Delete", probe4/7/9) and the trash routes ARE registered
+// (W4-WIRE wired registerWorkspaceTrashRoutes; the earlier comment
+// claiming otherwise was stale and is corrected here). What is
+// missing is purely the DialogService wiring. Pinning the current
+// blocked behavior as a passing test would enshrine a broken flow,
+// so this spec stays TODO until the wiring lands; the wiring is
+// proposed to the integrator as a numbered follow-up in the
+// W4-FLOWS report (AD-33 / dialog-wiring precedent).
 //
-// Intended steps (replace the notYetLanded call when the feature lands):
-// 1. Seed the workspace through the backend fixture
-//    (harness/backend-fixture.ts: WORKSPACE_ROOT per test) so the
-//    seed entries appear in the tree. The fixture has no live run
-//    yet. NOTE: the trash routes are likewise unregistered on trunk
-//    (registerWorkspaceTrashRoutes has no caller in server/src),
-//    so the delete leg also waits on route wiring, not only on the
-//    context menu path.
-// 2. Open the context menu for one seeded file in the tree and choose
-//    Delete (selectors.deleteMenuItem, UNVERIFIED). If the shipped UI
-//    shows a confirmation dialog, confirm through its accessible
-//    buttons; the confirmation texts in the catalog cover folder
-//    deletion (confirmDelete) and multi-entry deletion
-//    (confirmDeleteEntries), so the flow author must verify which
-//    confirmation, if any, a single file deletion shows. Do not
-//    assume a dialog exists.
+// SELECTOR STATUS: the menu path is PROVEN in a live DOM
+// (selectors.deleteMenuItem: Radix menuitem, right-click trigger,
+// non-exact name match because the item carries the "Del" hint).
+// The confirmation dialog has NO locator: no dialog renders until
+// the service wiring lands, so no dialog text or button can be
+// pinned yet. Do not drive deletion through the
+// 'filemanager-delete' window event: that bypasses the UI the user
+// actually uses.
+//
+// Intended steps (replace the notYetLanded call when the dialog
+// service wiring lands):
+// 1. Seed the workspace through the backend fixture. The trash
+//    routes are registered (W4-WIRE); the delete leg waits only
+//    on the confirmation dialog wiring.
+// 2. Open the context menu for one seeded file in the tree and
+//    choose Delete (selectors.deleteMenuItem). Confirm through
+//    the confirmation dialog's accessible buttons (texts and
+//    roles to be pinned from the live dialog once it renders;
+//    the catalog confirmDeleteEntries text is the message).
 // 3. Wait for the deletion EFFECT by observation: the treeitem for
-//    the deleted path disappears (expect.poll on the treeitem count,
-//    or toHaveCount(0) with the default expect timeout), never by a
-//    fixed sleep.
+//    the deleted path disappears (toHaveCount(0) with the default
+//    expect timeout), never by a fixed sleep.
 // 4. Assert the file is gone from the tree and, through the backend
 //    harness read path, gone from the workspace or present in trash
-//    according to the delete semantics the web fork ships (trash vs
-//    permanent delete is a UI/backend owner decision; the contract
-//    exposes trash restore endpoints, so the flow must assert the
-//    semantics that actually shipped, not an assumed one).
+//    according to the delete semantics the web fork ships (the
+//    contract exposes trash restore endpoints, so the flow must
+//    assert the semantics that actually shipped, not an assumed
+//    one).
 // 5. Assert no duplicate or stale tree entry remains and the other
 //    seed entries are untouched.
 
@@ -66,9 +79,10 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S2 @scaffold note CRUD delete: deleted note leaves the tree and the workspace', async () => {
   notYetLanded(
     'E2E-S2',
-    'the workspace delete/trash API is not registered (trash ' +
-      'registrar has no caller in server/src), the context-menu ' +
-      'delete path is unverified, and the backend harness has no ' +
-      'live run yet; no note can be deleted through the web UI yet.',
+    'the web dialog service is not wired (AD-33): ' +
+      'platform.dialog.ask() throws, so the delete confirmation ' +
+      'never renders and deletion cannot complete through the web ' +
+      'UI; the context menu and trash routes work, only the ' +
+      'confirmation wiring is missing.',
   )
 })

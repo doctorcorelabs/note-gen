@@ -21,14 +21,9 @@
 // 4. The page has visible text and no error boundary text.
 //
 // Deliberately NOT asserted here: the authenticated redirect to
-// /core/main and the file tree. Those need a backend harness that
-// answers /api/auth/me with 200 plus healthy /api/health/* responses,
-// which has not landed (wave 3 owns the backend harness and seed
-// wiring). Asserting them now would fail for a harness reason, not an
-// app reason, and would hide the real boot signal. When the backend
-// harness lands, add an authenticated variant of this flow that uses
-// AppPage.gotoHome / expectBooted; do not weaken the assertions below,
-// which pin the fail-closed contract.
+// /core/main and the file tree. Those live in boot-auth.spec.ts
+// (E2E-01-auth), which uses the backend harness. Do not weaken the
+// assertions below, which pin the fail-closed contract.
 
 import { expect, test } from '@playwright/test'
 
@@ -66,23 +61,84 @@ test('E2E-01 @smoke boot without a backend: guard blocks with an understandable 
   })
 })
 
-// E2E-01b: boot with a corrupt store shows an understandable error UI,
-// not a blank page. This is a direct regression test for the
+// E2E-01b: boot with a failing store endpoint shows an understandable
+// error UI, not a blank page. This is a direct regression test for the
 // unguarded Store.load in src/app/page.tsx (D1 finding).
 //
-// Status: SKIPPED as documented debt, not passed and not failed. The
-// harness cannot corrupt the store yet: in the web fork the store is
-// served by the backend settings path, and no test hook exists to
-// poison it before boot. Desain-pengujian 4.2 says exactly this:
-// when the variant harness cannot be built in the MVP, its absence is
-// recorded as debt, not treated as a pass. Unskip this test when the
-// backend harness can seed a corrupt store; the steps below are the
-// intended flow.
-test.skip('E2E-01b @smoke boot with corrupt store: understandable error UI, not a blank page', async () => {
-  // Intended steps (harness work required before unskipping):
-  // 1. Seed a corrupt store through the backend test harness.
-  // 2. Open / and wait for the error UI (not the tree, not blank).
-  // 3. Assert an error message is visible and the page has text.
-  // 4. Assert the app does not hang: the error UI appears within the
-  //    default expect timeout.
+// Status: LIVE (unskipped by W4-FLOWS). The variant pins the guard
+// store-failure branch with Playwright route interception, following
+// the boot-stall.spec.ts precedent: the session probe and both health
+// probes answer healthy, and GET /api/settings answers 200 with a
+// body that fails envelope/shape validation (a non-numeric
+// revision), so the store loader throws and the guard must surface
+// BOOT_STORE_UNAVAILABLE with the STORE_LOAD_FAILED detail. The app
+// code under test is unmodified production code; only the network
+// behavior is controlled.
+//
+// Precision note: this pins the guard branch for a FAILING STORE
+// ENDPOINT (a corrupt wire response). True database-document
+// corruption has no poison hook in the harness, and this spec does
+// not claim to cover it. The distinction is recorded here so a green
+// run is never read as proving more than the stubbed failure.
+test('E2E-01b @smoke boot with corrupt store: understandable error UI, not a blank page', async ({
+  page,
+  request,
+}) => {
+  await test.step('worker bundles are served', async () => {
+    await assertWorkerBundlesServed(request)
+  })
+
+  await test.step('corrupt settings response surfaces the store failure screen', async () => {
+    let settingsObserved = false
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      })
+    })
+    await page.route('**/api/health/live', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      })
+    })
+    await page.route('**/api/health/ready', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      })
+    })
+    await page.route('**/api/settings', async (route) => {
+      settingsObserved = true
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, data: { revision: 'corrupt', settings: {} } }),
+      })
+    })
+
+    await page.goto('/')
+    const alert = page.locator('main [role="alert"]')
+    await expect(alert).toBeVisible({ timeout: 30_000 })
+    await expect(
+      alert.getByRole('heading', { name: 'Could not load your settings.' }),
+    ).toBeVisible()
+    await expect(alert.getByText(/BOOT_STORE_UNAVAILABLE/)).toBeVisible()
+    await expect(alert.getByText(/STORE_LOAD_FAILED/)).toBeVisible()
+    await expect(alert.getByRole('button', { name: 'Try again' })).toBeVisible()
+    await expect(page).toHaveURL(/\/$/)
+    expect(settingsObserved, 'the corrupt /api/settings stub never engaged').toBe(true)
+  })
+
+  await test.step('page is not blank and has no error boundary text', async () => {
+    await expect(errorBoundaryText(page)).toHaveCount(0)
+    const bodyText = await page.locator('body').innerText()
+    expect(
+      bodyText.trim().length,
+      'Boot produced a blank page: <body> has no visible text.',
+    ).toBeGreaterThan(0)
+  })
 })

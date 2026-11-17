@@ -1,18 +1,18 @@
 # E2E Playwright: scaffold Fase 1
 
 Scaffold harness E2E untuk fork web NoteGen. Desain: `fase1/desain-pengujian.md`
-seksi 4 (V1-15). Scaffold ini (V2-07) hanya memasang harness dan alur:
-6 alur `@smoke` dari desain (1 alur nyata boot + 5 alur TODO yang gagal
-eksplisit) ditambah 4 spec `@scaffold` untuk alur kritis brief pemulihan
-gelombang 2 (login, hapus catatan, record+tag, unduh arsip), semuanya TODO
-yang gagal eksplisit. Perluasan 3D e2e-prep (V3-41, cabang `web-e2e-prep`)
-menambah helper auth API, data seed bersama, varian boot terautentikasi
-`@smoke`, dan 2 kerangka demo `@demo` untuk gate A10; semuanya tetap TODO
-yang gagal eksplisit sampai harness backend mendarat. Slot 3E-V41-HARNESS
-menambah harness backend per test (lihat seksi "Backend harness" di bawah)
-beserta 1 spec `@harness` yang membuktikan harness itu; harness tersebut
-BELUM PERNAH jalan live (0 run hijau browser) sampai gate merge di muse-2
-melaporkannya. Tidak ada lulus palsu. Pemetaan dan justifikasi penambahan ada di seksi "Alur @scaffold
+seksi 4 (V1-15). Scaffold ini (V2-07) hanya memasang harness dan alur;
+perluasan 3D e2e-prep (V3-41) menambah helper auth API, data seed bersama,
+varian boot terautentikasi `@smoke`, dan 2 kerangka demo `@demo` untuk gate
+A10; slot 3E-V41-HARNESS menambah harness backend per test (lihat seksi
+"Backend harness" di bawah) beserta spec `@harness` yang membuktikan
+harness itu. Gelombang 4 slot W4-FLOWS mengonversi keenam alur `@smoke`
+menjadi spec live, meng-unskip E2E-01b, mengonversi E2E-S1/S3, dan
+menambah spec reload `@smoke`, spec bukti hook `@harness`, dan spec
+pengukuran profil i18n 9.5 `@i18n-profile`. Yang masih TODO: E2E-S2
+(terblokir wiring layanan dialog, AD-33), E2E-S4 (tanpa UI ekspor),
+dan 2 kerangka demo `@demo`. Tidak ada lulus palsu.
+Pemetaan dan justifikasi penambahan ada di seksi "Alur @scaffold
 (brief pemulihan)" dan "Alur @demo (gate A10)" di bawah.
 
 ## Cara jalan
@@ -20,10 +20,12 @@ melaporkannya. Tidak ada lulus palsu. Pemetaan dan justifikasi penambahan ada di
 ```sh
 pnpm install
 pnpm build
-pnpm e2e:smoke   # alur @smoke (saat ini: boot nyata, sisanya TODO gagal eksplisit)
-pnpm e2e          # semua spec di tests/e2e (termasuk spec @scaffold dan @demo)
-pnpm exec playwright test --grep @scaffold  # hanya 4 spec @scaffold
+pnpm e2e:smoke   # alur @smoke live (12 test: E2E-01, E2E-01b, E2E-01-auth, E2E-02..E2E-06, E2E-RELOAD, E2E-S1, E2E-S1b, E2E-S3)
+pnpm e2e          # semua spec di tests/e2e (termasuk spec @scaffold, @harness, @stall, @demo, @i18n-profile)
+pnpm exec playwright test --grep @scaffold  # spec @scaffold (E2E-S1/S1b, E2E-S3 live; E2E-S2, E2E-S4 TODO)
 pnpm exec playwright test --grep @demo  # hanya 2 kerangka demo @demo (gate A10)
+pnpm exec playwright test --grep @harness  # bukti harness + bukti hook H1 (butuh Postgres + E2E_PG_ADMIN_URL)
+pnpm exec playwright test --grep @i18n-profile  # pengukuran profil 9.5 en+zh (butuh Postgres + E2E_PG_ADMIN_URL)
 ```
 
 ## Backend harness (3E-V41-HARNESS)
@@ -42,8 +44,9 @@ cookie sesi, dan cek Origin melihat satu origin; (4) membuat akun
 seed + login lewat API (`harness/auth.ts`, kredensial dibuat per
 backend dan hanya hidup di memori); (5) men-seed 2 tag + 5 record
 lewat kind layer (`harness/seed-records.ts`, `POST /api/transactions`
-dengan kind `tags.create`/`marks.create`, karena rute REST marks/tags
-TIDAK ADA di trunk). Teardown menghentikan gateway, menghentikan
+dengan kind `tags.create`/`marks.create`; rute REST marks/tags ADA di
+trunk sejak W4-WIRE, tetapi seeder tetap memakai kind layer karena
+itulah jalur yang dipakai klien inbox terkirim). Teardown menghentikan gateway, menghentikan
 backend + menghapus database scratch, lalu menghapus workspace.
 
 Prasyarat, semuanya gagal cepat dengan error bernama bila tidak ada:
@@ -117,20 +120,24 @@ Browser: `pnpm exec playwright install chromium` (sekali per mesin/CI).
 | Alur | Spec | Status |
 |---|---|---|
 | E2E-01 boot tanpa backend | `boot.spec.ts` | Nyata. Ditujukan lulus terhadap build web saat ini: guard boot (M14) memblokir dengan layar error BOOT_SESSION_UNKNOWN yang dapat dipahami, bukan halaman kosong dan bukan redirect buta, karena server statis tidak menjawab `/api/auth/me` (404). Varian boot terautentikasi ada di `boot-auth.spec.ts` (E2E-01-auth); jangan melemahkan assertion fail-closed ini. |
-| E2E-01b boot store rusak | `boot.spec.ts` | `test.skip` sebagai utang terdokumentasi: harness belum bisa merusak store. Bukan lulus. |
-| E2E-01-auth boot terautentikasi | `boot-auth.spec.ts` | TODO `@smoke`: gagal dengan pesan "fitur belum mendarat". Paruh terautentikasi E2E-01 (redirect ke `/core/main` + pohon file); kode harness backend sudah mendarat (`harness/backend-fixture.ts`) tetapi belum ada live run yang membuktikannya. Guard dan halaman `/login` sudah mendarat (V3-03). |
-| E2E-02 buat + simpan | `create-save.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". API tulis workspace terdaftar + FsAdapter web terpasang; yang belum terbukti adalah run live harness + selector editor visual + input rename. Fixture di `harness/seed-data.ts` (`CREATE_NOTE_FIXTURE`). |
-| E2E-03 ubah artikel lama | `edit-existing.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Rute baca media BELUM terdaftar (modul ada, registrar tanpa pemanggil); navigasi tautan relatif butuh klik modifier di desktop dan belum terbukti runtime; harness belum ada live run. Edit di `harness/seed-data.ts` (`applyEditToDeepNote`). |
-| E2E-04 cari | `search.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Rute search BELUM terdaftar dan implementasi search berindeks belum mendarat (port + fake saja); UI sudah terpasang ke `/api/search`. Istilah di `harness/seed-data.ts` (`SEARCH_TERMS`); hook test-id tersedia di `harness/selectors.ts`. |
-| E2E-05 file dari luar | `external-file.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Rute WebSocket belum mendarat; fallback polling snapshot SUDAH mendarat (V3-09) dengan interval default 10 detik, jauh di atas batas kontrak 1 detik; harness belum ada live run. Berkas luar di `harness/seed-data.ts` (`EXTERNAL_FILE`). |
-| E2E-HARNESS bukti harness | `backend-harness.spec.ts` | NYATA `@harness` (bukan `@smoke`, tidak dihitung gate 6/6): gateway + sesi + seed terbaca balik. Hanya jalan di mesin dengan Postgres + `E2E_PG_ADMIN_URL`; belum pernah jalan live. |
-| E2E-06 pengaturan bertahan | `settings-persist.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Pembuka Settings masih tanpa hook (R3) dan pilihan pengaturannya masih tertunda; V3-29a/29b mendarat tanpa menyelesaikan keduanya. |
-| E2E-S1 login | `login.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI login SUDAH mendarat (`/login`, V3-03); locator terverifikasi di `harness/selectors.ts` + `harness/login-page.ts`. Kode harness (seeding akun + backend + jalur loopback melewati perimeter Access) sudah mendarat tetapi belum ada live run; konversi butuh varian browser tanpa sesi (fixture selalu login via API). |
-| E2E-S2 hapus catatan (CRUD) | `notes-crud.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Create = E2E-02, Read/Update = E2E-03. Rute trash BELUM terdaftar (registrar tanpa pemanggil di `server/src`). |
-| E2E-S3 record + tag | `record-tag.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Komponen inbox V3-26a mendarat tetapi belum terpasang di halaman mana pun (0 importer di trunk; V3-26b mendarat tanpa pemasangan; pemasangan = tindak lanjut); seeding lewat kind layer (`harness/seed-records.ts`, belum ada live run). Deskriptor di `harness/seed-data.ts`. |
-| E2E-S4 unduh arsip | `archive-download.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI ekspor belum ada; tanpa locator tebakan. |
-| E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; menunggu pemasangan inbox (tindak lanjut) + pilihan E2E-06 + live run harness backend. |
-| E2E-D2 cek data A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka cek data utuh sesudah restart backend; menunggu kontrol restart harness + database uji persisten (fixture per test bersifat ephemeral, tidak mendukung ini). |
+| E2E-01b boot store rusak | `boot.spec.ts` | Nyata (di-unskip W4-FLOWS): stub rute membuat `/api/settings` menjawab 200 dengan body yang gagal validasi bentuk, guard menampilkan BOOT_STORE_UNAVAILABLE / STORE_LOAD_FAILED. Mencakup cabang guard untuk endpoint store yang gagal; korupsi dokumen database sejati tidak punya hook poison dan tidak diklaim. |
+| E2E-01-auth boot terautentikasi | `boot-auth.spec.ts` | Nyata `@smoke` (dikonversi W4-FLOWS): redirect ke `/core/main` + pohon file + entri seed; menutup CELAH-4 (A5). Navigasi memakai origin gateway fixture sebagai parameter wajib (temuan T-8). |
+| E2E-02 buat + simpan | `create-save.spec.ts` | Nyata `@smoke` (dikonversi W4-FLOWS): buat lewat entri menu folder "New File" (toolbar "New Note" membuat di root), isi fixture diketik di mode sumber, disk sama byte-for-byte sesudah reload. |
+| E2E-03 ubah artikel lama | `edit-existing.spec.ts` | Nyata `@smoke` (dikonversi W4-FLOWS): edit visual (heading + paragraf), disk memuat perubahan dan mempertahankan bagian lain; gambar relatif ter-render (media 200, natural size > 0); tautan relatif dibuka dengan klik modifier. |
+| E2E-04 cari | `search.spec.ts` | Nyata `@smoke` (dikonversi W4-FLOWS): hasil menunjuk berkas seed + snippet, status fuzzy terlihat, aktivasi hasil dibuktikan lewat observasi editor (temuan D-DEMO-8), istilah absen menampilkan empty state eksplisit. |
+| E2E-05 file dari luar | `external-file.spec.ts` | Nyata `@smoke` (dikonversi W4-FLOWS): berkas ditulis atomik dari luar, muncul di pohon (timeout 30 dtk diturunkan dari interval polling 10 dtk, BUKAN batas kontrak 1 dtk), dibuka, tanpa duplikat. |
+| E2E-06 pengaturan bertahan | `settings-persist.spec.ts` | Nyata `@smoke` (dikonversi W4-FLOWS, E2E-06-darkMode): darkMode ditulis lewat API settings (AD-113/AD-123 butir 11: tanpa kontrol UI, tanpa klaim read-back UI), revisi naik 1, nilai bertahan sesudah reload. |
+| E2E-RELOAD seed reload | `reload.spec.ts` | Nyata `@smoke` (ditambah W4-FLOWS): berkas seed + record seed + dokumen settings utuh sesudah reload penuh; revisi settings tidak churn. |
+| E2E-HARNESS bukti harness | `backend-harness.spec.ts` | NYATA `@harness` (bukan `@smoke`, tidak dihitung gate): gateway + sesi + seed terbaca balik. Hijau di tiap gate merge; hanya jalan di mesin dengan Postgres + `E2E_PG_ADMIN_URL`. |
+| E2E-BOOT-SQL-PROOF | `boot-sql-proof.spec.ts` | NYATA `@harness`: boot + probe SQL + load store + round-trip kind layer. Header diperbarui W4-FLOWS: pemanggil adapter produksi bergating flag (hook H1) dicatat; bukti browser hook ada di `boot-hook.spec.ts`. |
+| E2E-HOOK bukti hook H1 | `boot-hook.spec.ts` | NYATA `@harness` (ditambah W4-FLOWS): deep link `?e2e-boot-proof=1` menulis `window.__notegenBootProof` + POST `/api/db/batch` ber-CSRF teramati; tanpa flag, hook `undefined`. |
+| E2E-S1 login | `login.spec.ts` | Nyata `@scaffold @smoke` (dikonversi W4-FLOWS; dipromosikan ke `@smoke` sesudah run hijau di tip 86ce4d03, putusan koordinator P-5): login UI lewat fixture tanpa sesi + varian password salah (alert generik); storage diperiksa tanpa token (boolean saja, tanpa nilai). |
+| E2E-S2 hapus catatan (CRUD) | `notes-crud.spec.ts` | TODO `@scaffold` (tetap TODO di W4-FLOWS): TERBLOKIR celah produk - layanan dialog web belum terpasang (AD-33), `platform.dialog.ask()` melempar error sehingga konfirmasi hapus tidak pernah tampil dan berkas tetap ada (probe 8-9). Menu konteks + rute trash berfungsi; yang hilang hanya wiring dialog. |
+| E2E-S3 record + tag | `record-tag.spec.ts` | Nyata `@scaffold @smoke` (dikonversi W4-FLOWS; dipromosikan ke `@smoke` sesudah run hijau di tip 86ce4d03, putusan koordinator P-5): tag kedua ditetapkan lewat dialog detail record web (TagChecklist + "Save tags", BUKAN tombol desktop "Manage tags"), terbaca balik lewat API, bertahan sesudah reload. |
+| E2E-S4 unduh arsip | `archive-download.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI ekspor belum ada; tanpa locator tebakan. Tetap TODO di W4-FLOWS. |
+| I18N-9.5 profil teratentikasi | `i18n-profile.spec.ts` | Pengukuran `@i18n-profile` (ditambah W4-FLOWS, AD-120 Q3): shell teratentikasi diukur di mode en + zh (marker 12+12, CJK, tangkapan shell/editor/Settings); hanya mekanika boot yang di-assert, marker tidak di-gate. Adjudikasi Q3b milik gate penutupan. |
+| E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; tetap TODO di W4-FLOWS (di luar lingkup slot). |
+| E2E-D2 cek data A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka cek data utuh sesudah restart backend; menunggu kontrol restart harness + database uji persisten. Tetap TODO di W4-FLOWS. |
 
 ## Alur @scaffold (brief pemulihan): pemetaan dan justifikasi
 
@@ -215,7 +222,7 @@ TERVERIFIKASI (source):
 
 | Selector | Bukti source |
 |---|---|
-| `getByRole('tree', { name: 'Workspace files' })` | `file-manager.tsx` `getContainerProps(t('treeLabel'))`; `article.file.treeLabel` = "Workspace files"; `@headless-tree/core` container props (`role: "tree"`, `aria-label`). |
+| `getByRole('tree').first()` (locale-free; JANGAN pakai nama) | `file-manager.tsx` `getContainerProps(t('treeLabel'))`; `article.file.treeLabel` TERLOKALISASI ("Workspace files" / "工作区文件", dibuktikan run I18N-9.5-ZH); `@headless-tree/core` container props (`role: "tree"`, `aria-label`). |
 | `getByRole('treeitem', { name: '<nama file>' })` | `@headless-tree/core` item props (`role: "treeitem"`, `aria-label: getItemName()`); `use-file-tree.ts` `getItemName` = nama item. |
 | `[data-file-manager-item-path="<path relatif>"]` | `file-tree-row.tsx`; nilai dari `computedParentPath` (`lib/path.ts`): path relatif workspace, mis. `notes/getting-started.md`. |
 | `getByRole('textbox', { name: 'Search files' })` | `file-manager.tsx` input filter, `aria-label={t('search.label')}`; `article.file.search.label` = "Search files". |
