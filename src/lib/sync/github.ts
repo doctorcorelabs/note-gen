@@ -1,4 +1,5 @@
 import { assertConditionalResponse } from './write-condition'
+import { requireApiUsername } from './api-username'
 import { withGithubRepoWriteLock } from './github-repo-write-lock'
 import { fetchRemoteRead, recoverRemoteMutation } from './remote-mutation-recovery'
 import { gitBlobVersion } from './remote-content-cache'
@@ -400,7 +401,7 @@ export async function getUserInfo(token?: string) {
     
     if (response.status >= 200 && response.status < 300) {
       const data = await response.json();
-      await store.set('githubUsername', data.login);
+      await store.set('githubUsername', requireApiUsername(data.login, "GitHub"));
       await store.save();
       return { data } as OctokitResponse<any>;
     }
