@@ -1,0 +1,189 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Dockerfile WEB: situs statis hasil static export Next.js (output: export).
+#
+# ADOPSI GELOMBANG 5 (slot W5-DOCKER, 18 Nov 2026): berkas ini diadopsi ke
+# repo dari draf dep-29 (SMK-DF1). Tahap build dan runtime dipertahankan
+# dari draf yang terbukti di smoke run 16 Nov 2026 (build run 2 lulus,
+# 64/64 halaman statis, service web healthy di stack smoke). Penempatan:
+# root repo, konteks build root repo. Pasangan: server/Dockerfile
+# (konteks server/) dan server/.dockerignore. Konteks web dibaca dengan
+# .dockerignore di root repo (berkas terlacak sejak adopsi ini).
+#
+# DELTA ADOPSI terhadap draf dep-29 (selain kepala berkas ini):
+# 1. Pin minor base build: node:24.22-bookworm-slim (draf memakai
+#    node:24-bookworm-slim). Kedua tag menunjuk manifest yang sama
+#    (digest di bawah, diverifikasi 18 Nov 2026), sehingga image
+#    tidak berubah.
+# 2. Digest base image terverifikasi dicatat di bawah (F10 bagian 5.3).
+# Tidak ada perubahan lain pada tahap build atau runtime.
+#
+# BENTUK SERVICE (konsisten dengan DEP-13 dan
+# infra/docker-compose.deploy.yml di trunk):
+# - Service `web`: static export TERBAKAR di dalam image, tanpa
+#   env_file, tanpa volume, expose internal 80, dijangkau Caddy
+#   sebagai web:80, healthcheck wget --spider ke /.
+# - DEP-13 TIDAK menetapkan base image runtime secara eksplisit
+#   (D-DEP13-3 terbuka). Pilihan berkas ini: nginx:alpine, mengikuti
+#   preseden compose dev (infra/docker-compose.dev.yml service `web`:
+#   image nginx:alpine, menyajikan out/ di /usr/share/nginx/html,
+#   healthcheck wget yang sama). Alasan: (1) healthcheck wget DEP-13
+#   disalin dari pola dev nginx statis, sehingga memakai nginx:alpine
+#   membuat asumsi wget di K-15/D-W5 terpenuhi oleh basis
+#   Alpine/busybox yang sama; (2) tanpa server aplikasi, sesuai AD-22
+#   (bukan server Next.js); (3) konfigurasi default nginx sudah
+#   menyajikan index.html di port 80, tanpa berkas konfigurasi tambahan
+#   yang belum teruji.
+# - Konfigurasi nginx TIDAK diubah: memakai default image. Batasan:
+#   fallback clean-URL (try_files) tidak ditambahkan karena belum
+#   terverifikasi apakah rute export membutuhkannya; smoke butir 1
+#   (front page 200) hanya butuh / -> index.html. Lihat disposisi A6.
+#
+# PIN BASE IMAGE (diverifikasi 18 Nov 2026 di muse-2, arsitektur
+# amd64/linux, lewat docker buildx imagetools inspect; digest juga
+# dicatat di laporan adopsi W5-DOCKER):
+# - node:24.22-bookworm-slim:
+#   sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
+#   (identik dengan node:24-bookworm-slim yang dipakai smoke; Node
+#   24.22.3 terkonfirmasi di image API predeploy.)
+# - nginx:alpine:
+#   sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
+#   (sama dengan digest smoke 16 Nov 2026; image yang sama masih
+#   ter-cache di muse-2.) Tag minor nginx TIDAK dipakai:
+#   nginx:1.29-alpine dan nginx:1.28-alpine menunjuk digest berbeda
+#   (image lain yang belum terbukti), sehingga mengganti tag berarti
+#   mengganti base image. Pin digest di FROM (bentuk tag@digest)
+#   diputus bersama K-15 saat adopsi CI; sampai saat itu digest
+#   tercatat di sini dan di laporan adopsi sebagai identitas audit.
+# - pnpm dipin eksak 9.15.9 lewat corepack (lihat stage build). Tidak
+#   ada field packageManager di package.json root maupun server/ pada
+#   trunk adopsi, sehingga pin hidup di berkas ini dan di CI.
+#
+# CARA BUILD PERSIS (dari root repo):
+#   docker build -f Dockerfile.web --build-arg IMAGE_REVISION=<sha> --build-arg IMAGE_SOURCE=https://github.com/doctorcorelabs/note-gen -t <nama-image>:<tag> .
+# - Konteks build (argumen `.`) WAJIB root repo, karena Dockerfile
+#   menyalin package.json, pnpm-lock.yaml, dan seluruh sumber dari
+#   konteks. Perintah di atas dijalankan dari root repo.
+# - Nama image final mengikuti keputusan K-15; usulan nama DEP-13
+#   adalah ghcr.io/doctorcorelabs/note-gen-web (USULAN, bukan
+#   keputusan). Jangan memakai tag mutable dev/main/latest untuk produksi.
+# - .dockerignore di root repo WAJIB ada (berkas terlacak sejak adopsi
+#   ini) agar dibaca Docker; .dockerignore di direktori lain tidak
+#   berpengaruh. Build tanpa .dockerignore yang benar dapat menyalin
+#   node_modules/.next/out dari host ke dalam stage build. Lihat A4.
+# - Build butuh jaringan (pnpm install mengunduh dependensi).
+#
+# ASUMSI DRAF (A1-A7) DAN DISPOSISINYA (bukti smoke 16 Nov 2026):
+# - A1 (`pnpm build` menghasilkan out/ tak kosong): TERBUKTI. Build
+#   smoke run 2: 64/64 halaman statis + export 3/3; asersi test -d out
+#   lulus. Dasar: skrip build di package.json (plugin-runtime +
+#   markdown-lexer + next build --turbopack + build:prune-maps) dan
+#   output: export di next.config.ts.
+# - A2 (base image runtime menyediakan wget untuk HEALTHCHECK):
+#   TERBUKTI. Gate image smoke 11/11 lulus, termasuk wget ada di web.
+# - A3 (proses nginx sebagai user non-root dapat bind port 80):
+#   TERBUKTI. Service web Up + healthy di stack smoke (langkah 8).
+#   Dasar: default Docker mengizinkan bind port istimewa di dalam
+#   container (ip_unprivileged_port_start=0). Bila host/daemon memakai
+#   setelan berbeda, fallback (listen 8080 + ubah expose/healthcheck
+#   compose dan upstream Caddy) adalah keputusan koordinator.
+# - A4 (.dockerignore tersedia di root konteks): TERTUTUP OLEH ADOPSI
+#   INI. .dockerignore kini berkas terlacak di root repo; ukuran
+#   konteks terverifikasi pada build adopsi (lihat laporan W5-DOCKER).
+# - A5 (tidak ada dependensi yang butuh kompilasi native saat
+#   install): TERBUKTI. pnpm install web lulus di smoke tanpa paket
+#   apt; stage build tetap tanpa toolchain native.
+# - A6 (konfigurasi default nginx cukup): TERBUKTI UNTUK SMOKE (front
+#   page 200 lewat proksi). Perilaku rute clean-URL tanpa .html dan
+#   fallback SPA belum diverifikasi; bila smoke/deploy butuh itu,
+#   tambahkan konfigurasi nginx teruji sebagai berkas terpisah atas
+#   keputusan koordinator.
+# - A7 (arsitektur image sama dengan host deploy): TERCATAT. Host
+#   deploy muse-2 adalah amd64/linux; digest di atas adalah digest
+#   manifest list; image hasil build adopsi diverifikasi di host
+#   yang sama.
+#
+# PENYIMPANGAN DARI F10 (dicatat, bukan disembunyikan): F10 bagian
+# 2/5.1 merancang web sebagai server Next.js standalone (output
+# standalone, port 3000). Trunk adopsi masih memakai output: export
+# (AD-22), compose deploy mengharapkan web statis di web:80, dan
+# smoke membuktikan jalur statis. Mengubah next.config.ts ke
+# standalone adalah perubahan perilaku di luar lingkup slot adopsi
+# Dockerfile ini; Dockerfile ini mengadopsi bentuk yang dipakai
+# trunk, DEP-13, dan smoke. Keputusan standalone tetap milik
+# koordinator sebagai pekerjaan terpisah.
+#
+# TANPA SECRET: berkas ini tidak memuat nilai secret, tidak memakai ARG
+# rahasia, dan tidak membaca env_file. Satu-satunya variabel NEXT_PUBLIC_
+# di sumber (NEXT_PUBLIC_MICROSOFT_CLIENT_ID) punya nilai default di
+# dalam kode, sehingga build tidak membutuhkan ARG/ENV dari luar. Bila
+# kebutuhan itu berubah, koordinator memutuskan mekanismenya; jangan
+# menambahkan ARG rahasia diam-diam ke berkas ini.
+
+# ---------- Stage build ----------
+FROM node:24.22-bookworm-slim AS build
+
+# pnpm dipin eksak 9.15.9 lewat corepack, sesuai preseden compose dev
+# (komentar service api, laporan toolchain W04) dan perintah tugas.
+# corepack dibundel bersama Node 24; tanpa instalasi global tambahan.
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+WORKDIR /app
+
+# Lapisan dependensi dipisah agar cache build dapat dipakai ulang bila
+# hanya sumber berubah. Tidak ada .npmrc atau pnpm-workspace.yaml di
+# root base-clone, sehingga dua berkas ini cukup untuk install.
+COPY package.json pnpm-lock.yaml ./
+
+# --frozen-lockfile: install gagal bila lockfile tidak cocok dengan
+# package.json, agar build tidak diam-diam memakai versi lain.
+# DevDependencies DIBUTUHKAN saat build (next, esbuild, typescript),
+# sehingga NODE_ENV TIDAK disetel ke production sebelum install.
+RUN pnpm install --frozen-lockfile
+
+# Salinan sumber. Mengandalkan .dockerignore di root konteks (A4).
+COPY . .
+
+# Build menghasilkan out/ (output: export). NODE_ENV=production hanya
+# untuk langkah ini, agar assetPrefix produksi berlaku dan agar install
+# di lapisan sebelumnya tidak terpengaruh. Telemetri Next dimatikan.
+# Asersi akhir membuktikan out/ ada dan tak kosong; tanpa itu image
+# runtime akan menyajikan direktori kosong secara diam-diam.
+RUN NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production pnpm build \
+  && test -d out \
+  && test -n "$(ls -A out)"
+
+# ---------- Stage runtime ----------
+FROM nginx:alpine
+
+# Provenans image (VRF-10, AD-84): nilai diteruskan compose smoke
+# lewat args IMAGE_REVISION/IMAGE_SOURCE. Bukan secret; default
+# kosong aman bila arg tidak diteruskan (label terisi string kosong).
+ARG IMAGE_REVISION=""
+ARG IMAGE_SOURCE=""
+
+LABEL org.opencontainers.image.title="notegen-web" \
+      org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}"
+
+# Static export dibakar ke dalam image (DEP-13: tanpa volume).
+COPY --from=build /app/out /usr/share/nginx/html
+
+# Persiapan jalan non-root: user dan grup `nginx` sudah ada di image
+# nginx:alpine. Direktori cache, log, berkas pid, dan html harus dapat
+# ditulis user nginx karena master nginx jalan tanpa root. Perintah ini
+# jalan sebagai root (default image) sebelum USER dialihkan.
+RUN touch /var/run/nginx.pid \
+  && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /var/run/nginx.pid /usr/share/nginx/html
+
+USER nginx
+
+EXPOSE 80
+
+# Probe liveness sama dengan healthcheck service web DEP-13 dan compose
+# dev (wget --spider ke /). Bila service jalan lewat compose, healthcheck
+# compose MENANG atas HEALTHCHECK ini; HEALTHCHECK di sini berlaku untuk
+# pemakaian `docker run` langsung. Lihat ASUMSI A2.
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=10s \
+  CMD wget --spider -q http://127.0.0.1:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

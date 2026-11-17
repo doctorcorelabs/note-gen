@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# .dockerignore untuk image API (Fastify) dengan KONTEKS server/ saja.
+# Penulis: SMK-DF3, batch penyegaran smoke AD-83, 16 Nov 2026.
+# Diadopsi ke repo oleh slot W5-DOCKER, 18 Nov 2026 (O-DOCKERIGNORE,
+# AD-131 butir 3); pola di bawah dipertahankan dari draf dep-29
+# (.dockerignore.api) dan diverifikasi ulang terhadap trunk adopsi
+# 2cd58757. Berkas ini TERLACAK sebagai server/.dockerignore.
+# Melayani server/Dockerfile yang memakai konteks server/ dan
+# COPY eksplisit: package.json, pnpm-lock.yaml, tsconfig.json,
+# tsconfig.build.json, src/, drizzle/. Berkas .dockerignore di root
+# repo TIDAK dibaca untuk konteks server/; itulah alasan berkas
+# terpisah ini ada.
+#
+# NOL NEGASI (!) disengaja. Tidak ada pengecualian .env.example.
+#
+# YANG DIIZINKAN (tidak ada di daftar ini, jangan ditambah tanpa bukti):
+# package.json, pnpm-lock.yaml, tsconfig.json, tsconfig.build.json,
+# drizzle.config.ts, src/, drizzle/ (SQL + jurnal), scripts/, README.md,
+# vitest.config.ts. Alasan: server/Dockerfile menyalin src/ dan drizzle/;
+# migrator membaca drizzle/ di samping dist/ saat runtime; drizzle.config.ts
+# tidak di-COPY server/Dockerfile tetapi tetap diizinkan agar penambahan
+# COPY di masa depan tidak patah diam-diam.
+#
+# SENGAJA TIDAK ADA pola *.sql, *secret*, *token*: drizzle/ berisi
+# *.sql yang wajib masuk image, dan src/ berisi berkas bernama secret
+# yang dibutuhkan build (secrets.ts, secret-cipher.ts). Secret dicek
+# lewat grep isi, bukan lewat nama berkas.
+
+# 1. Version control dan editor (preventif; tidak ada di server/)
+.git
+.git/
+**/.git
+**/.git/
+.vscode/
+.idea/
+.DS_Store
+**/.DS_Store
+
+# 2. Dependensi (server/node_modules puluhan MB, terukur du)
+node_modules
+node_modules/
+**/node_modules
+**/node_modules/
+
+# 3. Environment dan kredensial berkas (semua .env*, tanpa pengecualian)
+.env
+.env.*
+**/.env
+**/.env.*
+**/.npmrc
+**/.netrc
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.keystore
+**/*.jks
+**/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
+**/store.json
+**/local-mcp.json
+**/app-lock.json
+
+# 4. Artefak build dan test (dist/ dihasilkan di stage build server/Dockerfile)
+dist
+dist/
+**/dist
+**/dist/
+coverage
+coverage/
+**/coverage
+**/coverage/
+.turbo/
+.vercel/
+*.tsbuildinfo
+**/*.tsbuildinfo
+*.log
+**/*.log
+
+# 5. Data runtime dan database lokal
+data/
+data
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite
+**/*.sqlite3
+
+# 6. Test sumber per direktori (server/Dockerfile: runtime tanpa test/)
+test/
+
+# 7. Cadangan lokal (preventif)
+.backup/
+*.backup
+**/*.backup

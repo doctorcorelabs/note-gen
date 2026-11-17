@@ -1,0 +1,160 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# .dockerignore untuk image web (Next.js) fork NoteGen.
+# Penulis: SMK-DF3, batch penyegaran smoke AD-83, 16 Nov 2026.
+# Diadopsi ke repo oleh slot W5-DOCKER, 18 Nov 2026 (O-DOCKERIGNORE,
+# AD-131 butir 3); pola di bawah dipertahankan dari draf dep-29 dan
+# diverifikasi ulang terhadap trunk adopsi 2cd58757 (tidak ada
+# direktori sumber bernama out/build/dist/target/coverage, tidak ada
+# berkas terlacak berekstensi .key/.pem/.local).
+# KONTEKS BUILD: ROOT REPO. Berkas ini melayani Dockerfile.web
+# (COPY . . dari root). Berkas ini TERLACAK di root repo; Docker
+# membaca .dockerignore dari direktori konteks, bukan dari direktori
+# Dockerfile. Untuk image API yang memakai konteks server/ saja
+# (server/Dockerfile), pakai berkas pendamping server/.dockerignore
+# (berkas terlacak terpisah); .dockerignore di root repo TIDAK dibaca
+# untuk konteks server/.
+#
+# NOL NEGASI (!) disengaja. Tidak ada pengecualian .env.example: contoh
+# env tidak dibutuhkan build, dan nilainya tidak boleh masuk image.
+#
+# YANG DIIZINKAN (tidak ada di daftar ini, jangan ditambah tanpa bukti):
+# package.json, pnpm-lock.yaml (root dan server/), next.config.ts,
+# tsconfig.json (root dan server/), postcss.config.mjs, components.json,
+# src/, server/src/, server/drizzle/, server/drizzle.config.ts,
+# public/, messages/, config/, scripts/, infra/ (kecuali data/env),
+# berkas konfigurasi root (.eslintrc.json, vitest.config.ts,
+# playwright.config.ts), LICENSE, README, FORK.md.
+# Alasan: src/ mengimpor config/ dan messages/; migrator server membaca
+# server/drizzle/ saat runtime; build web men-generate worker JS ke
+# public/ lewat esbuild sehingga public/ harus utuh.
+#
+# SENGAJA TIDAK ADA pola nama *.test.*, *.spec.*, *token*, *secret*:
+# 29 berkas spec/test hidup di dalam src/ dan 8 berkas sumber bernama
+# secret/token dibutuhkan build. Pola nama akan memotong src/ dan
+# server/src/. Test hanya dikecualikan per direktori (tests/,
+# server/test/). Secret dicek lewat grep isi, bukan lewat nama berkas.
+
+# 1. Version control, CI, editor
+.git
+.git/
+**/.git
+**/.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+**/.DS_Store
+
+# 2. Dependensi dan cache paket (root node_modules 1,2 GB, terukur du)
+node_modules
+node_modules/
+**/node_modules
+**/node_modules/
+.pnpm-store
+.pnpm-store/
+**/.pnpm-store
+**/.pnpm-store/
+
+# 3. Environment dan kredensial berkas (semua .env*, tanpa pengecualian)
+.env
+.env.*
+**/.env
+**/.env.*
+**/.npmrc
+**/.netrc
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.keystore
+**/*.jks
+**/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
+**/store.json
+**/local-mcp.json
+**/app-lock.json
+
+# 4. Artefak build dan test (tidak ada di tree saat audit: preventif)
+.next
+.next/
+**/.next
+**/.next/
+out
+out/
+**/out
+**/out/
+dist
+dist/
+**/dist
+**/dist/
+build
+build/
+**/build
+**/build/
+coverage
+coverage/
+**/coverage
+**/coverage/
+.turbo/
+.vercel/
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+**/next-env.d.ts
+test-results
+test-results/
+**/test-results
+**/test-results/
+playwright-report
+playwright-report/
+**/playwright-report
+**/playwright-report/
+.nyc_output/
+**/*.log
+
+# 5. Data runtime dan database lokal (tidak ada di tree saat audit)
+server/data/
+infra/data/
+pgdata/
+pg17-data/
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite
+**/*.sqlite3
+
+# 6. Desktop saja: Tauri/Rust (build web dan API tidak memakainya)
+src-tauri/
+.cargo/
+target
+target/
+**/target
+**/target/
+rust-toolchain.toml
+
+# 7. Test sumber per direktori (bukan per pola nama, lihat kepala berkas)
+tests/
+server/test/
+
+# 8. Dokumen dan direktori dev-only (tidak dibaca build)
+docs/
+plans/
+remotion/
+.worktrees/
+.backup/
+*.backup
+**/*.backup
+.claude/
+.superpowers/
+.agents/
+skills-lock.json
+*.local
+**/*.local
+.yarn/
+.pnp.*
+**/.pnp.*
