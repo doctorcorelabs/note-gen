@@ -164,6 +164,17 @@ codes (`VALIDATION`, `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE`,
 `UNKNOWN`) stay until a final taxonomy lands; cases assert codes,
 never message text, except CT-X6.
 
+F6 resolution (wave 4, W4-CODEMOD): the SQL part of this entry is
+RESOLVED. The SQL mirror folded into re-exports of the canonical
+surface (`SqlAdapter` from `src/lib/platform/sql/interface.ts`,
+the 74-kind catalog from `ops-catalog.ts`, row types from
+`src/types/`), and the SQL cases assert the canonical
+`SqlAdapterError` / `SqlErrorCode` instead of `ContractError`.
+The six ghost kinds are gone (see the header of `sql-cases.ts`);
+CT-K4 was deleted with no canonical replacement. The Store and
+Filesystem parts of this entry remain open. CT-X6 no longer
+asserts message text on any leg (see E14).
+
 ## E10: the web column uses catalogued S keys (UNKNOWN writes throw)
 
 The web adapter with the production classifier rejects UNKNOWN
@@ -230,3 +241,62 @@ verbatim when the server answers; here no answer arrives). The
 web column asserts `isStoreWebError` plus the code. Neither
 divergence weakens its case: both columns assert a typed failure,
 never a hang or `undefined`.
+## E13: the 50-operation bound lives at three layers, and only the adapter layer is contract-asserted
+
+CT-X5 asserts that a transaction of 51 operations is rejected
+with `VALIDATION` and a transaction of 50 succeeds, on every leg.
+The bound itself is enforced at three layers with different
+mechanics, and the case deliberately asserts only the
+adapter-level one:
+
+- Adapter layer: `WebSqlAdapter.transaction` rejects oversized
+  transactions locally instead of splitting them ("transactions
+  are never split"); the fake and the Postgres shim mirror that
+  rejection. Read batches over 50 operations ARE split: the web
+  adapter chunks `queryMany` itself, and the Postgres shim
+  chunks likewise.
+- Transport layer: `createSqlDbClient` chunks calls over 50
+  operations into consecutive 50-operation requests. Atomicity
+  holds per chunk, not per call: a later-chunk failure leaves
+  earlier chunks committed. No contract case exercises a
+  multi-chunk write call, because the adapter never issues one.
+- Server layer: route validation rejects request bodies over 50
+  operations (400) and over 1 MB. The 1 MB half of CT-X5 stays
+  deferred to the server level (see README.md); the op-count
+  half at the server layer is covered by server specs, not by
+  this suite.
+
+## E14: Fase 1 410 stubs, fake-only cases, and adapter-observable surfaces
+
+Four cases run on the fake leg only, because the server behavior
+they need is stubbed with 410 `capability_unavailable` in Fase 1
+and planned for Fase 2: C-SQ-06b, CT-H5, and CT-S6 seed chunks
+through `vector.replaceChunks`, and CT-X4 commits through
+`wiki.commitRevision` (with `wiki.upsertSource` /
+`wiki.upsertPage` likewise stubbed). Their fake-local semantics
+(chunk validation rules, the wiki commit guard, the absence of
+wiki_meta dirty modeling) are documented in the fake header and
+are NOT server behavior; when the Fase 2 handlers land, these
+cases move to all legs and any disagreement is resolved in
+favor of the server. CT-K4 (`vector.insertChunk`) has no
+canonical operation at any layer and was deleted, not moved.
+
+Three more adapter-observability facts the remapped cases rely
+on:
+
+- The fake reports mode `"web"`. `SqlMode` has no `"fake"`; the
+  old mirror-only mode value is gone with the fold, and no case
+  asserts the mode value.
+- The web adapter rebuilds error messages from wire codes, so
+  server message text never reaches the caller. CT-X6 therefore
+  asserts the `CONFLICT` code plus the guard details
+  (`currentTagIds`, `currentPrimaryTagId`) on all legs; the
+  pinned upstream message stays pinned by
+  `server/test/db-handlers-records-tags.spec.ts`, and the
+  `TAG_GUARD_CONFLICT_MESSAGE` constant stays exported from
+  `contract-types.ts` as a Kelas J record.
+- The Postgres leg (`implementations/postgres.ts`) is registered
+  but live-unverified: it has never run against a real database
+  in this workspace. Its first live run belongs to CI or the
+  merge gate, against a scratch database named by
+  `SQL_CONTRACT_DATABASE_URL`.

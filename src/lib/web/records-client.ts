@@ -32,7 +32,9 @@
 //   client, which exposes this same RecordsApi surface over kinds.
 //   This REST client is retained unchanged for use after V3-25 lands
 //   the REST routes; until then its marks/tags calls answer 404 from
-//   the router. Live acceptance runs after integrator wiring (V3-41).
+//   the router. Mounting landed in wave 4 (W4-CODEMOD, WebInbox over
+//   KindRecordsApi, 17 Nov 2026); live acceptance still waits on a
+//   live E2E harness run (E2E-S3).
 
 import { ApiClient, defaultApiClient } from "./api-client";
 import { ApiError } from "./errors";

@@ -1,4 +1,4 @@
-import { getDb } from './index'
+import { getDb, getSqlAdapter } from './index'
 import { enqueueAutoDataSync } from '@/lib/sync/auto-data-sync-queue'
 import { nextConversationSyncTimestamp } from './conversation-sync-state'
 
@@ -21,122 +21,57 @@ export interface ConversationCompaction {
 
 export type NewConversationCompaction = Omit<ConversationCompaction, 'id' | 'createdAt' | 'revision'>
 
-export async function initConversationCompactionsDb() {
-  const db = await getDb()
-  await db.execute(`
-    create table if not exists conversation_compactions (
-      id integer primary key autoincrement,
-      conversationId integer not null,
-      summary text not null,
-      coveredThroughChatId integer not null,
-      tailStartChatId integer default null,
-      sourceTokenCount integer not null,
-      summaryTokenCount integer not null,
-      model text not null,
-      promptVersion integer not null,
-      revision integer not null,
-      createdAt integer not null
-    )
-  `)
-  for (const column of [
-    'retainedTurnCount integer not null default 0',
-    'prunedToolResultCount integer not null default 0',
-    'prunedToolTokenCount integer not null default 0',
-  ]) {
-    try {
-      await db.execute(`alter table conversation_compactions add column ${column}`)
-    } catch {
-      // Idempotent migration.
-    }
-  }
-  await db.execute(`
-    create index if not exists idx_conversation_compactions_latest
-    on conversation_compactions(conversationId, revision desc)
-  `)
-}
-
 export async function getLatestConversationCompaction(
   conversationId: number
 ): Promise<ConversationCompaction | null> {
-  const db = await getDb()
-  const result = await db.select<ConversationCompaction[]>(
-    `select
-       id,
-       conversationId,
-       summary,
-       coveredThroughChatId,
-       tailStartChatId,
-       sourceTokenCount,
-       summaryTokenCount,
-       model,
-       promptVersion,
-       coalesce(retainedTurnCount, 0) as retainedTurnCount,
-       coalesce(prunedToolResultCount, 0) as prunedToolResultCount,
-       coalesce(prunedToolTokenCount, 0) as prunedToolTokenCount,
-       revision,
-       createdAt
-     from conversation_compactions
-     where conversationId = $1
-     order by revision desc
-     limit 1`,
-    [conversationId]
-  )
-  return result[0] || null
+  // Migrated to kind `compactions.listByConversation` in wave 4
+  // (W4-CODEMOD). The kind orders by revision descending; the
+  // first row is the latest.
+  const rows = await getSqlAdapter().query({
+    kind: 'compactions.listByConversation',
+    conversationId,
+    limit: 1,
+  })
+  return rows[0] ?? null
 }
 
 export async function insertConversationCompaction(compaction: NewConversationCompaction) {
-  const db = await getDb()
-  const latest = await getLatestConversationCompaction(compaction.conversationId)
-  const revision = (latest?.revision || 0) + 1
-  const createdAt = await nextConversationSyncTimestamp()
-  const result = await db.execute(
-    `insert into conversation_compactions (
-      conversationId,
-      summary,
-      coveredThroughChatId,
-      tailStartChatId,
-      sourceTokenCount,
-      summaryTokenCount,
-      model,
-      promptVersion,
-      retainedTurnCount,
-      prunedToolResultCount,
-      prunedToolTokenCount,
-      revision,
-      createdAt
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-    [
-      compaction.conversationId,
-      compaction.summary,
-      compaction.coveredThroughChatId,
-      compaction.tailStartChatId,
-      compaction.sourceTokenCount,
-      compaction.summaryTokenCount,
-      compaction.model,
-      compaction.promptVersion,
-      compaction.retainedTurnCount,
-      compaction.prunedToolResultCount,
-      compaction.prunedToolTokenCount,
-      revision,
-      createdAt,
-    ]
-  )
-  await db.execute(
-    'update conversations set syncUpdatedAt = $1 where id = $2',
-    [createdAt, compaction.conversationId]
-  )
+  // Migrated to kind `compactions.insert` in wave 4 (W4-CODEMOD).
+  // The server assigns `revision` (latest plus one) and
+  // `createdAt`, so the saved row is re-read to return the full
+  // shape callers expect (notably `revision`). The upstream
+  // `conversations.syncUpdatedAt` touch has no kind and is
+  // dropped; the sync-queue notice is kept.
+  await getSqlAdapter().execute({
+    kind: 'compactions.insert',
+    compaction: {
+      conversationId: compaction.conversationId,
+      summary: compaction.summary,
+      coveredThroughChatId: compaction.coveredThroughChatId,
+      tailStartChatId: compaction.tailStartChatId,
+      sourceTokenCount: compaction.sourceTokenCount,
+      summaryTokenCount: compaction.summaryTokenCount,
+      model: compaction.model,
+      promptVersion: compaction.promptVersion,
+      retainedTurnCount: compaction.retainedTurnCount,
+      prunedToolResultCount: compaction.prunedToolResultCount,
+      prunedToolTokenCount: compaction.prunedToolTokenCount,
+    },
+  })
+  const saved = await getLatestConversationCompaction(compaction.conversationId)
+  if (saved === null) {
+    throw new Error('compactions.insert succeeded but the saved row was not found')
+  }
 
   enqueueAutoDataSync('conversations', 'conversation-compaction-created')
 
-  return {
-    ...compaction,
-    id: result.lastInsertId as number,
-    revision,
-    createdAt,
-  } satisfies ConversationCompaction
+  return saved satisfies ConversationCompaction
 }
 
 export async function deleteConversationCompactions(conversationId: number) {
+  // NOT migrated in wave 4: no catalog kind deletes compactions.
+  // Its callers (stores/chat.ts) keep calling this dead path
+  // until a kind lands; the sync touch below has no kind either.
   const db = await getDb()
   const syncUpdatedAt = await nextConversationSyncTimestamp()
   await db.execute(
@@ -150,7 +85,7 @@ export async function deleteConversationCompactions(conversationId: number) {
   enqueueAutoDataSync('conversations', 'conversation-compaction-deleted')
 }
 
-export async function deleteAllConversationCompactions() {
-  const db = await getDb()
-  await db.execute('delete from conversation_compactions', [])
-}
+// `initConversationCompactionsDb` (pure DDL) and
+// `deleteAllConversationCompactions` (no kind, zero callers)
+// were deleted in wave 4 (W4-CODEMOD). The table is
+// server-owned (migrations).

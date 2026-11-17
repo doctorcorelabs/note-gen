@@ -1,7 +1,7 @@
 import { getChatsByConversation, type Chat } from '@/db/chats'
+import { initAllDatabases } from '@/db'
 import {
   getLatestConversationCompaction,
-  initConversationCompactionsDb,
   insertConversationCompaction,
   type ConversationCompaction,
 } from '@/db/conversation-compactions'
@@ -371,7 +371,7 @@ function containsPotentialCredential(content: string) {
 async function prepareConversationHistoryInternal(
   input: PrepareConversationHistoryInput
 ): Promise<PreparedConversationHistory> {
-  await initConversationCompactionsDb()
+  await initAllDatabases()
 
   const aiConfig = input.aiConfig ?? await getAISettings('primaryModel')
   let capacity = await resolveModelCapacity(aiConfig)

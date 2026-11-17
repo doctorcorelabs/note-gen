@@ -1,7 +1,7 @@
 import type { Chat } from '@/db/chats'
+import { initAllDatabases } from '@/db'
 import {
   getLatestConversationCompaction,
-  initConversationCompactionsDb,
 } from '@/db/conversation-compactions'
 import { getChatsAfterLastClear } from './history-messages'
 import { agentDebugLog } from '@/lib/agent/debug-log'
@@ -38,7 +38,7 @@ export async function getConversationContextUsage(
   let coveredThroughChatId: number | undefined
 
   if (conversationId) {
-    await initConversationCompactionsDb()
+    await initAllDatabases()
     const compaction = await getLatestConversationCompaction(conversationId)
     const lastClear = chats.findLast(chat => chat.type === 'clear')
     if (compaction && (!lastClear || compaction.coveredThroughChatId > lastClear.id)) {

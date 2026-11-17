@@ -15,7 +15,7 @@
 // the only tests that call it. Earlier blocks exercise
 // `initSqlAdapter` directly and never touch the memo.
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PlatformCapabilityError,
   __resetPlatformForTests,
@@ -33,6 +33,10 @@ import {
 
 let readyOk = true;
 let readyCalls = 0;
+let verifyCalls = 0;
+let verifyOps: Array<{ kind: string }> = [];
+let verifyFails = false;
+let verifyTagRows: Array<Record<string, unknown>> = [{ name: "Idea" }];
 
 const fakeSql: SqlAdapter = {
   mode: "web",
@@ -46,8 +50,13 @@ const fakeSql: SqlAdapter = {
   queryOne: async () => {
     throw new Error("fake queryOne unused");
   },
-  queryMany: async () => {
-    throw new Error("fake queryMany unused");
+  queryMany: async (ops) => {
+    verifyCalls += 1;
+    verifyOps = ops.map((op) => ({ kind: op.kind }));
+    if (verifyFails) {
+      throw new Error("fake verification failure");
+    }
+    return ops.map((op) => (op.kind === "tags.list" ? verifyTagRows : []));
   },
   execute: async () => {
     throw new Error("fake execute unused");
@@ -61,6 +70,10 @@ const fakeSql: SqlAdapter = {
 beforeEach(() => {
   readyOk = true;
   readyCalls = 0;
+  verifyCalls = 0;
+  verifyOps = [];
+  verifyFails = false;
+  verifyTagRows = [{ name: "Idea" }];
   __resetPlatformForTests();
   registerPlatformAdapter("sql", fakeSql, ["web"]);
 });
@@ -146,6 +159,55 @@ describe("initSqlAdapter", () => {
     expect(error).toBeInstanceOf(PlatformCapabilityError);
     expect((error as PlatformCapabilityError).code).toBe("unavailable");
     expect((error as PlatformCapabilityError).message).toContain("readiness");
+    expect(verifyCalls).toBe(0);
+  });
+
+  it("runs the 13 section 5.4 verifications as one batch of 14 cheap reads", async () => {
+    await initSqlAdapter();
+    expect(verifyCalls).toBe(1);
+    expect(verifyOps.map((op) => op.kind)).toEqual([
+      "messages.listByConversation",
+      "conversations.list",
+      "compactions.listByConversation",
+      "imageCache.get",
+      "marks.list",
+      "notes.latestByTag",
+      "tags.list",
+      "vector.summaries",
+      "memories.list",
+      "policy.get",
+      "canvases.list",
+      "activity.list",
+      "knowledge.listSources",
+      "wiki.getSourceState",
+    ]);
+  });
+
+  it("throws a migration-naming capability error when verification fails", async () => {
+    verifyFails = true;
+    const error = await initSqlAdapter().then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(PlatformCapabilityError);
+    expect((error as PlatformCapabilityError).code).toBe("unavailable");
+    expect((error as PlatformCapabilityError).message).toContain("migrations");
+  });
+
+  it("warns when the bootstrap tag Idea is absent and stays silent when present", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      verifyTagRows = [];
+      await initSqlAdapter();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("Idea");
+      warn.mockClear();
+      verifyTagRows = [{ name: "Idea" }];
+      await initSqlAdapter();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

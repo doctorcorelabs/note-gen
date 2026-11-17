@@ -24,30 +24,81 @@
 // Chunk contents are never observable through read operations by
 // design (CT-S6), so C-SQ-06 atomicity is asserted through the
 // observable surfaces: knowledge status and vector summaries.
+//
+// F6 REMAP (wave 4): the cases run against the canonical SqlAdapter
+// surface (ops-catalog.ts, 74 kinds), not the folded 30-kind
+// mirror. The six ghost kinds are gone: the knowledge status
+// machine runs on knowledge.upsertSource / knowledge.updateStatus /
+// knowledge.removeSource, and chunk work on vector.replaceChunks.
+// Changes from the scaffold cases, each with its reason:
+// - CT-K4 DELETED: vector.insertChunk is a ghost kind with no
+//   canonical operation; duplicate-chunk-key behavior has no
+//   observable canonical form (replaceChunks replaces whole sets).
+// - CT-K2: the `duplicate` flag assertion is dropped (canonical
+//   SqlWriteResult has no such field; first-write-wins is observed
+//   as affected 0 plus the existing id), the null-sourceId leg
+//   omits sourceId instead (the server mints UUIDs), and the
+//   update-sourceId tail is dropped (SqlMarkPatch has no sourceId;
+//   the field is immutable after create).
+// - CT-K3: a duplicate tag name returns the existing tag with
+//   affected 0 (the server handler's ON CONFLICT DO NOTHING
+//   behavior), it does not throw.
+// - CT-X6: the pinned upstream message is NOT asserted here. The
+//   web adapter rebuilds error messages from wire codes, so the
+//   message text is not adapter-observable; the case asserts the
+//   CONFLICT code plus the guard details, and the message itself
+//   stays pinned by server/test/db-handlers-records-tags.spec.ts.
+// - CT-P2-shape: exact key-set equality is replaced by
+//   required-plus-allowed key assertions, because canonical rows
+//   omit null content/desc and tag rows carry no timestamps and no
+//   total on tags.get.
+// - CT-X1: the middle valid mark creation is dropped. Tag ids are
+//   database-global sequences, so no case may assume the first tag
+//   in a fresh workspace has id 1; atomicity is proven with one
+//   successful op plus one failing op.
+// - CT-H3/CT-H4: the ghost claim/fail/retry verbs are replaced by
+//   guarded updateStatus transitions. Pending-to-pending is a legal
+//   self-transition, so the old "retry from pending conflicts"
+//   leg is replaced by ready-to-indexing and failed-to-ready legs.
+// - Fake-only cases (they run only when factory.name is "fake"):
+//   C-SQ-06b, CT-H5, CT-S6 (they seed chunks through
+//   vector.replaceChunks, which the server answers 410 in Fase 1),
+//   and CT-X4 (wiki.commitRevision is a 410 stub in Fase 1).
+//   CT-X5 runs on every leg: the web adapter rejects oversized
+//   transactions locally instead of splitting them, and the
+//   Postgres shim mirrors that adapter-level bound. See
+//   tests/contract/EXCEPTIONS.md E13-E14.
 
 import { expect, it } from "vitest";
-import { ContractError, isContractError } from "./contract-errors";
-import type { ContractErrorCode } from "./contract-errors";
-import { TAG_GUARD_CONFLICT_MESSAGE } from "./contract-types";
+import { DEFAULT_CANVAS_DOCUMENT } from "../../src/types/canvas";
+import type { ContractFactory } from "./contract-harness";
+import { SqlAdapterError } from "./contract-types";
 import type {
-  MarkRow,
+  KnowledgeIndexStatus,
+  KnowledgeSource,
+  KnowledgeSourceType,
   SqlAdapter,
-  TagRow,
+  SqlErrorCode,
+  SqlMarkRow,
+  SqlTagRow,
+  WikiPage,
+  WikiSourceRevision,
+  WikiSourceState,
 } from "./contract-types";
 
 async function expectCode(
   promise: Promise<unknown>,
-  code: ContractErrorCode,
-): Promise<ContractError> {
+  code: SqlErrorCode,
+): Promise<SqlAdapterError> {
   let thrown: unknown;
   try {
     await promise;
   } catch (error) {
     thrown = error;
   }
-  expect(thrown).toBeInstanceOf(ContractError);
-  expect(isContractError(thrown, code)).toBe(true);
-  return thrown as ContractError;
+  expect(thrown).toBeInstanceOf(SqlAdapterError);
+  expect((thrown as SqlAdapterError).code).toBe(code);
+  return thrown as SqlAdapterError;
 }
 
 async function makeTag(sql: SqlAdapter, name: string): Promise<number> {
@@ -59,7 +110,7 @@ async function makeMark(
   sql: SqlAdapter,
   tagId: number,
   tagIds: number[],
-  extra: { sourceId?: string | null; content?: string } = {},
+  extra: { sourceId?: string; content?: string } = {},
 ): Promise<number> {
   const result = await sql.execute({
     kind: "marks.create",
@@ -67,15 +118,18 @@ async function makeMark(
       tagId,
       type: "text",
       content: extra.content ?? "body",
-      sourceId: extra.sourceId,
+      url: "",
+      ...(extra.sourceId === undefined
+        ? {}
+        : { sourceId: extra.sourceId }),
     },
     tagIds,
   });
   return result.id as number;
 }
 
-async function getMark(sql: SqlAdapter, id: number): Promise<MarkRow> {
-  const row = await sql.queryOne<MarkRow>({ kind: "marks.get", id });
+async function getMark(sql: SqlAdapter, id: number): Promise<SqlMarkRow> {
+  const row = await sql.queryOne({ kind: "marks.get", id });
   if (row === null) {
     throw new Error(`Expected mark ${id} to exist`);
   }
@@ -83,9 +137,9 @@ async function getMark(sql: SqlAdapter, id: number): Promise<MarkRow> {
 }
 
 async function assertPrimaryInvariant(sql: SqlAdapter): Promise<void> {
-  const marks = await sql.query<MarkRow>({
+  const marks = await sql.query({
     kind: "marks.list",
-    includeDeleted: true,
+    deleted: "all",
     limit: 200,
   });
   for (const mark of marks) {
@@ -93,7 +147,141 @@ async function assertPrimaryInvariant(sql: SqlAdapter): Promise<void> {
   }
 }
 
-export function defineSqlCases(getImpl: () => SqlAdapter): void {
+function makeSourceInput(
+  sourceKey: string,
+  sourceType: KnowledgeSourceType,
+  sourceId: string,
+  contentHash: string,
+  status: KnowledgeIndexStatus = "pending",
+): KnowledgeSource {
+  return {
+    sourceKey,
+    sourceType,
+    sourceId,
+    title: sourceId,
+    contentHash,
+    indexedHash: null,
+    updatedAt: Date.now(),
+    locator: {},
+    status,
+    error: null,
+  };
+}
+
+async function upsertSource(
+  sql: SqlAdapter,
+  source: KnowledgeSource,
+): Promise<void> {
+  await sql.execute({ kind: "knowledge.upsertSource", source });
+}
+
+async function getSource(
+  sql: SqlAdapter,
+  sourceKey: string,
+): Promise<KnowledgeSource> {
+  const row = await sql.queryOne({ kind: "knowledge.getSource", sourceKey });
+  if (row === null) {
+    throw new Error(`Expected knowledge source ${sourceKey} to exist`);
+  }
+  return row;
+}
+
+async function setStatus(
+  sql: SqlAdapter,
+  sourceKey: string,
+  status: KnowledgeIndexStatus,
+  extra: {
+    indexedHash?: string | null;
+    error?: string | null;
+    expectedStatus?: KnowledgeIndexStatus;
+  } = {},
+): Promise<void> {
+  await sql.execute({
+    kind: "knowledge.updateStatus",
+    sourceKey,
+    update: { status, ...extra },
+  });
+}
+
+const WIKI_CANVAS_ID = "11111111-1111-4111-8111-111111111111";
+
+function wikiState(contentHash: string, version: number): WikiSourceState {
+  return {
+    contextId: "ctx",
+    stableId: "s1",
+    sourceKey: "article:s1",
+    sourceType: "article",
+    source: {
+      sourceKey: "article:s1",
+      stableId: "s1",
+      sourceType: "article",
+      title: "S1",
+      contentHash,
+      locator: {},
+      syncDomain: "library",
+    },
+    contentHash,
+    status: "pending",
+    revisionId: null,
+    version,
+    updatedAt: Date.now(),
+    error: null,
+  };
+}
+
+function wikiRevision(
+  id: string,
+  sourceHash: string,
+  outputHash: string,
+): WikiSourceRevision {
+  return {
+    id,
+    contextId: "ctx",
+    inputHash: sourceHash,
+    outputHash,
+    pipelineVersion: "wiki-1",
+    generation: 1,
+    language: "en",
+    source: {
+      sourceKey: "article:s1",
+      stableId: "s1",
+      sourceType: "article",
+      title: "S1",
+      contentHash: sourceHash,
+      locator: {},
+      syncDomain: "library",
+    },
+    summary: "summary",
+    contributions: [],
+    createdAt: Date.now(),
+    modelId: "test-model",
+    usage: { inputTokens: 0, outputTokens: 0, estimated: false },
+  };
+}
+
+function wikiPage(id: string): WikiPage {
+  return {
+    id,
+    contextId: "ctx",
+    kind: "source",
+    title: "Page",
+    aliases: [],
+    body: "body",
+    sourceRefs: [],
+    inputHash: "h1",
+    outputHash: "out1",
+    updatedAt: Date.now(),
+    status: "ready",
+    relatedPageIds: [],
+  };
+}
+
+export function defineSqlCases(
+  getImpl: () => SqlAdapter,
+  factory: ContractFactory<SqlAdapter>,
+): void {
+  const isFake = factory.name === "fake";
+
   it("C-SQ-01: ready() is idempotent and preserves data", async () => {
     const sql = getImpl();
     await expect(sql.ready()).resolves.toMatchObject({ ok: true });
@@ -101,7 +289,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     await makeMark(sql, tagId, [tagId]);
     await expect(sql.ready()).resolves.toMatchObject({ ok: true });
     await expect(sql.ready()).resolves.toMatchObject({ ok: true });
-    const marks = await sql.query<MarkRow>({ kind: "marks.list" });
+    const marks = await sql.query({ kind: "marks.list" });
     expect(marks).toHaveLength(1);
   });
 
@@ -112,7 +300,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     const id = await makeMark(sql, a, [a, b]);
     const row = await getMark(sql, id);
     expect(row.tagIds).toEqual([a, b]);
-    const byTag = await sql.query<MarkRow>({
+    const byTag = await sql.query({
       kind: "marks.listByTag",
       tagId: b,
     });
@@ -124,7 +312,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     await expectCode(
       sql.execute({
         kind: "marks.create",
-        mark: { tagId: 999, type: "text" },
+        mark: { tagId: 999, type: "text", url: "" },
         tagIds: [999],
       }),
       "VALIDATION",
@@ -133,7 +321,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     await expectCode(
       sql.execute({
         kind: "marks.create",
-        mark: { tagId, type: "text" },
+        mark: { tagId, type: "text", url: "" },
         tagIds: [tagId, 999],
       }),
       "VALIDATION",
@@ -141,126 +329,90 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     await expect(sql.query({ kind: "marks.list" })).resolves.toHaveLength(0);
   });
 
-  it("CT-K2/C-SQ-05: duplicate sourceId returns the existing row; null sourceIds stay independent", async () => {
+  it("CT-K2/C-SQ-05: duplicate sourceId returns the existing row; omitted sourceIds stay independent", async () => {
     const sql = getImpl();
     const tagId = await makeTag(sql, "Dup");
     const first = await sql.execute({
       kind: "marks.create",
-      mark: { tagId, type: "text", content: "body", sourceId: "src-1" },
+      mark: { tagId, type: "text", content: "body", url: "", sourceId: "src-1" },
       tagIds: [tagId],
     });
     const second = await sql.execute({
       kind: "marks.create",
-      mark: { tagId, type: "text", content: "other", sourceId: "src-1" },
+      mark: { tagId, type: "text", content: "other", url: "", sourceId: "src-1" },
       tagIds: [tagId],
     });
-    expect(second.duplicate).toBe(true);
-    expect(second.id).toBe(first.id);
     expect(second.affected).toBe(0);
-    const marks = await sql.query<MarkRow>({ kind: "marks.list" });
+    expect(second.id).toBe(first.id);
+    const marks = await sql.query({ kind: "marks.list" });
     expect(marks).toHaveLength(1);
     expect(marks[0].content).toBe("body");
 
-    await makeMark(sql, tagId, [tagId], { sourceId: null });
-    await makeMark(sql, tagId, [tagId], { sourceId: null });
+    await makeMark(sql, tagId, [tagId]);
+    await makeMark(sql, tagId, [tagId]);
     await expect(sql.query({ kind: "marks.list" })).resolves.toHaveLength(3);
-
-    const other = await makeMark(sql, tagId, [tagId], {
-      sourceId: "src-2",
-    });
-    await expectCode(
-      sql.execute({
-        kind: "marks.update",
-        id: other,
-        patch: { sourceId: "src-1" },
-      }),
-      "CONFLICT",
-    );
   });
 
-  it("CT-K3: tag names are unique and case-sensitive", async () => {
+  it("CT-K3: duplicate tag names return the existing tag; names are case-sensitive", async () => {
     const sql = getImpl();
-    await makeTag(sql, "Work");
-    await expectCode(sql.execute({ kind: "tags.create", name: "Work" }), "CONFLICT");
+    const first = await sql.execute({ kind: "tags.create", name: "Work" });
+    expect(first.affected).toBe(1);
+    const duplicate = await sql.execute({ kind: "tags.create", name: "Work" });
+    expect(duplicate.affected).toBe(0);
+    expect(duplicate.id).toBe(first.id);
     await makeTag(sql, "work");
-    const tags = await sql.query<TagRow>({ kind: "tags.list" });
+    const tags = await sql.query({ kind: "tags.list" });
     expect(tags.map((tag) => tag.name).sort()).toEqual(["Work", "work"]);
   });
 
-  it("CT-K4/C-SQ-06a: a duplicate vector chunk key is rejected", async () => {
-    const sql = getImpl();
-    const chunk = { chunkId: 0, content: "c0", embedding: [0.1] };
-    await sql.execute({
-      kind: "vector.insertChunk",
-      sourceType: "article",
-      sourceId: "a1",
-      chunk,
+  if (isFake) {
+    it("C-SQ-06b: replaceChunks is all-or-nothing when one chunk is invalid", async () => {
+      const sql = getImpl();
+      await upsertSource(
+        sql,
+        makeSourceInput("article:doc", "article", "doc", "h1"),
+      );
+      await setStatus(sql, "article:doc", "indexing", {
+        expectedStatus: "pending",
+      });
+      await sql.transaction([
+        {
+          kind: "knowledge.updateStatus",
+          sourceKey: "article:doc",
+          update: { status: "ready", indexedHash: "h1" },
+        },
+        {
+          kind: "vector.replaceChunks",
+          sourceType: "article",
+          sourceId: "doc",
+          chunks: [{ chunkId: 0, content: "old", embedding: "[0.1]" }],
+        },
+      ]);
+      await expectCode(
+        sql.transaction([
+          {
+            kind: "knowledge.updateStatus",
+            sourceKey: "article:doc",
+            update: { status: "ready", indexedHash: "h2" },
+          },
+          {
+            kind: "vector.replaceChunks",
+            sourceType: "article",
+            sourceId: "doc",
+            chunks: [
+              { chunkId: 0, content: "new", embedding: "[0.2]" },
+              { chunkId: -1, content: "bad", embedding: "[0.3]" },
+            ],
+          },
+        ]),
+        "VALIDATION",
+      );
+      const summaries = await sql.query({ kind: "vector.summaries" });
+      expect(summaries).toHaveLength(1);
+      const source = await getSource(sql, "article:doc");
+      expect(source).toMatchObject({ status: "ready", indexedHash: "h1" });
     });
-    await expectCode(
-      sql.execute({
-        kind: "vector.insertChunk",
-        sourceType: "article",
-        sourceId: "a1",
-        chunk,
-      }),
-      "CONFLICT",
-    );
-    await sql.execute({
-      kind: "vector.insertChunk",
-      sourceType: "article",
-      sourceId: "a1",
-      chunk: { chunkId: 1, content: "c1", embedding: [0.2] },
-    });
-    await sql.execute({
-      kind: "vector.insertChunk",
-      sourceType: "article",
-      sourceId: "a2",
-      chunk,
-    });
-    const summaries = await sql.query({ kind: "vector.summaries" });
-    expect(summaries).toHaveLength(2);
-  });
-
-  it("C-SQ-06b: replaceChunks is all-or-nothing when one chunk is invalid", async () => {
-    const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h1",
-    });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    await sql.execute({
-      kind: "knowledge.completeSource",
-      sourceType: "article",
-      sourceId: "doc",
-      chunks: [{ chunkId: 0, content: "old", embedding: [0.1] }],
-    });
-    await expectCode(
-      sql.execute({
-        kind: "vector.replaceChunks",
-        sourceType: "article",
-        sourceId: "doc",
-        chunks: [
-          { chunkId: 0, content: "new", embedding: [0.2] },
-          { chunkId: -1, content: "bad", embedding: [0.3] },
-        ],
-      }),
-      "VALIDATION",
-    );
-    const summaries = await sql.query({ kind: "vector.summaries" });
-    expect(summaries).toHaveLength(1);
-    const source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    expect(source).toMatchObject({ status: "ready", indexedHash: "h1" });
-  });
+  }
 
   it("CT-T1/C-SQ-04a: moving the primary tag keeps extra tags", async () => {
     const sql = getImpl();
@@ -303,7 +455,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
       sql.queryOne({ kind: "marks.get", id }),
     ).resolves.toBeNull();
     await expect(
-      sql.query({ kind: "marks.list", includeDeleted: true }),
+      sql.query({ kind: "marks.list", deleted: "all" }),
     ).resolves.toHaveLength(0);
     await expect(
       sql.query({ kind: "marks.listByTag", tagId: a }),
@@ -329,7 +481,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     const after2 = await getMark(sql, m2);
     expect(after2.tagIds).toEqual([b]);
     expect(after2.deleted).toBe(false);
-    const tags = await sql.query<TagRow>({ kind: "tags.list" });
+    const tags = await sql.query({ kind: "tags.list" });
     expect(tags.map((tag) => tag.name)).toEqual(["B"]);
   });
 
@@ -380,98 +532,62 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
       newNames: ["C"],
     });
     await sql.execute({ kind: "marks.update", id: m2, patch: { tagId: a } });
-    await sql.execute({ kind: "marks.saveTagIds", id: m2, tagIds: [] });
+    await sql.execute({ kind: "marks.saveTagIds", id: m2, tagId: a, tagIds: [] });
     await sql.execute({ kind: "marks.softDelete", id: m1 });
     await sql.execute({ kind: "marks.restore", id: m1 });
     await assertPrimaryInvariant(sql);
   });
 
-  it("CT-H1/C-SQ-07: register, claim, complete drives pending to ready with matching hashes", async () => {
+  it("CT-H1/C-SQ-07: upsert, claim, complete drives pending to ready with matching hashes", async () => {
     const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "record",
-      sourceId: "r1",
-      contentHash: "h1",
-      title: "R1",
-    });
-    let source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "record",
-      sourceId: "r1",
-    });
+    await upsertSource(
+      sql,
+      makeSourceInput("record:r1", "record", "r1", "h1"),
+    );
+    let source = await getSource(sql, "record:r1");
     expect(source).toMatchObject({
       status: "pending",
       indexedHash: null,
       contentHash: "h1",
     });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "record",
-      sourceId: "r1",
+    await setStatus(sql, "record:r1", "indexing", {
+      expectedStatus: "pending",
     });
-    source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "record",
-      sourceId: "r1",
-    });
+    source = await getSource(sql, "record:r1");
     expect(source).toMatchObject({ status: "indexing" });
-    await sql.execute({
-      kind: "knowledge.completeSource",
-      sourceType: "record",
-      sourceId: "r1",
-      chunks: [{ chunkId: 0, content: "c", embedding: [0.1, 0.2] }],
+    await setStatus(sql, "record:r1", "ready", {
+      indexedHash: "h1",
+      expectedStatus: "indexing",
     });
-    source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "record",
-      sourceId: "r1",
-    });
+    source = await getSource(sql, "record:r1");
     expect(source).toMatchObject({
       status: "ready",
       indexedHash: "h1",
       contentHash: "h1",
     });
-    const stats = await sql.query({
-      kind: "knowledge.stats",
-    });
-    expect(stats).toContainEqual({
-      sourceType: "record",
-      status: "ready",
-      count: 1,
-    });
+    const stats = await sql.queryOne({ kind: "knowledge.stats" });
+    expect(stats?.record.ready).toBe(1);
+    expect(stats?.record.pending).toBe(0);
   });
 
   it("CT-H2: new content returns a ready source to pending, keeping the old indexedHash", async () => {
     const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h1",
+    await upsertSource(
+      sql,
+      makeSourceInput("article:doc", "article", "doc", "h1"),
+    );
+    await setStatus(sql, "article:doc", "indexing", {
+      expectedStatus: "pending",
     });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "article",
-      sourceId: "doc",
+    await setStatus(sql, "article:doc", "ready", {
+      indexedHash: "h1",
+      expectedStatus: "indexing",
     });
-    await sql.execute({
-      kind: "knowledge.completeSource",
-      sourceType: "article",
-      sourceId: "doc",
-      chunks: [{ chunkId: 0, content: "c", embedding: [0.1] }],
-    });
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h2",
-    });
-    const source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
+    await upsertSource(
+      sql,
+      makeSourceInput("article:doc", "article", "doc", "h2"),
+    );
+    const source = await getSource(sql, "article:doc");
     expect(source).toMatchObject({
       status: "pending",
       contentHash: "h2",
@@ -481,160 +597,120 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
 
   it("CT-H3: illegal status transitions are rejected", async () => {
     const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "canvas",
-      sourceId: "c1",
-      contentHash: "h1",
+    await upsertSource(
+      sql,
+      makeSourceInput("canvas:c1", "canvas", "c1", "h1"),
+    );
+    await expectCode(
+      setStatus(sql, "canvas:c1", "ready"),
+      "CONFLICT",
+    );
+    await expectCode(
+      setStatus(sql, "canvas:c1", "failed", { error: "boom" }),
+      "CONFLICT",
+    );
+    await setStatus(sql, "canvas:c1", "indexing", {
+      expectedStatus: "pending",
+    });
+    await setStatus(sql, "canvas:c1", "ready", {
+      indexedHash: "h1",
+      expectedStatus: "indexing",
     });
     await expectCode(
-      sql.execute({
-        kind: "knowledge.completeSource",
-        sourceType: "canvas",
-        sourceId: "c1",
-        chunks: [],
-      }),
+      setStatus(sql, "canvas:c1", "indexing"),
       "CONFLICT",
     );
-    await expectCode(
-      sql.execute({
-        kind: "knowledge.failSource",
-        sourceType: "canvas",
-        sourceId: "c1",
-        error: "boom",
-      }),
-      "CONFLICT",
+    await upsertSource(
+      sql,
+      makeSourceInput("canvas:c2", "canvas", "c2", "h1"),
     );
-    await expectCode(
-      sql.execute({
-        kind: "knowledge.retrySource",
-        sourceType: "canvas",
-        sourceId: "c1",
-      }),
-      "CONFLICT",
-    );
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "canvas",
-      sourceId: "c1",
+    await setStatus(sql, "canvas:c2", "indexing", {
+      expectedStatus: "pending",
     });
-    await sql.execute({
-      kind: "knowledge.completeSource",
-      sourceType: "canvas",
-      sourceId: "c1",
-      chunks: [],
-    });
-    await expectCode(
-      sql.execute({
-        kind: "knowledge.claimSource",
-        sourceType: "canvas",
-        sourceId: "c1",
-      }),
-      "CONFLICT",
-    );
+    await setStatus(sql, "canvas:c2", "failed", { error: "worker died" });
+    await expectCode(setStatus(sql, "canvas:c2", "ready"), "CONFLICT");
   });
 
-  it("CT-H4: two claims over one pending source, exactly one wins", async () => {
+  it("CT-H4: two guarded claims over one pending source, exactly one wins", async () => {
     const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h1",
-    });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "article",
-      sourceId: "doc",
+    await upsertSource(
+      sql,
+      makeSourceInput("article:doc", "article", "doc", "h1"),
+    );
+    await setStatus(sql, "article:doc", "indexing", {
+      expectedStatus: "pending",
     });
     await expectCode(
-      sql.execute({
-        kind: "knowledge.claimSource",
-        sourceType: "article",
-        sourceId: "doc",
+      setStatus(sql, "article:doc", "indexing", {
+        expectedStatus: "pending",
       }),
       "CONFLICT",
     );
+    const source = await getSource(sql, "article:doc");
+    expect(source.status).toBe("indexing");
   });
 
-  it("CT-H5: a failed chunk write cancels the status change", async () => {
-    const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h1",
+  if (isFake) {
+    it("CT-H5: a failed chunk write cancels the status change", async () => {
+      const sql = getImpl();
+      await upsertSource(
+        sql,
+        makeSourceInput("article:doc", "article", "doc", "h1"),
+      );
+      await setStatus(sql, "article:doc", "indexing", {
+        expectedStatus: "pending",
+      });
+      await expectCode(
+        sql.transaction([
+          {
+            kind: "knowledge.updateStatus",
+            sourceKey: "article:doc",
+            update: { status: "ready", indexedHash: "h1" },
+          },
+          {
+            kind: "vector.replaceChunks",
+            sourceType: "article",
+            sourceId: "doc",
+            chunks: [{ chunkId: 0, content: "", embedding: "[0.1]" }],
+          },
+        ]),
+        "VALIDATION",
+      );
+      const source = await getSource(sql, "article:doc");
+      expect(source).toMatchObject({ status: "indexing", indexedHash: null });
+      await expect(sql.query({ kind: "vector.summaries" })).resolves.toHaveLength(0);
+      await sql.transaction([
+        {
+          kind: "knowledge.updateStatus",
+          sourceKey: "article:doc",
+          update: { status: "ready", indexedHash: "h1" },
+        },
+        {
+          kind: "vector.replaceChunks",
+          sourceType: "article",
+          sourceId: "doc",
+          chunks: [{ chunkId: 0, content: "ok", embedding: "[0.1]" }],
+        },
+      ]);
+      const ready = await getSource(sql, "article:doc");
+      expect(ready).toMatchObject({ status: "ready" });
     });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    await expectCode(
-      sql.execute({
-        kind: "knowledge.completeSource",
-        sourceType: "article",
-        sourceId: "doc",
-        chunks: [{ chunkId: 0, content: "", embedding: [0.1] }],
-      }),
-      "VALIDATION",
-    );
-    const source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    expect(source).toMatchObject({ status: "indexing", indexedHash: null });
-    await expect(sql.query({ kind: "vector.summaries" })).resolves.toHaveLength(0);
-    await sql.execute({
-      kind: "knowledge.completeSource",
-      sourceType: "article",
-      sourceId: "doc",
-      chunks: [{ chunkId: 0, content: "ok", embedding: [0.1] }],
-    });
-    const ready = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    expect(ready).toMatchObject({ status: "ready" });
-  });
+  }
 
   it("CT-H6: a failed source retries to pending with the error cleared", async () => {
     const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h1",
+    await upsertSource(
+      sql,
+      makeSourceInput("article:doc", "article", "doc", "h1"),
+    );
+    await setStatus(sql, "article:doc", "indexing", {
+      expectedStatus: "pending",
     });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    await sql.execute({
-      kind: "knowledge.failSource",
-      sourceType: "article",
-      sourceId: "doc",
-      error: "worker died",
-    });
-    let source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
+    await setStatus(sql, "article:doc", "failed", { error: "worker died" });
+    let source = await getSource(sql, "article:doc");
     expect(source).toMatchObject({ status: "failed", error: "worker died" });
-    await sql.execute({
-      kind: "knowledge.retrySource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    source = await sql.queryOne({
-      kind: "knowledge.getSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
+    await setStatus(sql, "article:doc", "pending");
+    source = await getSource(sql, "article:doc");
     expect(source).toMatchObject({ status: "pending", error: null });
   });
 
@@ -645,13 +721,8 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
         { kind: "tags.create", name: "T1" },
         {
           kind: "marks.create",
-          mark: { tagId: 1, type: "text" },
-          tagIds: [1],
-        },
-        {
-          kind: "marks.create",
-          mark: { tagId: 999, type: "text" },
-          tagIds: [999],
+          mark: { tagId: 999999, type: "text", url: "" },
+          tagIds: [999999],
         },
       ]),
       "VALIDATION",
@@ -696,18 +767,21 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
   it("CT-X3: canvas save with a stale version conflicts; force succeeds", async () => {
     const sql = getImpl();
     const created = await sql.execute({
-      kind: "canvases.save",
-      title: "Board",
-      content: { nodes: [] },
+      kind: "canvases.create",
+      canvas: {
+        id: WIKI_CANVAS_ID,
+        title: "Board",
+        canvasType: "blank",
+        document: structuredClone(DEFAULT_CANVAS_DOCUMENT),
+      },
     });
     const id = created.id as string;
     const error = await expectCode(
       sql.execute({
         kind: "canvases.save",
         id,
-        title: "Stale",
-        content: {},
-        expectedVersion: 99,
+        patch: { title: "Stale" },
+        expected: { version: 99 },
       }),
       "CONFLICT",
     );
@@ -715,63 +789,78 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     const second = await sql.execute({
       kind: "canvases.save",
       id,
-      title: "V2",
-      content: { nodes: [1] },
-      expectedVersion: 1,
+      patch: {
+        title: "V2",
+        document: structuredClone(DEFAULT_CANVAS_DOCUMENT),
+      },
+      expected: { version: 1 },
     });
     expect(second.version).toBe(2);
     const forced = await sql.execute({
       kind: "canvases.save",
       id,
-      title: "Forced",
-      content: {},
-      expectedVersion: 1,
+      patch: { title: "Forced" },
+      expected: { version: 1 },
       force: true,
     });
     expect(forced.version).toBe(3);
   });
 
-  it("CT-X4: wiki commit with a stale version does not commit; the correct version commits", async () => {
-    const sql = getImpl();
-    const stale = await sql.execute({
-      kind: "wiki.commitRevision",
-      contextId: "ctx",
-      sourceId: "s1",
-      expectedVersion: 1,
-      contentHash: "h1",
+  if (isFake) {
+    it("CT-X4: wiki commit with a stale version does not commit; the correct version commits", async () => {
+      const sql = getImpl();
+      const stale = await sql.execute({
+        kind: "wiki.commitRevision",
+        revision: wikiRevision("rev-0", "h1", "out0"),
+        pages: [],
+        expectedVersion: 1,
+      });
+      expect(stale.committed).toBe(false);
+      expect(stale.version).toBe(0);
+      await sql.execute({
+        kind: "wiki.upsertSource",
+        state: wikiState("h1", 0),
+      });
+      const hashMismatch = await sql.execute({
+        kind: "wiki.commitRevision",
+        revision: wikiRevision("rev-x", "other", "outx"),
+        pages: [],
+        expectedVersion: 0,
+      });
+      expect(hashMismatch.committed).toBe(false);
+      const committed = await sql.execute({
+        kind: "wiki.commitRevision",
+        revision: wikiRevision("rev-1", "h1", "out1"),
+        pages: [wikiPage("page-1")],
+        expectedVersion: 0,
+      });
+      expect(committed.committed).toBe(true);
+      expect(committed.version).toBe(1);
+      const state = await sql.queryOne({
+        kind: "wiki.getSourceState",
+        contextId: "ctx",
+        stableId: "s1",
+      });
+      expect(state).toMatchObject({
+        version: 1,
+        revisionId: "rev-1",
+        contentHash: "out1",
+      });
+      const staleAgain = await sql.execute({
+        kind: "wiki.commitRevision",
+        revision: wikiRevision("rev-2", "out1", "out2"),
+        pages: [],
+        expectedVersion: 0,
+      });
+      expect(staleAgain.committed).toBe(false);
+      const unchanged = await sql.queryOne({
+        kind: "wiki.getSourceState",
+        contextId: "ctx",
+        stableId: "s1",
+      });
+      expect(unchanged).toMatchObject({ version: 1, contentHash: "out1" });
     });
-    expect(stale.committed).toBe(false);
-    expect(stale.version).toBe(0);
-    const committed = await sql.execute({
-      kind: "wiki.commitRevision",
-      contextId: "ctx",
-      sourceId: "s1",
-      expectedVersion: 0,
-      contentHash: "h1",
-    });
-    expect(committed.committed).toBe(true);
-    expect(committed.version).toBe(1);
-    const state = await sql.queryOne({
-      kind: "wiki.getSourceState",
-      contextId: "ctx",
-      sourceId: "s1",
-    });
-    expect(state).toMatchObject({ version: 1, dirty: true, contentHash: "h1" });
-    const staleAgain = await sql.execute({
-      kind: "wiki.commitRevision",
-      contextId: "ctx",
-      sourceId: "s1",
-      expectedVersion: 0,
-      contentHash: "h2",
-    });
-    expect(staleAgain.committed).toBe(false);
-    const unchanged = await sql.queryOne({
-      kind: "wiki.getSourceState",
-      contextId: "ctx",
-      sourceId: "s1",
-    });
-    expect(unchanged).toMatchObject({ version: 1, contentHash: "h1" });
-  });
+  }
 
   it("CT-X5: a transaction over the operation limit is rejected", async () => {
     const sql = getImpl();
@@ -789,7 +878,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     expect(results).toHaveLength(50);
   });
 
-  it("CT-X6: the tag guard conflict uses the pinned upstream message", async () => {
+  it("CT-X6: the tag guard conflict reports the current tag set", async () => {
     const sql = getImpl();
     const a = await makeTag(sql, "A");
     const id = await makeMark(sql, a, [a]);
@@ -802,7 +891,10 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
       }),
       "CONFLICT",
     );
-    expect(error.message).toBe(TAG_GUARD_CONFLICT_MESSAGE);
+    expect(error.details).toMatchObject({
+      currentTagIds: [a],
+      currentPrimaryTagId: a,
+    });
   });
 
   it("CT-S5/C-SQ-08: injection strings are data; unknown kinds and removed tables are rejected; no raw SQL path", async () => {
@@ -812,9 +904,9 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     await makeMark(sql, tagId, [tagId], {
       content: "; DROP TABLE marks; --",
     });
-    const tags = await sql.query<TagRow>({ kind: "tags.list" });
+    const tags = await sql.query({ kind: "tags.list" });
     expect(tags.map((tag) => tag.name)).toContain(injectionTag);
-    const marks = await sql.query<MarkRow>({ kind: "marks.list" });
+    const marks = await sql.query({ kind: "marks.list" });
     expect(marks).toHaveLength(1);
     expect(marks[0].content).toBe("; DROP TABLE marks; --");
 
@@ -833,34 +925,39 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     expect(surface.sql).toBeUndefined();
   });
 
-  it("CT-S6: responses never carry embeddings", async () => {
-    const sql = getImpl();
-    await sql.execute({
-      kind: "knowledge.registerSource",
-      sourceType: "article",
-      sourceId: "doc",
-      contentHash: "h1",
+  if (isFake) {
+    it("CT-S6: responses never carry embeddings", async () => {
+      const sql = getImpl();
+      await upsertSource(
+        sql,
+        makeSourceInput("article:doc", "article", "doc", "h1"),
+      );
+      await setStatus(sql, "article:doc", "indexing", {
+        expectedStatus: "pending",
+      });
+      const completed = await sql.transaction([
+        {
+          kind: "knowledge.updateStatus",
+          sourceKey: "article:doc",
+          update: { status: "ready", indexedHash: "h1" },
+        },
+        {
+          kind: "vector.replaceChunks",
+          sourceType: "article",
+          sourceId: "doc",
+          chunks: [{ chunkId: 0, content: "c", embedding: "[0.5, 0.25]" }],
+        },
+      ]);
+      const batch = await sql.queryMany([
+        { kind: "knowledge.listSources" },
+        { kind: "vector.summaries" },
+        { kind: "knowledge.stats" },
+      ]);
+      const serialized = JSON.stringify({ completed, batch });
+      expect(serialized).not.toContain("embedding");
+      expect(serialized).not.toContain("0.5");
     });
-    await sql.execute({
-      kind: "knowledge.claimSource",
-      sourceType: "article",
-      sourceId: "doc",
-    });
-    const completed = await sql.execute({
-      kind: "knowledge.completeSource",
-      sourceType: "article",
-      sourceId: "doc",
-      chunks: [{ chunkId: 0, content: "c", embedding: [0.5, 0.25] }],
-    });
-    const batch = await sql.queryMany([
-      { kind: "knowledge.listSources" },
-      { kind: "vector.summaries" },
-      { kind: "knowledge.stats" },
-    ]);
-    const serialized = JSON.stringify({ completed, batch });
-    expect(serialized).not.toContain("embedding");
-    expect(serialized).not.toContain("0.5");
-  });
+  }
 
   it("CT-I1/CT-I2: an idempotency key replays identical results and rejects a different body", async () => {
     const sql = getImpl();
@@ -868,7 +965,7 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     const first = await sql.transaction(ops, { idempotencyKey: "key-1" });
     const replay = await sql.transaction(ops, { idempotencyKey: "key-1" });
     expect(replay).toEqual(first);
-    const tags = await sql.query<TagRow>({ kind: "tags.list" });
+    const tags = await sql.query({ kind: "tags.list" });
     expect(tags.filter((tag) => tag.name === "Idem")).toHaveLength(1);
     await expectCode(
       sql.transaction([{ kind: "tags.create", name: "Other" }], {
@@ -883,38 +980,55 @@ export function defineSqlCases(getImpl: () => SqlAdapter): void {
     const tagId = await makeTag(sql, "Shape");
     const id = await makeMark(sql, tagId, [tagId]);
     const mark = await getMark(sql, id);
-    expect(Object.keys(mark).sort()).toEqual(
-      [
-        "content",
-        "createdAt",
-        "deleted",
-        "desc",
-        "id",
-        "sourceId",
-        "tagId",
-        "tagIds",
-        "tagUpdatedAt",
-        "type",
-        "updatedAt",
-        "url",
-        "version",
-      ].sort(),
-    );
+    const markKeys = Object.keys(mark).sort();
+    const allowedMarkKeys = [
+      "content",
+      "createdAt",
+      "deleted",
+      "desc",
+      "id",
+      "sourceId",
+      "tagId",
+      "tagIds",
+      "tagUpdatedAt",
+      "type",
+      "updatedAt",
+      "url",
+      "version",
+    ].sort();
+    for (const key of markKeys) {
+      expect(allowedMarkKeys).toContain(key);
+    }
+    for (const key of [
+      "id",
+      "tagId",
+      "tagIds",
+      "tagUpdatedAt",
+      "type",
+      "url",
+      "deleted",
+      "createdAt",
+      "updatedAt",
+      "version",
+      "sourceId",
+      "content",
+    ]) {
+      expect(markKeys).toContain(key);
+    }
     expect(typeof mark.createdAt).toBe("number");
     expect(mark.createdAt).toBeGreaterThan(0);
     expect(typeof mark.updatedAt).toBe("number");
-    const tags = await sql.query<TagRow>({ kind: "tags.list" });
-    expect(Object.keys(tags[0]).sort()).toEqual(
-      [
-        "createdAt",
-        "id",
-        "isLocked",
-        "isPin",
-        "name",
-        "sortOrder",
-        "updatedAt",
-      ].sort(),
-    );
+    const tags = await sql.query({ kind: "tags.list" });
+    const tagKeys = Object.keys(tags[0]).sort();
+    for (const key of tagKeys) {
+      expect(["id", "isLocked", "isPin", "name", "sortOrder", "total"]).toContain(key);
+    }
+    for (const key of ["id", "name", "isLocked", "isPin", "sortOrder"]) {
+      expect(tagKeys).toContain(key);
+    }
+    const single = await sql.queryOne({ kind: "tags.get", id: tagId });
+    expect(single).not.toBeNull();
+    expect("total" in (single as SqlTagRow)).toBe(false);
   });
 
   it("queryMany: batch reads keep order and fail as a batch on an unknown kind; queryOne returns null when empty", async () => {

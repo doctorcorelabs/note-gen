@@ -16,7 +16,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Item, ItemGroup, ItemMedia, ItemContent, ItemTitle, ItemActions, ItemDescription } from '@/components/ui/item'
 import { SettingSection } from '@/app/core/setting/components/setting-base'
-import { clearVectorDb, initVectorDb } from '@/db/vector'
+import { initAllDatabases } from '@/db'
+import { clearVectorDb } from '@/db/vector'
 import { getContextForQuery, initBM25Search, type RagDiagnosticResult } from '@/lib/rag'
 import { cn } from '@/lib/utils'
 import { Progress } from '@/components/ui/progress'
@@ -85,7 +86,10 @@ export function Settings() {
   async function handleDeleteIndex() {
     if (!await platform.dialog.confirm(t('deleteVectorConfirm'))) return
     await clearVectorDb()
-    await initVectorDb()
+    // The vector table is server-owned now: there is no local
+    // recreate step. Re-verify adapter readiness instead; the
+    // vector module migration owns clear/recreate semantics.
+    await initAllDatabases()
     await markIndexDirty()
     const store = await platform.store.load('store.json')
     await store.delete('lastVectorProcessTime')

@@ -1,4 +1,4 @@
-import { getDb } from './index'
+import { getSqlAdapter } from './index'
 
 export interface ImageAnalysisCacheEntry {
   cacheKey: string
@@ -12,61 +12,47 @@ export interface ImageAnalysisCacheEntry {
   updatedAt: number
 }
 
-export async function initImageAnalysisCacheDb() {
-  const db = await getDb()
-  await db.execute(`
-    create table if not exists image_analysis_cache (
-      cacheKey text primary key,
-      imageHash text not null,
-      queryHash text not null,
-      ocrText text default null,
-      visualAnalysis text default null,
-      mimeType text default null,
-      width integer default null,
-      height integer default null,
-      updatedAt integer not null
-    )
-  `)
-  await db.execute(`
-    create index if not exists image_analysis_cache_hash
-    on image_analysis_cache(imageHash, updatedAt desc)
-  `)
-}
-
-export async function getImageAnalysisCache(cacheKey: string) {
-  await initImageAnalysisCacheDb()
-  const db = await getDb()
-  const rows = await db.select<ImageAnalysisCacheEntry[]>(
-    'select * from image_analysis_cache where cacheKey = $1 limit 1',
-    [cacheKey]
-  )
-  return rows[0]
+export async function getImageAnalysisCache(cacheKey: string): Promise<ImageAnalysisCacheEntry | undefined> {
+  // Migrated to kind `imageCache.get` in wave 4 (W4-CODEMOD).
+  // Expired rows are a miss server-side and never returned.
+  // The kind row carries an extra `expiresAt`; it is stripped
+  // here so callers keep seeing the upstream entry shape.
+  const row = await getSqlAdapter().queryOne({ kind: 'imageCache.get', cacheKey })
+  if (row === null) return undefined
+  return {
+    cacheKey: row.cacheKey,
+    imageHash: row.imageHash,
+    queryHash: row.queryHash,
+    ocrText: row.ocrText,
+    visualAnalysis: row.visualAnalysis,
+    mimeType: row.mimeType,
+    width: row.width,
+    height: row.height,
+    updatedAt: row.updatedAt,
+  }
 }
 
 export async function saveImageAnalysisCache(entry: ImageAnalysisCacheEntry) {
-  await initImageAnalysisCacheDb()
-  const db = await getDb()
-  await db.execute(
-    `insert into image_analysis_cache
-      (cacheKey, imageHash, queryHash, ocrText, visualAnalysis, mimeType, width, height, updatedAt)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     on conflict(cacheKey) do update set
-       ocrText = excluded.ocrText,
-       visualAnalysis = excluded.visualAnalysis,
-       mimeType = excluded.mimeType,
-       width = excluded.width,
-       height = excluded.height,
-       updatedAt = excluded.updatedAt`,
-    [
-      entry.cacheKey,
-      entry.imageHash,
-      entry.queryHash,
-      entry.ocrText,
-      entry.visualAnalysis,
-      entry.mimeType,
-      entry.width,
-      entry.height,
-      entry.updatedAt,
-    ]
-  )
+  // Migrated to kind `imageCache.put` in wave 4 (W4-CODEMOD).
+  // Upsert keyed by (workspace, cacheKey) with the same
+  // conflict-update fields as upstream. `updatedAt` is
+  // server-assigned and `expiresAt` defaults to the handler TTL
+  // policy, so the caller-supplied `updatedAt` is not sent.
+  await getSqlAdapter().execute({
+    kind: 'imageCache.put',
+    entry: {
+      cacheKey: entry.cacheKey,
+      imageHash: entry.imageHash,
+      queryHash: entry.queryHash,
+      ocrText: entry.ocrText,
+      visualAnalysis: entry.visualAnalysis,
+      mimeType: entry.mimeType,
+      width: entry.width,
+      height: entry.height,
+    },
+  })
 }
+
+// `initImageAnalysisCacheDb` was pure DDL, had zero callers
+// outside this module, and was deleted in wave 4 (W4-CODEMOD).
+// The table is server-owned (migrations).
