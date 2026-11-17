@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Temporary allowlist for scripts/platform-guard.sh check 2 (AD-07).
 # One path per line: legacy files that still mention the Tauri internals
-# marker directly. Each entry is deleted when its file migrates to
-# detect.ts. Deadlines: debug-log.ts closes at G2 (AD-89: kept until
-# the detect.ts consolidation, 3D/manual); the relocated
-# event-listener.tauri.ts entry closes when detection consolidates to
-# detect.ts (3D/manual, AD-89); developer-tools.ts closes at G4.
-# The canonical mention in src/lib/platform/detect.ts is not listed
-# here; the guard excludes it.
-src/lib/agent/debug-log.ts
-src/lib/platform/event/event-listener.tauri.ts
+# marker directly. Empty since the 3D detect.ts consolidation (AD-89):
+# debug-log.ts now uses isTauri() and the relocated
+# event-listener.tauri.ts now uses the detect.ts callback-registry seam;
+# developer-tools.ts lost its marker at G4. The file stays so check 2
+# keeps enforcing an exact empty match. The canonical mention in
+# src/lib/platform/detect.ts is not listed here; the guard excludes it.

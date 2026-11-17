@@ -15,3 +15,30 @@ export function isTauri(): boolean {
 export function getPlatformMode(): PlatformMode {
   return isTauri() ? "tauri" : "web";
 }
+
+/**
+ * Narrow seam for the Tauri callback registry (AD-89, 3D consolidation).
+ *
+ * This file is the only module that may read the Tauri internals
+ * object. The relocated event listener (event-listener.tauri.ts)
+ * needs unregisterCallback for the Tauri 2.11 listen() race
+ * workaround; it reaches the registry only through this accessor,
+ * never by naming the marker itself. Returns undefined outside the
+ * Tauri shell or when the registry shape is absent, so callers keep
+ * working in web mode without a marker read of their own.
+ */
+export interface TauriCallbackRegistry {
+  unregisterCallback: (id: number) => void;
+}
+
+export function getTauriCallbackRegistry():
+  | TauriCallbackRegistry
+  | undefined {
+  const internals = (globalThis as Record<string, unknown>)[
+    "__TAURI_INTERNALS__"
+  ] as Partial<TauriCallbackRegistry> | undefined;
+  if (!internals || typeof internals.unregisterCallback !== "function") {
+    return undefined;
+  }
+  return internals as TauriCallbackRegistry;
+}

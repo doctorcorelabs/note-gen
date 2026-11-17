@@ -8,10 +8,10 @@
 // Subcheck A, derivative patterns, over src/:
 //   - raw Store.load calls outside src/lib/platform/ (0 from G1 on)
 //   - raw invoke calls outside src/lib/platform/ (0 from G2 on)
-//   - __TAURI_INTERNALS__ outside src/lib/platform/detect.ts (AD-89
-//     delta baseline: debug-log.ts + the relocated
-//     event-listener.tauri.ts; both close at the 3D detect.ts
-//     consolidation; 0 from G4 on once 3D lands)
+//   - __TAURI_INTERNALS__ outside src/lib/platform/detect.ts (AD-89:
+//     0 files from the 3D detect.ts consolidation on; the delta
+//     baseline {debug-log.ts, event-listener.tauri.ts} closed when
+//     both markers moved to the detect.ts seam)
 //   - direct adapter implementation imports (*.tauri / *.web) outside
 //     registry.ts, __tests__/, and the AD-33 wiring modules
 //     (mirrors guard check 3; the AD-91 re-export is allowed
@@ -76,21 +76,18 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WAVE_ORDER = { G1: 1, G2: 2, G3: 3, G4: 4, G5: 5, all: 5 };
-// AD-89 delta baseline (verified at trunk d8f55765): developer-tools.ts
-// lost its marker at G4 (now isTauri() via the registry) and the
-// tauri-event-listener.ts marker moved to event-listener.tauri.ts at
-// G2. Both remaining files close at the 3D detect.ts consolidation.
-const INTERNALS_BASELINE = new Set([
-  "src/lib/agent/debug-log.ts",
-  "src/lib/platform/event/event-listener.tauri.ts",
-]);
-const INTERNALS_G2_G3 = new Set([
-  "src/lib/agent/debug-log.ts",
-  "src/lib/platform/event/event-listener.tauri.ts",
-]);
+// AD-89 delta baseline, closed at the 3D detect.ts consolidation:
+// developer-tools.ts lost its marker at G4 (now isTauri() via the
+// registry); the tauri-event-listener.ts marker moved to the
+// relocated event-listener.tauri.ts at G2 and was removed together
+// with the debug-log.ts marker when both call sites moved to the
+// detect.ts seam. Both sets stay empty: any marker file outside
+// detect.ts fails in every mode.
+const INTERNALS_BASELINE = new Set();
+const INTERNALS_G2_G3 = new Set();
 // Direct implementation imports allowed only in the registry mechanism
 // and the AD-33 wiring modules (mirrors guard check 3), plus the AD-91
-// transitional re-export until 3D deletes it with this entry.
+// transitional re-export until the ad91 slot deletes it with this entry.
 const DIRECT_ALLOWED_FILES = new Set([
   "src/lib/platform/registry.ts",
   "src/lib/platform/wiring.ts",
