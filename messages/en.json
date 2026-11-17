@@ -6590,6 +6590,57 @@
         "placeholder": "Enter AI instruction",
         "submit": "Run"
       }
+    },
+    "disabled": {
+      "badge": "Not available in the web version",
+      "collaboration": {
+        "title": "Collaboration is not available yet",
+        "message": "Collaboration is not available in the web version yet. Editing is single-user; your changes save only to this workspace."
+      },
+      "ai": {
+        "title": "AI writing features are not available yet",
+        "message": "AI writing features are not available yet in the web version. Your notes are never sent to a third-party AI provider."
+      },
+      "wiki": {
+        "title": "Wiki generation is not available yet",
+        "message": "Wiki generation is not available yet in the web version. Existing wiki blocks in your notes are kept unchanged."
+      },
+      "canvas": {
+        "title": "Canvas is not available yet",
+        "message": "Canvas is not available yet in the web version. Your existing canvas files are kept unchanged."
+      },
+      "fileHistory": {
+        "title": "File history is not available yet",
+        "message": "File history is not available yet in the web version."
+      },
+      "syncTools": {
+        "title": "Sync is not available yet",
+        "message": "Sync, pull, and file history are not available yet in the web version. Your changes save only to this workspace."
+      },
+      "imageHosting": {
+        "title": "Image hosting is not available yet",
+        "message": "Image hosting is not available yet in the web version. Images are saved to your workspace instead."
+      },
+      "editorWindow": {
+        "title": "Separate editor windows are not available",
+        "message": "Separate editor windows are not available in the web version. Use a new browser tab to edit another file side by side. Always-on-top has no browser equivalent."
+      },
+      "printWindow": {
+        "title": "The print window is not available",
+        "message": "Printing uses your browser print dialog. Choose Save as PDF to export a PDF file."
+      },
+      "quickRecordWindow": {
+        "title": "The quick-record window is not available",
+        "message": "Quick record is not available as a separate window in the web version. Use the record form in the main window instead."
+      },
+      "screenshot": {
+        "title": "Screenshot and OCR capture are not available",
+        "message": "Screenshot and OCR capture are not available in the web version. Use your operating system screenshot tool, then paste the image into the editor."
+      },
+      "globalShortcuts": {
+        "title": "Global shortcuts are not available",
+        "message": "Global shortcuts are not available in the web version. Shortcuts below work only while this tab is focused."
+      }
     }
   },
   "editorWindow": {

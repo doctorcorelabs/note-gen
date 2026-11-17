@@ -48,6 +48,8 @@ import { PluginDocumentPreview } from '@/components/plugins/plugin-document-prev
 import { PluginViewSurface } from '@/components/plugins/plugin-view-surface'
 import { parsePluginEditorTabPath } from '@/lib/plugins/editor-tab'
 import { UnsupportedFile } from './unsupported-file'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { MarkDetailPanel } from '../mark/mark-detail-panel'
 import { getRecordIdFromTabPath, isRecordTabPath } from '../mark/mark-record-tab'
 import { createCanvasTab, getCanvasIdFromTabPath, isCanvasTabPath } from '../canvas/canvas-tab'
@@ -236,6 +238,11 @@ function EditorGroupPane({
   renderActiveContent, renderEmpty,
 }: EditorGroupPaneProps) {
   const tCanvas = useTranslations('canvas')
+  // Web fork (Fase 1, V3-24): creating a canvas from the new-tab
+  // menu shows the disabled marker in web mode instead of creating
+  // a project that can never be opened (audit section 4.4).
+  const tDisabled = useTranslations('editor.disabled')
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
   const newFile = useArticleStore(state => state.newFile)
   const addTab = useArticleStore(state => state.addTab)
   const setLeftSidebarTab = useSidebarStore(state => state.setLeftSidebarTab)
@@ -261,7 +268,14 @@ function EditorGroupPane({
         onNewBrowser={() => onNewBrowser(group.id)}
         onNewNote={() => { void setLeftSidebarTab('files').then(() => newFile()) }}
         onNewRecord={() => emitter.emit('quickRecordTextHandler')}
-        onNewCanvas={() => { void createProject('blank', tCanvas('templates.blank')).then(project => { if (project) void addTab(createCanvasTab(project)) }) }}
+        onNewCanvas={() => {
+          if (canvasDisabled) {
+            const { titleKey, messageKey } = editorDisabledMessageKeys('canvas')
+            toast(tDisabled(titleKey), { description: tDisabled(messageKey) })
+            return
+          }
+          void createProject('blank', tCanvas('templates.blank')).then(project => { if (project) void addTab(createCanvasTab(project)) })
+        }}
         onCloseTab={tabId => onCloseTab(group.id, tabId)}
         onCloseOtherTabs={tabId => onKeepTabs(group.id, [tabId])}
         onCloseAllTabs={() => onKeepTabs(group.id, [])}
@@ -343,6 +357,8 @@ export function EditorLayout() {
   const setActiveCanvasId = useCanvasStore(state => state.setActiveCanvasId)
   const tOnboarding = useTranslations('article.emptyState.onboarding')
   const tGroups = useTranslations('tabContext')
+  const tDisabled = useTranslations('editor.disabled')
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
 
   const tabContentsRef = useRef<Record<string, string>>({})
   const tabContentsWorkspacePathRef = useRef(workspacePath)
@@ -1203,6 +1219,16 @@ export function EditorLayout() {
         return
       }
 
+      // Web fork (Fase 1, V3-24): openEditorWindow duplicates the
+      // tab in web mode, so the tab must stay in this layout.
+      // Removing it here would race the new tab's restore and
+      // could lose the tab. The toast states the mapping honestly.
+      if (!checkIsTauri()) {
+        const { titleKey, messageKey } = editorDisabledMessageKeys('editorWindow')
+        toast(tDisabled(titleKey), { description: tDisabled(messageKey) })
+        return
+      }
+
       let next = layoutRef.current
       for (const currentGroupId of getEditorGroupIds(next.root)) {
         next = removeTabFromEditorGroup(next, currentGroupId, tabId)
@@ -1225,7 +1251,7 @@ export function EditorLayout() {
     } finally {
       setDetachingTabId('')
     }
-  }, [activateTab, openTabs, setLayout, setOpenTabs, setTabDisposition, tGroups])
+  }, [activateTab, openTabs, setLayout, setOpenTabs, setTabDisposition, tDisabled, tGroups])
 
   const handleToggleMaximize = useCallback((groupId: string) => {
     suppressPanelLayoutUntilRef.current = Date.now() + 200
@@ -1786,6 +1812,12 @@ export function EditorLayout() {
     }
     if (isCanvasEditorTab(tab)) {
       const canvasId = tab.canvasId || getCanvasIdFromTabPath(tab.path)
+      // Web fork (Fase 1, V3-24): canvas tabs never open the canvas
+      // editor in web mode (audit section 4.4). The marker says so
+      // and the existing canvas file is left unchanged.
+      if (canvasDisabled) {
+        return <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-8"><div className="w-full max-w-md"><EditorDisabledNotice feature="canvas" /></div></div>
+      }
       return <div className="flex min-h-0 flex-1 overflow-hidden">{canvasId ? <CanvasEditor canvasId={canvasId} isActive={active} /> : <UnsupportedFile filePath={tab.path} />}</div>
     }
     const itemType = tab.isFolder ? 'folder' : getItemType(tab.path)
@@ -1804,7 +1836,7 @@ export function EditorLayout() {
         </div>
       </TabContentErrorBoundary>
     )
-  }, [layout.activeGroupId, layout.groups, layout.maximizedGroupId, dragging, detachingTabId, getItemType, getRecordIdForTab, handleCloseTab, isCanvasEditorTab, isRecordEditorTab, isPluginEditorTab, isBrowserEditorTab, pluginTabRevisions, workspacePath])
+  }, [layout.activeGroupId, layout.groups, layout.maximizedGroupId, dragging, detachingTabId, getItemType, getRecordIdForTab, handleCloseTab, isCanvasEditorTab, isRecordEditorTab, isPluginEditorTab, isBrowserEditorTab, pluginTabRevisions, workspacePath, canvasDisabled])
 
   const onboardingAgentPrompt = getOnboardingAgentPrompt({
     intro: tOnboarding('agentPrompt.intro'),

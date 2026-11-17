@@ -14,6 +14,8 @@ import { RecordSaveTarget } from '@/app/core/main/mark/record-save-target'
 import { applyAppFontFamily } from '@/lib/font-settings'
 import { applyThemeColors } from '@/lib/theme-utils'
 import { hideQuickRecordWindow, requestQuickRecord, type QuickRecordContext, type QuickRecordRequest } from '@/lib/quick-record-window'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 
 const DRAFT_KEY = 'quick-record-draft'
 
@@ -170,6 +172,15 @@ export default function QuickRecordPage() {
       setSaving(false)
       if (refreshContext) void prepare()
     }
+  }
+
+  // Web fork (Fase 1, V3-24): the quick-record window route is
+  // not used on the web (audit section 6.1, AD-20). The
+  // replacement is the record form in the main window. Opening
+  // this route directly in a browser shows the honest marker
+  // instead of a window that can never receive its context.
+  if (isEditorFeatureDisabled('quickRecordWindow')) {
+    return <EditorDisabledNotice feature="quickRecordWindow" variant="page" />
   }
 
   return (

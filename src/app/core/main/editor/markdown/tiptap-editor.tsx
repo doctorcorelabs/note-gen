@@ -60,6 +60,7 @@ import { buildAgentMarkdownEdit, buildAgentRangeEdit, buildAgentRangeMarkdown, a
 import { BubbleMenu as BubbleMenuComponent } from './bubble-menu'
 import { ImageBubbleMenu } from './image-bubble-menu'
 import { toast } from '@/hooks/use-toast'
+import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { TableContextToolbar } from './table-context-toolbar'
 import { TableScrollbar } from './table-scrollbar'
 import { AgentDiffNavigation } from './agent-diff-navigation'
@@ -2492,6 +2493,17 @@ export function TipTapEditor({
   const tImage = useTranslations('editor.image')
   const tSourceMode = useTranslations('settings.editor.sourceMode')
   const tAgentDiff = useTranslations('agentDiffNavigation')
+  const tDisabled = useTranslations('editor.disabled')
+  // Web fork (Fase 1, V3-24): AI and canvas triggers are closed in
+  // web mode (audit sections 4.2 and 4.4, AD-20). The extensions
+  // stay registered; only the actions below are gated, and every
+  // gated action shows the catalog marker instead of acting.
+  const aiDisabled = isEditorFeatureDisabled('ai')
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
+  const showAiDisabledNotice = useCallback(() => {
+    const { titleKey, messageKey } = editorDisabledMessageKeys('ai')
+    toast({ title: tDisabled(titleKey), description: tDisabled(messageKey) })
+  }, [tDisabled])
   const pendingQuote = useChatStore((state) => state.pendingQuote)
   const pendingSearchKeyword = useArticleStore((state) => state.pendingSearchKeyword)
   const setPendingSearchKeyword = useArticleStore((state) => state.setPendingSearchKeyword)
@@ -3359,8 +3371,11 @@ export function TipTapEditor({
     let cancelled = false
     let stopPresence: (() => void) | null = null
     const setup = async () => {
+      // Web fork (Fase 1, V3-24): the collaboration gate stays
+      // closed in web mode (audit section 4.1, AD-11). No session
+      // opens, no polling timer runs, and no remote cursors appear.
       if (standalone || primaryBackupMethod !== 'selfHosted' || !selfHostedRuntimeReady
-        || !isActive || !activeFilePath || !editor) return
+        || !isActive || !activeFilePath || !editor || isEditorFeatureDisabled('collaboration')) return
       const workspace = await getWorkspacePath()
       const workspaceRoot = workspace.isCustom
         ? workspace.path
@@ -4879,6 +4894,17 @@ export function TipTapEditor({
       updateMobileContext()
     }
 
+    // Web fork (Fase 1, V3-24): the mobile writing toolbar and the
+    // mobile more-sheet reach the AI actions through this dispatcher,
+    // not through the slash menu or the shortcuts. In web mode every
+    // AI action shows the disabled marker instead of opening an AI
+    // sheet or dispatching an AI event (audit section 4.2).
+    if (aiDisabled && (action === 'open-ai-write' || action === 'open-ai-custom' || action === 'ai-continue' || action === 'ai-generate-section' || action === 'ai-generate-summary' || action === 'ai-generate-custom')) {
+      closeSheet()
+      showAiDisabledNotice()
+      return
+    }
+
     const colorAction = /^(text-color|highlight-color):(.+)$/.exec(action)
     if (colorAction) {
       const mark = colorAction[1] === 'text-color' ? 'textColor' : 'highlight'
@@ -5038,9 +5064,11 @@ export function TipTapEditor({
         return
     }
   }, [
+    aiDisabled,
     customAiInstruction,
     editor,
     openSearchReplace,
+    showAiDisabledNotice,
     updateMobileContext,
   ])
 
@@ -5065,6 +5093,15 @@ export function TipTapEditor({
 
   const runMobileEditorAction = useCallback((action: string) => {
     if (!editor) return
+
+    // Web fork (Fase 1, V3-24): the 'ai' action opens an AI sheet
+    // ('ai-write' or 'ai'). In web mode it shows the disabled marker
+    // instead (audit section 4.2). The other AI actions delegate to
+    // runMobileWritingAction or to the gated AI handlers.
+    if (aiDisabled && action === 'ai') {
+      showAiDisabledNotice()
+      return
+    }
 
     if (!mobileContext) {
       switch (action) {
@@ -5234,10 +5271,12 @@ export function TipTapEditor({
         return
     }
   }, [
+    aiDisabled,
     editor,
     mobileContext,
     runMobileWritingAction,
     restoreMobileContextSelection,
+    showAiDisabledNotice,
     updateMobileContext,
   ])
 
@@ -5724,11 +5763,28 @@ export function TipTapEditor({
     }
   }, [captureEditorOperation, editor])
 
-  const handleAIPolish = useCallback(() => runSelectionAiAction('polish', fetchAiPolishStream), [runSelectionAiAction])
-  const handleAIConcise = useCallback(() => runSelectionAiAction('concise', fetchAiConciseStream), [runSelectionAiAction])
-  const handleAIExpand = useCallback(() => runSelectionAiAction('expand', fetchAiExpandStream), [runSelectionAiAction])
-  const handleAITranslate = useCallback((language: string) => runSelectionAiAction('translate',
-    (text, onChunk, signal, onThinking) => fetchAiTranslateStream(text, language, onChunk, signal, onThinking)), [runSelectionAiAction])
+  // Web fork (Fase 1, V3-24): these four handlers are the single
+  // choke point for bubble-menu AI actions, the ai-group shortcut
+  // handlers (via aiActionHandlersRef), and the AI completion
+  // accept path. In web mode they show the disabled marker and
+  // never start an AI request.
+  const handleAIPolish = useCallback(async () => {
+    if (aiDisabled) { showAiDisabledNotice(); return }
+    await runSelectionAiAction('polish', fetchAiPolishStream)
+  }, [aiDisabled, runSelectionAiAction, showAiDisabledNotice])
+  const handleAIConcise = useCallback(async () => {
+    if (aiDisabled) { showAiDisabledNotice(); return }
+    await runSelectionAiAction('concise', fetchAiConciseStream)
+  }, [aiDisabled, runSelectionAiAction, showAiDisabledNotice])
+  const handleAIExpand = useCallback(async () => {
+    if (aiDisabled) { showAiDisabledNotice(); return }
+    await runSelectionAiAction('expand', fetchAiExpandStream)
+  }, [aiDisabled, runSelectionAiAction, showAiDisabledNotice])
+  const handleAITranslate = useCallback(async (language: string) => {
+    if (aiDisabled) { showAiDisabledNotice(); return }
+    await runSelectionAiAction('translate',
+      (text, onChunk, signal, onThinking) => fetchAiTranslateStream(text, language, onChunk, signal, onThinking))
+  }, [aiDisabled, runSelectionAiAction, showAiDisabledNotice])
 
   useEffect(() => {
     aiActionHandlersRef.current = {
@@ -5875,10 +5931,14 @@ export function TipTapEditor({
       toggleTaskList: (targetEditor) => targetEditor.chain().focus().toggleTaskList().run(),
       toggleCodeBlock: (targetEditor) => targetEditor.chain().focus().toggleCodeBlock().run(),
       openAiMenu: () => {
+        // Web fork (Fase 1, V3-24): the AI menu shortcut shows the
+        // disabled marker in web mode instead of opening the menu.
+        if (aiDisabled) { showAiDisabledNotice(); return true }
         setOpenAiMenuSignal((value) => value + 1)
         return true
       },
       aiContinue: () => {
+        if (aiDisabled) { showAiDisabledNotice(); return true }
         document.dispatchEvent(new CustomEvent('tiptap-ai-continue'))
         return true
       },
@@ -5895,6 +5955,7 @@ export function TipTapEditor({
         return true
       },
       aiTranslate: () => {
+        if (aiDisabled) { showAiDisabledNotice(); return true }
         setOpenTranslateMenuSignal((value) => value + 1)
         return true
       },
@@ -7964,6 +8025,14 @@ export function TipTapEditor({
   }
 
   const handleCreateCanvasFromSelection = async (type: 'flowchart' | 'mindmap' | 'timeline' | 'tasks') => {
+    // Web fork (Fase 1, V3-24): canvas is not available in the web
+    // MVP. Do not create a canvas project that can never be opened;
+    // show the marker instead.
+    if (canvasDisabled) {
+      const { titleKey, messageKey } = editorDisabledMessageKeys('canvas')
+      toast({ title: tDisabled(titleKey), description: tDisabled(messageKey) })
+      return
+    }
     const { from, to } = editor.state.selection
     const selectedText = editor.state.doc.textBetween(from, to, '\n', '\n').trim()
     if (!selectedText) return
@@ -8237,7 +8306,7 @@ export function TipTapEditor({
 
               {editable && !isMobile && <ImageBubbleMenu editor={editor} pluginsEnabled={exposeToPluginHost} />}
 
-              {editable && isActive && <AISuggestionFloating
+              {editable && isActive && !aiDisabled && <AISuggestionFloating
                 key={activeFilePath}
                 editor={editor}
                 onPendingChange={handleAiSuggestionPendingChange}

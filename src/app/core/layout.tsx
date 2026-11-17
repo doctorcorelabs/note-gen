@@ -390,8 +390,20 @@ export default function RootLayout({
           await initAutoDataSyncRuntime()
         }
         if (cancelled) return
-        const { initWikiRuntime } = await import('@/lib/wiki/runtime')
-        const cleanupWiki = await initWikiRuntime()
+        // Web fork (Fase 1, V3-24): the wiki runtime is skipped
+        // explicitly in web mode. Wiki generation is not available
+        // in the MVP (audit section 4.3, AD-20): its runtime needs
+        // the file shim, the database shim, and the AI transport,
+        // none of which exist for wiki in Fase 1. The no-op keeps
+        // the same cleanup shape, so the cancelled/stop wiring
+        // below is unchanged. WikiMetadata blocks in existing
+        // notes are left untouched; the runtime must never delete
+        // or rewrite them. Desktop behavior is unchanged.
+        let cleanupWiki: () => void = () => {}
+        if (!webMode) {
+          const { initWikiRuntime } = await import('@/lib/wiki/runtime')
+          cleanupWiki = await initWikiRuntime()
+        }
         if (cancelled) { cleanupWiki(); return }
         stopWiki = cleanupWiki
         stopManagedBackup = initManagedBackupRuntime()

@@ -1,6 +1,7 @@
 import type { OpenTabInfo } from '@/stores/article'
 import { checkIsTauri } from '@/lib/check'
 import { platform } from '@/lib/platform'
+import { openWindowRouteInBrowserTab } from '@/lib/window-route-mapping'
 import { getDefaultArticleAbsolutePath, getWorkspacePath, isAbsoluteFsPath } from '@/lib/workspace'
 import { editorPathsCouldReferToSameFile, editorPathsReferToSameFile, isEditorPathMutationLocked } from '@/lib/editor-deactivation'
 
@@ -138,7 +139,17 @@ export async function hasEditorWindowForPaths(paths: readonly string[], workspac
 }
 
 export async function openEditorWindow(tab: OpenTabInfo) {
-  if (!checkIsTauri() || !canOpenInEditorWindow(tab)) return false
+  // Web fork (Fase 1, V3-24): there is no Tauri editor window in a
+  // browser. The audit replacement (section 6.2) is a browser tab:
+  // the current tab is duplicated and the file is reopened from
+  // the restored tab state. Callers keep their failure handling
+  // when the browser blocks the new tab. The tab is a duplicate,
+  // not a move: callers must not remove the tab from this layout.
+  if (!checkIsTauri()) {
+    if (!canOpenInEditorWindow(tab)) return false
+    return openWindowRouteInBrowserTab('/editor-window')
+  }
+  if (!canOpenInEditorWindow(tab)) return false
 
   const resolved = await resolveEditorWindowPath(tab)
   if (isEditorPathMutationLocked(resolved.absolutePath, resolved.workspaceRoot)) return false

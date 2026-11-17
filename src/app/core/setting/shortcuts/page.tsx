@@ -12,6 +12,9 @@ import { EditorShortcutsSection } from "./editor-shortcuts-section";
 
 export default function ShortcutsPage() {
   const t = useTranslations('settings.shortcuts');
+  // Web fork (Fase 1, V3-24): the existing capability gate stays;
+  // only the copy moves to the shared catalog marker (audit 6.2).
+  const tDisabled = useTranslations('editor.disabled');
   const { shortcuts } = useShortcutStore()
   const globalShortcutsAvailable = capabilities.globalShortcut
 
@@ -20,7 +23,7 @@ export default function ShortcutsPage() {
       <SettingSection title={t('globalShortcuts.title')} desc={t('globalShortcuts.desc')}>
         {!globalShortcutsAvailable ? (
           <Alert>
-            <AlertDescription>Global shortcuts are only available in the desktop app. In the browser, shortcuts cannot capture keys pressed outside this tab.</AlertDescription>
+            <AlertDescription>{tDisabled('globalShortcuts.message')}</AlertDescription>
           </Alert>
         ) : null}
         <ItemGroup className="gap-4">

@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { CloudCog } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, CloudCog, History } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
 import { toast } from '@/hooks/use-toast'
+import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { prepareActiveEditorDeactivationDurably } from '@/lib/editor-deactivation'
 import { compareFileVersions } from '@/lib/sync/auto-sync'
 import { getSyncPushQueue } from '@/lib/sync/sync-push-queue'
@@ -133,6 +134,13 @@ export function SyncTools(props: SyncToolsProps) {
   const availability = useSyncAvailability()
 
   if (!settingsReady || method === 'selfHosted' || method === 'local') return null
+  // Web fork (Fase 1, V3-24): sync, pull, and file history are not
+  // available in the web MVP (audit section 4.5, AD-11). The
+  // buttons stay visible in a disabled state and show the honest
+  // marker on click; hiding them silently is forbidden. The AD-17
+  // revision-guard conflict dialog is a different UI and is not
+  // affected by this gate.
+  if (isEditorFeatureDisabled('syncTools')) return <DisabledSyncTools />
   if (props.embedded) return <DesktopSyncTools key={JSON.stringify([workspacePath, method, activeFilePath])}
     {...props} configured={availability.configured} />
 
@@ -149,6 +157,39 @@ export function SyncTools(props: SyncToolsProps) {
     <PullButton editor={props.editor} markdown={props.markdown} getMarkdown={props.getMarkdown}
       prepareExternalAction={props.prepareExternalAction} onMarkdownChange={props.onMarkdownChange} />
   </div>
+}
+
+/**
+ * Disabled history/sync/pull buttons for the web MVP (Fase 1,
+ * V3-24). The buttons keep their desktop affordances at reduced
+ * opacity, stay focusable, and explain themselves on click. They
+ * never open a sheet, never start a sync, and never call the
+ * sync backend.
+ */
+export function DisabledSyncTools() {
+  const tDisabled = useTranslations('editor.disabled')
+  const tSync = useTranslations('syncOverview')
+  const { titleKey, messageKey } = editorDisabledMessageKeys('syncTools')
+  const title = tDisabled(titleKey)
+  const message = tDisabled(messageKey)
+  const showNotice = () => {
+    toast({ title, description: message })
+  }
+  const buttonClassName = 'flex items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground opacity-50 transition-colors hover:bg-[hsl(var(--muted))]'
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label={title}>
+      <button type="button" aria-disabled="true" title={message} aria-label={title} onClick={showNotice} className={buttonClassName}>
+        <History size={14} />
+        <span className="text-xs">{tSync('historyVersions')}</span>
+      </button>
+      <button type="button" aria-disabled="true" title={message} aria-label={title} onClick={showNotice} className="rounded p-0.5 text-muted-foreground opacity-50 transition-colors hover:bg-muted hover:text-foreground">
+        <ArrowUpCircle size={14} />
+      </button>
+      <button type="button" aria-disabled="true" title={message} aria-label={title} onClick={showNotice} className="rounded p-0.5 text-muted-foreground opacity-50 transition-colors hover:bg-muted hover:text-foreground">
+        <ArrowDownCircle size={14} />
+      </button>
+    </div>
+  )
 }
 
 export default SyncTools

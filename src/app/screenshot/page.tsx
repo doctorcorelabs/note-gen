@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { bytesToBase64, clampPoint, drawAnnotations, drawScreenshot, exportScreenshot, rectFromPoints, type Annotation, type Point, type Rect, type Tool } from '@/lib/screenshot-editor'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
 
 interface ScreenshotContext {
   sessionId: string
@@ -560,7 +561,9 @@ export default function ScreenshotPage() {
     return (
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
-          <Alert className="max-w-lg"><AlertDescription>Desktop screenshot capture is not available in the web version.</AlertDescription></Alert>
+          {/* Web fork (Fase 1, V3-24): the capability gate stays;
+              only the copy moves to the shared catalog marker. */}
+          <EditorDisabledNotice feature="screenshot" className="w-full max-w-lg" />
         </main>
       </ThemeProvider>
     )
