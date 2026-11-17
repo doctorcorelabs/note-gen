@@ -18,7 +18,11 @@
  * flushes the queue and waits for server confirmation; reload()
  * flushes first, then reloads without firing listeners; set(key,
  * undefined) throws a validation error and leaves the key unchanged
- * (H3, AD-106; callers delete with delete()). A flush is serialized
+ * (H3, AD-106; callers delete with delete()). A nested undefined
+ * field inside an object value is dropped at the set() boundary and
+ * an undefined array element becomes null, matching the JSON wire
+ * form (F1-22 step 3, W4-F122Q), so the cache never disagrees with
+ * what PATCH persists. A flush is serialized
  * through one promise chain, coalesces per key, and keeps the queue
  * on failure for retry.
  *
@@ -374,6 +378,76 @@ function cloneValue<T>(value: T): T {
   } catch {
     return JSON.parse(JSON.stringify(value)) as T;
   }
+}
+
+/**
+ * Nested-undefined rule (F1-22 step 3, desain 5.1 langkah 3, W4-F122Q):
+ * the wire form wins at the set() boundary. JSON.stringify drops an
+ * object field whose value is undefined and turns an undefined array
+ * element into null, so a value kept verbatim by structuredClone would
+ * disagree with what PATCH and the L document persist and with what
+ * reload() reads back. set() therefore normalizes before cloning:
+ * undefined-valued fields are dropped from plain objects (recursively),
+ * undefined array elements become null (recursively), and everything
+ * else passes through untouched for cloneValue to clone as before.
+ * The caller's object is never mutated: normalization builds a new
+ * object or array only along paths that actually contain undefined,
+ * and returns the input unchanged when no nested undefined is found.
+ * Non-plain objects (Date, Map, class instances) are not recursed
+ * into, and a revisited cyclic object is returned as-is; cyclic
+ * values cannot cross the JSON wire in any case.
+ */
+function normalizeNestedUndefined<T>(
+  value: T,
+  seen: WeakSet<object> = new WeakSet(),
+): T {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+    let changed = false;
+    const out = value.map((item) => {
+      if (item === undefined) {
+        changed = true;
+        return null;
+      }
+      const next = normalizeNestedUndefined(item, seen);
+      if (next !== item) {
+        changed = true;
+      }
+      return next;
+    });
+    return (changed ? out : value) as T;
+  }
+  if (typeof value === "object" && value !== null) {
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      return value;
+    }
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+    let changed = false;
+    const out: Record<string, unknown> = Object.create(proto) as Record<
+      string,
+      unknown
+    >;
+    for (const [field, fieldValue] of Object.entries(value)) {
+      if (fieldValue === undefined) {
+        changed = true;
+        continue;
+      }
+      const next = normalizeNestedUndefined(fieldValue, seen);
+      if (next !== fieldValue) {
+        changed = true;
+      }
+      out[field] = next;
+    }
+    return (changed ? out : value) as T;
+  }
+  return value;
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
@@ -1187,19 +1261,23 @@ class WebStoreHandleImpl implements WebStoreHandle {
       // listener side effect, so the key stays unchanged.
       this.rejectUndefinedValue(key);
     }
+    // Nested-undefined rule (F1-22 step 3, W4-F122Q): normalize to
+    // the JSON wire form once, here, so the cache, the queue, the
+    // listeners, PATCH, and the L document all see the same value.
+    const normalized = normalizeNestedUndefined(value);
     if (this.queueSize() >= MAX_QUEUE_ENTRIES && !this.pending.has(key)) {
       // Queue bound (V1-02 5.2.9): flush before accepting more.
       await this.enqueueFlush();
     }
     if (cls === "L") {
-      this.lCache.set(key, cloneValue(value));
+      this.lCache.set(key, cloneValue(normalized));
       this.localDirty = true;
-      this.notify(key, value);
+      this.notify(key, normalized);
       this.markDirty();
       return;
     }
     if (key === "aiModelList") {
-      const { metadata, secrets } = splitAiModelList(value);
+      const { metadata, secrets } = splitAiModelList(normalized);
       this.sCache.set(key, cloneValue(metadata));
       this.pending.set(key, { op: "set", value: cloneValue(metadata) });
       for (const [providerKey, patch] of secrets) {
@@ -1218,9 +1296,9 @@ class WebStoreHandleImpl implements WebStoreHandle {
       this.markDirty();
       return;
     }
-    this.sCache.set(key, cloneValue(value));
-    this.pending.set(key, { op: "set", value: cloneValue(value) });
-    this.notify(key, value);
+    this.sCache.set(key, cloneValue(normalized));
+    this.pending.set(key, { op: "set", value: cloneValue(normalized) });
+    this.notify(key, normalized);
     this.markDirty();
   }
 

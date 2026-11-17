@@ -38,7 +38,8 @@ import type { UnlistenFn } from "../event/interface";
  *   detail. This interface only fixes the listener signatures.
  * - Persistence semantics follow V1-02 sections 5.1 and 5.2
  *   (F1-22: set(key, undefined) throws a validation error and leaves
- *   the key unchanged, H3 per AD-106; F1-23: queue plus server
+ *   the key unchanged, H3 per AD-106; nested undefined fields follow
+ *   the JSON wire form, step 3 per W4-F122Q; F1-23: queue plus server
  *   confirmation, save() flushes and waits). V1-05 only says
  *   "explicit flush" and does not decide either point.
  *
@@ -97,7 +98,11 @@ export interface StoreHandle {
    * set(key, undefined) throws a validation error
    * (PlatformCapabilityError, invalid_argument) and leaves the key
    * unchanged (F1-22 H3, AD-106). Callers delete with delete().
-   * set() on an R_REJECT key or on "pin" throws
+   * A nested undefined field inside an object value is dropped at
+   * the set() boundary and an undefined array element becomes null,
+   * matching the JSON wire form (F1-22 step 3, W4-F122Q), so get(),
+   * listeners, and the persisted document always agree; explicit
+   * null is preserved. set() on an R_REJECT key or on "pin" throws
    * PlatformCapabilityError and leaves the cache unchanged. set() on a
    * key unknown to the schema throws a validation error and leaves
    * the cache unchanged. set() never waits for the network; network

@@ -47,7 +47,10 @@ on every read surface, and `set` over them throws. The full
 key-schema module belongs to the store-interface owner. The `corrupt: true` option makes
 `load()` reject as if the stored document were corrupt, for C-ST-04.
 `set(key, undefined)` throws a validation error and leaves the key
-unchanged (H3, CT-02, see EXCEPTIONS.md E4).
+unchanged (H3, CT-02, see EXCEPTIONS.md E4). A nested undefined field
+inside an object value is dropped at the `set()` boundary and an
+undefined array element becomes null, matching the JSON wire form
+(F1-22 step 3, CT-02-nested, W4-F122Q).
 
 ### `fake-fs.ts`
 

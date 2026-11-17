@@ -837,6 +837,71 @@ describe("web store: basic semantics", () => {
     await store.close();
   });
 
+  it("nested undefined fields follow the JSON wire form in cache, listeners, and PATCH (F1-22 step 3, W4-F122Q)", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const { store } = await openStore(server, storage);
+    const written: Record<string, unknown> = {
+      dropped: undefined,
+      kept: 1,
+      nested: { dropped: undefined, kept: 2 },
+      list: [undefined, 3, { dropped: undefined, kept: 4 }],
+      explicitNull: null,
+    };
+    const seen: unknown[] = [];
+    await store.onKeyChange("nested", (value) => {
+      seen.push(value);
+    });
+    await store.set("nested", written);
+    assert.equal("dropped" in written, true);
+    const cached = (await store.get<Record<string, unknown>>(
+      "nested",
+    )) as Record<string, unknown>;
+    assert.equal("dropped" in cached, false);
+    assert.deepEqual(Object.keys(cached).sort(), [
+      "explicitNull",
+      "kept",
+      "list",
+      "nested",
+    ]);
+    assert.deepEqual(cached["list"], [null, 3, { kept: 4 }]);
+    assert.equal(cached["explicitNull"], null);
+    assert.equal(seen.length, 1);
+    assert.equal("dropped" in (seen[0] as Record<string, unknown>), false);
+    await store.save();
+    const patchBody = server.patchRequests()[0]?.body;
+    assert.ok(isRecord(patchBody));
+    const settings = patchBody["settings"] as Record<string, unknown>;
+    assert.deepEqual(settings["nested"], {
+      kept: 1,
+      nested: { kept: 2 },
+      list: [null, 3, { kept: 4 }],
+      explicitNull: null,
+    });
+    await store.close();
+  });
+
+  it("nested undefined fields are normalized on the L path too (F1-22 step 3, W4-F122Q)", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const classifyKey = classifierWith({ localNested: "L" });
+    const { store } = await openStore(server, storage, { classifyKey });
+    await store.set("localNested", {
+      dropped: undefined,
+      kept: 1,
+      list: [undefined, 2],
+    });
+    const cached = (await store.get<Record<string, unknown>>(
+      "localNested",
+    )) as Record<string, unknown>;
+    assert.equal("dropped" in cached, false);
+    assert.deepEqual(cached["list"], [null, 2]);
+    await store.save();
+    const doc = storage.readDoc("store.json") as Record<string, unknown>;
+    assert.deepEqual(doc["localNested"], { kept: 1, list: [null, 2] });
+    await store.close();
+  });
+
   it("reload flushes first, replaces the cache, and fires no listeners", async () => {
     const server = new FakeSettingsServer();
     server.seed({ a: "server-a" }, 1);

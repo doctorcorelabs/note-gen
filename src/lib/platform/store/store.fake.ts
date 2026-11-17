@@ -21,6 +21,10 @@
  * - set(key, undefined) throws a validation error
  *   (PlatformCapabilityError, invalid_argument) and leaves the key
  *   unchanged (F1-22 H3, AD-106). Callers delete with delete().
+ * - A nested undefined field inside an object value is dropped at
+ *   the set() boundary and an undefined array element becomes null,
+ *   matching the JSON wire form (F1-22 step 3, W4-F122Q), exactly
+ *   like the web adapter.
  * - aiModelList entries are stored with their secret-bearing fields
  *   stripped (section 2.7). The fake never stores apiKey,
  *   webSearchApiKey, webSearchApiKeys, or customHeaders, and never
@@ -173,6 +177,66 @@ function cloneValue<T>(value: T): T {
   }
 }
 
+/**
+ * Nested-undefined rule (F1-22 step 3, W4-F122Q), identical to the
+ * web adapter: undefined-valued fields are dropped from plain
+ * objects (recursively) and undefined array elements become null
+ * (recursively), matching the JSON wire form. The caller's object is
+ * never mutated. See normalizeNestedUndefined in store.web.ts.
+ */
+function normalizeNestedUndefined<T>(
+  value: T,
+  seen: WeakSet<object> = new WeakSet(),
+): T {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+    let changed = false;
+    const out = value.map((item) => {
+      if (item === undefined) {
+        changed = true;
+        return null;
+      }
+      const next = normalizeNestedUndefined(item, seen);
+      if (next !== item) {
+        changed = true;
+      }
+      return next;
+    });
+    return (changed ? out : value) as T;
+  }
+  if (typeof value === "object" && value !== null) {
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      return value;
+    }
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+    let changed = false;
+    const out: Record<string, unknown> = Object.create(proto) as Record<
+      string,
+      unknown
+    >;
+    for (const [field, fieldValue] of Object.entries(value)) {
+      if (fieldValue === undefined) {
+        changed = true;
+        continue;
+      }
+      const next = normalizeNestedUndefined(fieldValue, seen);
+      if (next !== fieldValue) {
+        changed = true;
+      }
+      out[field] = next;
+    }
+    return (changed ? out : value) as T;
+  }
+  return value;
+}
+
 function stripAiModelListSecrets(value: unknown): unknown {
   if (!Array.isArray(value)) {
     return cloneValue(value);
@@ -268,8 +332,8 @@ class FakeStoreHandle implements StoreHandle {
     }
     const stored =
       disposition === "split-ai-model-list"
-        ? stripAiModelListSecrets(value)
-        : cloneValue(value);
+        ? stripAiModelListSecrets(normalizeNestedUndefined(value))
+        : cloneValue(normalizeNestedUndefined(value));
     this.data.set(key, stored);
     this.notify(key, stored);
   }
