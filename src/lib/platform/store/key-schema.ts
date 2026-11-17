@@ -1060,8 +1060,9 @@ function validatorForKey(key: string, classification: KeyClassification): KeyVal
 /**
  * Validate a value for one key without throwing. Unknown keys are
  * invalid. Callers on the set() path run assertWritable() first (for
- * the typed D-07 error) and skip value validation when the value is
- * undefined, which means delete (F1-22). A null value passes: null
+ * the typed D-07 error) and treat undefined as invalid: set(key,
+ * undefined) throws (F1-22 H3, AD-106), so value validation must
+ * never be skipped for undefined. A null value passes: null
  * means delete in PATCH, and the adapter handles it before flushing.
  */
 export function validateKeyValue(key: string, value: unknown): KeyValueValidation {
