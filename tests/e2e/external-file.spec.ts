@@ -20,21 +20,17 @@
 // recorded contract question for the owner, and this spec must not
 // be read as proving sub-second watcher latency.
 //
-// KNOWN PRODUCT DEFECT D-WATCHER (W4-FLOWS probe10A, first
-// conversion run): an externally written file did NOT appear in
-// the tree after 60 seconds of observation (six 10-second polling
-// intervals; the file was on disk, 75 bytes), while a manual
-// Refresh click revealed it immediately. The polling snapshot
-// path therefore does not surface external writes in this build,
-// or the watcher never starts in this shell state; a follow-up
-// probe with console and network capture distinguishes those two
-// causes. The 30-second observation assertion is kept as written:
-// driving Refresh would test manual refresh, not the arrival
-// event the flow is specified to cover, and weakening the spec
-// would enshrine the defect. The fix is proposed to the
-// integrator as a numbered product follow-up in the W4-FLOWS
-// report (P-10). Until it lands, this spec is red and the defect
-// is the finding.
+// D-WATCHER FIXED (W4-FIXWATCH, AD-126): an externally written
+// file used to stay invisible because polling was gated on
+// WebSocket failure and a connected-but-silent socket (the hub
+// has no producer yet, the V3-08b remainder) suppressed it
+// forever. The fix arms polling when a connected socket stays
+// silent for one poll interval, and emits one pathless rescan
+// event when polling starts so pre-baseline writes surface. The
+// 30-second observation assertion is kept as written: driving
+// Refresh would test manual refresh, not the arrival event the
+// flow is specified to cover, and weakening the spec would
+// enshrine a defect.
 //
 // Steps:
 // 1. Boot through the backend fixture and expand the seed folder.
