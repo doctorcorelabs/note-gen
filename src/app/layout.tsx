@@ -11,6 +11,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { DeveloperModeController } from "@/components/developer-mode-controller";
 import { AppLockGate } from "@/components/app-lock-gate";
 import { CustomCssController } from "@/components/custom-css-controller";
+import { ensureWebPlatformInitialized } from "@/lib/web/platform-boot";
+
+// Boot (N-5): register the web platform adapters and run the
+// once-per-boot POC cleanup before any component effect can resolve
+// an adapter. This module wraps every route, and module evaluation
+// precedes all renders and effects. No-op during SSR and inside the
+// Tauri shell; see src/lib/web/platform-boot.ts.
+ensureWebPlatformInitialized()
 
 function AppRuntime({ children }: { children: React.ReactNode }) {
   useEffect(() => {

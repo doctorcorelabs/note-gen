@@ -56,6 +56,7 @@ export default defineConfig({
             "src/lib/platform/updater/updater.web.spec.ts",
             "src/lib/web/api-client.spec.ts",
             "src/lib/web/errors.spec.ts",
+            "src/lib/web/platform-boot.spec.ts",
             "src/lib/web/search-client.spec.ts",
           ],
         },
