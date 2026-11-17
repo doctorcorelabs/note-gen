@@ -4,12 +4,14 @@
 
 // Keyword search port (V3-27 skeleton, Fase 1 wave 3B overlap).
 //
-// This module defines INTERFACES ONLY plus a fake implementation for
-// tests. It contains no database access, no disk access, and no index
-// access: the index-backed implementation waits for V3-06/V3-25, and
-// the integrator wires it in through the search route block in
-// app.ts. The routes consume search only through KeywordSearchPort,
-// so the real implementation lands without touching the routes.
+// This module defines the port interfaces plus the shared
+// matching engine and a fake implementation for tests. It
+// contains no database access, no disk access, and no index
+// access: the production direct port (direct.ts, W4-WIRE) loads
+// real candidates and runs the shared engine, and an
+// index-backed implementation may replace the loader later
+// without touching the routes, which consume search only
+// through KeywordSearchPort.
 //
 // Port contract (kontrak-api-kanonis.md section 3.9, V1-14 section 8):
 // - Matching: every query term must occur (AND), case-insensitive,
@@ -42,14 +44,20 @@
 //   carries the verified session principal, and the real
 //   implementation resolves the workspace from it server-side.
 //   The fake serves single-workspace fixture data and performs no
-//   scoping; it must never be wired into production.
+//   scoping; the fake itself must never be wired into production.
+//   The matching engine below IS shared with production: the
+//   direct port loads real, workspace-scoped candidates and runs
+//   the same engine, so route specs written against the fake pin
+//   production matching behavior too.
 //
 // The fake implementation below mirrors the contract closely enough
 // for route tests (matching, ranking order, snippet windows, cursor
 // binding, trash exclusion) while staying obviously fake: its scores
 // come from a fixed weighting documented in scoreCandidate, and its
-// cursor is an unsigned base64url payload. The real implementation
-// must not reuse the fake cursor format as a security boundary.
+// cursor is an unsigned base64url payload. The cursor format is a
+// pagination encoding, never a security boundary: it carries only
+// the query binding and the sort position, and the engine
+// re-validates the binding on every use.
 
 import { ApiError } from '../../plugins/envelope.js';
 import type { SessionPrincipal } from '../../middleware/auth-hook.js';
@@ -441,6 +449,62 @@ function scoreCandidate(item: FakeSearchItem, terms: readonly string[]): ScoredC
   };
 }
 
+// Shared matching, ranking, snippet, and cursor-pagination
+// engine (W4-WIRE). The fake port below and the production
+// direct port (direct.ts) both run this engine over candidate
+// items; only the loading and scoping differ. The engine is
+// pure and synchronous: it reads no database, no disk, and no
+// clock. Scores, snippet windows, cursor binding, and trash
+// exclusion are exactly the fake behavior the route specs
+// already pin; extracting them here changes no outcome.
+export function executeKeywordSearch(
+  items: readonly FakeSearchItem[],
+  input: KeywordSearchInput,
+): SearchPage {
+  const terms = input.query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term !== '');
+  const anchor = input.cursor === undefined ? undefined : decodeSearchCursor(input.cursor, input);
+  const matched: ScoredCandidate[] = [];
+  for (const item of items) {
+    if (item.trashed === true) {
+      continue;
+    }
+    if (input.scope === 'records' && item.kind !== 'record') {
+      continue;
+    }
+    if (input.scope === 'files' && item.kind !== 'file') {
+      continue;
+    }
+    const candidate = scoreCandidate(item, terms);
+    if (candidate === null) {
+      continue;
+    }
+    // tagId and type filter record hits only; file hits are
+    // never filtered by tag or record type (V1-14 8.1).
+    if (item.kind === 'record') {
+      if (input.tagId !== undefined && !item.tagIds.includes(input.tagId)) {
+        continue;
+      }
+      if (input.type !== undefined && !input.type.includes(item.type)) {
+        continue;
+      }
+    }
+    matched.push(candidate);
+  }
+  matched.sort(comparePositions);
+  const after = anchor === undefined ? matched : matched.filter((candidate) => comparePositions(candidate, anchor) > 0);
+  const page = after.slice(0, input.limit);
+  const hasMore = after.length > input.limit;
+  const last = page[page.length - 1];
+  return {
+    results: page.map((candidate) => candidate.result),
+    nextCursor: hasMore && last !== undefined ? encodeSearchCursor(input, last) : null,
+    hasMore,
+  };
+}
+
 // Build a fake port over fixed fixture items. The fixture is copied
 // at construction; later mutation of the caller's array cannot
 // change search results. Trashed items are always excluded, matching
@@ -449,48 +513,7 @@ export function createFakeKeywordSearchPort(items: readonly FakeSearchItem[]): K
   const snapshot = [...items];
   return {
     async search(input: KeywordSearchInput): Promise<SearchPage> {
-      const terms = input.query
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((term) => term !== '');
-      const anchor = input.cursor === undefined ? undefined : decodeSearchCursor(input.cursor, input);
-      const matched: ScoredCandidate[] = [];
-      for (const item of snapshot) {
-        if (item.trashed === true) {
-          continue;
-        }
-        if (input.scope === 'records' && item.kind !== 'record') {
-          continue;
-        }
-        if (input.scope === 'files' && item.kind !== 'file') {
-          continue;
-        }
-        const candidate = scoreCandidate(item, terms);
-        if (candidate === null) {
-          continue;
-        }
-        // tagId and type filter record hits only; file hits are
-        // never filtered by tag or record type (V1-14 8.1).
-        if (item.kind === 'record') {
-          if (input.tagId !== undefined && !item.tagIds.includes(input.tagId)) {
-            continue;
-          }
-          if (input.type !== undefined && !input.type.includes(item.type)) {
-            continue;
-          }
-        }
-        matched.push(candidate);
-      }
-      matched.sort(comparePositions);
-      const after = anchor === undefined ? matched : matched.filter((candidate) => comparePositions(candidate, anchor) > 0);
-      const page = after.slice(0, input.limit);
-      const hasMore = after.length > input.limit;
-      const last = page[page.length - 1];
-      return {
-        results: page.map((candidate) => candidate.result),
-        nextCursor: hasMore && last !== undefined ? encodeSearchCursor(input, last) : null,
-        hasMore,
-      };
+      return executeKeywordSearch(snapshot, input);
     },
   };
 }
