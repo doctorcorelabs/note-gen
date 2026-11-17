@@ -37,6 +37,7 @@ import { useSettingsDialogStore } from '@/stores/settings-dialog'
 import { useWikiNavigation } from '@/components/wiki/use-wiki-navigation'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { DisabledFeatureButton } from './disabled-feature'
+import { SessionMenu } from './session-menu'
 
 /**
  * Top app bar for the web shell. Replacement for the desktop TitleBar
@@ -288,6 +289,8 @@ export function TopAppBar() {
               <p>{settingsOpen ? t('common.back') : t('common.settings')}</p>
             </TooltipContent>
           </Tooltip>
+
+          <SessionMenu />
 
           <AppStatus />
         </div>

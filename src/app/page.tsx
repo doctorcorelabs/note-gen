@@ -37,6 +37,7 @@ import {
   type BootGuardFailure,
   type BootStep,
 } from '@/lib/web/boot-guard'
+import { getSharedAuthSessionClient } from '@/lib/web/auth-client'
 
 type PageState =
   | { kind: 'checking'; step: BootStep }
@@ -104,9 +105,21 @@ export default function Home() {
         return
       }
       if (outcome.status === 'ready') {
+        // Web fork (Fase 1, V3-03 slot 03b): the probe just proved
+        // the session is alive, so a previous expiry must not
+        // linger into the shell. The CSRF token itself stays in
+        // memory and is refetched after a reload by the auth
+        // client; nothing is seeded or stored here.
+        getSharedAuthSessionClient().resetSessionStatus()
         setState({ kind: 'redirecting' })
         router.push(outcome.target)
       } else if (outcome.status === 'failed') {
+        if (outcome.failure.code === 'BOOT_SESSION_EXPIRED') {
+          // A rejected session must never keep a stale CSRF token
+          // into the next sign-in. Other failures keep the token:
+          // an inconclusive probe must not destroy a live session.
+          getSharedAuthSessionClient().clearCsrfToken()
+        }
         setState({ kind: 'error', failure: outcome.failure })
       }
     }

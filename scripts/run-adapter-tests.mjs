@@ -100,6 +100,7 @@ const VITEST_SPECS = [
   "src/lib/platform/sql/db-client.spec.ts",
   "src/lib/platform/sql/reconciled-forms.spec.ts",
   "src/lib/platform/sql/sql.web.spec.ts",
+  "src/lib/web/auth-client.spec.ts",
   "src/lib/web/csrf.spec.ts",
 ];
 
