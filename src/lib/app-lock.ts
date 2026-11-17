@@ -79,8 +79,18 @@ export async function saveAppLock(password: string | null): Promise<void> {
     await store.save()
   } catch (error) {
     // Do not report a failed save while retaining a different in-memory lock.
-    await store.set('credential', previous)
-    await store.set('rememberUntil', previousRememberUntil)
+    // A previous value of undefined means the key was absent: restore
+    // absence with delete(), since set(key, undefined) throws (F1-22 H3).
+    if (previous === undefined) {
+      await store.delete('credential')
+    } else {
+      await store.set('credential', previous)
+    }
+    if (previousRememberUntil === undefined) {
+      await store.delete('rememberUntil')
+    } else {
+      await store.set('rememberUntil', previousRememberUntil)
+    }
     throw error
   }
 }

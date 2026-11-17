@@ -37,17 +37,18 @@ truth, or true concurrency are deferred to Postgres and listed in
 `tests/contract/README.md`. If the fake and Postgres disagree,
 Postgres wins.
 
-## E4: CT-02 asserts interim behavior (F1-22 unconfirmed)
+## E4: CT-02 asserts H3 behavior (F1-22 decided, AD-106)
 
-`fase1/desain-store-adapter.md` section 5.1 leaves the verdict for
+`fase1/desain-store-adapter.md` section 5.1 left the verdict for
 `set(key, undefined)` (H1/H2/H3/H4) unconfirmed pending a check
-against the Rust implementation, and states CT-02 stays pending
-until the verdict is recorded. The scaffold runs CT-02 as
-`CT-02-interim`, asserting the interim "delete" behavior matching
-the POC shim, with the case name saying so. When the verdict lands,
-the case must be re-parameterized over the verdict and this entry
-updated. The store migration gate does not pass on the interim case
-alone.
+against the Rust implementation. AD-106 records the parent decision:
+H3, so `set(key, undefined)` throws a validation error
+(`PlatformCapabilityError`, `invalid_argument`, capability
+`store.set`) and leaves the key unchanged. CT-02 asserts that
+behavior in both columns, and the interim "delete" case is
+superseded. The desktop behavior test (step 2 of the section 5.1
+plan) is deferred, not a Fase 1 gate; if it ever contradicts H3,
+the contract is reviewed again.
 
 ## E5: watcher latency bound is a placeholder (A5)
 
@@ -176,15 +177,16 @@ while the fake column keeps its original keys:
 
 | Case | Fake keys | Web keys (all S in key-schema.ts) |
 |---|---|---|
-| CT-02-interim | `to-delete`, `never-existed` | `darkMode`, `centeredContent` |
+| CT-02 | `to-delete`, `never-existed` | `darkMode`, `centeredContent` |
 | CT-03a | `missing`, `a`, `b` | `primaryModel`, `language`, `editorLineHeight` |
 | CT-03b | `obj` | `language` |
 | CT-03c | `watched`, `other`, `after-reset` | `language`, `editorLineHeight`, `primaryModel` |
 | CT-22 | `keep-me` | `language` |
 
 This is a key renaming, not a weakened assertion: the asserted
-behavior (delete on `undefined`, keys/values/entries consistency,
-deep clone, listeners, `createNew`) is identical in both columns.
+behavior (throw on `undefined` with the key unchanged,
+keys/values/entries consistency, deep clone, listeners,
+`createNew`) is identical in both columns.
 C-ST-02 is unchanged: UNKNOWN reads are tolerant in both columns
 (the web adapter reads UNKNOWN keys from its S cache and reports
 absent keys as `undefined`). The UNKNOWN-write rejection itself is

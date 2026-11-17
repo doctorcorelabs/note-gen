@@ -17,9 +17,10 @@
  * set() updates the cache immediately and queues the write; save()
  * flushes the queue and waits for server confirmation; reload()
  * flushes first, then reloads without firing listeners; set(key,
- * undefined) deletes the key (interim F1-22 behavior, pending the
- * Rust verdict). A flush is serialized through one promise chain,
- * coalesces per key, and keeps the queue on failure for retry.
+ * undefined) throws a validation error and leaves the key unchanged
+ * (H3, AD-106; callers delete with delete()). A flush is serialized
+ * through one promise chain, coalesces per key, and keeps the queue
+ * on failure for retry.
  *
  * Injected ports (seams for the integrator, wave 3B):
  *
@@ -70,7 +71,10 @@
  *
  * Error taxonomy: capability failures use PlatformCapabilityError
  * from ../errors.ts (the landed skeleton; see
- * fase1/laporan-store-interface.md R-03). Operational failures
+ * fase1/laporan-store-interface.md R-03). Client-side validation
+ * rejections (unknown keys, undefined values) also use
+ * PlatformCapabilityError with code invalid_argument, the landed
+ * form of the V1-02 VALIDATION_ERROR code. Operational failures
  * (HTTP, network, storage, conflicts) use StoreWebError below,
  * following the FsAdapterError precedent in ../fs/errors.ts: the
  * wire code is carried verbatim, never invented, and no error ever
@@ -1137,6 +1141,16 @@ class WebStoreHandleImpl implements WebStoreHandle {
     );
   }
 
+  private rejectUndefinedValue(key: string): never {
+    throw capabilityError(
+      "invalid_argument",
+      "store",
+      "store.set",
+      "web",
+      `set() does not accept undefined for key "${key}"; use delete() to remove a key (F1-22 H3, AD-106)`,
+    );
+  }
+
   private queueSize(): number {
     return this.pending.size + this.pendingSecrets.size;
   }
@@ -1168,13 +1182,14 @@ class WebStoreHandleImpl implements WebStoreHandle {
     if (cls === "UNKNOWN") {
       this.rejectUnknownWrite(key, "set");
     }
+    if (value === undefined) {
+      // H3 (AD-106): reject before any flush, cache, queue, or
+      // listener side effect, so the key stays unchanged.
+      this.rejectUndefinedValue(key);
+    }
     if (this.queueSize() >= MAX_QUEUE_ENTRIES && !this.pending.has(key)) {
       // Queue bound (V1-02 5.2.9): flush before accepting more.
       await this.enqueueFlush();
-    }
-    if (value === undefined) {
-      await this.delete(key);
-      return;
     }
     if (cls === "L") {
       this.lCache.set(key, cloneValue(value));

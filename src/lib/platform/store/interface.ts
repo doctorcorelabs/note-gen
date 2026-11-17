@@ -37,10 +37,10 @@ import type { UnlistenFn } from "../event/interface";
  *   the WebSocket watcher in V1-05 section 1.1) is an implementation
  *   detail. This interface only fixes the listener signatures.
  * - Persistence semantics follow V1-02 sections 5.1 and 5.2
- *   (F1-22: set(key, undefined) deletes, temporary pending the Rust
- *   confirmation; F1-23: queue plus server confirmation, save() flushes
- *   and waits). V1-05 only says "explicit flush" and does not decide
- *   either point.
+ *   (F1-22: set(key, undefined) throws a validation error and leaves
+ *   the key unchanged, H3 per AD-106; F1-23: queue plus server
+ *   confirmation, save() flushes and waits). V1-05 only says
+ *   "explicit flush" and does not decide either point.
  *
  * This file has no runtime dependency on any adapter implementation
  * and must never import Tauri packages or any *.tauri.ts / *.web.ts
@@ -94,8 +94,9 @@ export interface StoreHandle {
   /**
    * Updates the cache immediately (visible to the next get() without
    * waiting for save()), fires listeners, and queues the write.
-   * set(key, undefined) deletes the key (F1-22 temporary decision,
-   * V1-02 section 5.1, pending confirmation against the Rust plugin).
+   * set(key, undefined) throws a validation error
+   * (PlatformCapabilityError, invalid_argument) and leaves the key
+   * unchanged (F1-22 H3, AD-106). Callers delete with delete().
    * set() on an R_REJECT key or on "pin" throws
    * PlatformCapabilityError and leaves the cache unchanged. set() on a
    * key unknown to the schema throws a validation error and leaves

@@ -802,7 +802,7 @@ describe("web store: basic semantics", () => {
     await store.close();
   });
 
-  it("set(key, undefined) deletes and queues a null PATCH", async () => {
+  it("set(key, undefined) throws a validation error and leaves the key unchanged (F1-22 H3, AD-106)", async () => {
     const server = new FakeSettingsServer();
     const storage = new FakeStorage();
     const { store } = await openStore(server, storage);
@@ -811,18 +811,28 @@ describe("web store: basic semantics", () => {
     await store.onKeyChange("k", (value) => {
       seen.push(value);
     });
-    await store.set("k", undefined);
-    assert.equal(await store.get("k"), undefined);
-    assert.equal(await store.has("k"), false);
-    assert.deepEqual(seen, [undefined]);
-    await store.set("never-existed", undefined);
+    await assert.rejects(
+      store.set("k", undefined),
+      (error: unknown) =>
+        isCapabilityError(error, "invalid_argument", "store.set"),
+    );
+    assert.equal(await store.get("k"), "v");
+    assert.equal(await store.has("k"), true);
+    assert.deepEqual(seen, []);
+    assert.equal(store.pendingCount(), 1);
+    await assert.rejects(
+      store.set("never-existed", undefined),
+      (error: unknown) =>
+        isCapabilityError(error, "invalid_argument", "store.set"),
+    );
     assert.equal(await store.has("never-existed"), false);
+    assert.equal(store.pendingCount(), 1);
     await store.save();
     const body = server.patchRequests()[0]?.body;
     assert.ok(isRecord(body));
     assert.equal(
       (body["settings"] as Record<string, unknown>)["k"],
-      null,
+      "v",
     );
     await store.close();
   });
