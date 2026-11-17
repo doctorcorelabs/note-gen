@@ -123,6 +123,9 @@ export const WEB_FEATURE_FLAGS: Record<WebFeatureId, WebFeatureFlag> = {
     fallbackMessage:
       'The browser panel is not available in this build. External links open in a new browser tab instead.',
   },
+  // The plugins flag reads the build-static phase constant: this build
+  // is always OFF, enabling plugins requires a code change to that
+  // constant plus a redeploy, and there is no runtime toggle.
   plugins: {
     id: 'plugins',
     enabled: PLUGIN_WEB_PHASE !== 'off',
