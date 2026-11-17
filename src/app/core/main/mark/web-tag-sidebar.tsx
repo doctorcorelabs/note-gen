@@ -2,10 +2,12 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
 // Tag sidebar for the web inbox (Fase 1, V3-26). View switching
-// (records/trash), tag filtering, and tag create/rename/delete through
-// RecordsApiPort only. Deleting a tag never deletes records (contract 3.6,
-// D-03); a tag still in use requires a reassign target. Locked tags
-// offer no rename or delete control.
+// (records/trash), tag filtering, and tag create/rename/delete/pin
+// through RecordsApiPort only. Tag names are validated client-side
+// (V3-26b, tag-inputs.ts) before any call. Deleting a tag never
+// deletes records (contract 3.6, D-03); a tag still in use requires
+// a reassign target, and the delete dialog shows how many records
+// use the tag. Locked tags offer no rename, delete, or pin control.
 
 "use client";
 
@@ -36,6 +38,10 @@ import {
   type ApiTag,
   type RecordsApiPort,
 } from "@/lib/web/records-client";
+import {
+  validateTagName,
+  type TagNameProblem,
+} from "@/lib/web/tag-inputs";
 
 export type InboxView = "active" | "trash";
 
@@ -70,8 +76,16 @@ export function WebTagSidebar({
   const [notice, setNotice] = useState<string | null>(null);
 
   async function handleCreateTag() {
-    const name = newName.trim();
-    if (name === "") return;
+    const checked = validateTagName(newName);
+    if (!checked.ok) {
+      // An empty name stays silent, as before; a name that fails
+      // another rule names the problem instead of calling the API.
+      if (checked.reason !== "empty") {
+        setNotice(tagNameNotice(checked.reason));
+      }
+      return;
+    }
+    const name = checked.name;
     setBusy(true);
     setNotice(null);
     try {
@@ -79,19 +93,25 @@ export function WebTagSidebar({
       setNewName("");
       onTagsChanged();
     } catch (error) {
-      setNotice(
-        apiErrorWireCode(error) === "unauthenticated"
-          ? tList("sessionExpired")
-          : tList("errorGeneric"),
-      );
+      setNotice(tagErrorNotice(error));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleRename(tag: ApiTag) {
-    const name = editingName.trim();
-    if (name === "" || name === tag.name) {
+    const checked = validateTagName(editingName);
+    if (!checked.ok) {
+      if (checked.reason === "empty") {
+        setEditingId(null);
+        return;
+      }
+      // Keep the editor open so the name can be fixed in place.
+      setNotice(tagNameNotice(checked.reason));
+      return;
+    }
+    const name = checked.name;
+    if (name === tag.name) {
       setEditingId(null);
       return;
     }
@@ -102,14 +122,37 @@ export function WebTagSidebar({
       setEditingId(null);
       onTagsChanged();
     } catch (error) {
-      setNotice(
-        apiErrorWireCode(error) === "unauthenticated"
-          ? tList("sessionExpired")
-          : tList("errorGeneric"),
-      );
+      setNotice(tagErrorNotice(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleTogglePin(tag: ApiTag) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await api.updateTag(tag.id, { pinned: !tag.pinned });
+      onTagsChanged();
+    } catch (error) {
+      setNotice(tagErrorNotice(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function tagNameNotice(reason: TagNameProblem): string {
+    if (reason === "tooLong") return t("tagNameTooLong");
+    if (reason === "controlChars") return t("tagNameInvalid");
+    return tList("errorGeneric");
+  }
+
+  function tagErrorNotice(error: unknown): string {
+    const code = apiErrorWireCode(error);
+    if (code === "unauthenticated") return tList("sessionExpired");
+    if (code === "tag_name_taken") return t("tagNameTaken");
+    if (code === "tag_locked") return t("tagLocked");
+    return tList("errorGeneric");
   }
 
   async function handleDelete(tag: ApiTag, reassign?: number) {
@@ -123,9 +166,15 @@ export function WebTagSidebar({
       if (selectedTagId === tag.id) onSelectTag("all");
       onTagsChanged();
     } catch (error) {
-      if (apiErrorWireCode(error) === "tag_in_use") {
+      const code = apiErrorWireCode(error);
+      if (code === "tag_in_use") {
         setNeedsReassign(true);
-      } else if (apiErrorWireCode(error) === "unauthenticated") {
+      } else if (code === "capability_unavailable") {
+        // The live kind path has no tags.delete handler yet, so
+        // delete is honestly unavailable until it lands (V3-25).
+        setNotice(t("deleteUnavailable"));
+        setPendingDelete(null);
+      } else if (code === "unauthenticated") {
         setNotice(tList("sessionExpired"));
         setPendingDelete(null);
       } else {
@@ -206,6 +255,14 @@ export function WebTagSidebar({
                       size="sm"
                       variant="ghost"
                       disabled={busy}
+                      onClick={() => handleTogglePin(tag)}
+                    >
+                      {tag.pinned ? t("unpinTag") : t("pinTag")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
                       onClick={() => {
                         setEditingId(tag.id);
                         setEditingName(tag.name);
@@ -279,6 +336,13 @@ export function WebTagSidebar({
               {t("deleteTagConfirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {pendingDelete && (
+            <p className="text-sm text-zinc-600">
+              {t("deleteTagAffected", {
+                count: pendingDelete.recordCount,
+              })}
+            </p>
+          )}
           {needsReassign && (
             <div className="space-y-2">
               <p role="alert" className="text-sm text-red-600">

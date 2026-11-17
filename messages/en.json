@@ -4926,7 +4926,15 @@
           "deleteTagConfirmTitle": "Delete this tag?",
           "deleteTagConfirmDescription": "Deleting a tag does not delete records. Records still using this tag must be moved to another tag first.",
           "tagInUse": "This tag is still used by records. Choose a tag to move them to.",
-          "reassignLabel": "Move records to"
+          "reassignLabel": "Move records to",
+          "pinTag": "Pin tag",
+          "unpinTag": "Unpin tag",
+          "tagNameTaken": "A tag with this name already exists.",
+          "tagLocked": "This tag is locked and cannot be changed.",
+          "tagNameTooLong": "Tag names can be at most 100 characters.",
+          "tagNameInvalid": "Tag names cannot contain control characters.",
+          "deleteTagAffected": "{count} records use this tag.",
+          "deleteUnavailable": "Tag deletion is not available yet."
         }
       }
     },
