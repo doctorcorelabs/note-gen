@@ -77,6 +77,40 @@ export function resolveImagePathFromMarkdown(markdownPath: string, imagePath: st
   return resolvedSegments.join('/')
 }
 
+/**
+ * Normalize a workspace image path for the web media endpoint.
+ *
+ * The web asset adapter only accepts workspace-relative paths (see
+ * `src/lib/platform/asset/asset.web.ts`), so callers must not join
+ * a workspace root or app-data prefix before calling it. This
+ * helper performs the reversible lexical cleanup only: separators,
+ * leading slashes and `./` markers, and the default-workspace
+ * `article/` prefix. The adapter remains the authority that
+ * rejects `..` segments, hidden segments, overlong paths, and
+ * control characters. Callers must pass decoded paths (the
+ * resolver in this file already decodes markdown URL segments);
+ * this helper never decodes percent escapes.
+ */
+export function toWorkspaceMediaRelativePath(path: string, isCustomWorkspace: boolean): string {
+  let normalized = path
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+
+  while (normalized.startsWith('/')) {
+    normalized = normalized.slice(1)
+  }
+  while (normalized.startsWith('./')) {
+    normalized = normalized.slice(2)
+  }
+
+  if (!isCustomWorkspace) {
+    normalized = normalized.replace(/^article\//, '')
+  }
+
+  return normalized
+}
+
 export function toMarkdownImagePath(markdownPath: string, workspaceImagePath: string): string {
   const markdownDirSegments = getMarkdownDirSegments(markdownPath)
   const imageSegments = normalizePathSegments(workspaceImagePath)

@@ -16,6 +16,7 @@ import { shouldTransformImageSrcToWorkspaceAsset } from './image-src'
 import { GitHubAlertBlockquote } from './github-alert-blockquote'
 import { MarkdownOrderedList } from './markdown-ordered-list'
 import { createIsolatedMarkdownLexer } from './markdown-tokenizers'
+import { LANGUAGE_STORAGE_KEY, normalizeLocale, toHtmlLangTag } from '@/i18n/config'
 
 export type MarkdownExportFormat = 'markdown' | 'html' | 'json' | 'pdf'
 
@@ -28,6 +29,8 @@ export interface MarkdownExportSource {
 
 export interface MarkdownExportOptions {
   onPdfRenderStart?: () => void
+  /** Explicit export locale. When omitted, the active UI locale is used (D-6). */
+  locale?: string
 }
 
 const IMAGE_LOAD_TIMEOUT_MS = 5000
@@ -454,9 +457,19 @@ async function collectExportStyles() {
   return styleChunks.join('\n')
 }
 
-function buildHtmlDocument(title: string, body: string, styles: string) {
+function getExportDocumentLang(explicitLocale?: string | null) {
+  if (explicitLocale) {
+    return toHtmlLangTag(explicitLocale)
+  }
+  const storedLocale = typeof window === 'undefined'
+    ? null
+    : localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  return toHtmlLangTag(normalizeLocale(storedLocale))
+}
+
+function buildHtmlDocument(title: string, body: string, styles: string, lang: string) {
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${escapeHtml(lang)}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -469,7 +482,7 @@ ${body}
 </html>`
 }
 
-export async function buildMarkdownExportDocument(source: MarkdownExportSource) {
+export async function buildMarkdownExportDocument(source: MarkdownExportSource, options?: MarkdownExportOptions) {
   const fileName = getMarkdownExportBaseName(source.baseName)
   const markdown = await getValue(source.markdown)
   const [body, styles] = await Promise.all([
@@ -477,7 +490,7 @@ export async function buildMarkdownExportDocument(source: MarkdownExportSource) 
     collectExportStyles(),
   ])
 
-  return buildHtmlDocument(fileName, body, styles)
+  return buildHtmlDocument(fileName, body, styles, getExportDocumentLang(options?.locale))
 }
 
 function createPrintFrame(html: string) {
@@ -587,6 +600,9 @@ async function notifyPdfRenderStart(options?: MarkdownExportOptions) {
 async function printExportDocument(source: MarkdownExportSource, options?: MarkdownExportOptions) {
   const fileName = getMarkdownExportBaseName(source.baseName)
 
+  // Desktop only: the native print window and the /print route. In web
+  // mode the branch below prints the same document with the browser
+  // print dialog (window.print on the print frame, "Save as PDF").
   if (checkIsTauri()) {
     let outputPath: string | undefined
 
@@ -603,14 +619,14 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
 
     await notifyPdfRenderStart(options)
     return await openTauriPrintWindow(
-      await buildMarkdownExportDocument(source),
+      await buildMarkdownExportDocument(source, options),
       fileName,
       outputPath,
     )
   }
 
   await notifyPdfRenderStart(options)
-  const html = await buildMarkdownExportDocument(source)
+  const html = await buildMarkdownExportDocument(source, options)
 
   const iframe = createPrintFrame(html)
 
@@ -661,7 +677,7 @@ export async function exportMarkdownSource(
 
   if (format === 'html') {
     return await saveTextExport(
-      await buildMarkdownExportDocument(source),
+      await buildMarkdownExportDocument(source, options),
       `${fileName}.html`,
       'html',
       'text/html',

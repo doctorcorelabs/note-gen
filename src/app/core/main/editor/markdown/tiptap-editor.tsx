@@ -50,7 +50,7 @@ import {
   getWorkspacePath,
   isAbsoluteFsPath,
 } from '@/lib/workspace'
-import { isMobileDevice } from '@/lib/check'
+import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { pickImagesFromPhotoLibrary } from '@/lib/image-picker'
 import { useTranslations } from 'next-intl'
 import { replaceLinesInRange } from '@/lib/agent/react-diff-helpers'
@@ -101,7 +101,7 @@ import {
 } from './markdown-paragraph'
 import { GitHubAlertBlockquoteEditor } from './github-alert-blockquote-view'
 import { StableCodeBlockLowlight } from './code-block-extension'
-import { shouldTransformImageSrcToWorkspaceAsset } from './image-src'
+import { shouldTransformImageSrcToWorkspaceAsset, stripDisplayImageUrlPrefix } from './image-src'
 import useSettingStore from '@/stores/setting'
 import { useEditorOutlineStore } from '@/stores/editor-outline'
 import useSyncStore from '@/stores/sync'
@@ -3008,8 +3008,9 @@ export function TipTapEditor({
           // 优先使用 relativeSrc，其次使用 src
           const attrs = node.attrs || {}
           let src = attrs.relativeSrc || attrs.src || ''
-          // 如果是 asset:// 或 tauri:// 路径，提取实际路径
-          src = src.replace(/^(tauri|asset|http):\/\/localhost\//, '')
+          // Display URLs (asset://, tauri://, localhost, and web media
+          // URLs) never belong in saved Markdown; keep the path form.
+          src = stripDisplayImageUrlPrefix(src)
           const width = parseImageDimension(attrs.width)
           const height = parseImageDimension(attrs.height)
 
@@ -5752,6 +5753,22 @@ export function TipTapEditor({
 
       if (isMobile) {
         fileObject = (await pickImagesFromPhotoLibrary())[0] || null
+      } else if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped picker returns
+        // the picked File directly. Path-shaped open() rejects here.
+        const picked = await platform.dialog.openFiles({
+          multiple: false,
+          filters: [
+            {
+              name: 'Images',
+              extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
+            },
+          ],
+        })
+
+        if (!isCurrentOperation()) return
+        const firstPicked = Array.isArray(picked) ? picked[0] : picked
+        fileObject = firstPicked?.file ?? null
       } else {
         const file = await platform.dialog.open({
           multiple: false,
