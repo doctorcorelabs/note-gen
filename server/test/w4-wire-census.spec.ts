@@ -30,8 +30,10 @@ import { testConfig } from './auth/helpers.js';
 // Increment 1 (adapters 60/70/80): workspace structure (10),
 // reconcile (2), media wildcard (2).
 // Increment 2 (adapter 130): record assets (2).
-// Increment 3 (adapter 120): search (2, fuzzy stub included). Concrete ids stand in for
-// :id segments; the wildcard probe uses a nested media path.
+// Increment 3 (adapter 120): search (2, fuzzy stub included).
+// Increment 4 (adapter 110): records marks (9) and tags (5).
+// Concrete ids stand in for :id segments; the wildcard probe
+// uses a nested media path.
 const EXPECTED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['POST', '/api/workspace/mkdir'],
   ['POST', '/api/workspace/move'],
@@ -51,6 +53,20 @@ const EXPECTED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['GET', '/api/assets/ast_0123456789abcdef0123456789abcdef'],
   ['GET', '/api/search'],
   ['POST', '/api/search/fuzzy'],
+  ['POST', '/api/marks'],
+  ['GET', '/api/marks'],
+  ['GET', '/api/marks/123'],
+  ['PATCH', '/api/marks/123'],
+  ['PUT', '/api/marks/123/tags'],
+  ['DELETE', '/api/marks/123'],
+  ['POST', '/api/marks/123/restore'],
+  ['DELETE', '/api/marks/123/permanent'],
+  ['DELETE', '/api/marks/trash'],
+  ['GET', '/api/tags'],
+  ['POST', '/api/tags'],
+  ['GET', '/api/tags/123'],
+  ['PATCH', '/api/tags/123'],
+  ['DELETE', '/api/tags/123'],
 ];
 
 // Excepted routes (AD-114, kontrak 3.10/3.13): backup CRUD (7)
@@ -92,7 +108,7 @@ describe('W4-WIRE route census', () => {
     return app;
   }
 
-  it('registers every increment-1 to increment-3 route (unauthenticated probe answers 401, not 404)', async () => {
+  it('registers every increment-1 to increment-4 route (unauthenticated probe answers 401, not 404)', async () => {
     const built = await censusApp();
     for (const [method, url] of EXPECTED_ROUTES) {
       const res = await built.inject({ method, url });

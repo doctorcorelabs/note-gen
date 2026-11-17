@@ -216,4 +216,15 @@ export class AssetService {
     }
     return this.#store.loadMetadata(workspaceId, assetKey);
   }
+
+  // Removes one stored asset. A malformed key is not an asset key
+  // and deletes nothing (false). The caller owns the
+  // reference-count check: this method deletes unconditionally
+  // once the key is well-formed.
+  async deleteAsset(workspaceId: string, assetKey: unknown): Promise<boolean> {
+    if (!isValidAssetKey(assetKey)) {
+      return false;
+    }
+    return this.#store.delete(workspaceId, assetKey);
+  }
 }

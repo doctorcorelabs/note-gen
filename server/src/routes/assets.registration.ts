@@ -51,6 +51,10 @@ class UnavailableAssetStore implements AssetStore {
   async loadMetadata(): Promise<null> {
     throw ApiError.serviceUnavailable('The asset store is not configured.');
   }
+
+  async delete(): Promise<boolean> {
+    throw ApiError.serviceUnavailable('The asset store is not configured.');
+  }
 }
 
 export const REGISTRATION_ID = 'assets' as const;
