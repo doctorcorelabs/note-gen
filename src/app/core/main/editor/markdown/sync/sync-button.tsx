@@ -607,6 +607,7 @@ export function SyncButton(props: PushSyncOptions) {
     lastPushTime,
     push: handlePush,
   } = usePushSync(props)
+  const t = useTranslations()
 
   if (!isConfigured || !activeFilePath) return null
 
