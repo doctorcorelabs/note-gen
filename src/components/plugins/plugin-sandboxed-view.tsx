@@ -2,11 +2,10 @@
 
 import { useLocale, useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PluginPermissionName } from '@notegen/plugin-api'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { readPluginResource } from '@/lib/plugins/backend'
 import { connectPluginFrameCapabilities } from '@/lib/plugins/frame-capabilities'
-import { getPluginManifestFingerprint, isPluginEnabledInWorkspace } from '@/lib/plugins/internal-types'
+import { isPluginEnabledInWorkspace } from '@/lib/plugins/internal-types'
 import { usePluginStore } from '@/stores/plugins'
 
 interface EmbeddedResource { id: string; script: string; style: string }
@@ -57,10 +56,10 @@ export function PluginSandboxedView({ scope, resourceId }: { scope: string; reso
   const allowed = Boolean(plugin && isPluginEnabledInWorkspace(plugin, workspaceState))
   const resources = plugin?.manifest.resources as unknown as { embeddedViews?: EmbeddedResource[] } | undefined
   const resource = resources?.embeddedViews?.find(item => item.id === resourceId)
-  const terminalPermission = 'terminal.open' as PluginPermissionName
-  const terminalGrant = workspaceState?.permissions[terminalPermission]
-  const terminalAllowed = Boolean(plugin?.manifest.permissions[terminalPermission] && terminalGrant?.granted
-    && plugin && terminalGrant.manifestFingerprint === getPluginManifestFingerprint(plugin))
+  // No terminal wiring exists here (AD-14, F8 section 5.2 item 4):
+  // the embedded view is display-only and the frame capability
+  // channel offers no capability. Do not re-add a terminal grant
+  // computation; the frame-capabilities module rejects every request.
   const t = useTranslations('settings.plugins.embeddedView')
   const locale = useLocale()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -105,7 +104,7 @@ export function PluginSandboxedView({ scope, resourceId }: { scope: string; reso
       readyTimer = setTimeout(() => { if (alive) setError(t('loadTimeout')) }, 15_000)
     }).catch(reason => { if (alive) setError(String(reason)) })
     return () => { alive = false; clearTimeout(readyTimer); if (readyListener) window.removeEventListener('message', readyListener) }
-  }, [allowed, plugin, resource?.script, resource?.style, workspaceId, terminalAllowed, locale])
+  }, [allowed, plugin, resource?.script, resource?.style, workspaceId, locale])
 
   useEffect(() => {
     if (!allowed || !source || !frameToken || loadedSource !== source || !workspaceId || !frame.current?.contentWindow) return
@@ -120,7 +119,7 @@ export function PluginSandboxedView({ scope, resourceId }: { scope: string; reso
     const theme = () => hostTheme(frame.current?.parentElement ?? null)
     void (async () => {
       try {
-        const capabilities = await connectPluginFrameCapabilities({ pluginId, workspaceId, port, terminal: terminalAllowed })
+        const capabilities = await connectPluginFrameCapabilities({ port })
         if (!alive) { capabilities.dispose(); return }
         disposeCapabilities = capabilities.dispose
         port.onmessage = event => {
@@ -140,7 +139,7 @@ export function PluginSandboxedView({ scope, resourceId }: { scope: string; reso
         const initialTheme = theme()
         frame.current?.contentWindow?.postMessage({
           type: 'notegen:embedded-view-init', protocol: 1, token: frameToken, locale,
-          capabilities: terminalAllowed ? ['terminal'] : [],
+          capabilities: [],
           settings: settingsRef.current,
           background: initialTheme.background, foreground: initialTheme.foreground, theme: initialTheme,
         }, '*', [channel.port2])
@@ -157,7 +156,7 @@ export function PluginSandboxedView({ scope, resourceId }: { scope: string; reso
       port.close()
       channel.port2.close()
     }
-  }, [allowed, source, frameToken, loadedSource, pluginId, workspaceId, terminalAllowed, locale])
+  }, [allowed, source, frameToken, loadedSource, pluginId, workspaceId, locale])
 
   useEffect(() => {
     portRef.current?.postMessage({ type: 'host.settings', settings: viewSettings })

@@ -21,6 +21,7 @@ import {
 } from '@/lib/plugins/command-registry'
 import { hasActiveMarkdownPluginEditor, onDidChangeActivePluginEditor } from '@/lib/plugins/editor-bridge'
 import { getPluginPlatform, readPluginEntry } from '@/lib/plugins/backend'
+import { assertPluginsEnabled, isPluginKillSwitchActive } from '@/lib/plugins/plugin-kill-switch'
 import { loadPluginMessages } from '@/lib/plugins/localization'
 import { CommunityPluginRuntime } from '@/lib/plugins/runtime/community-runtime'
 import {
@@ -123,6 +124,13 @@ export class PluginHost {
   private lifecycleGeneration = 0
 
   async initialize(locale: string, surface: PluginHostSurface = 'main'): Promise<void> {
+    // G1 (W4-SEC): while the kill switch is active, return silently
+    // without starting anything: no store initialize, no market
+    // refresh, no refresh timer, no development auto-reload, and no
+    // subscriptions. Silence is deliberate: the bridge retries when
+    // initialize() rejects, so an error here would be harmful. The
+    // host stays uninitialized and every later gate keeps it closed.
+    if (isPluginKillSwitchActive()) return
     const generation = ++this.lifecycleGeneration
     this.locale = locale
     this.surface = surface
@@ -231,6 +239,12 @@ export class PluginHost {
   }
 
   async reconcile(): Promise<void> {
+    // G1 (W4-SEC): defense in depth. The host never initializes while
+    // the kill switch is active, so the !initialized check below would
+    // already stop reconciliation; the explicit check keeps the gate
+    // visible here and closes the path even if initialization state
+    // ever drifts.
+    if (isPluginKillSwitchActive()) return
     const generation = this.lifecycleGeneration
     const operation = this.reconcileQueue
       .catch(() => undefined)
@@ -247,6 +261,9 @@ export class PluginHost {
   }
 
   async activate(pluginId: string, activationEvent?: string): Promise<void> {
+    // G1 (W4-SEC): activation while the kill switch is active fails
+    // with the explicit kill-switch error. No runtime is created.
+    assertPluginsEnabled()
     if (!this.initialized) throw new PluginError('Cancelled', 'The plugin host is not running')
     if (this.workspaceTransitioning || !isPluginWorkspaceBindingCurrent()) {
       throw new PluginError('Cancelled', 'The active workspace is changing')

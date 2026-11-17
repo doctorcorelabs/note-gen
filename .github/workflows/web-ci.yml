@@ -6,7 +6,7 @@
 # design F10 section 6 and F12 section 6).
 #
 # Gates: typecheck, lint, registration-drift, unit, contract, build,
-# e2e-smoke, secret-scan.
+# e2e-smoke, secret-scan, forbidden-strings.
 # Every job must be green before merge (F12 section 6.2). There is no
 # emergency merge without a written reason in the PR.
 #
@@ -247,3 +247,17 @@ jobs:
           else
             bash scripts/secret-scan.sh
           fi
+
+  forbidden-strings:
+    name: Forbidden strings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      # No dependency install: the gate is a fixed-string grep over
+      # src/ (AD-14, AD-109, W4-SEC). It fails on any occurrence of
+      # the two forbidden literals and exits 1 when src/ is missing,
+      # so it never passes vacuously on a broken checkout. Until
+      # Actions runs for this repository, the same command is
+      # verified locally: bash scripts/check-forbidden-strings.sh
+      - name: Check for forbidden terminal literals in src/
+        run: bash scripts/check-forbidden-strings.sh

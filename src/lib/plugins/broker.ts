@@ -55,6 +55,7 @@ import {
 import { readPluginEditorTarget } from '@/lib/plugins/editor-targets'
 import { registerPluginCommandHandler } from '@/lib/plugins/command-registry'
 import { invokePluginBackend } from '@/lib/plugins/backend'
+import { assertPluginsEnabled } from '@/lib/plugins/plugin-kill-switch'
 import {
   getPluginManifestFingerprint,
   type InstalledPlugin,
@@ -1495,7 +1496,7 @@ export function createPluginContext(options: {
       id: pluginId,
       version: plugin.manifest.version,
       apiVersion: PLUGIN_API_VERSION,
-      capabilities: ['embedded-views', 'workspace-views', 'contextual-views', 'editor-actions', 'records', 'chat-draft', 'ai-generation', 'ui-prompts', 'document-rendering', 'document-preview', 'html-export', 'html-copy', 'clipboard-write', 'file-export', 'editor-styles', 'terminal', 'related-notes-search'] as PluginContext['plugin']['capabilities'],
+      capabilities: ['embedded-views', 'workspace-views', 'contextual-views', 'editor-actions', 'records', 'chat-draft', 'ai-generation', 'ui-prompts', 'document-rendering', 'document-preview', 'html-export', 'html-copy', 'clipboard-write', 'file-export', 'editor-styles', 'related-notes-search'] as PluginContext['plugin']['capabilities'],
     },
     log: {
       info: message => { guard(); usePluginStore.getState().addLog({ pluginId, level: 'info', message }) },
@@ -1923,6 +1924,11 @@ export async function invokePluginCapability(
   workspaceBinding?: PluginWorkspaceBinding,
   expectedPlugin?: InstalledPlugin,
 ): Promise<unknown> {
+  // G2 (W4-SEC): one check at the head, before the switch and before
+  // every other check. While the kill switch is active all 55 RPC
+  // methods are blocked, including read methods, with the explicit
+  // kill-switch error. No per-case check exists or is needed.
+  assertPluginsEnabled()
   assertPluginWorkspaceBinding(workspaceBinding)
   const plugin = currentPlugin(pluginId)
   if (expectedPlugin && getPluginManifestFingerprint(plugin) !== getPluginManifestFingerprint(expectedPlugin)) {

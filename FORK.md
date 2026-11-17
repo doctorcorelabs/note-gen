@@ -54,7 +54,7 @@ call site G5.
 | Luncur saat startup | `AutostartAdapter`: `isEnabled`/`enable`/`disable` menolak. Flag `autostart`. | Pengaturan perilaku sistem: badge "Desktop only" pada pengaturan luncur saat startup, dan kedua switch dinonaktifkan. Adapter tidak dipanggil di web. |
 | Pemeriksa pembaruan aplikasi | `UpdaterAdapter.check` menolak; pembaruan adalah deploy server. Flag `updater`. | Halaman Tentang: pemberitahuan bahwa pembaruan dipasang di server dan tombol pemeriksaan dinonaktifkan. Pemicu pemeriksaan saat boot dijaga agar tidak berjalan di web (AD-42). |
 | Tangkap layar desktop dan pin | Rute desktop; flag `screenshot`. Salin gambar memakai `ClipboardAdapter.writeImage` dengan bytes PNG langsung. | Rute `/screenshot` dan `/screenshot-pin` menampilkan pemberitahuan nonaktif di web dan tidak memulai sesi desktop. |
-| Eksekusi terminal plugin | Tanpa adapter; dihapus permanen tanpa padanan web (AD-14). | Tidak ada permukaan UI; izin `terminal.open` tidak ada di fork web. |
+| Eksekusi terminal plugin | Tanpa adapter; dihapus permanen tanpa padanan web (AD-14). Koreksi atas klaim lama bahwa izin `terminal.open` "tidak ada di fork web": klaim itu SALAH pada trunk gelombang 3, karena 11 literal masih ada di `src/` (AD-109). Gelombang 4 (W4-SEC) menghapus ke-11 literal itu: izin dihapus dari skema manifest (manifest yang mendeklarasikannya gagal validasi `InvalidManifest`), modul capability frame menjadi no-op tanpa jalur invoke, dan job grep CI + aturan eslint menegakkan 0 literal di `src/`. Backend Rust `src-tauri/src/plugin_terminal.rs` masih ada di tree tetapi tidak punya jalur invoke dari `src/` dan tidak ikut build web; tidak ada padanan server yang boleh dibuat. | Tidak ada permukaan UI; dialog izin tidak pernah menampilkan izin terminal, dan embedded view plugin hanya tampil tanpa capability. |
 
 ## Branch
 
@@ -88,6 +88,8 @@ Aturan merge: PR fitur ke web memakai squash merge. PR sync upstream ke web mema
 ## Changelog
 
 ### web-v0.1.0 (belum dirilis)
+
+- 2026-11-17: kill-switch plugin ditegakkan di kode + penghapusan terminal (W4-SEC): satu konstanta fase plugin `PLUGIN_WEB_PHASE` bernilai `off` (`src/lib/plugins/plugin-web-phase.ts`) dibaca satu modul kill-switch yang meng-gate bridge host (G0), host initialize/activate/reconcile (G1), kepala broker RPC (G2), dan seam backend plugin (G3); flag `plugins` di web-chrome kini diturunkan dari konstanta yang sama. Ke-11 literal terminal pra-ada di `src/` dihapus (skema manifest, urutan tampil izin, view sandbox, modul capability frame yang menjadi no-op); metadata capability tidak lagi mengiklankan terminal; job grep CI `forbidden-strings` + aturan eslint `no-restricted-syntax` menegakkan 0 literal di `src/`; baris terminal pada tabel G5 di atas dikoreksi (klaim lama dinyatakan SALAH oleh AD-109).
 
 - 2026-11-17: shim Store POC dihapus (F1-16/V3-12): berkas src/lib/platform/poc-store-shim.ts dihapus dan entri alias Turbopack @tauri-apps/plugin-store dilepas dari next.config.ts; StoreAdapter web (src/lib/platform/store/store.web.ts) menggantikannya. Alias api/app dan poc-app-shim.ts dipertahankan untuk pekerjaan AppAdapter. Kontrak store F1 seksi 8 (design/01-shim-architecture.md) diganti oleh kontrak store yang berlaku (fase1/kontrak-api-kanonis.md; desain-store-adapter.md seksi 4.7); kedua bentuk kontrak tidak dibangun bersamaan.
 

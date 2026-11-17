@@ -167,6 +167,10 @@ const manifestSchema = z.object({
     message: 'entry must be a JavaScript file',
   }).optional(),
   activationEvents: z.array(z.string()).max(100),
+  // The permission set below intentionally has no terminal permission
+  // (AD-14, F8 section 5.2): the object is strict, so a manifest that
+  // declares it fails validation with InvalidManifest. Do not re-add
+  // it; no phase and no flag may enable terminal execution in the fork.
   permissions: z.object({
     'records.read': permissionDeclarationSchema.optional(),
     'records.write': permissionDeclarationSchema.optional(),
@@ -176,7 +180,6 @@ const manifestSchema = z.object({
     'clipboard.write': permissionDeclarationSchema.optional(),
     'files.export': permissionDeclarationSchema.optional(),
     'editor.style': permissionDeclarationSchema.optional(),
-    'terminal.open': permissionDeclarationSchema.optional(),
     'editor.read': permissionDeclarationSchema.optional(),
     'editor.write': permissionDeclarationSchema.optional(),
     'notes.read': permissionDeclarationSchema.optional(),
@@ -303,7 +306,7 @@ function isNamespaced(value: string, pluginId: string): boolean {
 }
 
 function validatePermissionScopes(manifest: PluginManifestV1): void {
-  const allowedScopes: Partial<Record<PluginPermissionName | 'terminal.open', readonly string[]>> = {
+  const allowedScopes: Partial<Record<PluginPermissionName, readonly string[]>> = {
     'records.read': ['application'],
     'records.write': ['application'],
     'chat.read': ['application'],
@@ -312,7 +315,6 @@ function validatePermissionScopes(manifest: PluginManifestV1): void {
     'clipboard.write': ['application'],
     'files.export': ['application'],
     'editor.style': ['application'],
-    'terminal.open': ['application'],
     'editor.read': ['active-editor'],
     'editor.write': ['active-editor'],
     'notes.read': ['workspace-file', 'workspace-files', 'workspace-folder'],
@@ -329,7 +331,7 @@ function validatePermissionScopes(manifest: PluginManifestV1): void {
 
   for (const [permission, declaration] of Object.entries(manifest.permissions)) {
     if (!declaration) continue
-    const scopes = allowedScopes[permission as PluginPermissionName | 'terminal.open']
+    const scopes = allowedScopes[permission as PluginPermissionName]
     if (!scopes?.includes(declaration.scope)) {
       throw new PluginError(
         'InvalidManifest',
