@@ -33,17 +33,27 @@
 //   with a fixed, unique content string.
 // - Record CREATION through the UI is out of scope for this spec:
 //   upstream capture controls (control-text.tsx and siblings) are
-//   desktop capture flows, and the web record-creation path is
-//   undecided. The record under test is seeded through the backend
-//   harness, which has NOT landed.
+//   desktop capture flows. The web creation dialog (WebRecordCreate,
+//   V3-26a) has merged but is not mounted in any page on trunk, and
+//   V3-26b merged without mounting it, so no creation path is
+//   reachable through the browser until inbox mounting lands as
+//   follow-up work. The record under test is seeded through the
+//   backend harness, which has NOT landed. Seeding goes through the
+//   kind layer (tags.create, then marks.create; D-3D-1): REST
+//   marks/tags routes do not exist on trunk.
 //
 // Intended steps (replace the notYetLanded call when the feature lands):
 // 1. Seed one record (type text, fixed unique content) and two tags
 //    through the backend harness, with the record assigned only the
-//    first tag. Backend record/tag seeding has NOT landed.
+//    first tag. Descriptors live in harness/seed-data.ts
+//    (RECORD_SEEDS, TAG_SEEDS). Backend record/tag seeding has NOT
+//    landed.
 // 2. Open the record list, find the seeded record (markDetailButton,
 //    UNVERIFIED), and open the tag editor (AppPage.openTagEditor,
-//    "Manage tags" button, VERIFIED in source).
+//    "Manage tags" button, VERIFIED in source). The web inbox list
+//    (WebInboxList, V3-26a) is likewise unmounted: V3-26b merged
+//    without mounting it, so this step waits on mounting follow-up
+//    as well as seeding.
 // 3. Check the second tag checkbox (tagCheckbox, UNVERIFIED) and
 //    save. Do NOT touch the primary tag checkbox: it is disabled in
 //    source, and the primary tag is changed through Move Tag, not
@@ -51,10 +61,11 @@
 // 4. Wait for the save EFFECT by observation: the dialog closes and
 //    the record shows the new tag (or the tag list count changes),
 //    never by a fixed sleep. Note the contract guard: PUT tags
-//    requires expectedTagIds unless force (kontrak 3.6); the UI
-//    sends the expectation from the state it loaded, so a stale
-//    editor must fail visibly rather than overwrite silently. This
-//    spec does not cover the stale-editor conflict case.
+//    requires expectedTagIds unless force (kontrak 3.6; kind path:
+//    marks.updateTags set guard); the UI sends the expectation from
+//    the state it loaded, so a stale editor must fail visibly rather
+//    than overwrite silently. This spec does not cover the
+//    stale-editor conflict case.
 // 5. Reload the page and re-open the tag editor for the same record.
 // 6. Assert both tags are checked, in the order the contract defines.
 //    CAUTION (inventaris-record-ui.md S-02): upstream tagIds are
@@ -72,8 +83,7 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S3 @scaffold record plus tag: assigned tag survives reload', async () => {
   notYetLanded(
     'E2E-S3',
-    'backend record/tag seeding plus the records/tags API plus the ' +
-      'web record list wiring have not landed; no record can be ' +
-      'tagged through the web UI yet.',
+    'backend record/tag seeding plus inbox mounting and wiring ' +
+      'have not landed; no record can be tagged through the web UI yet.',
   )
 })

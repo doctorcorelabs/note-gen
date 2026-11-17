@@ -16,13 +16,16 @@
 //    behavior: never assert instant results. Seed wiring and the
 //    search backend have NOT landed.
 // 2. Search a term that exists in exactly one file
-//    (AppPage.searchGlobally, input locator VERIFIED in source).
+//    (SEARCH_TERMS.uniqueTerm in harness/seed-data.ts, in
+//    SEARCH_TERMS.uniqueTermFile; AppPage.searchGlobally, input
+//    locator VERIFIED in source, or searchInputByTestId).
 // 3. Assert the result points at the right file: result title and
 //    snippet match (selectors.searchResult, VERIFIED via cmdk).
-// 4. Search a term that exists nowhere in the corpus.
+// 4. Search a term that exists nowhere in the corpus
+//    (SEARCH_TERMS.absentTerm in harness/seed-data.ts).
 // 5. Assert the explicit empty state appears
 //    (AppPage.expectNoSearchResults, "No search results", VERIFIED
-//    in source), not an endless spinner.
+//    in source, or searchEmptyStateByTestId), not an endless spinner.
 
 import { test } from '@playwright/test'
 
