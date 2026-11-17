@@ -10,12 +10,15 @@
 // its audience or team domain, Access disabled outside local
 // development, and COOKIE_SECURE=false outside development on
 // localhost), read the version once from server/package.json and keep
-// it in memory, create the Postgres pool without an eager connection,
-// build the auth context, check the SETUP_TOKEN boot prerequisite
-// against the auth store (refuse when the database holds no accounts
-// and no token of sufficient length is configured; warn and continue
-// when the check cannot run, so health keeps reporting and an
-// unmigrated database does not refuse boot), build the Fastify app,
+// it in memory, run the startup migration step (apply pending
+// migrations, or refuse start on drift when MIGRATE_ON_START is
+// 'false'; skip entirely when DATABASE_URL is unset), create the
+// Postgres pool without an eager connection, build the auth context,
+// check the SETUP_TOKEN boot prerequisite against the auth store
+// (refuse when the database holds no accounts and no token of
+// sufficient length is configured; warn and continue when the check
+// cannot run, so health keeps reporting instead of the server dying
+// on a database it is meant to report on), build the Fastify app,
 // then listen. The server starts even when
 // DATABASE_URL or WORKSPACE_ROOT is missing, so the misconfiguration
 // shows up as a failed readiness check instead of a dead backend.
@@ -35,6 +38,15 @@ import {
 } from './auth/context.js';
 import type { AuthStore } from './auth/store.js';
 import { loadConfig, MIN_SECRET_LENGTH, type ServerConfig } from './config.js';
+import {
+  checkMigrationDrift,
+  runMigrations,
+  type CheckDriftOptions,
+  type CheckDriftResult,
+  type DriftResult,
+  type RunMigrationsOptions,
+  type RunMigrationsResult,
+} from './db/migrate.js';
 import { closePool, createPool, type HealthDbPool } from './db/pool.js';
 
 export function readServerVersion(): string {
@@ -82,6 +94,174 @@ export async function enforceSetupBootPrerequisite(
   return result === 'refused' ? 'refused' : 'proceed';
 }
 
+// Startup migration wiring (AD-104, SMK-F1). main() applies pending
+// migrations in-process before the server accepts traffic, following
+// the contract in db/migrate.ts: when MIGRATE_ON_START is not
+// 'false', runMigrations runs before the SETUP_TOKEN prerequisite
+// check and before listen; when it is 'false', checkMigrationDrift
+// runs and startup refuses unless the schema is already current (the
+// manual migration path, Opsi C); when DATABASE_URL is unset,
+// migration is skipped entirely and readiness reports the database
+// as unconfigured, preserving Fase 0 behavior. The lock timeout
+// keeps the migrate.ts default of 30 seconds (AD-104 E-4): no
+// override is passed. Failure is fail-fast (AD-104 E-3 Opsi A):
+// main() exits 1 before the pool, the auth context, or listen
+// exists, so no ready response can claim the server is up. This
+// wiring covers the boot schema only; the ready-endpoint migration
+// check stays owned by V3-15 (AD-104 E-5) and is not touched here.
+
+// Parse rule for MIGRATE_ON_START (AD-104 E-2 Opsi B, binding):
+// enabled unless the value is exactly 'false'. Unset, empty, and
+// unrecognized values (including 'FALSE', '0', and 'no') all mean
+// enabled, matching the migrate.ts contract; the check is a plain
+// string comparison, not a truthiness or boolean parse. server.ts
+// reads process.env directly; loadConfig has no migration field and
+// server/.env.example Bagian B is unchanged by this wiring.
+export function isMigrateOnStartEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.MIGRATE_ON_START !== 'false';
+}
+
+export type StartupMigrationOutcome =
+  | { status: 'migrated'; appliedTags: string[] }
+  | { status: 'current' }
+  | { status: 'skipped' }
+  | { status: 'failed'; kind: 'database-unreachable' | 'migration-failed'; message: string };
+
+// Runners for the migration step, injectable so tests can prove the
+// decision table without a database. Production main() uses the real
+// migrate.ts functions through the default below.
+export interface StartupMigrationRunners {
+  runMigrations: (options: RunMigrationsOptions) => Promise<RunMigrationsResult>;
+  checkMigrationDrift: (options: CheckDriftOptions) => Promise<CheckDriftResult>;
+}
+
+export interface StartupMigrationStepDeps {
+  databaseUrl: string | undefined;
+  migrateOnStart: boolean;
+  runners?: StartupMigrationRunners;
+  log: (message: string) => void;
+}
+
+// Connection-level failure codes: the database could not be reached
+// at all, as opposed to a migration that ran and failed. The log
+// wording distinguishes the two (AD-104 E-3); only the machine code
+// is logged, never the driver message, which may quote an address.
+const DATABASE_UNREACHABLE_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'EPIPE',
+  'ECONNABORTED',
+]);
+
+function migrationErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && code !== '') {
+      return code;
+    }
+  }
+  return undefined;
+}
+
+// Converts a runner failure into a failed outcome with a message
+// that is safe to log: migration or lock names from migrate.ts
+// errors (whose contract guarantees no URL, SQL, or credential
+// material), a machine error code for driver errors, or a fixed
+// message when nothing safe can be said.
+function toFailedMigrationOutcome(error: unknown): Extract<StartupMigrationOutcome, { status: 'failed' }> {
+  const code = migrationErrorCode(error);
+  if (code !== undefined && DATABASE_UNREACHABLE_CODES.has(code)) {
+    return {
+      status: 'failed',
+      kind: 'database-unreachable',
+      message:
+        'The database could not be reached during startup migrations ' +
+        `(DATABASE_URL is configured; connection error ${code}). ` +
+        'Startup fails; no traffic is served.',
+    };
+  }
+  if (error instanceof Error && code === undefined) {
+    return {
+      status: 'failed',
+      kind: 'migration-failed',
+      message: `Startup migrations failed: ${error.message}`,
+    };
+  }
+  if (code !== undefined) {
+    return {
+      status: 'failed',
+      kind: 'migration-failed',
+      message: `Startup migrations failed (database error ${code}). Startup fails; no traffic is served.`,
+    };
+  }
+  return {
+    status: 'failed',
+    kind: 'migration-failed',
+    message: 'Startup migrations failed for an unknown reason. Startup fails; no traffic is served.',
+  };
+}
+
+// Refusal message for the flag-false drift case, built from the drift
+// comparison itself: missing tags are named (migration names only),
+// unexpected digests are counted, never quoted.
+function describeDriftRefusal(drift: DriftResult): string {
+  const parts: string[] = [];
+  if (drift.missingTags.length > 0) {
+    parts.push(`missing or changed migrations: ${drift.missingTags.join(', ')}`);
+  }
+  if (drift.unexpectedHashes.length > 0) {
+    parts.push(`${drift.unexpectedHashes.length} unexpected applied digests`);
+  }
+  const detail = parts.length > 0 ? ` (${parts.join('; ')})` : '';
+  return (
+    `Migration drift detected${detail}. MIGRATE_ON_START is 'false', so startup refuses ` +
+    'to serve traffic on a drifted schema; apply migrations manually, then restart.'
+  );
+}
+
+export async function runStartupMigrationStep(deps: StartupMigrationStepDeps): Promise<StartupMigrationOutcome> {
+  const runners: StartupMigrationRunners = deps.runners ?? { runMigrations, checkMigrationDrift };
+  if (deps.databaseUrl === undefined) {
+    deps.log('Startup migrations skipped: DATABASE_URL is not set.');
+    return { status: 'skipped' };
+  }
+  if (!deps.migrateOnStart) {
+    let result: CheckDriftResult;
+    try {
+      result = await runners.checkMigrationDrift({ databaseUrl: deps.databaseUrl });
+    } catch (error: unknown) {
+      return toFailedMigrationOutcome(error);
+    }
+    if (!result.drift.current) {
+      return { status: 'failed', kind: 'migration-failed', message: describeDriftRefusal(result.drift) };
+    }
+    deps.log(
+      'Startup migrations disabled by MIGRATE_ON_START=false; ' +
+        `drift check passed (${result.drift.appliedCount}/${result.drift.expectedCount} migrations applied).`,
+    );
+    return { status: 'current' };
+  }
+  let result: RunMigrationsResult;
+  try {
+    // Only the database URL is passed: the lock timeout keeps the
+    // migrate.ts default of 30 seconds and the migrations folder
+    // keeps the default resolution (MIGRATIONS_FOLDER honored).
+    result = await runners.runMigrations({ databaseUrl: deps.databaseUrl });
+  } catch (error: unknown) {
+    return toFailedMigrationOutcome(error);
+  }
+  if (result.appliedTags.length > 0) {
+    deps.log(`Startup migrations applied: ${result.appliedTags.join(', ')}.`);
+  } else {
+    deps.log('Startup migrations current: no pending migrations.');
+  }
+  return { status: 'migrated', appliedTags: result.appliedTags };
+}
+
 function safeLoadConfig(): ServerConfig {
   try {
     return loadConfig(process.env);
@@ -98,6 +278,22 @@ function safeLoadConfig(): ServerConfig {
 async function main(): Promise<void> {
   const config = safeLoadConfig();
   const version = readServerVersion();
+  const migration = await runStartupMigrationStep({
+    databaseUrl: config.databaseUrl,
+    migrateOnStart: isMigrateOnStartEnabled(),
+    log: (message) => {
+      console.log(message);
+    },
+  });
+  if (migration.status === 'failed') {
+    // Fail-fast (AD-104 E-3 Opsi A): exit before the pool, the auth
+    // context, buildApp, and listen exist, so no ready response can
+    // claim the server is up. The message was sanitized by the step:
+    // it names variables, migration files, the lock, or a machine
+    // error code, never a URL, SQL, or credential value.
+    console.error(`Failed to start: ${migration.message}`);
+    process.exit(1);
+  }
   const pool: HealthDbPool | null = createPool(config.databaseUrl, config.checkTimeoutMs);
   // Production auth context (V3-01): builds the Drizzle-backed store
   // lazily from DATABASE_URL and reads secret values from the
