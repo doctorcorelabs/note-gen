@@ -31,8 +31,13 @@
 // that bypasses the UI the user actually uses.
 //
 // Intended steps (replace the notYetLanded call when the feature lands):
-// 1. Seed the workspace (harness/seed.ts) and wire it into the app so
-//    the seed entries appear in the tree. Seed wiring has NOT landed.
+// 1. Seed the workspace through the backend fixture
+//    (harness/backend-fixture.ts: WORKSPACE_ROOT per test) so the
+//    seed entries appear in the tree. The fixture has no live run
+//    yet. NOTE: the trash routes are likewise unregistered on trunk
+//    (registerWorkspaceTrashRoutes has no caller in server/src),
+//    so the delete leg also waits on route wiring, not only on the
+//    context menu path.
 // 2. Open the context menu for one seeded file in the tree and choose
 //    Delete (selectors.deleteMenuItem, UNVERIFIED). If the shipped UI
 //    shows a confirmation dialog, confirm through its accessible
@@ -61,8 +66,9 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S2 @scaffold note CRUD delete: deleted note leaves the tree and the workspace', async () => {
   notYetLanded(
     'E2E-S2',
-    'seed workspace wiring plus the workspace delete/trash API plus a ' +
-      'verified context-menu delete path have not landed; no note can ' +
-      'be deleted through the web UI yet.',
+    'the workspace delete/trash API is not registered (trash ' +
+      'registrar has no caller in server/src), the context-menu ' +
+      'delete path is unverified, and the backend harness has no ' +
+      'live run yet; no note can be deleted through the web UI yet.',
   )
 })

@@ -17,7 +17,9 @@
 //    The fixture is CREATE_NOTE_FIXTURE at CREATE_NOTE_RELATIVE_PATH
 //    in harness/seed-data.ts; do not invent a second fixture.
 // 3. Wait for the autosave EFFECT, never a fixed sleep: poll the file
-//    on disk through the backend harness until its content equals the
+//    on disk through the backend fixture
+//    (backend.waitForWorkspaceFileContent in
+//    harness/backend-fixture.ts) until its content equals the
 //    fixture, with a timeout derived from the autosave debounce.
 //    There is no "Saved" indicator text in the editor UI (verified by
 //    grep: no save-status string exists), so disk polling is the only
@@ -35,8 +37,10 @@ import { notYetLanded } from './harness/todo'
 test('E2E-02 @smoke create and save: content survives reload byte-for-byte', async () => {
   notYetLanded(
     'E2E-02',
-    'workspace write API plus editor save wiring plus a backend ' +
-      'harness that can read the saved file from disk have not landed; ' +
-      'there is no way to create or persist a note through the web UI yet.',
+    'the backend harness (harness/backend-fixture.ts) has no live ' +
+      'run yet: the workspace write API is registered and the web ' +
+      'FsAdapter is wired, but no run has proved create plus autosave ' +
+      'through the browser, the visual editor selector is unverified, ' +
+      'and the rename input has no stable hook.',
   )
 })

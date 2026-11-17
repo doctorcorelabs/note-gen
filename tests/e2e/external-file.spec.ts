@@ -15,10 +15,21 @@
 //    harness/external-writer.ts writeFileAtomically: temp file plus
 //    rename).
 // 3. Wait for the file to appear in the tree by polling the treeitem
-//    locator (VERIFIED in source), with a timeout equal to
-//    WATCHER_MAX_LATENCY_MS. The watcher replacement in the web fork
-//    is WebSocket /api/workspace/events plus polling snapshot
-//    (AD-09); neither has landed.
+//    locator (VERIFIED in source). TIMEOUT WARNING: the polling
+//    snapshot interval defaults to 10000 ms while the tab is
+//    visible (fs.web.ts watchPollIntervalMs), far above the
+//    WATCHER_MAX_LATENCY_MS contract bound of 1000 ms, so a
+//    conversion against the polling path must derive its timeout
+//    from the polling interval actually in effect and record the
+//    divergence; do not reuse the 1000 ms bound blindly. The
+//    watcher replacement in the web fork is WebSocket
+//    /api/workspace/events plus polling snapshot (AD-09). The
+//    WebSocket route has NOT landed (no server registration, no
+//    websocket dependency in server/package.json); the polling
+//    snapshot fallback HAS landed (FsAdapter.watch in
+//    src/lib/platform/fs/fs.web.ts plus the watcher client,
+//    src/lib/web/watcher-client.ts, V3-09). The seed workspace
+//    comes from the backend fixture (harness/backend-fixture.ts).
 // 4. Click the file and assert its content is shown.
 // 5. Assert no duplicate tree entry appears after the event is applied.
 
@@ -29,8 +40,9 @@ import { notYetLanded } from './harness/todo'
 test('E2E-05 @smoke external file: new file appears in the tree and opens', async () => {
   notYetLanded(
     'E2E-05',
-    'seed workspace wiring plus the WebSocket/polling workspace event ' +
-      'channel (AD-09) have not landed; an externally written file cannot ' +
-      'reach the file tree yet.',
+    'the WebSocket workspace event channel (AD-09) has not landed ' +
+      'and the backend harness has no live run yet; the polling ' +
+      'snapshot fallback has landed, but no run has proved an ' +
+      'externally written file reaches the file tree yet.',
   )
 })

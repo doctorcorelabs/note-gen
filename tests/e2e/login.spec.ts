@@ -26,18 +26,27 @@
 // the page source (no auth catalog namespace yet). What still blocks
 // this spec is the harness side, not the UI: account seeding, the
 // backend test harness, and a path past the Cloudflare Access
-// perimeter (inventaris-selector-e2e.md 3.1/11.5). This spec keeps
+// perimeter (inventaris-selector-e2e.md 3.1/11.5). The harness code
+// has landed (harness/backend-fixture.ts: per-test backend, seed
+// account, loopback test-only Access bypass) but has no live run
+// yet. NOTE for the conversion author: the fixture establishes a
+// session via the API, so this spec needs an unauthenticated
+// browser variant (seed the account without logging the browser
+// in) or a logout first; driving the login UI from an already
+// authenticated context would prove nothing. This spec keeps
 // the @scaffold tag until the coordinator promotes it after a green
 // run proves the selectors.
 //
-// Intended steps (replace the notYetLanded call when the harness lands):
-// 1. Seed a test account through the backend test harness (account
-//    seeding has NOT landed). Credentials come from test-only
-//    environment values supplied by the harness (readTestCredentials
-//    in harness/auth.ts), never hardcoded in this spec and never a
-//    real operator credential. Seed one account without TOTP for the
-//    happy path; TOTP coverage is a separate variant, not part of
-//    this spec.
+// Intended steps (replace the notYetLanded call after the first live
+// harness run proves the fixture):
+// 1. Seed a test account through the backend fixture (account
+//    seeding is harness/backend-fixture.ts plus harness/auth.ts;
+//    credentials are generated per backend and live in memory
+//    only, never hardcoded in this spec and never a real operator
+//    credential; the environment-credential path in
+//    readTestCredentials stays for runs against an external base
+//    URL). Seed one account without TOTP for the happy path; TOTP
+//    coverage is a separate variant, not part of this spec.
 // 2. Open /login (LoginPage.gotoLogin) and wait for the sign-in form
 //    by observation: the title text appears only after the page's
 //    session probe finishes.
@@ -70,8 +79,10 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S1 @scaffold login: seeded account signs in and reaches the app', async () => {
   notYetLanded(
     'E2E-S1',
-    'account seeding plus the backend test harness plus a path ' +
-      'past the Cloudflare Access perimeter have not landed; no ' +
-      'seeded account can sign in through the shipped /login page yet.',
+    'the backend test harness has no live run yet (code landed, ' +
+      'including account seeding and the loopback test-only path ' +
+      'past the Cloudflare Access perimeter, unproven against ' +
+      'Postgres); no seeded account has signed in through the ' +
+      'shipped /login page yet.',
   )
 })
