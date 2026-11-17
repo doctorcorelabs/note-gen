@@ -26,7 +26,6 @@ import type { AgentEditPreview, AgentTraceEvent, ConfirmationRecord } from "@/li
 import type { AgentApprovalDecision, AgentSteeringPayload } from "@/lib/agent/types"
 import { serializeChatAttachments, type RuntimeChatAttachment } from '@/lib/chat-attachments'
 import { retainCompletedAgentTraceEvents } from '@/lib/agent/trace-retention'
-import { noteGenModelDisplayName } from '@/components/notegen-model-label'
 import { getAISettingsByModelId } from '@/lib/ai/utils'
 import { applyChatReasoningOverride } from '@/lib/ai/chat-reasoning'
 import type { AiConfig } from '@/app/core/setting/config'
@@ -1218,7 +1217,7 @@ Answer the user question based on this quoted content.
       )
       const modelSnapshot = {
         id: modelId,
-        name: noteGenModelDisplayName(aiConfig?.model || modelId, aiConfig?.key === 'note-gen-free'),
+        name: aiConfig?.model || modelId,
         config: aiConfig,
       }
       setAgentState({

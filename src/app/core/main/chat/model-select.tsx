@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button"
 import { ChatToolItem } from "./chat-tool-item"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
-import { NoteGenModelLabel, noteGenModelDisplayName } from '@/components/notegen-model-label'
 import {
   changePrimaryChatModel,
   collectGroupedChatModels,
@@ -45,8 +44,8 @@ export function ModelSelect({ display = 'icon', disabled = false }: ModelSelectP
   async function modelSelectChangeHandler(modelId: string) {
     const nextModel = groupedModels.find(item => item.model.id === modelId)
     const previousModel = groupedModels.find(item => item.model.id === primaryModel)
-    const nextName = noteGenModelDisplayName(nextModel?.model.model || modelId, nextModel?.configKey === 'note-gen-free')
-    const previousName = noteGenModelDisplayName(previousModel?.model.model || primaryModel, previousModel?.configKey === 'note-gen-free')
+    const nextName = nextModel?.model.model || modelId
+    const previousName = previousModel?.model.model || primaryModel
     const result = await changePrimaryChatModel({
       modelId,
       modelName: nextName,
@@ -92,7 +91,7 @@ export function ModelSelect({ display = 'icon', disabled = false }: ModelSelectP
     && agentState.activeModelId !== primaryModel
   )
   const selectedModelLabel = selectedModel?.model.model || t('noModel')
-  const selectedDisplayName = noteGenModelDisplayName(selectedModelLabel, selectedModel?.configKey === 'note-gen-free')
+  const selectedDisplayName = selectedModelLabel
   const displayedModelLabel = appliesNextTurn
     ? `${agentState.activeModelName || agentState.activeModelId} → ${selectedDisplayName}`
     : selectedDisplayName
@@ -165,7 +164,7 @@ export function ModelSelect({ display = 'icon', disabled = false }: ModelSelectP
                     }}
                   >
                     <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-medium"><NoteGenModelLabel model={item.model.model} builtin={item.configKey === 'note-gen-free'} showFree /></span>
+                      <span className="truncate font-medium">{item.model.model}</span>
                     </div>
                   </CommandItem>
                 ))}

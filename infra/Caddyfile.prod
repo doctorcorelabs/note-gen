@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# Caddyfile PRODUKSI: routing DEP-14 + header pengerasan gelombang 4.
+#
+# Status: MASUKAN PENGERASAN untuk adopsi gelombang 5, BELUM LIVE.
+# Routing di bawah ini disalin verbatim dari draf DEP-14
+# (fase1/deploy-prep/dep-14/Caddyfile); satu-satunya penambahan
+# terhadap DEP-14 adalah blok header di dalam handle fallback.
+# Berkas ini dipasangkan dengan infra/docker-compose.deploy.yml,
+# yang MEMUAT service `web`, sehingga prasyarat T1 DEP-14 (R2-2)
+# terpenuhi secara struktural untuk pasangan ini (opsi T1-a).
+# Jangan deploy sebelum `caddy validate` lulus dan T16 lewat
+# proksi lulus; gelombang 5 yang mengadopsi berkas ini ke rakitan
+# deploy dan menjalankan validasi itu.
+#
+# CSP: Tahap 1 Report-Only (desain-h4-csp seksi 2.1). Nilai
+# penegakan (seksi 2.2) BELUM aktif dan HANYA berlaku sesudah K-12
+# diputus dari bukti log Report-Only (0 pelanggaran tak dijelaskan
+# + keputusan koordinator tercatat). Jangan mengganti nama header
+# menjadi Content-Security-Policy tanpa keputusan K-12 itu.
+# Kandidat penegakan dicatat di komentar di bawah blok header
+# sebagai referensi, bukan sebagai konfigurasi aktif.
+#
+# Cakupan header: blok fallback ke web:80 SAJA (respons HTML/statis).
+# /api/health, /api/health/*, dan /api/* TIDAK membawa header CSP
+# dari Caddy; API memiliki headernya sendiri dan endpoint laporan
+# secara eksplisit tidak menetapkan header CSP apa pun. Tepat satu
+# header CSP per respons HTML; tidak ada <meta> CSP untuk halaman
+# utama (desain-h4-csp seksi 2.5).
+#
+# Asumsi skema: `upgrade-insecure-requests` dipertahankan karena
+# skema yang dihadapi browser di balik perimeter TLS adalah HTTPS.
+# Untuk deployment localhost non-HTTPS, hapus direktif itu
+# (desain-h4-csp seksi 2.3); jangan mengambil bukti K-12 dari
+# deployment http:// publik.
+#
+# Nilai pendamping yang MASIH BUTUH KONFIRMASI gelombang 5
+# (desain-h4-csp seksi 2.4): nilai Strict-Transport-Security di
+# bawah adalah USULAN (max-age 1 tahun, tanpa includeSubDomains
+# dan tanpa preload), dan daftar Permissions-Policy di bawah
+# adalah USULAN (kamera, mikrofon, geolokasi mati). Keduanya
+# ditandai USULAN sampai gelombang 5 mengonfirmasinya bersama
+# keputusan deployment. HSTS hanya efektif lewat HTTPS; Caddy
+# ini mendengarkan :80 di balik perimeter TLS dan header ini
+# diteruskan perimeter ke browser.
+#
+# Routing, bind, alias, dan larangan (tanpa respond/rewrite/
+# handle_errors/filter metode) mengikuti DEP-14 apa adanya; lihat
+# komentar DEP-14 untuk rasional tiap blok. Satu pintu: /api/health
+# dan /api/health/* dan /api/* ke api, sisanya ke web.
+
+:80 {
+
+	header /api/health Cache-Control "no-store"
+	header /api/health/* Cache-Control "no-store"
+
+	handle /api/health {
+		reverse_proxy api:3001
+	}
+
+	handle /api/health/* {
+		reverse_proxy api:3001
+	}
+
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests; report-uri /api/csp-reports; report-to csp-endpoint"
+		header Reporting-Endpoints `csp-endpoint="/api/csp-reports"`
+		header X-Content-Type-Options "nosniff"
+		header Referrer-Policy "strict-origin-when-cross-origin"
+		header Cross-Origin-Opener-Policy "same-origin"
+		header Cross-Origin-Resource-Policy "same-origin"
+		header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		header Strict-Transport-Security "max-age=31536000"
+		reverse_proxy web:80
+	}
+}
+
+# Kandidat penegakan Tahap 2 (TIDAK AKTIF; gated K-12). Satu-satunya
+# selisih dari nilai Report-Only di atas adalah style-src dengan
+# 'unsafe-inline' BERSYARAT (dipertahankan hanya bila log Tahap 1
+# membuktikan pelanggaran atribut style dan tidak ada refactor yang
+# wajar; bila tidak terbukti, penegakan memakai style-src 'self').
+# Saat K-12 diputus, ganti nama header di blok handle di atas menjadi
+# Content-Security-Policy dan pakai string ini (atau varian K-12):
+# default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests; report-uri /api/csp-reports; report-to csp-endpoint

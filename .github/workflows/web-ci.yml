@@ -6,7 +6,7 @@
 # design F10 section 6 and F12 section 6).
 #
 # Gates: typecheck, lint, registration-drift, unit, contract, build,
-# e2e-smoke, secret-scan, forbidden-strings.
+# e2e-smoke, secret-scan, forbidden-strings, hardening-grep.
 # Every job must be green before merge (F12 section 6.2). There is no
 # emergency merge without a written reason in the PR.
 #
@@ -33,10 +33,15 @@
 #
 # The secret-scan job uses gitleaks when the runner provides it and
 # the grep backstop in scripts/secret-scan.sh otherwise. The backstop
-# carries one documented baseline exception for an upstream shared
-# key; see the script header. The gitleaks path is untested locally
-# (no gitleaks binary in the authoring environment) and may flag that
-# same baseline key until the AD-15 removal lands.
+# formerly carried one documented baseline exception for an upstream
+# shared key; the AD-15 removal (gelombang 4) retired the exception
+# together with the key, and the scan now treats every file the same.
+#
+# The hardening-grep job runs scripts/hardening-grep.sh: the AD-15
+# regression gate over deleted paths, removed identifiers, and the two
+# sponsor-gateway purge predicates. The build job additionally runs the
+# script in --bundle mode over the static export, proving no gateway
+# request URL or Config Center identifier reaches the shipped bundle.
 #
 # Not in this framework: Docker image publication (AD-18, deploy work),
 # the conditional Rust job (F12 section 6.1 job 8), and the license
@@ -200,6 +205,12 @@ jobs:
           test -f out/index.html
           test -f public/plugin-runtime.js
           test -f public/markdown-lexer.js
+      # AD-15 bundle proof: no gateway request URL or Config Center
+      # identifier in the shipped static export. The purge predicates
+      # keep the bare gateway hostname in the bundle by design; the
+      # script checks the full URL form only. See scripts/hardening-grep.sh.
+      - name: Verify no removed identifiers in production bundle
+        run: bash scripts/hardening-grep.sh --bundle out
       - name: Build server
         run: pnpm --dir server run build
       - name: Verify server build artifact
@@ -261,3 +272,15 @@ jobs:
       # verified locally: bash scripts/check-forbidden-strings.sh
       - name: Check for forbidden terminal literals in src/
         run: bash scripts/check-forbidden-strings.sh
+
+  hardening-grep:
+    name: Hardening regression grep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+      # No dependency install: the gate uses only git grep and shell
+      # builtins, like the secret-scan backstop.
+      - name: Check AD-15 removal regressions
+        run: bash scripts/hardening-grep.sh

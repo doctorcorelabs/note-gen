@@ -3843,31 +3843,6 @@
       "voice": "Voice Type",
       "voiceDesc": "Specify the voice type for audio models, such as 'alloy', 'echo', 'fable', etc.",
       "voicePlaceholder": "Enter voice type, e.g.: alloy",
-      "defaultModels": {
-        "title": "NoteGen",
-        "desc": "NoteGen provides free AI model services supported by SiliconFlow and AIHubMix, enabling basic functionality without configuration.",
-        "chatModel": {
-          "name": "NoteGen AI",
-          "type": "Chat Model",
-          "desc": "Ready to use, no setup required"
-        },
-        "embeddingModel": {
-          "name": "BAAI/bge-m3",
-          "type": "Embedding Model",
-          "desc": "Used for text vectorization and semantic search"
-        },
-        "visionModel": {
-          "name": "OpenGVLab/InternVL2-8B",
-          "type": "Vision Model",
-          "desc": "Supports image understanding and visual Q&A"
-        },
-        "completionModel": {
-          "name": "Fast Completion",
-          "type": "Completion Model",
-          "desc": "AI inline completion for Markdown editor, similar to GitHub Copilot, quickly generates continuation content"
-        },
-        "poweredBy": "Powered by SiliconFlow"
-      },
       "connectionFailed": "Connection Failed",
       "enableStream": "Stream Response",
       "enableStreamDesc": "Enable streaming response to display generated content in real-time, but some models may not support this feature.",
@@ -3908,7 +3883,13 @@
       "batchEmbeddingCountMismatch": "Batch embedding result count does not match",
       "rerankResultFormatInvalid": "Rerank result format is invalid.",
       "rerankResultNoValidScores": "The rerank result has no valid scores",
-      "embeddingIncompleteResult": "The embedding result is incomplete"
+      "embeddingIncompleteResult": "The embedding result is incomplete",
+      "noProvider": {
+        "title": "No AI provider configured",
+        "description": "Add a provider to enable AI features. No provider is configured by default.",
+        "localHint": "Ollama and LM Studio run on the server (local on server) when the deployment enables them. Models on your own laptop are not reachable from a remote deployment without a bridge."
+      },
+      "localOnServer": "local on server"
     },
     "file": {
       "title": "File Settings",

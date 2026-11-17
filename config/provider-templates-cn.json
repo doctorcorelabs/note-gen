@@ -2,19 +2,17 @@
   "providers": [
     {
       "key": "siliconflow",
-      "sponsored": true,
       "title": "SiliconFlow",
       "baseURL": "https://api.siliconflow.cn/v1",
-      "apiKeyUrl": "https://cloud.siliconflow.cn/i/O2ciJeZw",
+      "apiKeyUrl": "https://cloud.siliconflow.cn/",
       "icon": "https://s2.loli.net/2025/09/09/D8Al2raSvewN5xn.jpg",
       "enabled": true
     },
     {
       "key": "aihubmix",
-      "sponsored": true,
       "title": "AIHubMix",
       "baseURL": "https://aihubmix.com/v1",
-      "apiKeyUrl": "https://aihubmix.com/?aff=6rfO",
+      "apiKeyUrl": "https://aihubmix.com/",
       "icon": "https://aihubmix.com/favicon.ico?v=2",
       "enabled": true
     },
@@ -22,25 +20,22 @@
       "key": "packycode",
       "title": "PackyCode",
       "baseURL": "https://www.packyapi.ai/v1",
-      "apiKeyUrl": "https://www.packyapi.ai/register?aff=NqBq",
+      "apiKeyUrl": "https://www.packyapi.ai/register",
       "icon": "https://files.seeusercontent.com/2026/09/14/qWi0/pasted-image-1789372842907.webp",
-      "promotion": "2折",
       "enabled": true
     },
     {
       "key": "infistar",
       "title": "无限星河",
       "baseURL": "https://infistar.cc/v1",
-      "apiKeyUrl": "https://www.infistar.cc/register?aff=G55F2Z5Q&ref_source=link",
+      "apiKeyUrl": "https://www.infistar.cc/register",
       "icon": "https://infistar.cc/favicon.ico",
-      "promotion": "送$10",
       "enabled": true
     },
     {
       "key": "qiuqiutoken",
       "title": "球球 Token",
       "baseURL": "https://api.qiuqiutoken.net/v1",
-      "apiKeyUrl": "https://go.qiuqiutoken.net/ABK",
       "icon": "https://files.seeusercontent.com/2026/11/10/U3cy/qiuqiutoken-logo-transparent.png",
       "enabled": true
     },
@@ -48,7 +43,7 @@
       "key": "shengsuanyun",
       "title": "胜算云",
       "baseURL": "https://router.shengsuanyun.com/api/v1",
-      "apiKeyUrl": "https://www.shengsuanyun.com/?from=CH_YZ0Q43T6",
+      "apiKeyUrl": "https://www.shengsuanyun.com/",
       "icon": "https://s2.loli.net/2025/09/15/4qjswKyaRfZ8OxW.png",
       "enabled": true
     },
@@ -56,7 +51,7 @@
       "key": "bailian",
       "title": "阿里云百炼",
       "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "apiKeyUrl": "https://bailian.console.aliyun.com/?apiKey=1",
+      "apiKeyUrl": "https://bailian.console.aliyun.com/",
       "icon": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.94.0/icons/bailian-color.svg",
       "enabled": true
     },
@@ -80,7 +75,7 @@
       "key": "minimax",
       "title": "MiniMax",
       "baseURL": "https://api.minimaxi.com/v1",
-      "apiKeyUrl": "https://platform.minimaxi.com/subscribe/token-plan?code=1CnznNlJHf&source=link",
+      "apiKeyUrl": "https://platform.minimaxi.com/subscribe/token-plan",
       "icon": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.94.0/icons/minimax-color.svg",
       "enabled": true
     },
@@ -96,7 +91,7 @@
       "key": "qianfan",
       "title": "百度千帆",
       "baseURL": "https://qianfan.baidubce.com/v2",
-      "apiKeyUrl": "https://console.bce.baidu.com/iam/#/iam/apikey/list",
+      "apiKeyUrl": "https://console.bce.baidu.com/iam/",
       "icon": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.94.0/icons/baiducloud-color.svg",
       "enabled": true
     },
@@ -128,7 +123,7 @@
       "key": "huaweicloud",
       "title": "华为云 MaaS",
       "baseURL": "https://api.modelarts-maas.com/openai/v1",
-      "apiKeyUrl": "https://console.huaweicloud.com/modelarts/?region=cn-north-4#/maas/overview",
+      "apiKeyUrl": "https://console.huaweicloud.com/modelarts/",
       "icon": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.94.0/icons/huaweicloud-color.svg",
       "enabled": true
     },
@@ -190,7 +185,6 @@
       "key": "qiniu",
       "title": "七牛云",
       "baseURL": "https://openai.qiniu.com/v1",
-      "apiKeyUrl": "https://s.qiniu.com/v6Bnuu",
       "icon": "https://s2.loli.net/2025/09/15/ALjNPveWrtmsfOY.png",
       "enabled": true
     },
@@ -198,7 +192,6 @@
       "key": "302",
       "title": "302.AI",
       "baseURL": "https://api.302.ai/v1",
-      "apiKeyUrl": "https://share.302.ai/jfFrIP",
       "icon": "https://s2.loli.net/2025/06/26/4CJOQ2U9ibvoGpR.png",
       "enabled": true
     },
@@ -214,7 +207,7 @@
       "key": "ucloud",
       "title": "优云智算",
       "baseURL": "https://api.modelverse.cn/v1",
-      "apiKeyUrl": "https://www.compshare.cn/coding-plan?ytag=GPU_YY_JL_git_note-gen",
+      "apiKeyUrl": "https://www.compshare.cn/coding-plan",
       "icon": "https://files.seeusercontent.com/2026/03/26/L5pg/logo-compshare_.png",
       "enabled": true
     }

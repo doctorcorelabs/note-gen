@@ -4,13 +4,11 @@ import { create } from 'zustand'
 import { AiConfig } from '@/app/core/setting/config'
 import { GitlabInstanceType } from '@/lib/sync/gitlab.types'
 import { GiteaInstanceType } from '@/lib/sync/gitea.types'
-import { noteGenDefaultModels, noteGenModelKeys } from '@/app/model-config'
 import { CustomThemeColors } from '@/types/theme'
 import { applyThemeColors, removeThemeColors } from '@/lib/theme-utils'
 import { getNormalizedImageHosting } from '@/lib/image-hosting-config'
 import { normalizeSpeechMode } from '@/lib/speech/preferences'
 import type { SpeechMode } from '@/lib/speech/types'
-import { applyNoteGenDefaultConfig, loadNoteGenDefaultConfig } from '@/lib/ai/notegen-default-models-runtime'
 import { excludeBuiltInOpenAIProviders, isMainlandChinaAppStore } from '@/lib/ai/storefront-policy'
 import { enqueueAutoDataSync, isAutoDataSyncApplyingRemote } from '@/lib/sync/auto-data-sync-queue'
 import type { InitialDataSyncStrategy } from '@/lib/sync/auto-data-sync-queue'
@@ -583,6 +581,32 @@ async function persistChangedSettings(
   }
 }
 
+// Sponsor-gateway purge (AD-15). A stored config is a sponsor config when it
+// points at the shared gateway host, carries the free-provider template key,
+// or names one of the three shared gateway model ids. Anything matching is
+// removed from the persisted list on load and on snapshot restore. This
+// predicate is duplicated verbatim in src/lib/sync/settings-snapshot.ts; keep both
+// copies in sync. The hostname literal below is a purge predicate only: it
+// is never used to build a request URL.
+const SPONSOR_GATEWAY_HOST = 'api.notegen.top'
+const SPONSOR_GATEWAY_MODEL_IDS = new Set([
+  'note-gen-chat',
+  'note-gen-embedding',
+  'note-gen-stt',
+])
+
+export function isSponsorGatewayConfig(config: AiConfig): boolean {
+  let hostname = ''
+  try {
+    hostname = new URL(config.baseURL ?? '').hostname.toLowerCase()
+  } catch {
+    hostname = ''
+  }
+  if (hostname === SPONSOR_GATEWAY_HOST) return true
+  if (config.templateKey === 'note-gen-free') return true
+  if (config.models?.some((model) => SPONSOR_GATEWAY_MODEL_IDS.has(model.id))) return true
+  return false
+}
 
 const useSettingStore = create<SettingState>((set, get) => ({
   initSettingData: (options) => withSettingsHydration(async () => {
@@ -788,67 +812,42 @@ const useSettingStore = create<SettingState>((set, get) => ({
       set({ useImageRepo: savedUseImageRepo })
     }
 
-    // 初始化默认的NoteGen模型配置
+    // Remove sponsor gateway configs left by earlier builds (AD-15). No
+    // provider is injected here: an empty list stays empty until the user
+    // adds a provider.
     const storedAiModelList = (await store.get('aiModelList') as AiConfig[]) || []
     const existingAiModelList = await isMainlandChinaAppStore()
       ? excludeBuiltInOpenAIProviders(storedAiModelList)
       : storedAiModelList
-    const hasNoteGenModels = existingAiModelList.some(config => 
-      config.key === 'note-gen-free' || 
-      noteGenModelKeys.includes(config.key) ||
-      config.models?.some(model => noteGenModelKeys.includes(model.id))
-    )
-    
-    const noteGenDefaultConfig = await loadNoteGenDefaultConfig(noteGenDefaultModels[0])
-    const finalAiModelList = applyNoteGenDefaultConfig(existingAiModelList, noteGenDefaultConfig)
-    if (JSON.stringify(finalAiModelList) !== JSON.stringify(existingAiModelList)) {
-      await store.set('aiModelList', finalAiModelList)
-      set({ aiModelList: finalAiModelList })
+    const purgedAiModelList = existingAiModelList.filter((config) => !isSponsorGatewayConfig(config))
+    if (JSON.stringify(purgedAiModelList) !== JSON.stringify(existingAiModelList)) {
+      await store.set('aiModelList', purgedAiModelList)
     }
+    set({ aiModelList: purgedAiModelList })
 
-    // 检查是否设置了主要模型，如果没有且存在note-gen-chat，则设置为主要模型
+    // Clear a stored primary model that points at the removed sponsor gateway.
     const currentPrimaryModel = await store.get('primaryModel') as string
-    const hasNoteGenChat = finalAiModelList.some(config => 
-      config.models?.some(model => model.id === 'note-gen-chat') || config.key === 'note-gen-chat'
-    )
-    
-    if (!currentPrimaryModel && hasNoteGenChat) {
-      const noteGenFreeConfig = finalAiModelList.find(config => config.key === 'note-gen-free')
-      if (noteGenFreeConfig?.models?.some(model => model.id === 'note-gen-chat')) {
-        await store.set('primaryModel', 'note-gen-chat')
-        set({ primaryModel: 'note-gen-chat' })
-      } else {
-        await store.set('primaryModel', 'note-gen-chat')
-        set({ primaryModel: 'note-gen-chat' })
-      }
+    if (currentPrimaryModel && (currentPrimaryModel === 'note-gen-chat' || currentPrimaryModel.startsWith('note-gen-free-') || currentPrimaryModel.startsWith('note-gen-limited'))) {
+      await store.set('primaryModel', '')
+      set({ primaryModel: '' })
     }
 
-    // 检查是否设置了嵌入模型，如果没有且存在note-gen-embedding，则设置为默认嵌入模型
+    // Clear a stored embedding model that points at the removed sponsor gateway.
     const currentEmbeddingModel = await store.get('embeddingModel') as string
-    const hasNoteGenEmbedding = finalAiModelList.some(config => 
-      config.models?.some(model => model.id === 'note-gen-embedding') || config.key === 'note-gen-embedding'
-    )
-    
-    if (!currentEmbeddingModel && hasNoteGenEmbedding) {
-      const noteGenFreeConfig = finalAiModelList.find(config => config.key === 'note-gen-free')
-      if (noteGenFreeConfig?.models?.some(model => model.id === 'note-gen-embedding')) {
-        await store.set('embeddingModel', 'note-gen-embedding')
-        set({ embeddingModel: 'note-gen-embedding' })
-      } else {
-        await store.set('embeddingModel', 'note-gen-embedding')
-        set({ embeddingModel: 'note-gen-embedding' })
-      }
+    if (currentEmbeddingModel && (currentEmbeddingModel === 'note-gen-embedding' || currentEmbeddingModel.startsWith('note-gen-free-') || currentEmbeddingModel.startsWith('note-gen-limited'))) {
+      await store.set('embeddingModel', '')
+      set({ embeddingModel: '' })
     }
 
-    // 检查是否设置了TTS模型，如果没有且存在note-gen-tts，则设置为默认TTS模型
+    // If no TTS model is set, use the first available TTS model from the user's own providers.
     const currentAudioModel = await store.get('audioModel') as string
-    const hasNoteGenTTS = finalAiModelList.some(config => 
+    const hasTtsModel = purgedAiModelList.some(config => 
       config.models?.some(model => model.modelType === 'tts') || config.modelType === 'tts'
     )
     
-    if (!currentAudioModel && hasNoteGenTTS) {
+    if (!currentAudioModel && hasTtsModel) {
       // 查找第一个可用的TTS模型
-      for (const config of finalAiModelList) {
+      for (const config of purgedAiModelList) {
         if (config.models && config.models.length > 0) {
           const ttsModel = config.models.find(model => model.modelType === 'tts')
           if (ttsModel) {
@@ -864,15 +863,15 @@ const useSettingStore = create<SettingState>((set, get) => ({
       }
     }
 
-    // 检查是否设置了STT模型，如果没有且存在note-gen-stt，则设置为默认STT模型
+    // If no STT model is set, use the first available STT model from the user's own providers.
     const currentSttModel = await store.get('sttModel') as string
-    const hasNoteGenSTT = finalAiModelList.some(config => 
+    const hasSttModel = purgedAiModelList.some(config => 
       config.models?.some(model => model.modelType === 'stt') || config.modelType === 'stt'
     )
     
-    if (!currentSttModel && hasNoteGenSTT) {
+    if (!currentSttModel && hasSttModel) {
       // 查找第一个可用的STT模型
-      for (const config of finalAiModelList) {
+      for (const config of purgedAiModelList) {
         if (config.models && config.models.length > 0) {
           const sttModel = config.models.find(model => model.modelType === 'stt')
           if (sttModel) {
@@ -905,36 +904,30 @@ const useSettingStore = create<SettingState>((set, get) => ({
       const currentModel = await store.get(storeKey) as string
       if (!currentModel) {
         // 查找第一个可用的聊天模型作为默认值
-        const noteGenFreeConfig = finalAiModelList.find(config => config.key === 'note-gen-free')
-        if (noteGenFreeConfig?.models?.some(model => model.id === 'note-gen-chat' && model.modelType === modelType)) {
-          await store.set(storeKey, 'note-gen-chat')
-          set({ [storeKey]: 'note-gen-chat' })
-        } else {
-          // 查找其他可用的聊天模型
-          for (const config of finalAiModelList) {
-            if (config.models && config.models.length > 0) {
-              const chatModel = config.models.find(model => model.modelType === modelType)
-              if (chatModel) {
-                await store.set(storeKey, `${config.key}-${chatModel.id}`)
-                set({ [storeKey]: `${config.key}-${chatModel.id}` })
-                break
-              }
-            } else if (config.modelType === modelType || !config.modelType) {
-              await store.set(storeKey, config.key)
-              set({ [storeKey]: config.key })
+        // Use the first available model of the requested type from the user's own providers.
+        for (const config of purgedAiModelList) {
+          if (config.models && config.models.length > 0) {
+            const chatModel = config.models.find(model => model.modelType === modelType)
+            if (chatModel) {
+              await store.set(storeKey, `${config.key}-${chatModel.id}`)
+              set({ [storeKey]: `${config.key}-${chatModel.id}` })
               break
             }
+          } else if (config.modelType === modelType || !config.modelType) {
+            await store.set(storeKey, config.key)
+            set({ [storeKey]: config.key })
+            break
           }
         }
       }
     }
 
-    // Migrate previous built-in chat choices to the single NoteGen chat entry.
+    // Clear legacy model selections that pointed at the removed sponsor gateway.
     for (const field of ['primaryModel', 'editorModel', 'placeholderModel', 'imageMethodModel', 'completionModel', 'markDescModel', 'commitModel']) {
       const selected = await store.get<string>(field)
-      if (selected && (selected.startsWith('note-gen-limited') || selected.startsWith('note-gen-free-note-gen-limited') || selected === 'note-gen-free-chat' || selected === 'note-gen-free-note-gen-free-chat' || selected === 'note-gen-vlm' || selected === 'note-gen-free-note-gen-vlm')) {
-        await store.set(field, 'note-gen-chat')
-        set({ [field]: 'note-gen-chat' })
+      if (selected && (selected.startsWith('note-gen-limited') || selected.startsWith('note-gen-free-') || selected === 'note-gen-chat' || selected === 'note-gen-embedding' || selected === 'note-gen-vlm')) {
+        await store.set(field, '')
+        set({ [field]: '' })
       }
     }
     await store.save()
@@ -957,8 +950,8 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
       if (typeof value === 'function') return
       if (res !== undefined && key !== 'version') {
-        if (key === 'aiModelList' && hasNoteGenModels) {
-          // 如果已经有NoteGen模型，使用存储的配置
+        if (key === 'aiModelList') {
+          // Use the stored configuration (sponsor entries were purged above).
           hydratedSettings[key] = res as AiConfig[]
         } else if (key === 'recordToolbarConfig') {
           // 确保包含所有工具，如果缺少新工具则自动添加

@@ -21,15 +21,6 @@
 #
 # Exit code: 0 when clean, 1 when any finding is reported.
 #
-# Known baseline exception (narrow, documented, must not be extended
-# without a coordinator decision): src/app/model-config.ts holds one
-# upstream shared API key, present since the upstream base commit and
-# already public in the upstream repository. Its removal belongs to the
-# AD-15 shared-key removal work, not to this scan. The sk- pattern check
-# below skips exactly that one file and prints a visible warning when it
-# does so. Delete the exception when the key is removed from the fork.
-# Never use that key value; treat it as compromised.
-#
 # Usage: bash scripts/secret-scan.sh   (from anywhere inside the repo)
 
 set -eu
@@ -41,7 +32,6 @@ ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
 cd "$ROOT"
 
 findings=0
-exception_hit=0
 
 report() {
   # $1 = label, $2 = file path. Values are never printed.
@@ -91,16 +81,12 @@ scan_pattern "token-prefix" 'ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pa
 scan_pattern "private-key" '-----BEGIN [A-Z ]*PRIVATE KEY-----'
 scan_pattern "database-url" 'postgres(ql)?://[^:/<>[:space:]]+:[^@<>[:space:]]+@'
 
-# API key pattern with the single documented baseline exception.
+# API key pattern. No exceptions: every tracked file is treated the same.
 git grep -I -l -E -e 'sk-[A-Za-z0-9]{20,}' -- ':!pnpm-lock.yaml' ':!server/pnpm-lock.yaml' ':!scripts/secret-scan.sh' > "$tmp_list" || true
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   case "$f" in
     *.env.example) continue ;;
-    src/app/model-config.ts)
-      exception_hit=1
-      continue
-      ;;
   esac
   report "api-key" "$f"
 done < "$tmp_list"
@@ -138,10 +124,6 @@ for f in $(git ls-files '*.env.example'); do
     report "example-without-placeholder" "$f"
   fi
 done
-
-if [ "$exception_hit" -eq 1 ]; then
-  echo "WARNING: known baseline exception applied to src/app/model-config.ts (upstream shared key, AD-15 removal pending). Delete the exception when the key is removed." >&2
-fi
 
 if [ "$findings" -gt 0 ]; then
   echo "secret-scan: $findings finding(s). Do not merge. If a real secret leaked, rotate it immediately; deleting the file in a later commit does not clean git history." >&2

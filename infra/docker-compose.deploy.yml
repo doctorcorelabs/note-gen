@@ -1,0 +1,288 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+# See LICENSE and FORK.md.
+#
+# Compose DEPLOY: topologi DEP-13 + autentikasi SCRAM untuk Postgres
+# (pengerasan gelombang 4, W4-HARDEN, 2026-11-17).
+#
+# Status: MASUKAN PENGERASAN untuk adopsi gelombang 5, BELUM LIVE.
+# Berkas ini disalin dari draf DEP-13
+# (fase1/deploy-prep/dep-13/docker-compose.yml) dengan dua delta
+# saja, keduanya tercatat di bawah; seluruh topologi, pin image,
+# batas sumber daya, dan komentar DEP-13 dipertahankan verbatim.
+# Delta terhadap DEP-13:
+# 1. Caddy me-mount ./Caddyfile.prod (Caddyfile produksi gelombang 4
+#    dengan header Report-Only), bukan ./Caddyfile draf smoke.
+# 2. Postgres memakai autentikasi SCRAM-SHA-256 lewat berkas HBA
+#    khusus (infra/postgres/pg_hba.conf, di-mount read-only) dan
+#    command eksplisit password_encryption=scram-sha-256. Tanpa
+#    trust di jalur deploy mana pun. Lihat komentar service
+#    postgres dan infra/docs/runbook-deploy.md.
+#
+# Lokasi remote yang direncanakan: /data/home/note-gen-web/ (F10 bagian 4;
+# nama final ditetapkan saat setup, watchdog A-04). Direktori remote bukan
+# git repo; berkas ini disalin ke sana bersama Caddyfile.prod,
+# postgres/pg_hba.conf, dan berkas env (rakitan deploy).
+# Berkas env (./api.env, ./postgres.env) adalah berkas lokal rakitan
+# yang TIDAK PERNAH di-commit; jalankan `docker compose config` hanya
+# dengan berkas env scratch di luar repo. Kontrak variabel: postgres.env
+# memuat POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB, dan DATABASE_URL
+# di api.env harus memakai kredensial yang sama (verifikasi di runbook).
+#
+# Keputusan terbuka yang diwarisi DEP-13 (bukan diputus berkas ini):
+# K-15 (image GHCR web/api masih PLACEHOLDER, stack belum dapat di-up),
+# K-03 (peringatan pgvector atas postgres:17-alpine, jangan diam-diam
+# ganti image), G2/K-13 (tanpa service worker, disengaja), K-06
+# (bind mount workspace), D-W4/D-W5 (konflik healthcheck), K-05
+# (port host 3200 kandidat). Lihat README-keputusan-revisi.md DEP-13.
+#
+# Aturan yang ditegakkan berkas ini (diwarisi DEP-01/DEP-13):
+# - Satu-satunya port yang dipublikasi ke host adalah 127.0.0.1:3200 (Caddy).
+#   Service lain hanya expose internal, tanpa ports.
+# - Secret hanya lewat env_file. Berkas ini tidak memuat nilai secret.
+# - Semua service memakai restart unless-stopped.
+
+name: notegen
+
+services:
+  caddy:
+    # Satu pintu (AD-18): /api/* ke api, sisanya ke web. Pada revisi ini
+    # service web ADA, sehingga rute fallback Caddyfile punya upstream
+    # (T1 tertutup secara struktural; eksekusi tetap menunggu digest K-15).
+    # Caddy di dalam container mendengarkan :80; bind ke 127.0.0.1:3200
+    # dilakukan pemetaan ports di bawah (F10 bagian 4.1).
+    # Tanpa env_file: Caddy tidak memakai secret (F10 bagian 4.3).
+    # Tanpa healthcheck, disengaja: liveness Caddy dinilai lewat probe proksi
+    # (T16) dan perbandingan probe lewat Caddy vs langsung ke API, agar
+    # gagalnya API tidak dibaca sebagai gagalnya Caddy (V1-07 bagian 4.1;
+    # spesifikasi-watchdog.md bagian 2.2). F10 menyerahkan bentuk final
+    # healthcheck Caddy ke implementasi; draf ini mempertahankan keputusan dev.
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3200:80"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+    mem_limit: "256m"
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - notegen
+
+  web:
+    # File statis hasil static export Next.js (output: export, AD-22).
+    # Image GHCR by digest pada jalur utama (F10 bagian 6.2/7.2,
+    # rencana-t16-deploy.md bagian 1.2/3.3); tag mutable (dev/main/latest)
+    # dilarang untuk produksi. Nilai image di bawah ini adalah
+    # PLACEHOLDER: belum ada image GHCR (job docker/publish CI belum
+    # ada, K-15; tidak ada Dockerfile dan tidak ada rujukan ghcr.io di
+    # trunk web HEAD 0699c620) sehingga digest belum ada. Ganti dengan
+    # digest rilis nyata sebelum `up` apa pun. Nama image dan owner
+    # adalah USULAN, sejajar dengan usulan nama image api DEP-01.
+    # Tanpa env_file: penyajian statis tidak memakai secret (preseden dev).
+    # Tanpa volume: static export TERBAKAR di dalam image GHCR produksi
+    # (rencana-t16-deploy.md bagian 1.2/3.3). Bind mount ../out di compose
+    # dev adalah pola DEV ONLY dan TIDAK disalin ke produksi.
+    # Tanpa ports: hanya internal 80, dijangkau Caddy sebagai web:80.
+    # Healthcheck: bentuk wget disalin dari compose dev (V1-07). Bentuk
+    # probe liveness web produksi adalah KONFLIK TERBUKA D-W5
+    # (spesifikasi-watchdog.md): healthcheck nginx statis (pola dev) vs
+    # route handler live (AD-19/F10 9.4). Bentuk ini juga MENGASUMSIKAN
+    # image web menyediakan wget; asumsi itu WAJIB diverifikasi saat
+    # image web dirancang (K-15). Watchdog menilai web lewat status
+    # container + healthcheck apa pun bentuknya, tanpa probe HTTP khusus.
+    image: ghcr.io/doctorcorelabs/note-gen-web:PLACEHOLDER_TAG
+    restart: unless-stopped
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: "512m"
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - notegen
+
+  api:
+    # API Fastify + Drizzle. Image GHCR by digest pada jalur utama (F10
+    # bagian 6.2/7.2, rencana-t16-deploy.md bagian 3.2); tag mutable
+    # (dev/main/latest) dilarang untuk produksi. Nilai image di bawah ini
+    # adalah PLACEHOLDER: belum ada image GHCR (job docker/publish CI belum
+    # ada, K-15) sehingga digest belum ada. Ganti dengan digest rilis nyata
+    # sebelum `up` apa pun. Nama image dan owner adalah USULAN.
+    # Command: default image (server API). F10 bagian 5.2: command default
+    # adalah server API; command `worker` hanya untuk service worker.
+    image: ghcr.io/doctorcorelabs/note-gen-api:PLACEHOLDER_TAG
+    restart: unless-stopped
+    expose:
+      - "3001"
+    env_file:
+      - ./api.env
+    environment:
+      # Nilai bukan secret; environment menang atas env_file sehingga stack
+      # benar tanpa bergantung pada isi api.env untuk ketiga nilai ini
+      # (preseden dev V1-07 bagian 4.3).
+      HOST: "0.0.0.0"
+      PORT: "3001"
+      WORKSPACE_ROOT: "/workspace"
+    volumes:
+      # Bind mount kandidat F10 bagian 4.2. Keputusan bind mount vs named
+      # volume untuk workspace produksi adalah K-06 (belum diputuskan);
+      # pemakaian bind mount di sini adalah USULAN (diwarisi DEP-01).
+      # Bila service worker ditambahkan (gelombang 5), worker WAJIB
+      # me-mount path host yang sama ke /workspace (rencana bagian 3.3).
+      - /data/home/note-gen-web/data/workspace:/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Probe live (bukan ready): proses hidup tanpa I/O. Sumber: F10
+      # bagian 9.4 dan rencana-t16-deploy.md bagian 3.3. KONFLIK TERBUKA:
+      # tabel F10 bagian 4.1 menulis healthcheck api ke /api/health/ready,
+      # dan desain health 5.1 juga memakai ready; keputusan D-W4 belum
+      # diambil koordinator. Draf ini memakai live mengikuti preseden dev.
+      # Bentuk probe node/fetch disalin verbatim dari compose dev karena
+      # image runner Node tidak dijamin menyediakan curl/wget (V1-07).
+      # Asumsi yang wajib diverifikasi saat image api ada: biner node
+      # tersedia di PATH image runner.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health/live').then(function (r) { process.exit(r.ok ? 0 : 1); }).catch(function () { process.exit(1); });"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: "1g"
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - notegen
+
+  postgres:
+    # Postgres 17 (AD-05, keputusan final user). Pin image
+    # postgres:17-alpine berasal dari F10 bagian 4.1, tetapi pin ini
+    # BERDIRI TANPA BUKTI UJI: yang teruji adalah PGDG 17.12, bukan image
+    # ini (laporan-postgres17.md bagian 8; gate G1/G4 TERBUKA).
+    # PERINGATAN PGVECTOR: DEP-11 membuktikan dari sumber publik bahwa
+    # image resmi postgres (termasuk varian alpine) TIDAK membawa
+    # ekstensi vector, dan mengusulkan Opsi A (image kustom alpine +
+    # pgvector 0.8.7 dari source, dibangun di CI, by digest) sebagai
+    # USULAN UTAMA; bukti internal (G4 langkah 1, cek
+    # pg_available_extensions di image deployment) tetap wajib jalan
+    # atas image alpine stock lebih dulu. Bila vector tidak tersedia,
+    # JANGAN diam-diam mengganti image: keputusan K-03 milik koordinator
+    # (opsi di README-keputusan-revisi.md bagian 4; Opsi D DEP-11,
+    # instalasi saat runtime, DITOLAK).
+    # Tanpa ports: hanya internal (F10). Debug lewat
+    # docker compose exec postgres psql.
+    #
+    # SCRAM (gelombang 4): autentikasi password memakai SCRAM-SHA-256,
+    # tanpa trust di jalur deploy mana pun. Dua mekanisme bekerja sama:
+    # (a) berkas HBA khusus di-mount read-only dan dipakai lewat
+    # hba_file (lihat infra/postgres/pg_hba.conf): seluruh baris
+    # memakai scram-sha-256 untuk koneksi lokal maupun host. Tanpa
+    # baris replikasi: replikasi ditolak karena tidak ada baris yang
+    # cocok (fail closed), bukan karena baris reject eksplisit.
+    # (b) command menetapkan password_encryption=scram-sha-256 secara
+    # eksplisit. PG17 sudah memakai scram-sha-256 sebagai default;
+    # penetapan eksplisit menjaga perilaku bila default berubah dan
+    # membuat enkripsi terverifikasi lewat SHOW password_encryption.
+    # POSTGRES_HOST_AUTH_METHOD SENGAJA TIDAK dipakai: variabel itu
+    # hanya memengaruhi berkas HBA yang digenerasi entrypoint, dan
+    # berkas itu digantikan sepenuhnya oleh hba_file di sini.
+    # password_encryption hanya memengaruhi password BARU/DIUBAH:
+    # volume data lama yang passwordnya dibuat sebelum SCRAM wajib
+    # di-hash ulang (ALTER ROLE ... PASSWORD) dan diverifikasi lewat
+    # prefix verifier SCRAM di pg_shadow; lihat runbook-deploy.
+    # Debug lewat `docker compose exec` membutuhkan PGPASSWORD karena
+    # tidak ada trust; jangan menambahkan baris trust untuk debug.
+    image: postgres:17-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "password_encryption=scram-sha-256", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+    expose:
+      - "5432"
+    env_file:
+      - ./postgres.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      # pg_isready, disalin verbatim dari compose dev (V1-07 bagian 4.5):
+      # ekspansi env di dalam container, $$ adalah escape compose untuk $
+      # literal (F10 bagian 4.3). Tanpa default diam-diam: bila variabel
+      # kosong, healthcheck gagal secara jujur.
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: "1g"
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - notegen
+
+volumes:
+  # Volume bernama dengan driver_opts bind ke /data (USULAN DEP-13,
+  # D-DEP13-2, menjawab temuan T2 P01/R2-2). Rencana-t16-deploy.md
+  # bagian 3.3 menuntut semua volume di bawah /data; volume bernama
+  # polos DEP-01 tidak membuktikan penempatan itu karena lokasi fisiknya
+  # mengikuti data-root daemon Docker. Bentuk driver_opts di bawah
+  # membuat penempatan TERBUKTI dari berkas compose dan dari
+  # `docker volume inspect` sesudah volume dibuat.
+  # SYARAT SETUP: direktori device WAJIB sudah ada di host sebelum
+  # `docker compose up` pertama (lihat VALIDASI.md langkah 2). Perilaku
+  # kepemilikan direktori data Postgres pada volume bind-backed wajib
+  # diverifikasi pada jalan G1 pertama; draf ini tidak mengarang
+  # penanganan uid/chown. Bila koordinator menolak bentuk ini,
+  # alternatifnya adalah volume bernama polos DEP-01 ditambah bukti
+  # `docker info` bahwa data-root daemon berada di bawah /data.
+  pgdata:
+    name: notegen_pgdata
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/home/note-gen-web/data/pgdata
+  # Volume state Caddy. USULAN DEP-01 (compose dev tidak memakainya),
+  # dipertahankan; penempatan /data mengikuti pola pgdata di atas.
+  caddy_data:
+    name: notegen_caddy_data
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/home/note-gen-web/data/caddy/data
+  caddy_config:
+    name: notegen_caddy_config
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/home/note-gen-web/data/caddy/config
+
+networks:
+  # Satu jaringan bridge internal compose (F10 bagian 4.2). Tidak ada
+  # service selain Caddy yang mem-publish port ke host.
+  notegen:
+    driver: bridge

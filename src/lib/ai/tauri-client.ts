@@ -2,7 +2,6 @@ import { platform } from '@/lib/platform'
 import type OpenAI from 'openai'
 import type { ModelsPage } from 'openai/resources/models'
 import type { AiConfig, ReasoningEffort } from '@/app/core/setting/config'
-import { createSponsoredUsageRecorder, reserveSponsoredRequest } from './sponsored-model-limits'
 
 type JsonValue = Record<string, unknown>
 
@@ -146,7 +145,6 @@ function usesEnableThinkingForDisabledReasoning(aiConfig?: AiConfig): boolean {
       'dashscope-intl.aliyuncs.com',
       'api.siliconflow.cn',
       'api.siliconflow.com',
-      'api.notegen.top',
     ]
   )
 
@@ -359,10 +357,6 @@ export async function invokeAiJson<T = JsonValue>(
   payload: Omit<JsonRequestPayload, 'requestId'>,
   signal?: AbortSignal
 ): Promise<T> {
-  if ((payload.method || 'POST') === 'POST' && ['/chat/completions', '/completions', '/responses', '/messages'].includes(payload.path)) {
-    payload = { ...payload, body: await reserveSponsoredRequest(payload.config, payload.body, signal) }
-  }
-  const recordUsage = createSponsoredUsageRecorder(payload.config, payload.body)
   const requestId = signal ? createRequestId() : undefined
   const detachAbort = requestId ? attachAbort(signal, requestId) : () => {}
   try {
@@ -372,7 +366,6 @@ export async function invokeAiJson<T = JsonValue>(
         requestId,
       },
     })
-    await recordUsage(response)
     return response
   } catch (error) {
     throw toAbortError(error)
@@ -430,13 +423,10 @@ async function createStreamingIterable<T>(
   },
   signal?: AbortSignal
 ) {
-  request = { ...request, body: await reserveSponsoredRequest(request.config, request.body, signal) }
-  const recordUsage = createSponsoredUsageRecorder(request.config, request.body)
   const queue = new AsyncQueue<T>()
   const detachAbort = attachAbort(signal, request.requestId)
   const channel = platform.channel.createChannel<StreamEvent<T>>((event) => {
     if (event.type === 'chunk') {
-      void recordUsage(event.data)
       queue.push(event.data)
       return
     }

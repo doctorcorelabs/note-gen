@@ -20,7 +20,6 @@ import {
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { TooltipButton } from "@/components/tooltip-button"
-import { NoteGenModelLabel } from '@/components/notegen-model-label'
 
 interface GroupedModel {
   configKey: string
@@ -230,7 +229,6 @@ export function ModelSelect({
     const selectedItem = groupedModels.find(isModelSelected)
     
     if (selectedItem) {
-      if (selectedItem.configKey === 'note-gen-free') return <span className="truncate"><NoteGenModelLabel model={selectedItem.model.model} builtin /></span>
       return `${selectedItem.model.model}(${selectedItem.configTitle})`
     }
     
@@ -296,7 +294,7 @@ export function ModelSelect({
                       setOpen(false)
                     }}
                   >
-                    <NoteGenModelLabel model={item.model.model} builtin={item.configKey === 'note-gen-free'} showFree />
+                    {item.model.model}
                   </CommandItem>
                 ))}
               </CommandGroup>
