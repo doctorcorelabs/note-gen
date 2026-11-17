@@ -137,13 +137,15 @@ export class FakeStoreHandle implements StoreHandle {
       );
     }
     if (value === undefined) {
-      // Interim behavior for F1-22 (verdict unconfirmed, CT-02 pending):
-      // set(key, undefined) deletes the key, matching the POC shim.
-      const existed = this.backing.delete(key);
-      if (existed) {
-        this.notify(key, undefined);
-      }
-      return;
+      // H3 (AD-106): reject and leave the key unchanged, matching
+      // the web adapter. Callers delete with delete().
+      throw capabilityError(
+        "invalid_argument",
+        "store",
+        "store.set",
+        "web",
+        `set() does not accept undefined for key "${key}"; use delete() to remove a key (F1-22 H3, AD-106)`,
+      );
     }
     const stored = cloneValue(value);
     this.backing.set(key, stored);

@@ -18,8 +18,9 @@
  *   values/entries/length, and delete() returns false (section 2.2).
  * - set() on an R-MVP-REJECT key throws PlatformCapabilityError and
  *   leaves the cache unchanged (sections 2.3 rule 4, 2.5, 2.10).
- * - set(key, undefined) deletes the key (F1-22 temporary decision,
- *   section 5.1, pending confirmation against the Rust plugin).
+ * - set(key, undefined) throws a validation error
+ *   (PlatformCapabilityError, invalid_argument) and leaves the key
+ *   unchanged (F1-22 H3, AD-106). Callers delete with delete().
  * - aiModelList entries are stored with their secret-bearing fields
  *   stripped (section 2.7). The fake never stores apiKey,
  *   webSearchApiKey, webSearchApiKeys, or customHeaders, and never
@@ -255,11 +256,15 @@ class FakeStoreHandle implements StoreHandle {
       );
     }
     if (value === undefined) {
-      const existed = this.data.delete(key);
-      if (existed) {
-        this.notify(key, undefined);
-      }
-      return;
+      // H3 (AD-106): reject and leave the key unchanged, matching
+      // the web adapter. Callers delete with delete().
+      throw capabilityError(
+        "invalid_argument",
+        "store",
+        "store.set",
+        "web",
+        `set() does not accept undefined for key "${key}"; use delete() to remove a key (F1-22 H3, AD-106)`,
+      );
     }
     const stored =
       disposition === "split-ai-model-list"
