@@ -9,9 +9,14 @@
 // idempotency replay, and repair-links preconditions. The app comes
 // from buildApp with injected
 // session/CSRF/Origin verifiers, over a real scratch directory;
-// the move routes are registered on the built app (the AD-57
-// overlap rule forbids editing app.ts, and the integrator performs
-// the same registration inside buildApp at merge time).
+// the move routes arrive through the workspace-structure
+// registration adapter (rank 60, W4-WIRE). The two idempotency
+// tests use a standalone Fastify instance built from the same
+// frozen plugin functions, because they inject a test-only
+// in-memory idempotency store and identity resolver that
+// production wiring deliberately does not supply; registering
+// the routes a second time on the buildApp app would duplicate
+// them.
 //
 // Expectations mirror the R1 client conformance suite
 // (tests/workspace-client/move.test.mjs): affectedCount counts the
@@ -21,7 +26,7 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { ServerConfig } from '../src/config.js';
@@ -29,13 +34,13 @@ import { buildRevision } from '../src/lib/revision.js';
 import {
   defaultVerifyOrigin,
   readCsrfTokenHeader,
+  registerAuthHooks,
   type SessionPrincipal,
   type VerifySessionFn,
 } from '../src/middleware/auth-hook.js';
-import {
-  registerWorkspaceMoveRoutes,
-  type WorkspaceMoveRouteDeps,
-} from '../src/routes/workspace-move.js';
+import { registerErrorHandling } from '../src/plugins/error-handler.js';
+import { registerRequestId, requestIdFromHeaders } from '../src/plugins/request-id.js';
+import { registerWorkspaceMoveRoutes } from '../src/routes/workspace-move.js';
 import type {
   IdempotencyLookupInput,
   IdempotencyLookupResult,
@@ -99,7 +104,7 @@ interface Fixture {
 
 let fixture: Fixture | undefined;
 
-async function setup(moveDeps: Partial<WorkspaceMoveRouteDeps> = {}): Promise<Fixture> {
+async function setup(): Promise<Fixture> {
   const dir = await mkdtemp(join(tmpdir(), 'v3b-05b-move-'));
   const rootReal = await realpath(dir);
   const app = await buildApp({
@@ -110,7 +115,41 @@ async function setup(moveDeps: Partial<WorkspaceMoveRouteDeps> = {}): Promise<Fi
     verifyCsrf: async (request) => readCsrfTokenHeader(request) === 'good-csrf',
     verifyOrigin: defaultVerifyOrigin,
   });
-  await registerWorkspaceMoveRoutes(app, { workspaceRoot: dir, ...moveDeps });
+  fixture = { app, dir, rootReal };
+  return fixture;
+}
+
+// Standalone app for the idempotency tests: the same frozen
+// plugins buildApp uses, plus the move registrar with the
+// test-only in-memory idempotency store and identity resolver.
+// Production wiring passes neither dep, so these tests cannot
+// run against buildApp without duplicating the routes.
+async function setupIdempotent(): Promise<Fixture> {
+  const dir = await mkdtemp(join(tmpdir(), 'v3b-05b-move-'));
+  const rootReal = await realpath(dir);
+  const app = Fastify({
+    logger: false,
+    logController: new LogController({ disableRequestLogging: true }),
+    genReqId: (request) => requestIdFromHeaders(request.headers),
+  });
+  registerRequestId(app);
+  registerErrorHandling(app, { version: 'test' });
+  registerAuthHooks(app, {
+    verifySession,
+    verifyCsrf: async (request) => readCsrfTokenHeader(request) === 'good-csrf',
+    verifyOrigin: defaultVerifyOrigin,
+    canonicalOrigin: TEST_ORIGIN,
+  });
+  await registerWorkspaceMoveRoutes(app, {
+    workspaceRoot: dir,
+    idempotency: createMemoryIdempotencyStore(),
+    resolveIdentity: async (principal) => ({
+      workspaceId: 'ws-1',
+      userId: principal.userId,
+      actorId: undefined,
+    }),
+  });
+  await app.ready();
   fixture = { app, dir, rootReal };
   return fixture;
 }
@@ -662,14 +701,7 @@ function createMemoryIdempotencyStore(): IdempotencyPort {
 
 describe('POST /api/workspace/move idempotency', () => {
   it('replays the stored response without moving twice', async () => {
-    const { app, dir } = await setup({
-      idempotency: createMemoryIdempotencyStore(),
-      resolveIdentity: async (principal) => ({
-        workspaceId: 'ws-1',
-        userId: principal.userId,
-        actorId: undefined,
-      }),
-    });
+    const { app, dir } = await setupIdempotent();
     await seed(dir, 'move/idem-old.md', 'once');
     const key = `idem-move-${Date.now()}-replay`;
     const body = { source: 'move/idem-old.md', target: 'move/idem-new.md', rewriteLinks: false };
@@ -684,14 +716,7 @@ describe('POST /api/workspace/move idempotency', () => {
   });
 
   it('rejects a reused key with a different request', async () => {
-    const { app, dir } = await setup({
-      idempotency: createMemoryIdempotencyStore(),
-      resolveIdentity: async (principal) => ({
-        workspaceId: 'ws-1',
-        userId: principal.userId,
-        actorId: undefined,
-      }),
-    });
+    const { app, dir } = await setupIdempotent();
     await seed(dir, 'move/reuse-old.md', 'once');
     await seed(dir, 'move/other.md', 'other');
     const key = `idem-move-${Date.now()}-reuse`;

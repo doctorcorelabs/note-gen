@@ -43,6 +43,17 @@ export interface ServerConfig {
   port: number;
   databaseUrl: string | undefined;
   workspaceRoot: string | undefined;
+  // Optional deployment roots (W4-WIRE). assetRoot is the
+  // dedicated asset store root OUTSIDE the workspace tree
+  // (desain V1-14: assets must never live under the workspace
+  // root); trashRoot overrides the sibling trash default
+  // (desain-workspace-api.md section 5.1). Both are optional so
+  // existing config literals keep compiling: when unset, the
+  // owning routes fail closed per request (assets) or fall back
+  // to the derived default (trash). No silent derivation from
+  // the workspace root is ever applied to assets.
+  assetRoot?: string | undefined;
+  trashRoot?: string | undefined;
   nodeEnv: 'development' | 'production';
   logLevel: string;
   checkTimeoutMs: number;
@@ -169,6 +180,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (workspaceRoot === undefined) {
     warnings.push('WORKSPACE_ROOT is not set; readiness will fail until it is set.');
   }
+
+  // Optional roots: no warning when unset. Assets fail closed per
+  // request without ASSET_ROOT, and trash falls back to its
+  // derived sibling default without TRASH_ROOT; neither blocks
+  // readiness, so neither belongs in the boot warnings.
+  const assetRoot = nonEmpty(env.ASSET_ROOT);
+  const trashRoot = nonEmpty(env.TRASH_ROOT);
 
   let nodeEnv: 'development' | 'production' = 'development';
   if (env.NODE_ENV === 'production') {
@@ -357,6 +375,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     port,
     databaseUrl,
     workspaceRoot,
+    assetRoot,
+    trashRoot,
     nodeEnv,
     logLevel,
     checkTimeoutMs,

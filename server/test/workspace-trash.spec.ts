@@ -6,10 +6,10 @@
 // DELETE file/folder to trash, batch move to trash, list, restore,
 // purge one, and empty all
 // (kontrak 3.1, desain-workspace-api.md 2.8 and 5.2). The app is buildApp
-// with a temp workspace root plus the trash routes registered on
-// top, because AD-57 forbids overlap workers from editing app.ts;
-// registration is the integrator's job, and this spec proves the
-// routes behave end to end under the frozen auth hook and envelope.
+// with a temp workspace root; the trash routes arrive through the
+// workspace-structure registration adapter (rank 60, W4-WIRE), and
+// this spec proves the routes behave end to end under the frozen
+// auth hook and envelope.
 //
 // File name note: the root .gitignore ignores "*.test.*", which
 // would silently drop a file named workspace-trash.test.ts from
@@ -28,7 +28,6 @@ import {
   readCsrfTokenHeader,
   type SessionPrincipal,
 } from '../src/middleware/auth-hook.js';
-import { registerWorkspaceTrashRoutes } from '../src/routes/workspace-trash.js';
 
 const TEST_ORIGIN = 'https://app.example.invalid';
 const TEST_PRINCIPAL: SessionPrincipal = {
@@ -100,7 +99,6 @@ async function setup(): Promise<Fixture> {
     verifyCsrf: async (request) => readCsrfTokenHeader(request) === 'good-csrf',
     verifyOrigin: defaultVerifyOrigin,
   });
-  await registerWorkspaceTrashRoutes(app, { workspaceRoot: root });
   fixture = { app, root, parent };
   return fixture;
 }
