@@ -1186,18 +1186,18 @@ const useSettingStore = create<SettingState>((set, get) => ({
   templateList: [
     {
       id: '0',
-      title: '笔记',
-      content: `整理成一篇详细完整的笔记。
-满足以下格式要求：
-- 如果是代码，必须完整保留，不要随意生成。
-- 文字复制的内容尽量不要修改，只处理格式化后的内容。`,
+      title: 'Note',
+      content: `Organize this into a detailed and complete note.
+Meet the following format requirements:
+- If it is code, keep it complete; do not generate code casually.
+- Try not to modify copied text; only process the formatted content.`,
       status: true,
       range: GenTemplateRange.All
     },
     {
       id: '1',
-      title: '周报',
-      content: '最近一周的记录整理成一篇周报，将每条记录形成一句总结，每条不超过50字。',
+      title: 'Weekly Report',
+      content: 'Organize the records from the past week into a weekly report, summarizing each record in one sentence of no more than 50 characters.',
       status: true,
       range: GenTemplateRange.Week
     }

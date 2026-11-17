@@ -16,7 +16,7 @@ export function MobileClearContext() {
     await insert({
       tagId: currentTagId,
       role: 'system',
-      content: '上下文已清除，之后的对话将只携带此消息之后的内容。',
+      content: t('clearContextNotice'),
       type: 'clear',
       inserted: true,
       image: undefined,

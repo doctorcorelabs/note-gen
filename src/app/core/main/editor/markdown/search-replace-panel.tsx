@@ -373,7 +373,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             ref={searchInputRef}
-            placeholder="搜索..."
+            placeholder="Search..."
             value={searchText}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={(e) => {
@@ -401,7 +401,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
           className="size-8"
           onClick={handlePrev}
           disabled={resultCount === 0}
-          title="上一个 (Shift+Enter)"
+          title="Previous (Shift+Enter)"
         >
           <ChevronUp className="w-4 h-4" />
         </Button>
@@ -411,7 +411,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
           className="size-8"
           onClick={handleNext}
           disabled={resultCount === 0}
-          title="下一个 (Enter)"
+          title="Next (Enter)"
         >
           <ChevronDown className="w-4 h-4" />
         </Button>
@@ -420,7 +420,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
           size="icon"
           className="size-8"
           onClick={handleClose}
-          title="关闭 (Esc)"
+          title="Close (Esc)"
         >
           <X className="w-4 h-4" />
         </Button>
@@ -430,7 +430,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
         <div className="relative flex-1">
           <Replace className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="替换为..."
+            placeholder="Replace with..."
             disabled={readOnly}
             value={replaceText}
             onChange={(e) => handleReplaceChange(e.target.value)}
@@ -451,20 +451,20 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
           size="sm"
           onClick={handleReplace}
           disabled={readOnly || resultCount === 0}
-          title="替换当前 (Enter)"
+          title="Replace current (Enter)"
         >
           <Replace className="w-3 h-3 mr-1" />
-          替换
+          Replace
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleReplaceAll}
           disabled={readOnly || resultCount === 0}
-          title="替换全部 (Shift+Enter)"
+          title="Replace all (Shift+Enter)"
         >
           <ReplaceAll className="w-3 h-3 mr-1" />
-          全部
+          All
         </Button>
       </div>
 
@@ -474,7 +474,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
             checked={caseSensitive}
             onCheckedChange={handleCaseSensitiveToggle}
           />
-          <span>区分大小写</span>
+          <span>Case sensitive</span>
         </label>
       </div>
     </div>
@@ -489,7 +489,7 @@ export function SearchReplacePanel({ editor, readOnly = false, open, focusReques
       >
         <DrawerContent className="max-h-[80vh]">
           <DrawerHeader>
-            <DrawerTitle>搜索和替换</DrawerTitle>
+            <DrawerTitle>Search and Replace</DrawerTitle>
           </DrawerHeader>
           <div className="px-4 pb-6">
             {panelContent}

@@ -74,7 +74,7 @@ export function GitlabSync() {
               placeholder={t('settings.sync.gitlabInstanceTypePlaceholder')}
               options={[
                 { value: GitlabInstanceType.OFFICIAL, label: <span className="flex items-center gap-2"><Globe />GitLab.com</span> },
-                { value: GitlabInstanceType.JIHULAB, label: <span className="flex items-center gap-2"><Globe />极狐</span> },
+                { value: GitlabInstanceType.JIHULAB, label: <span className="flex items-center gap-2"><Globe />{t('settings.sync.gitlabInstanceTypeOptions.jihu')}</span> },
                 { value: GitlabInstanceType.SELF_HOSTED, label: <span className="flex items-center gap-2"><Server />{t('settings.sync.gitlabInstanceTypeOptions.selfHosted')}</span> },
               ]}
             />

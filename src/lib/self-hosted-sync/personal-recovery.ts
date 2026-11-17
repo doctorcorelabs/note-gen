@@ -68,7 +68,7 @@ export async function recoverPersonalRevisionConflicts(context: Context, session
   if (!rejected.length) return false
   const { client } = await authenticatedClient(context.profileId)
   const profile = await getProfile(context.profileId)
-  if (!profile) throw new Error('自托管同步配置不存在')
+  if (!profile) throw new Error('SELF_HOSTED_SYNC_CONFIG_MISSING')
   const wanted = new Set(rejected.map(row => row.objectId))
   const remoteObjects = new Map<string, SyncBootstrapPage['objects'][number]>()
   await client.withBootstrapSnapshot(context.workspaceId, session.syncEpoch, async readPage => {

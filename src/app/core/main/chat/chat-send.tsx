@@ -70,7 +70,7 @@ function resolveRecordedApprovalEvent(event: AgentTraceEvent, records: Confirmat
     approvalDecision: approved ? 'approved' : record.status === 'superseded' ? 'steered' : 'denied',
     editOutcome: !approved && event.approvalPreview ? 'cancelled' : event.editOutcome,
     status: approved ? 'success' : 'error',
-    message: approved ? '用户已确认操作。' : '本次确认已取消。',
+    message: approved ? '用户已确认操作。' : 'This confirmation was cancelled.',
   }
 }
 
@@ -82,7 +82,7 @@ function finalizeInterruptedAgentEvent(event: AgentTraceEvent, finishedAt: numbe
       approvalDecision: 'denied',
       editOutcome: event.approvalPreview ? 'cancelled' : event.editOutcome,
       status: 'success',
-      message: '本次确认已取消。',
+      message: 'This confirmation was cancelled.',
       duration: event.duration ?? Math.max(0, finishedAt - event.timestamp),
     }
   }
@@ -91,7 +91,7 @@ function finalizeInterruptedAgentEvent(event: AgentTraceEvent, finishedAt: numbe
       ...event,
       editOutcome: event.status === 'pending' ? 'cancelled' : 'unverified',
       status: 'error',
-      message: event.status === 'pending' ? '改动已取消。' : '应用结果待核对，请查看当前文件。',
+      message: event.status === 'pending' ? 'Change cancelled.' : 'The result needs verification. Check the current file.',
       duration: event.duration ?? Math.max(0, finishedAt - event.timestamp),
     }
   }
@@ -233,10 +233,10 @@ export const ChatSend = forwardRef<ChatSendHandle, ChatSendProps>(({
     const failureMessage = failedToolCall?.result?.error || result
 
     return [
-      `已成功生成文件：`,
+      `Files generated successfully:`,
       uniqueOutputFiles.map((file) => `- ${file}`).join('\n'),
       '',
-      `后续校验或附加步骤失败：${failureMessage}`,
+      `Follow-up validation or additional steps failed: ${failureMessage}`,
     ].join('\n')
   }
 
@@ -859,9 +859,9 @@ export const ChatSend = forwardRef<ChatSendHandle, ChatSendProps>(({
       // 3. 关联文件夹作为 Agent 自动检索时的优先范围，不在发送前预先检索。
       if (request.linkedResource && isLinkedFolder(request.linkedResource)) {
         context += [
-          '## 用户关联的笔记文件夹',
-          `用户关联了文件夹“${request.linkedResource.name}”（${request.linkedResource.relativePath}）。`,
-          '如果当前请求需要查找用户资料，请优先使用 knowledge_search，并将 folderPath 设置为这个相对路径。不要在没有必要时搜索。',
+          '## User-Linked Note Folder',
+          `The user linked the folder “${request.linkedResource.name}” (${request.linkedResource.relativePath}).`,
+          'If the current request needs to look up user material, prefer knowledge_search with folderPath set to this relative path. Do not search when it is not needed.',
           '',
         ].join('\n')
       }
@@ -889,7 +889,7 @@ export const ChatSend = forwardRef<ChatSendHandle, ChatSendProps>(({
           }
 
           if (linkedFileContent) {
-            context += `\n## 关联文件完整内容\n\nThe full content of the linked file "${request.linkedResource.name}" (${request.linkedResource.relativePath}) is already included below. Do not call tools to read or check this same file again unless the user explicitly asks to refresh it.\n\n---\n${linkedFileContent}\n---\n`
+            context += `\n## Full Content of Linked File\n\nThe full content of the linked file "${request.linkedResource.name}" (${request.linkedResource.relativePath}) is already included below. Do not call tools to read or check this same file again unless the user explicitly asks to refresh it.\n\n---\n${linkedFileContent}\n---\n`
           }
 
           agentDebugLog('chat_context_linked_file', {
@@ -918,74 +918,74 @@ export const ChatSend = forwardRef<ChatSendHandle, ChatSendProps>(({
 
         if (hasValidLineNumbers) {
           if (startLine === endLine) {
-            lineInfo = `第 ${startLine} 行`
+            lineInfo = `line ${startLine}`
           } else {
-            lineInfo = `第 ${startLine}-${endLine} 行`
+            lineInfo = `lines ${startLine}-${endLine}`
           }
         }
 
-        context += `\n## 📌 用户引用内容
+        context += `\n## 📌 User-Quoted Content
 
-用户引用了笔记 "${fileName}" ${lineInfo}的以下内容：
+The user quoted the following content from the note "${fileName}" ${lineInfo}:
 
 ---
 ${fullContent}
 ---
 
-${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才允许编辑**。
+${hasValidRange ? `**Only edit when the user explicitly asks to modify/rewrite/expand/insert.**
 
-如果用户是在提问、解释、总结、分析、询问译法、润色建议、代码说明，应该直接基于这段引用内容回答，**不要调用任何编辑工具**。
+If the user is asking a question, or asking for an explanation, summary, analysis, translation, polish suggestions, or code explanation, answer directly from this quoted content and **do not call any editing tools**.
 
-如果用户明确说“这句/这段/选中内容翻译成某种语言”，这是编辑请求，必须直接使用 editor_replace_range；已有 from/to 已足够，禁止再调用 editor_get_state 或 editor_get_selection。
+If the user explicitly says "translate this sentence/paragraph/selected content into some language", that is an edit request: use editor_replace_range directly. The existing from/to are sufficient; do not call editor_get_state or editor_get_selection.
 
-**🚨 当且仅当用户明确要求修改时，必须精确替换用户选中的范围**: 当前引用内容来自编辑器选区，必须优先使用 editor_replace_range，只替换这段选中的内容：
+**🚨 Only when the user explicitly asks for changes, replace exactly the selected range**: this quoted content comes from an editor selection. Prefer editor_replace_range and replace only this selected content:
 - from: ${from}
 - to: ${to}
-- 使用 content 传入新内容
-- 只允许替换这个选区，禁止扩大到整篇文档或整段之外
+- Pass the new content via content
+- Only replace this selection; do not expand to the whole document or beyond the paragraph
 
-**如果用户说“在这段前面/后面/上面/下面插入、补充、添加”**:
-- 仍然使用 editor_replace_range
-- 基于当前引用范围整体替换
-- 前插: 新内容 + 原引用内容
-- 后插: 原引用内容 + 新内容
-- 不要使用 editor_insert_at_cursor，因为聊天输入会让编辑器失焦，当前光标位置不可靠
+**If the user says "insert/add/append before/after/above/below this passage"**:
+- Still use editor_replace_range
+- Replace the whole current quoted range
+- Insert before: new content + original quoted content
+- Insert after: original quoted content + new content
+- Do not use editor_insert_at_cursor, because chat input blurs the editor and the current cursor position is unreliable
 
-**如果用户明确要求“前面和后面都增加内容”**:
-- 仍然使用 editor_replace_range
-- content 直接传入最终替换内容：前插内容 + 原引用内容 + 后插内容
-- 不要使用额外协议标记；工具会把 content 原样写入选区
+**If the user explicitly asks to "add content both before and after"**:
+- Still use editor_replace_range
+- Pass the final replacement content directly via content: inserted-before content + original quoted content + inserted-after content
+- Do not use extra protocol markers; the tool writes content verbatim into the selection
 
-**兜底行号信息**:
-- 单行修改: startLine: ${startLine}, endLine: ${endLine}
-- 多行范围: startLine: ${startLine}, endLine: ${endLine}
+**Fallback line-number information**:
+- Single-line edit: startLine: ${startLine}, endLine: ${endLine}
+- Multi-line range: startLine: ${startLine}, endLine: ${endLine}
 
-**禁止**:
-- 禁止在解释/分析类请求中调用编辑工具
-- 禁止改动选区之外的内容
-- 禁止获取整个文档后再重写整篇
-- 禁止把 startLine/endLine 擅自改成 1/1` : hasValidLineNumbers ? `**仅在用户明确要求修改/改写/补充/插入时才允许编辑**。
+**Forbidden**:
+- Do not call editing tools for explanation/analysis requests
+- Do not change content outside the selection
+- Do not fetch the whole document and rewrite it entirely
+- Do not change startLine/endLine to 1/1 on your own` : hasValidLineNumbers ? `**Only edit when the user explicitly asks to modify/rewrite/expand/insert.**
 
-如果用户是在提问、解释、总结、分析、询问译法、润色建议、代码说明，应该直接基于这段引用内容回答，**不要调用任何编辑工具**。
+If the user is asking a question, or asking for an explanation, summary, analysis, translation, polish suggestions, or code explanation, answer directly from this quoted content and **do not call any editing tools**.
 
-如果用户明确说“这句/这段/选中内容翻译成某种语言”，这是编辑请求，必须直接使用 editor_replace_lines；已有行号已足够，禁止再调用 editor_get_state 或 editor_get_selection。
+If the user explicitly says "translate this sentence/paragraph/selected content into some language", that is an edit request: use editor_replace_lines directly. The existing line numbers are sufficient; do not call editor_get_state or editor_get_selection.
 
-**🚨 当且仅当用户明确要求修改时，必须使用行号修改**: 当用户引用内容并要求修改时，你必须使用 editor_replace_lines，传入精确的行号：
-- 单行修改: startLine: ${startLine}, endLine: ${endLine}
-- 多行范围: startLine: ${startLine}, endLine: ${endLine}
-- 必须使用 replaceContent 参数传入新内容
+**🚨 Only when the user explicitly asks for changes, edit by line numbers**: when the user quotes content and asks for changes, you must use editor_replace_lines with exact line numbers:
+- Single-line edit: startLine: ${startLine}, endLine: ${endLine}
+- Multi-line range: startLine: ${startLine}, endLine: ${endLine}
+- You must pass the new content via the replaceContent parameter
 
-**禁止**:
-- 禁止在解释/分析类请求中调用编辑工具
-- 禁止使用 from/to 位置参数
-- 禁止使用 searchContent 文本搜索模式
-- 禁止获取整个文档内容后再操作` : `**注意**: 此引用内容只有选中文本，没有可安全使用的 Markdown 源码位置。
+**Forbidden**:
+- Do not call editing tools for explanation/analysis requests
+- Do not use from/to position parameters
+- Do not use the searchContent text-search mode
+- Do not fetch the whole document content before operating` : `**Note**: this quoted content only has the selected text, with no safely usable Markdown source position.
 
-- 如果用户只是在提问、解释、总结或分析，请直接回答，不要调用编辑工具。
-- 如果用户明确要求修改当前选区，只能调用 editor_insert_at_cursor，并设置 replaceSelection=true。
-- 不要推测 from/to 或行号；如果活动选区已经变化，工具会安全失败。`}
+- If the user is only asking, explaining, summarizing, or analyzing, answer directly and do not call editing tools.
+- If the user explicitly asks to modify the current selection, only call editor_insert_at_cursor with replaceSelection=true.
+- Do not guess from/to or line numbers; if the active selection has changed, the tool fails safely.`}
 
-请基于这段引用内容回答用户的问题。
+Answer the user question based on this quoted content.
 
 `
 

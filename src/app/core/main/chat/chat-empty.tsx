@@ -49,9 +49,9 @@ export default function ChatEmpty() {
 
   // 快速 prompt 模板 - 默认模板
   const quickPrompts = useMemo(() => [
-    { id: 1, icon: <FileEdit className="w-4 h-4" />, text: t('quickPrompts.writeNote') || '帮我写一篇笔记' },
-    { id: 2, icon: <FileText className="w-4 h-4" />, text: t('quickPrompts.summarize') || '帮我总结这段内容' },
-    { id: 3, icon: <Lightbulb className="w-4 h-4" />, text: t('quickPrompts.brainstorm') || '帮我头脑风暴一些想法' },
+    { id: 1, icon: <FileEdit className="w-4 h-4" />, text: t('quickPrompts.writeNote') || 'Help me write a note' },
+    { id: 2, icon: <FileText className="w-4 h-4" />, text: t('quickPrompts.summarize') || 'Help me summarize this content' },
+    { id: 3, icon: <Lightbulb className="w-4 h-4" />, text: t('quickPrompts.brainstorm') || 'Help me brainstorm some ideas' },
   ], [t])
 
   const handleQuickPrompt = (prompt: string) => {
@@ -131,7 +131,7 @@ export default function ChatEmpty() {
 
         {/* Quick Prompts */}
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground px-1">{t('quickPrompts.title') || '快速开始'}</p>
+          <p className="text-xs text-muted-foreground px-1">{t('quickPrompts.title') || 'Quick start'}</p>
           {quickPrompts.map((prompt) => (
             <button
               type="button"

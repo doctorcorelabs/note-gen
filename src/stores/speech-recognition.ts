@@ -81,7 +81,7 @@ const useSpeechRecognitionStore = create<SpeechRecognitionState>((set, get) => (
     try {
       // 检查浏览器支持
       if (!get().isSupported()) {
-        throw new Error('当前浏览器不支持语音识别功能，请使用 Chrome、Edge 或 Safari')
+        throw new Error('The current browser does not support speech recognition. Please use Chrome, Edge, or Safari.')
       }
 
       // 创建识别实例

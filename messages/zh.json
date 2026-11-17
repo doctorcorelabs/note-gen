@@ -1733,7 +1733,19 @@
           "title": "识别模型",
           "desc": "可选。配置后可在自动模式下回退使用，或在仅模型模式下强制使用。"
         }
-      }
+      },
+      "textContentEmpty": "文本内容为空",
+      "speechSynthesisUnsupported": "当前浏览器不支持语音合成功能",
+      "audioModelNotConfigured": "未配置音频模型",
+      "audioModelConfigNotFound": "未找到音频模型配置",
+      "audioModelConfigIncomplete": "音频模型配置不完整",
+      "audioContextDestroyed": "音频上下文已被销毁",
+      "audioDecodingFailed": "音频解码失败: {error}",
+      "audioPlaybackFailed": "音频播放失败: {error}",
+      "readAloudModeUnavailable": "当前朗读模式不可用，请检查本地语音支持或模型配置",
+      "speechRecognitionModelNotConfigured": "未配置语音识别模型",
+      "speechRecognitionModelConfigNotFound": "未找到语音识别模型配置",
+      "speechRecognitionModelConfigIncomplete": "语音识别模型配置不完整"
     },
     "readAloud": {
       "title": "朗读",
@@ -2071,7 +2083,17 @@
           "viewer": "查看者",
           "editor": "编辑者",
           "manager": "管理员"
-        }
+        },
+        "errors": {
+          "SELF_HOSTED_WORKSPACE_INIT_INCOMPLETE": "自托管同步工作区尚未完成初始化",
+          "SELF_HOSTED_COLLAB_DOC_INIT_FAILED": "协作文档初始化失败：{code}",
+          "SELF_HOSTED_DOCUMENT_NOT_BOUND": "文档尚未绑定到自托管工作区",
+          "SELF_HOSTED_SERVER_URL_PROTOCOL_INVALID": "服务器地址必须使用 HTTP 或 HTTPS",
+          "SELF_HOSTED_SERVER_URL_CREDENTIALS_FORBIDDEN": "服务器地址不能包含用户名或密码",
+          "SELF_HOSTED_SERVER_URL_QUERY_OR_FRAGMENT_FORBIDDEN": "服务器地址不能包含查询参数或锚点",
+          "SELF_HOSTED_SYNC_CONFIG_MISSING": "自托管同步配置不存在"
+        },
+        "requestFailed": "服务器请求失败 ({status})"
       },
       "connectionTab": "连接设置",
       "syncOptionsTab": "同步选项",
@@ -2196,7 +2218,8 @@
       "gitlabInstanceTypePlaceholder": "选择 GitLab 实例类型",
       "gitlabInstanceTypeOptions": {
         "selfHosted": "自建实例",
-        "selfHostedDesc": "输入您的自建 GitLab 服务器地址（如：https://gitlab.example.com）"
+        "selfHostedDesc": "输入您的自建 GitLab 服务器地址（如：https://gitlab.example.com）",
+        "jihu": "极狐"
       },
       "gitlabAccessTokenDesc": "在 {instanceDisplayName} 创建个人访问令牌，需要 api 权限",
       "giteaInstanceType": "Gitea 实例类型",
@@ -3170,7 +3193,8 @@
       "importConfigSuccessMobile": "配置下载成功，请手动重启应用",
       "exportConfigSuccess": "导出成功",
       "importButton": "导入",
-      "exportButton": "导出"
+      "exportButton": "导出",
+      "importConfigFailed": "title: '导入失败',"
     },
     "localMcp": {
       "title": "让 AI 访问 NoteGen",
@@ -3437,7 +3461,14 @@
           "desc": "用于 Markdown 编辑器的 AI 内联补全，类似 GitHub Copilot，快速生成续写内容"
         },
         "poweredBy": "由 SiliconFlow 提供技术支持"
-      }
+      },
+      "embeddingModelNotConfigured": "未配置嵌入模型或模型配置不正确",
+      "embeddingModelConfigIncomplete": "嵌入模型配置不完整",
+      "embeddingResultFormatInvalid": "嵌入结果格式不正确",
+      "batchEmbeddingCountMismatch": "批量嵌入结果数量不匹配",
+      "rerankResultFormatInvalid": "重排序结果格式不正确",
+      "rerankResultNoValidScores": "重排序结果没有有效分数",
+      "embeddingIncompleteResult": "Embedding 返回不完整"
     },
     "imageMethod": {
       "title": "图像识别",
@@ -3985,7 +4016,9 @@
           "metadata-only": "仅保存了网页标题或描述，没有提取到正文。",
           "blocked": "网页要求登录或验证，已保留链接。",
           "failed": "网页请求失败，已保留链接。"
-        }
+        },
+        "crawlingPageContent": "正在爬取页面内容...",
+        "processing": "处理中..."
       },
       "todo": {
         "title": "待办记录",
@@ -4759,6 +4792,21 @@
               "busy": "任务执行中，完成后可以撤销。"
             },
             "stalePreview": "内容或编辑模式已变化，请取消本次提案后重新生成差异。"
+          },
+          "confirmationCancelledMessage": "本次确认已取消。",
+          "changeCancelled": "改动已取消。",
+          "partialSuccessFilesHeader": "已成功生成文件：",
+          "partialSuccessFollowupFailed": "后续校验或附加步骤失败：{failureMessage}",
+          "tools": {
+            "canvas": {
+              "getStateTitle": "title: '读取当前画布',",
+              "createDiagramTitle": "title: '创建完整画布图表',",
+              "applyOperationsTitle": "title: '编辑当前画布',"
+            },
+            "attachment": {
+              "listTitle": "title: '列出附件目录',",
+              "readTitle": "title: '读取附件',"
+            }
           }
         },
         "fileLink": {
@@ -5883,7 +5931,9 @@
         "autoCalcEnabled": "已启用自动向量计算",
         "autoCalcDisabled": "已禁用自动向量计算",
         "settingFailed": "设置失败",
-        "confirmDeleteVectors": "确定要删除 {count} 个文件的向量吗？"
+        "confirmDeleteVectors": "确定要删除 {count} 个文件的向量吗？",
+        "syncFolderNotDirectory": "title: '不是目录',",
+        "syncFolderDirectoriesOnly": "description: '只能下载目录',"
       },
       "folderView": {
         "vectorDbNotEnabled": "向量数据库未启用",
@@ -6157,7 +6207,8 @@
           "start": "开始",
           "clear": "清除",
           "clearChat": "清空对话",
-          "clearContext": "清除上下文"
+          "clearContext": "清除上下文",
+          "clearContextNotice": "content: '上下文已清除，之后的对话将只携带此消息之后的内容。',"
         },
         "attachments": {
           "title": "附件",
@@ -6215,7 +6266,8 @@
       "builtinDesc": "免费，实时识别",
       "model": "大模型识别",
       "modelDesc": "需配置STT模型，更准确"
-    }
+    },
+    "speechRecognitionUnsupported": "当前浏览器不支持语音识别功能，请使用 Chrome、Edge 或 Safari"
   },
   "quickRecord": {
     "description": "点击选择记录工具，快速创建记录"
@@ -6559,7 +6611,20 @@
         "placeholder": "输入 AI 指令",
         "submit": "执行"
       }
-    }
+    },
+    "searchReplace": {
+      "searchPlaceholder": "搜索...",
+      "previousTitle": "上一个 (Shift+Enter)",
+      "nextTitle": "下一个 (Enter)",
+      "closeTitle": "关闭 (Esc)",
+      "replacePlaceholder": "替换为...",
+      "replaceCurrentTitle": "替换当前 (Enter)",
+      "replaceAllTitle": "替换全部 (Shift+Enter)",
+      "replaceAll": "全部",
+      "title": "搜索和替换"
+    },
+    "infographicLoading": "正在加载 Infographic...",
+    "infographicRenderFailed": "Infographic 渲染失败: {message}"
   },
   "editorWindow": {
     "missing": "编辑窗口会话不存在或已经关闭",
