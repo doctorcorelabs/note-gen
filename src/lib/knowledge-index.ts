@@ -180,12 +180,38 @@ export async function processStructuredKnowledgeSources(
   return { total: documents.length, success, failed, paused }
 }
 
+// Re-homed by F5 (wave 4, desain-sql-adapter section 5.4 row 17):
+// registration runs through the SqlAdapter kind
+// `knowledge.upsertSource` (status pending, no indexing, no BM25
+// touch) and the consent key through the StoreAdapter. The
+// document collectors still read through the @/db modules (their
+// migration to kinds belongs to the F3 codemod); this function
+// itself sends no raw SQL and touches no legacy database handle.
+// It is not a boot step: the funnel documents it as re-homed
+// outside boot init, and its owner calls it explicitly.
 export async function bootstrapStructuredKnowledgeRegistry() {
   const documents = [
     ...await collectRecordKnowledgeDocuments(),
     ...await collectCanvasKnowledgeDocuments(),
   ]
-  for (const document of documents) await registerDocument(document)
+  const adapter = platform.sql
+  for (const document of documents) {
+    await adapter.execute({
+      kind: 'knowledge.upsertSource',
+      source: {
+        sourceKey: document.sourceKey,
+        sourceType: document.sourceType,
+        sourceId: document.sourceId,
+        title: document.title,
+        contentHash: document.contentHash,
+        indexedHash: null,
+        updatedAt: document.updatedAt,
+        locator: document.locator,
+        status: 'pending',
+        error: null,
+      },
+    })
+  }
   const store = await platform.store.load('store.json')
   const consent = await store.get<boolean>('ragStructuredKnowledgeConsent')
   if (consent === undefined) {

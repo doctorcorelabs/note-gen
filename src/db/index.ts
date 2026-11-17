@@ -22,9 +22,22 @@
  *   owned by wiring (AD-33); until wiring registers the adapter,
  *   resolving it throws the registry's not-registered error.
  * - `initSqlAdapter()` checks adapter readiness (endpoint ready
- *   plus session, through `ready()`) and returns without running
- *   DDL. `initAllDatabases()` keeps its name and memoized shape
+ *   plus session, through `ready()`), then runs the 13 table
+ *   verifications of desain-sql-adapter section 5.4 (F5, wave 4):
+ *   one cheap read per retained table, batched through
+ *   `queryMany`, writing nothing and creating no schema.
+ *   `initAllDatabases()` keeps its name and memoized shape
  *   for existing callers and delegates to it.
+ *
+ * Re-homed outside boot init (F5): `initializeWikiPreferences`
+ * runs through the StoreAdapter, lazily from `getWikiSettings`
+ * (it is not a boot step); `bootstrapStructuredKnowledgeRegistry`
+ * runs through the SqlAdapter (`knowledge.upsertSource`, status
+ * pending, no indexing) plus the StoreAdapter consent key, from
+ * its owner in `src/lib/knowledge-index.ts` (it is not a boot
+ * step either). The two init functions for deleted tables
+ * (`initConversationSyncStateDb`, `initSelfHostedSyncDb`) were
+ * removed with F5: they had no callers and must never run.
  *
  * The legacy surface below (`getDb`, the `db` facade,
  * `executeRecordTransaction`, `RecordStatement`) is kept ONLY so
@@ -34,12 +47,11 @@
  * `PlatformCapabilityError` naming the migration; nothing fails
  * silently and nothing executes. The per-module init functions
  * are NOT called from here anymore: the sync-state and
- * self-hosted init functions target deleted tables and must never
- * run, the rest are replaced by the readiness check, the wiki
- * preference bootstrap and the structured knowledge registry
- * bootstrap are re-homed outside boot init (follow-up, see the
- * V3-14 report), and the conversation-sync initialized flag is
- * never written (the sync protocol is deleted).
+ * self-hosted init functions target deleted tables and were
+ * removed, the rest are replaced by the readiness check plus the
+ * section 5.4 verifications, and the conversation-sync
+ * initialized flag is never written (the sync protocol is
+ * deleted).
  */
 
 // Relative import (not the @/ alias): vitest does not resolve the
@@ -159,12 +171,62 @@ export const db = {
 };
 
 /**
- * Check SqlAdapter readiness and return. No DDL runs, no schema is
- * created, and no per-module init runs: the server migrator owns
- * the schema, and readiness comes from the health endpoint through
- * `ready()`. Throws a capability error when the adapter reports
- * not-ok, so boot fails with a diagnosable cause instead of
- * proceeding against an unreadable database.
+ * The section 5.4 verification batch: 13 verification rows, 14
+ * cheap reads (the memories row needs two: the list plus the
+ * policy default). Each read proves one retained table is
+ * reachable through the adapter; no read writes anything and no
+ * read creates schema. Probe ids are arbitrary: the list handlers
+ * answer an empty array for an unknown conversation or tag,
+ * never an error, and the cache read answers a miss for a random
+ * key, so the batch succeeds on an empty database and fails only
+ * when a table cannot be reached at all (stale migrations, a
+ * broken session, or a down backend). Row order follows the
+ * section 5.4 table (rows 4 and 15, the deleted tables, are
+ * absent by disposition).
+ */
+type VerificationBatch = Parameters<SqlAdapter["queryMany"]>[0];
+
+function buildVerificationBatch(): VerificationBatch {
+  return [
+    { kind: "messages.listByConversation", conversationId: 1, limit: 1 },
+    { kind: "conversations.list", limit: 1 },
+    { kind: "compactions.listByConversation", conversationId: 1, limit: 1 },
+    {
+      kind: "imageCache.get",
+      cacheKey: `__verify__${Math.random().toString(36).slice(2)}`,
+    },
+    { kind: "marks.list", limit: 1 },
+    { kind: "notes.latestByTag", tagId: 1 },
+    { kind: "tags.list" },
+    { kind: "vector.summaries" },
+    { kind: "memories.list", limit: 1 },
+    { kind: "policy.get" },
+    { kind: "canvases.list", limit: 1 },
+    { kind: "activity.list", limit: 1 },
+    { kind: "knowledge.listSources", limit: 1 },
+    {
+      kind: "wiki.getSourceState",
+      contextId: "__verify__",
+      stableId: "__verify__",
+    },
+  ];
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Check SqlAdapter readiness, then verify every retained table is
+ * reachable. No DDL runs, no schema is created, and no per-module
+ * init runs: the server migrator owns the schema, and readiness
+ * comes from the health endpoint through `ready()`. A failed
+ * verification throws a capability error naming migrations, so
+ * boot stops at step 4 with a diagnosable cause instead of
+ * proceeding against an unreadable database. The bootstrap tag
+ * `Idea` is verified present for the active workspace and only
+ * warned about when absent: boot never writes data, so a missing
+ * seed tag is a warning, not a failure and not a creation.
  */
 export async function initSqlAdapter(): Promise<void> {
   const adapter = getSqlAdapter();
@@ -176,6 +238,30 @@ export async function initSqlAdapter(): Promise<void> {
       "ready",
       getPlatformMode(),
       "database readiness check failed; verify migrations are current and the session is valid",
+    );
+  }
+  const batch = buildVerificationBatch();
+  let results: unknown[][];
+  try {
+    results = await adapter.queryMany(batch);
+  } catch {
+    throw capabilityError(
+      "unavailable",
+      "sql",
+      "verify",
+      getPlatformMode(),
+      "table verification failed; verify migrations are current and the session is valid",
+    );
+  }
+  const tagsIndex = batch.findIndex((op) => op.kind === "tags.list");
+  const tagRows = results[tagsIndex];
+  if (
+    Array.isArray(tagRows) &&
+    !tagRows.some((row) => isRecordValue(row) && row.name === "Idea")
+  ) {
+    console.warn(
+      "initSqlAdapter: bootstrap tag 'Idea' was not found for the active workspace; " +
+        "boot continues without creating it.",
     );
   }
 }

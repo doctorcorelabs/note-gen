@@ -9,33 +9,6 @@ export interface ConversationSyncTombstone {
   deletedAt: number
 }
 
-export async function initConversationSyncStateDb() {
-  const db = await getDb()
-  await db.execute(`
-    create table if not exists conversation_sync_tombstones (
-      entityType text not null,
-      syncId text not null,
-      conversationSyncId text default null,
-      deletedAt integer not null,
-      primary key (entityType, syncId)
-    )
-  `)
-  await db.execute(`
-    create index if not exists idx_conversation_sync_tombstones_conversation
-    on conversation_sync_tombstones(conversationSyncId)
-  `)
-  await db.execute(`
-    create table if not exists conversation_sync_clock (
-      id integer primary key check (id = 1),
-      value integer not null
-    )
-  `)
-  await db.execute(
-    'insert or ignore into conversation_sync_clock (id, value) values (1, 0)',
-    []
-  )
-}
-
 /**
  * Generates a timestamp that is monotonic for this database even when the
  * system clock moves backwards. Remote timestamps are observed during import,
