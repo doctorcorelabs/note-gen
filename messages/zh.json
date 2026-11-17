@@ -6221,6 +6221,37 @@
     "description": "点击选择记录工具，快速创建记录"
   },
   "editor": {
+    "revisionConflict": {
+      "title": "保存冲突",
+      "description": "此文件在编辑器外发生了更改。您的编辑内容仍在编辑器中，没有任何内容被覆盖。请选择如何解决 {path} 的冲突。",
+      "serverHeading": "服务器版本",
+      "modifiedAt": "修改时间",
+      "size": "大小",
+      "previewEmpty": "没有可用的预览。",
+      "previewTruncated": "预览已截断。",
+      "reloadChoice": "从服务器重新加载",
+      "reloadHint": "放弃编辑器中的修改，并加载服务器版本。",
+      "copyChoice": "另存为副本",
+      "copyHint": "将您的修改保存到新文件，然后在此处加载服务器版本。",
+      "copyNameLabel": "副本名称",
+      "copyNameTaken": "该名称已被占用，请尝试建议的名称。",
+      "forceChoice": "覆盖服务器版本",
+      "forceHint": "用您的修改替换服务器版本。",
+      "forceWarning": "警告：服务器版本将会丢失，此操作无法撤销。",
+      "decideLater": "稍后决定",
+      "working": "处理中...",
+      "errorLabel": "无法解决冲突，没有任何内容被覆盖。",
+      "unknownDate": "未知",
+      "heldTitle": "保存冲突尚未解决",
+      "heldDescription": "您的修改暂存在编辑器中，请解决冲突后再次保存。",
+      "resolveButton": "解决冲突"
+    },
+    "externalChange": {
+      "title": "文件在编辑器外发生了更改",
+      "description": "此文件在其他地方发生了更改。重新加载以查看最新版本，或继续编辑并在保存时解决冲突。",
+      "reloadButton": "重新加载",
+      "dismissButton": "忽略"
+    },
     "headingFolding": {
       "expand": "展开此标题内容",
       "collapse": "折叠此标题内容"

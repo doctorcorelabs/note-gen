@@ -1,4 +1,5 @@
 'use client'
+// Modified for the web fork on 2026-11-16; see FORK.md.
 
 import useArticleStore from '@/stores/article'
 import { useEffect, useState, useCallback, useRef, RefObject } from 'react'
@@ -14,6 +15,9 @@ import {
   OUTLINE_WIDTH_STORE_KEY,
 } from '@/lib/outline-preferences'
 import { platform } from '@/lib/platform'
+import { Button } from '@/components/ui/button'
+import { RevisionConflictDialog } from './revision-conflict-dialog'
+import { isAlreadyExistsLike, type RevisionConflictChoice } from './revision-conflict'
 import { useShallow } from 'zustand/react/shallow'
 import useSettingStore, { useSettingsHydrationStore } from '@/stores/setting'
 import { useSidebarStore } from '@/stores/sidebar'
@@ -41,6 +45,12 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
     justPulledFile,
     articleLoading,
     setTabDisposition,
+    revisionConflicts,
+    setLoadedRevision,
+    resolveRevisionConflict,
+    dismissRevisionConflict,
+    reopenRevisionConflict,
+    loadFileTree,
   } = useArticleStore(useShallow((state) => ({
     saveCurrentArticle: state.saveCurrentArticle,
     isPulling: state.isPulling,
@@ -49,6 +59,12 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
     justPulledFile: state.justPulledFile,
     articleLoading: state.loading,
     setTabDisposition: state.setTabDisposition,
+    revisionConflicts: state.revisionConflicts,
+    setLoadedRevision: state.setLoadedRevision,
+    resolveRevisionConflict: state.resolveRevisionConflict,
+    dismissRevisionConflict: state.dismissRevisionConflict,
+    reopenRevisionConflict: state.reopenRevisionConflict,
+    loadFileTree: state.loadFileTree,
   })))
   const {
     enableOutline,
@@ -65,8 +81,23 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
 
   const t = useTranslations('article.file.sync')
   const tEditor = useTranslations('editor')
+  const tExternalChange = useTranslations('editor.externalChange')
+  const tConflict = useTranslations('editor.revisionConflict')
   const [initialContent, setInitialContent] = useState<string | null>(null)
   const isCreatingFileRef = useRef(false)
+  // Revision-guard conflict state for this file, owned by the store.
+  const conflictEntry = revisionConflicts[filePath]
+  const [externalChangeNotice, setExternalChangeNotice] = useState(false)
+  const [conflictBusyChoice, setConflictBusyChoice] = useState<RevisionConflictChoice | null>(null)
+  const [conflictError, setConflictError] = useState<string | null>(null)
+  const [copyNameTaken, setCopyNameTaken] = useState(false)
+  // Last content known to be saved on the server. Compared against the
+  // tab cache to decide whether an external change may reload silently
+  // (clean editor) or must show the banner (unsaved edits).
+  const lastSavedContentRef = useRef<string | null>(null)
+  // Saves from this tab also arrive as watcher events without an actor,
+  // so they are suppressed briefly after the article-saved event.
+  const lastOwnSaveAtRef = useRef(0)
   // Track loaded state per file path - Bug fix: make this cleanup possible
   const loadedPathsRef = useRef<Set<string>>(new Set())
   // Bug fix: Track if editor content has been initialized to prevent saving empty content
@@ -98,6 +129,126 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       loadedPathsRef.current.delete(filePath)
     }
   }, [filePath])
+
+  // Reset per-file notice state when the tab switches files.
+  useEffect(() => {
+    setExternalChangeNotice(false)
+    setConflictError(null)
+    setCopyNameTaken(false)
+    lastSavedContentRef.current = null
+    lastOwnSaveAtRef.current = 0
+  }, [filePath])
+
+  // Apply server content to every cache the editor reads from: the tab
+  // cache, the shared active document, the TipTap instance (via the
+  // remote-content event), and the revision guard. The expected-content
+  // ref stops the echo onUpdate from scheduling a save of content that
+  // is already on the server.
+  const applyServerContent = useCallback((content: string, revision: string | null) => {
+    setLoadedRevision(filePath, revision)
+    expectedContentRef.current = content
+    contentInitializedRef.current = true
+    lastSavedContentRef.current = content
+    if (tabContentsRef.current) {
+      tabContentsRef.current[filePath] = content
+    }
+    if (useArticleStore.getState().activeFilePath === filePath) {
+      useArticleStore.getState().setCurrentArticle(content)
+      emitter.emit('editor-content-from-remote', { content })
+    }
+    setInitialContent(content)
+  }, [filePath, setLoadedRevision, tabContentsRef])
+
+  const reloadFromServer = useCallback(async () => {
+    try {
+      const { getFilePathOptions } = await import('@/lib/workspace')
+      const pathOptions = await getFilePathOptions(filePath)
+      const detailed = !pathOptions.baseDir
+        ? await platform.fs.readTextFileDetailed(pathOptions.path)
+        : await platform.fs.readTextFileDetailed(pathOptions.path, { baseDir: pathOptions.baseDir })
+      applyServerContent(detailed.content, detailed.revision)
+      setExternalChangeNotice(false)
+    } catch {
+      // Keep the editor content and the notice. The next save is still
+      // guarded, so a failed reload can never lose work silently.
+    }
+  }, [applyServerContent, filePath])
+
+  // Track saves so the external-change check can tell a clean editor
+  // from one with unsaved edits, and so own saves do not raise the
+  // banner when their watcher event arrives.
+  useEffect(() => {
+    const handleSaved = (event: { path: string; content: string }) => {
+      if (event.path !== filePath) return
+      lastSavedContentRef.current = event.content
+      lastOwnSaveAtRef.current = Date.now()
+    }
+    emitter.on('article-saved', handleSaved as any)
+    return () => {
+      emitter.off('article-saved', handleSaved as any)
+    }
+  }, [filePath])
+
+  // External changes (V1-09 section 3.9 step 5): a clean editor reloads
+  // silently because no work is lost; an editor with unsaved edits gets
+  // a non-blocking banner with an explicit reload action. The watcher
+  // event carries no actor, so own saves are suppressed by recency.
+  useEffect(() => {
+    const handleWorkspaceFileChanged = (event: Events['workspace-file-changed']) => {
+      if (event.kind !== 'changed') return
+      if (!editorPathsReferToSameFile(event.path, filePath, event.workspaceRoot)) return
+      if (!contentInitializedRef.current) return
+      if (Date.now() - lastOwnSaveAtRef.current < 1500) return
+      const cached = tabContentsRef.current?.[filePath]
+      const lastSaved = lastSavedContentRef.current
+      if (cached === undefined || lastSaved === null || cached === lastSaved) {
+        void reloadFromServer()
+        return
+      }
+      setExternalChangeNotice(true)
+    }
+    emitter.on('workspace-file-changed', handleWorkspaceFileChanged)
+    return () => {
+      emitter.off('workspace-file-changed', handleWorkspaceFileChanged)
+    }
+  }, [filePath, tabContentsRef, reloadFromServer])
+
+  // A fresh server revision means a fresh conflict: clear the previous
+  // resolution error and copy-name notice.
+  const conflictServerRevision = conflictEntry?.serverRevision
+  useEffect(() => {
+    setConflictError(null)
+    setCopyNameTaken(false)
+  }, [conflictServerRevision, filePath])
+
+  const handleChooseConflict = useCallback(async (choice: RevisionConflictChoice, copyPath?: string) => {
+    if (conflictBusyChoice) return
+    setConflictBusyChoice(choice)
+    setConflictError(null)
+    setCopyNameTaken(false)
+    try {
+      const result = await resolveRevisionConflict(filePath, choice, copyPath)
+      if (!result) return
+      if (result.status === 'copy-exists') {
+        setCopyNameTaken(true)
+        return
+      }
+      if (result.status === 'reloaded' || result.status === 'copied') {
+        applyServerContent(result.content, result.revision)
+        if (result.status === 'copied') {
+          void loadFileTree()
+        }
+      } else if (result.status === 'overwritten') {
+        lastSavedContentRef.current = conflictEntry?.localContent
+          ?? tabContentsRef.current?.[filePath]
+          ?? null
+      }
+    } catch (error) {
+      setConflictError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setConflictBusyChoice(null)
+    }
+  }, [conflictBusyChoice, resolveRevisionConflict, filePath, applyServerContent, loadFileTree, conflictEntry, tabContentsRef])
 
   // Keep the wrapper-owned tab cache aligned with snapshots applied by the
   // sync runtime. TipTap handles the same path-scoped event itself; this
@@ -267,6 +418,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
     if (activeFilePath === filePath) {
       if (articleLoading) return
       setInitialContent(currentArticle)
+      lastSavedContentRef.current = currentArticle
       if (tabContentsRef.current) {
         tabContentsRef.current[filePath] = currentArticle
       }
@@ -281,8 +433,14 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
           import('@/lib/workspace'),
         ])
         const pathOptions = await getFilePathOptions(filePath)
-        const content = await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        // Detailed read: the revision guards the next save (V1-09 3.9).
+        const detailed = !pathOptions.baseDir
+          ? await platform.fs.readTextFileDetailed(pathOptions.path)
+          : await platform.fs.readTextFileDetailed(pathOptions.path, { baseDir: pathOptions.baseDir })
+        const content = detailed.content
         if (disposed || loadedPathsRef.current.has(filePath)) return
+        setLoadedRevision(filePath, detailed.revision)
+        lastSavedContentRef.current = content
         if (tabContentsRef.current) tabContentsRef.current[filePath] = content
         loadedPathsRef.current.add(filePath)
         contentInitializedRef.current = true
@@ -296,7 +454,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
     return () => {
       disposed = true
     }
-  }, [activeFilePath, articleLoading, currentArticle, filePath, tabContentsRef])
+  }, [activeFilePath, articleLoading, currentArticle, filePath, tabContentsRef, setLoadedRevision])
 
   // Apply active-document updates only after that document has finished loading.
   useEffect(() => {
@@ -306,6 +464,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       // Bug fix: Set expected content BEFORE updating initialContent
       // This ensures handleContentChange knows what to expect
       expectedContentRef.current = currentArticle
+      lastSavedContentRef.current = currentArticle
       setInitialContent(currentArticle)
       // Update cache
       if (tabContentsRef.current) {
@@ -399,27 +558,32 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       let counter = 1
       let path = fileName
 
-      while (true) {
-        const pathOptions = await getFilePathOptions(fileName)
-        let fileExists = false
-        if (workspace.isCustom) {
-          fileExists = await platform.fs.exists(pathOptions.path)
-        } else {
-          fileExists = await platform.fs.exists(pathOptions.path, { baseDir: pathOptions.baseDir })
+      // Create-new attempts instead of exists-then-write: the existence
+      // check raced between tabs, so the server guard (If-None-Match: *)
+      // decides the name. An already_exists answer advances to the next
+      // candidate; any other error propagates to the caller below.
+      for (;;) {
+        if (counter > 1000) {
+          throw new Error('Could not find a free untitled file name')
         }
-        if (!fileExists) break
-        fileName = `untitled-${counter}.md`
-        path = fileName
-        counter++
-      }
-
-      const pathOptions = await getFilePathOptions(path)
-      if (await writeSelfHostedWorkspaceText(path, content)) {
-        // Rust journal already persisted the file.
-      } else if (workspace.isCustom) {
-        await platform.fs.writeTextFile(pathOptions.path, content)
-      } else {
-        await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+        const pathOptions = await getFilePathOptions(fileName)
+        if (await writeSelfHostedWorkspaceText(path, content)) {
+          // Rust journal already persisted the file.
+          break
+        }
+        try {
+          if (workspace.isCustom) {
+            await platform.fs.writeTextFile(pathOptions.path, content, { createNew: true })
+          } else {
+            await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir, createNew: true })
+          }
+          break
+        } catch (error) {
+          if (!isAlreadyExistsLike(error)) throw error
+          fileName = `untitled-${counter}.md`
+          path = fileName
+          counter++
+        }
       }
 
       await articleState.setActiveFilePath(
@@ -478,7 +642,35 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
   ) : null
 
   return (
-    <div id={isActive ? "onboarding-target-editor-content" : undefined} className="relative flex h-full w-full flex-1 min-w-0">
+    <div id={isActive ? "onboarding-target-editor-content" : undefined} className="relative flex h-full w-full flex-1 min-w-0 flex-col">
+      {externalChangeNotice ? (
+        <div className="flex items-center gap-3 border-b bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950/40">
+          <p className="min-w-0 flex-1">
+            <span className="font-medium">{tExternalChange('title')}</span>{' '}
+            {tExternalChange('description')}
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={() => void reloadFromServer()}>
+            {tExternalChange('reloadButton')}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setExternalChangeNotice(false)}>
+            {tExternalChange('dismissButton')}
+          </Button>
+        </div>
+      ) : null}
+
+      {conflictEntry?.dismissed ? (
+        <div className="flex items-center gap-3 border-b bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950/40">
+          <p className="min-w-0 flex-1">
+            <span className="font-medium">{tConflict('heldTitle')}</span>{' '}
+            {tConflict('heldDescription')}
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={() => reopenRevisionConflict(filePath)}>
+            {tConflict('resolveButton')}
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="relative flex min-h-0 min-w-0 flex-1">
       {/* Pull loading overlay */}
       {isThisEditorPulling && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -527,6 +719,19 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
       </div>
 
       {showOutline && outlinePosition === 'right' ? renderOutline() : null}
+      </div>
+
+      {conflictEntry ? (
+        <RevisionConflictDialog
+          open={!conflictEntry.dismissed}
+          conflict={conflictEntry}
+          busyChoice={conflictBusyChoice}
+          error={conflictError}
+          copyNameTaken={copyNameTaken}
+          onChoose={handleChooseConflict}
+          onDismiss={() => dismissRevisionConflict(filePath)}
+        />
+      ) : null}
     </div>
   )
 }

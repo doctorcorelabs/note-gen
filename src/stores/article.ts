@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-16; see FORK.md.
 import type { RemoteDirectoryEntry } from '@/lib/sync/directory-listing'
 import { getDirectoryFiles as getGithubFiles } from '@/lib/sync/github'
 import { getDirectoryFiles as getGiteeFiles } from '@/lib/sync/gitee'
@@ -57,6 +58,17 @@ import {
 } from '@/lib/editor-deactivation'
 import { writeSelfHostedWorkspaceText } from '@/lib/self-hosted-sync/files'
 import { isFileDeletionPending } from './file-deletion'
+import type { FsConflictPayload } from '@/lib/platform/fs/errors'
+import {
+  applyRevisionConflictChoice,
+  deriveCopyPath,
+  extractConflictPayload,
+  isRevisionConflictLike,
+  toRevisionConflictInfo,
+  type RevisionConflictChoice,
+  type RevisionConflictEntry,
+  type RevisionConflictResolution,
+} from '@/app/core/main/editor/markdown/revision-conflict'
 import type { EditorWorkspaceLayout } from '@/app/core/main/editor/editor-group-layout'
 
 type SyncPushCompletedEvent = Events['sync-push-completed']
@@ -76,6 +88,68 @@ type PendingArticleSave = {
 
 const pendingArticleSaves = new Map<string, PendingArticleSave>()
 const inFlightArticleSaves = new Map<string, Promise<void>>()
+
+// Revision guard state (V1-09 section 3.9, AD-17). The revision seen by
+// the latest successful read or save per workspace-relative path. It is
+// deliberately module-level, not UI state: only the save path reads it,
+// and the conflict dialog subscribes to `revisionConflicts` instead.
+// A missing entry means "unknown": the adapter then stats first and
+// guards with the current revision, so an unknown revision can never
+// silently overwrite either.
+const loadedArticleRevisions = new Map<string, string | null>()
+
+function getLoadedArticleRevision(path: string): string | null | undefined {
+  return loadedArticleRevisions.get(path)
+}
+
+function setLoadedArticleRevision(path: string, revision: string | null): void {
+  loadedArticleRevisions.set(path, revision)
+}
+
+type ArticlePathOptions = { path: string; baseDir?: BaseDirectory }
+
+async function refreshLoadedArticleRevision(
+  path: string,
+  pathOptions: ArticlePathOptions,
+): Promise<void> {
+  try {
+    const info = !pathOptions.baseDir
+      ? await platform.fs.stat(pathOptions.path)
+      : await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+    setLoadedArticleRevision(path, info.revision ?? null)
+  } catch {
+    // The write already succeeded. Clearing the revision makes the next
+    // save fall back to the adapter read-then-guard behavior instead of
+    // reusing a revision that is certainly stale.
+    setLoadedArticleRevision(path, null)
+  }
+}
+
+type GuardedWriteOutcome =
+  | { status: 'written' }
+  | { status: 'conflict'; conflict: FsConflictPayload | null }
+
+// One guarded write through the FS adapter. The loaded revision is sent
+// as the If-Match guard; a stale guard surfaces as a conflict outcome
+// instead of an overwrite, and every other error still throws.
+async function tryWriteGuardedArticleText(
+  pathOptions: ArticlePathOptions,
+  content: string,
+  expectedRevision: string | null | undefined,
+): Promise<GuardedWriteOutcome> {
+  try {
+    const options: { baseDir?: BaseDirectory; expectedRevision?: string } = {}
+    if (pathOptions.baseDir) options.baseDir = pathOptions.baseDir
+    if (expectedRevision) options.expectedRevision = expectedRevision
+    await platform.fs.writeTextFile(pathOptions.path, content, options)
+    return { status: 'written' }
+  } catch (error) {
+    if (isRevisionConflictLike(error)) {
+      return { status: 'conflict', conflict: extractConflictPayload(error) }
+    }
+    throw error
+  }
+}
 let vectorCalculationTimer: ReturnType<typeof setTimeout> | null = null
 let pendingVectorCalculation: { path: string; content: string } | null = null
 let inFlightVectorCalculation: { path: string; promise: Promise<void> } | null = null
@@ -1150,6 +1224,14 @@ interface NoteState {
   setSkipSyncOnSave: (skip: boolean) => void
   setAiGeneratingFilePath: (path: string | null) => void
   setAiTerminateFn: (fn: (() => void) | null) => void
+  // Revision-guard conflicts (V1-09 section 3.9). One entry per path
+  // while a guarded save is unresolved; the editor dialog subscribes.
+  revisionConflicts: Record<string, RevisionConflictEntry>
+  setLoadedRevision: (path: string, revision: string | null) => void
+  recordRevisionConflict: (path: string, localContent: string, conflict: FsConflictPayload | null) => void
+  resolveRevisionConflict: (path: string, choice: RevisionConflictChoice, copyPath?: string) => Promise<RevisionConflictResolution | null>
+  dismissRevisionConflict: (path: string) => void
+  reopenRevisionConflict: (path: string) => void
   saveCurrentArticle: (content: string, pathOverride?: string) => Promise<void>
   flushPendingArticleSave: (path: string) => Promise<void>
   flushPendingArticleSavesForPaths: (
@@ -3414,6 +3496,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
   skipSyncOnSave: false, // 标记是否跳过同步
   aiGeneratingFilePath: null, // 标记当前正在 AI 生成的文件路径
   aiTerminateFn: null, // AI 生成的终止函数
+  revisionConflicts: {},
 
   setReadFilePath: (path: string) => {
     set({ readFilePath: path })
@@ -3553,11 +3636,12 @@ const useArticleStore = create<NoteState>((set, get) => ({
 
     try {
       const pathOptions = await getFilePathOptions(actualPath)
-      if (!pathOptions.baseDir) {
-        localContent = await platform.fs.readTextFile(pathOptions.path)
-      } else {
-        localContent = await platform.fs.readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-      }
+      const detailed = !pathOptions.baseDir
+        ? await platform.fs.readTextFileDetailed(pathOptions.path)
+        : await platform.fs.readTextFileDetailed(pathOptions.path, { baseDir: pathOptions.baseDir })
+      localContent = detailed.content
+      // The revision read here guards the next save (V1-09 section 3.9).
+      setLoadedArticleRevision(actualPath, detailed.revision)
 
       if (!isCurrentArticleRead()) return
 
@@ -3593,6 +3677,12 @@ const useArticleStore = create<NoteState>((set, get) => ({
                             errorMsg.toLowerCase().includes('not found') ||
                             errorMsg.toLowerCase().includes('系统找不到指定的路径')
 
+      if (isFileNotFound) {
+        // A missing file invalidates any revision remembered for it. A
+        // stale revision would false-conflict if the file is recreated.
+        loadedArticleRevisions.delete(actualPath)
+      }
+
       if (isFileNotFound && fileInfo && !fileInfo.isLocale) {
         await pullMissingRemoteArticle()
         return
@@ -3610,6 +3700,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
           } else {
             await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
           }
+          await refreshLoadedArticleRevision(actualPath, pathOptions)
           if (isCurrentArticleRead()) {
             set({ currentArticle: '', loading: false })
           }
@@ -3702,6 +3793,98 @@ const useArticleStore = create<NoteState>((set, get) => ({
     set({ aiTerminateFn: fn })
   },
 
+  setLoadedRevision: (path: string, revision: string | null) => {
+    setLoadedArticleRevision(path, revision)
+  },
+
+  recordRevisionConflict: (path: string, localContent: string, conflict: FsConflictPayload | null) => {
+    const info = toRevisionConflictInfo(path, localContent, conflict)
+    const existing = get().revisionConflicts[path]
+    // A dismissed conflict stays dismissed while the server revision is
+    // unchanged, so typing does not reopen the dialog on every debounce
+    // cycle. A new server revision re-alerts the user.
+    const dismissed = existing
+      ? existing.dismissed && existing.serverRevision === info.serverRevision
+      : false
+    set({
+      revisionConflicts: {
+        ...get().revisionConflicts,
+        [path]: { ...info, dismissed },
+      },
+    })
+  },
+
+  resolveRevisionConflict: async (path: string, choice: RevisionConflictChoice, copyPath?: string) => {
+    const entry = get().revisionConflicts[path]
+    if (!entry) return null
+    const sourceOptions = await getFilePathOptions(path)
+    let targetCopyPath: string | undefined
+    let copyOptions: ArticlePathOptions | undefined
+    if (choice === 'save-copy') {
+      const requested = copyPath?.trim() ?? ''
+      targetCopyPath = requested !== ''
+        ? requested
+        : deriveCopyPath(path, entry.suggestedCopyPath)
+      copyOptions = await getFilePathOptions(targetCopyPath)
+    }
+    const result = await applyRevisionConflictChoice(platform.fs, {
+      choice,
+      sourceOptions,
+      copyOptions,
+      copyPath: targetCopyPath,
+      localContent: entry.localContent,
+    })
+    if (result.status === 'copy-exists') {
+      // Keep the dialog open with the next suggested name. Nothing was
+      // written and the original conflict is still unresolved.
+      set({
+        revisionConflicts: {
+          ...get().revisionConflicts,
+          [path]: { ...entry, dismissed: false, suggestedCopyPath: result.suggestedCopyPath },
+        },
+      })
+      return result
+    }
+    const nextConflicts = { ...get().revisionConflicts }
+    delete nextConflicts[path]
+    set({ revisionConflicts: nextConflicts })
+    setLoadedArticleRevision(path, result.revision)
+    if (result.choice === 'force-overwrite') {
+      // The editor content is now the server content. Run the light
+      // post-save effects the conflicted commit skipped.
+      get().markFileDirty(path)
+      if (get().activeFilePath === path) {
+        set({ currentArticle: entry.localContent })
+      }
+      if (!get().skipSyncOnSave && !isAbsoluteFsPath(path)) {
+        emitter.emit('article-saved', { path, content: entry.localContent })
+      }
+    }
+    return result
+  },
+
+  dismissRevisionConflict: (path: string) => {
+    const entry = get().revisionConflicts[path]
+    if (!entry || entry.dismissed) return
+    set({
+      revisionConflicts: {
+        ...get().revisionConflicts,
+        [path]: { ...entry, dismissed: true },
+      },
+    })
+  },
+
+  reopenRevisionConflict: (path: string) => {
+    const entry = get().revisionConflicts[path]
+    if (!entry || !entry.dismissed) return
+    set({
+      revisionConflicts: {
+        ...get().revisionConflicts,
+        [path]: { ...entry, dismissed: false },
+      },
+    })
+  },
+
   // 更新文件 sha 状态（推送成功后调用）
   updateFileSha: (path: string, sha: string) => {
     const cacheTree = cloneDeep(get().fileTree)
@@ -3764,10 +3947,19 @@ const useArticleStore = create<NoteState>((set, get) => ({
           const pathOptions = await getFilePathOptions(path)
           if (await writeSelfHostedWorkspaceText(path, content)) {
             // Rust journal already persisted the file.
-          } else if (!pathOptions.baseDir) {
-            await platform.fs.writeTextFile(pathOptions.path, content)
           } else {
-            await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+            const outcome = await tryWriteGuardedArticleText(
+              pathOptions,
+              content,
+              getLoadedArticleRevision(path),
+            )
+            if (outcome.status === 'conflict') {
+              // Never overwrite and never drop the editor content. The
+              // conflict dialog owns the next step.
+              get().recordRevisionConflict(path, content, outcome.conflict)
+              return
+            }
+            await refreshLoadedArticleRevision(path, pathOptions)
           }
           if (get().activeFilePath === path) {
             set({ currentArticle: content })
@@ -3848,11 +4040,20 @@ const useArticleStore = create<NoteState>((set, get) => ({
               }
             }
 
-            if (!pathOptions.baseDir) {
-              await platform.fs.writeTextFile(pathOptions.path, saveContent)
-            } else {
-              await platform.fs.writeTextFile(pathOptions.path, saveContent, { baseDir: pathOptions.baseDir })
+            const outcome = await tryWriteGuardedArticleText(
+              pathOptions,
+              saveContent,
+              getLoadedArticleRevision(savePath),
+            )
+            if (outcome.status === 'conflict') {
+              // Never overwrite and never drop the editor content. The
+              // conflict dialog owns the next step; post-save effects
+              // (dirty mark, vector schedule, article-saved) are skipped
+              // because nothing was saved.
+              get().recordRevisionConflict(savePath, saveContent, outcome.conflict)
+              return
             }
+            await refreshLoadedArticleRevision(savePath, pathOptions)
           }
           get().markFileDirty(savePath)
 
