@@ -32,6 +32,12 @@ export default defineConfig({
     fileParallelism: true,
     projects: [
       {
+        // The root `plugins` entry above does not reach project
+        // runs under Vitest 3 (proven 18 Nov 2026: a runtime `@/`
+        // import failed until this entry landed). Without it no
+        // unit spec can import a module that uses the `@/` alias,
+        // which is every module under src/db and src/app.
+        plugins: [tsconfigPaths()],
         test: {
           name: "unit",
           include: ["src/**/*.spec.ts"],
