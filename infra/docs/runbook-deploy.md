@@ -262,3 +262,30 @@ konfigurasi SCRAM deploy ke compose dev secara diam-diam.
   perilaku itu.
 - T16 lewat proksi + `caddy validate` atas `Caddyfile.prod` di
   mesin deploy (bukti adopsi gelombang 5).
+
+## 6. Layanan lain: larangan dan verifikasi pengganti (K-04/D-W7)
+
+Wording F10 seksi 9.7 langkah 3/6 dan seksi 9.8 butir terakhir
+yang memerintahkan verifikasi layanan lain "tetap listen"
+(9Router/knock/museai) adalah BASI dan TIDAK BERLAKU. Kalimat itu
+ditulis saat layanan tersebut aktif; keadaan kini berbeda: Edge
+dan 9Router dimatikan atas permintaan user dan TETAP MATI. Jangan
+mengikuti wording F10 mentah-mentah untuk butir ini.
+
+Yang berlaku adalah larangan spesifikasi-watchdog seksi 6
+(AD-138 butir 6, D-W7):
+
+- Deploy dan watchdog NoteGen bukan urusan layanan lain: jangan
+  menyentuh, memprobe untuk restart, me-restart, menghentikan,
+  atau mengubah konfigurasi layanan knock (port 8899) dan museai
+  (port 18610); jangan menyentuh, menghidupkan, me-restart, atau
+  mengubah artefak Edge dan 9Router (port 20128).
+- Semua perintah docker/compose bercakupan proyek NoteGen saja;
+  jangan membuka port-publish instabox, mengubah pemetaan port
+  host layanan lain, atau memakai port yang sudah dipakai
+  layanan lain.
+- Verifikasi pengganti (rencana-t16-deploy seksi 3.8 butir 3):
+  konfirmasi Edge/9Router tetap mati + peta port tidak berubah +
+  tidak ada gangguan pada layanan lain yang masih hidup.
+  Ketidakhadiran Edge/9Router bukan kegagalan, bukan temuan, dan
+  bukan pemicu tindakan apa pun.

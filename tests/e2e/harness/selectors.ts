@@ -49,9 +49,13 @@
 // themselves were never called (Tier B): refreshButton (probe10A
 // click revealed the file), newNoteButton (probe4 count 1),
 // deleteMenuItem (probe9 click; deletion blocked by AD-33).
-// Proven-broken or absent: loginAlertByText (deprecated,
-// probe14), editorLinkByHref (href renders empty),
-// manageTagsButton (absent in the web flow, desktop-only). All
+// Proven-broken or absent at recount time: loginAlertByText
+// (deprecated, probe14), manageTagsButton (absent in the web
+// flow, desktop-only). editorLinkByHref was proven-broken at
+// recount time (href rendered empty) and functions again since
+// W4-FIXLINK, because the href now renders (AD-125 item 4).
+// Its Tier A reclassification awaits a live run at the next
+// recount. All
 // other functions rest on source evidence only; several are
 // referenced only by uncalled AppPage helpers (openFileByPath,
 // createNewNote, searchGlobally, expectNoSearchResults) or by
@@ -86,9 +90,9 @@
 //   tab; probe2 counted 2 .ProseMirror and 2 .cm-content). Flows
 //   must use the visible-scoped editor locators
 //   (visibleVisualEditor / visibleSourceEditor).
-// - Rendered document links carry an EMPTY href in the live DOM
-//   (probe2); locate links by visible text (editorLinkByName), not
-//   by href.
+// - Rendered document links carry their relative href in the
+//   live DOM since W4-FIXLINK (AD-125); locate links by href
+//   (editorLinkByHref) or by visible text (editorLinkByName).
 
 import type { Locator, Page } from '@playwright/test'
 
