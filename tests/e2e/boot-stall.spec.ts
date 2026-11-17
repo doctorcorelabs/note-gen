@@ -46,6 +46,13 @@
 //   observed (or, for the probe/guard cases, the detail code that
 //   only the timeout path produces), so a green run cannot come
 //   from interception that never engaged.
+// - Alert assertions use bootAlert(), scoped to <main>. Next.js adds
+//   a runtime route announcer (<div id="__next-route-announcer__"
+//   role="alert">) that bare getByRole('alert') also matches: on the
+//   first stall run it caused a strict-mode violation in one case
+//   and false-visible reads in three others, while the app error
+//   screens themselves were correct. Both boot error screens render
+//   inside <main>; the announcer does not.
 // - Timeouts in this file only bound a hung run; the assertions are
 //   the visible screens and the stable detail codes, never elapsed
 //   time. The NAV case sets a 120 second test timeout because its
@@ -68,6 +75,16 @@ import { join } from 'node:path'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
 import { assertWorkerBundlesServed } from './harness/preflight'
+
+/**
+ * The app boot error card, scoped to <main> to exclude the Next.js
+ * route announcer (see the header note). Both boot error screens
+ * (the guard screen in src/app/page.tsx and the catalog screen in
+ * NextIntlProvider) render a role="alert" card inside <main>.
+ */
+function bootAlert(page: Page) {
+  return page.locator('main [role="alert"]')
+}
 
 // Distinctive catalog VALUES (not key names: key names also appear
 // in code chunks). Verified against the trunk build: each value
@@ -165,7 +182,7 @@ test('BOOT-STALL-SESSION @stall stalled session probe: visible BOOT_SESSION_UNKN
   await test.step('stall the session probe and observe the visible timeout failure', async () => {
     await page.route('**/api/auth/me', hangForever)
     await page.goto('/')
-    const alert = page.getByRole('alert')
+    const alert = bootAlert(page)
     await expect(alert).toBeVisible({ timeout: 30_000 })
     await expect(
       alert.getByRole('heading', { name: 'Could not verify your session.' }),
@@ -194,7 +211,7 @@ test('BOOT-STALL-GUARD @stall stalled health probe after a healthy session: visi
     })
     await page.route('**/api/health/live', hangForever)
     await page.goto('/')
-    const alert = page.getByRole('alert')
+    const alert = bootAlert(page)
     await expect(alert).toBeVisible({ timeout: 30_000 })
     await expect(
       alert.getByRole('heading', { name: 'NoteGen is taking too long to start.' }),
@@ -219,7 +236,7 @@ test('BOOT-STALL-I18N-HANG @stall hung catalog chunks: visible BOOT_I18N_TIMEOUT
     const names = await stallCatalogChunks(page, 'hang')
     const seen = watchRequestsFor(page, names)
     await page.goto('/')
-    const alert = page.getByRole('alert')
+    const alert = bootAlert(page)
     await expect(alert).toBeVisible({ timeout: 30_000 })
     await expect(
       alert.getByRole('heading', { name: 'Could not load the language.' }),
@@ -247,7 +264,7 @@ test('BOOT-STALL-I18N-ABORT @stall failed catalog chunks: visible BOOT_I18N_FAIL
     const names = await stallCatalogChunks(page, 'abort')
     const seen = watchRequestsFor(page, names)
     await page.goto('/')
-    const alert = page.getByRole('alert')
+    const alert = bootAlert(page)
     await expect(alert).toBeVisible({ timeout: 30_000 })
     await expect(
       alert.getByRole('heading', { name: 'Could not load the language.' }),
@@ -299,7 +316,7 @@ test('BOOT-STALL-NAV @stall hung navigation payload after a passing guard: visib
     // navigation started; without it, a later error screen could
     // be mistaken for a guard failure.
     await expect(page.getByText('Opening your workspace...')).toBeVisible({ timeout: 30_000 })
-    const alert = page.getByRole('alert')
+    const alert = bootAlert(page)
     await expect(alert).toBeVisible({ timeout: 45_000 })
     await expect(
       alert.getByRole('heading', { name: 'NoteGen is taking too long to open your workspace.' }),
