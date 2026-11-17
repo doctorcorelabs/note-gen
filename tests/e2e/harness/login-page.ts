@@ -42,14 +42,35 @@ export class LoginPage {
 
   /**
    * Open /login at the given gateway origin and wait for the
-   * sign-in form to appear. The origin is required for the same
-   * reason as AppPage.gotoHome: the config baseURL is static-only
-   * and the session lives on the fixture gateway origin. Pass
-   * backend.pageUrl from the backend fixture.
+   * sign-in form to appear AND hydrate. The origin is required
+   * for the same reason as AppPage.gotoHome: the config baseURL
+   * is static-only and the session lives on the fixture gateway
+   * origin. Pass backend.pageUrl from the backend fixture.
+   *
+   * The hydration wait is load-bearing (D-DEMO-5): the title
+   * text renders in SSR HTML before React attaches handlers, so
+   * waiting for the title alone lets a fill-and-click land on an
+   * unhydrated form whose submit does nothing (E2E-S1b failed
+   * twice this way while a probe with a later click passed).
+   * Hydration is observed through the React fiber key on the
+   * submit button, which exists only after React attaches. If
+   * the key never appears, the page never hydrated and the wait
+   * fails loudly instead of letting a dead click through.
    */
   async gotoLogin(pageUrl: string): Promise<void> {
     await this.page.goto(`${assertGatewayOrigin(pageUrl)}/login`)
     await expect(loginTitleText(this.page)).toBeVisible()
+    await this.page.waitForFunction(
+      () => {
+        const button = document.querySelector('[data-testid="auth-submit"]')
+        if (button === null) return false
+        return Object.keys(button).some(
+          (key) => key.startsWith('__reactFiber') || key.startsWith('__reactProps'),
+        )
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
   }
 
   /**
@@ -81,11 +102,24 @@ export class LoginPage {
 
   /**
    * Open /setup at the given gateway origin and wait for the
-   * first-account form to appear. See gotoLogin for why the origin
-   * is required.
+   * first-account form to appear AND hydrate. See gotoLogin for
+   * why the origin is required and why the hydration wait is
+   * load-bearing (same SSR-before-handlers race).
    */
   async gotoSetup(pageUrl: string): Promise<void> {
     await this.page.goto(`${assertGatewayOrigin(pageUrl)}/setup`)
     await expect(setupTitleText(this.page)).toBeVisible()
+    await this.page.waitForFunction(
+      () => {
+        const button = document.querySelector('[data-testid="auth-setup-submit"]')
+        if (button === null) return false
+        return Object.keys(button).some(
+          (key) => key.startsWith('__reactFiber') || key.startsWith('__reactProps'),
+        )
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
+  }
   }
 }

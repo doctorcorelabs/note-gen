@@ -179,6 +179,14 @@ export class AppPage {
     if (await this.page.locator('#web-inbox').isVisible()) {
       return
     }
+    // Wait for the tab bar to exist before evaluating: right
+    // after a reload the shell may still be mounting, and an
+    // immediate evaluate finds no icon button at all (E2E-RELOAD
+    // rerun-3: "no button contains the lucide-files icon").
+    await this.page
+      .locator('button:has(svg.lucide-highlighter)')
+      .first()
+      .waitFor({ state: 'attached', timeout: 10_000 })
     const clicked = await this.page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'))
       const visible = buttons.filter(
@@ -207,6 +215,13 @@ export class AppPage {
     if (await fileTree(this.page).isVisible()) {
       return
     }
+    // Wait for the tab bar to exist before evaluating (see
+    // switchToRecordsTab: post-reload the shell may still be
+    // mounting when this runs).
+    await this.page
+      .locator('button:has(svg.lucide-files)')
+      .first()
+      .waitFor({ state: 'attached', timeout: 10_000 })
     const clicked = await this.page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'))
       const visible = buttons.filter(

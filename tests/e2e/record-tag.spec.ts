@@ -33,9 +33,16 @@
 //    collapsed tabs have no accessible name) and click the seeded
 //    record row. Assert the detail dialog opens with the record
 //    content, e2e-alpha checked, e2e-beta unchecked.
-// 3. Check e2e-beta and save through "Save tags". Observe the PUT
-//    /api/marks/:id/tags 200 response: the guard-carrying write
-//    (expectedTagIds) answered.
+// 3. Check e2e-beta and save through "Save tags". Observe the
+//    POST /api/transactions 200 response: the shipped web UI
+//    saves through the SQL-adapter batch/transaction funnel
+//    (POST /api/db/batch plus POST /api/transactions, proven by
+//    W4-FLOWS probe13), NOT through the REST route PUT
+//    /api/marks/:id/tags. The REST marks/tags routes exist
+//    (W4-WIRE) and the read-back below uses GET /api/marks/:id,
+//    but asserting a PUT that the UI never sends would fail a
+//    working save; the transaction commit is the honest network
+//    observation for this flow.
 // 4. Read back through GET /api/marks/:id and assert the tag id SET
 //    contains both seed tags. CAUTION (S-02): tagIds are sorted
 //    ascending numerically and carry no position, so the assertion
@@ -113,14 +120,16 @@ backendTest(
     await expect(recordDetailTagCheckbox(page, TAG_SEEDS[0].name)).toBeChecked()
     await expect(recordDetailTagCheckbox(page, TAG_SEEDS[1].name)).not.toBeChecked()
 
-    const putResponse = page.waitForResponse(
+    const saveResponse = page.waitForResponse(
       (response) =>
-        response.url().endsWith(`/api/marks/${recordId}/tags`) && response.status() === 200,
+        response.url().endsWith('/api/transactions') &&
+        response.request().method() === 'POST' &&
+        response.status() === 200,
       { timeout: 30_000 },
     )
     await recordDetailTagCheckbox(page, TAG_SEEDS[1].name).check()
     await recordDetailSaveTagsButton(page).click()
-    await putResponse
+    await saveResponse
     await expect(recordDetailSaveTagsButton(page)).toHaveCount(0)
 
     const tagIds = await readRecordTagIds(page.request, backend.apiBaseUrl, recordId)
