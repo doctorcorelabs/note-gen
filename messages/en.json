@@ -1859,7 +1859,19 @@
           "title": "STT Model",
           "desc": "Optional. Configure a model for auto fallback or for model-only mode."
         }
-      }
+      },
+      "textContentEmpty": "Text content is empty",
+      "speechSynthesisUnsupported": "The current browser does not support speech synthesis",
+      "audioModelNotConfigured": "No audio model configured",
+      "audioModelConfigNotFound": "Audio model configuration not found",
+      "audioModelConfigIncomplete": "Audio model configuration is incomplete",
+      "audioContextDestroyed": "The audio context was destroyed",
+      "audioDecodingFailed": "Audio decoding failed: {error}",
+      "audioPlaybackFailed": "Audio playback failed: {error}",
+      "readAloudModeUnavailable": "The current read-aloud mode is unavailable. Check local speech support or model configuration.",
+      "speechRecognitionModelNotConfigured": "No speech recognition model configured",
+      "speechRecognitionModelConfigNotFound": "Speech recognition model configuration not found",
+      "speechRecognitionModelConfigIncomplete": "Speech recognition model configuration is incomplete"
     },
     "readAloud": {
       "title": "Read Aloud",
@@ -2168,8 +2180,15 @@
           "SELF_HOSTED_WORKSPACE_NAME_EMPTY": "The workspace name must not be empty.",
           "SELF_HOSTED_WORKSPACE_NOT_FOUND_OR_NO_ACCESS": "The workspace does not exist, or the current account has no access.",
           "SELF_HOSTED_WORKSPACE_NO_MANAGED_KEY": "This workspace has no available managed key.",
-          "SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH": "Cross-platform duplicate paths exist in the same directory: {duplicate} / {normalized}"
-        }
+          "SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH": "Cross-platform duplicate paths exist in the same directory: {duplicate} / {normalized}",
+          "SELF_HOSTED_WORKSPACE_INIT_INCOMPLETE": "The self-hosted sync workspace has not finished initializing",
+          "SELF_HOSTED_COLLAB_DOC_INIT_FAILED": "Failed to initialize the collaborative document: {code}",
+          "SELF_HOSTED_DOCUMENT_NOT_BOUND": "The document is not bound to a self-hosted workspace yet",
+          "SELF_HOSTED_SERVER_URL_PROTOCOL_INVALID": "The server address must use HTTP or HTTPS",
+          "SELF_HOSTED_SERVER_URL_CREDENTIALS_FORBIDDEN": "The server address must not contain a username or password",
+          "SELF_HOSTED_SERVER_URL_QUERY_OR_FRAGMENT_FORBIDDEN": "The server address must not contain query parameters or a fragment"
+        },
+        "requestFailed": "Server request failed ({status})"
       },
       "connectionTab": "Connection",
       "syncOptionsTab": "Sync Options",
@@ -2293,7 +2312,8 @@
       "gitlabInstanceTypePlaceholder": "Select GitLab Instance Type",
       "gitlabInstanceTypeOptions": {
         "selfHosted": "Self-hosted Instance",
-        "selfHostedDesc": "Enter your self-hosted GitLab server address (e.g., https://gitlab.example.com)"
+        "selfHostedDesc": "Enter your self-hosted GitLab server address (e.g., https://gitlab.example.com)",
+        "jihu": "JiHu"
       },
       "gitlabAccessTokenDesc": "Create a personal access token at {instanceDisplayName}, requires api permission",
       "giteaInstanceType": "Gitea Instance Type",
@@ -3605,7 +3625,8 @@
       "importConfigSuccessMobile": "Config downloaded successfully, please restart the app manually",
       "exportConfigSuccess": "Export successful",
       "importButton": "Import",
-      "exportButton": "Export"
+      "exportButton": "Export",
+      "importConfigFailed": "Import failed"
     },
     "localMcp": {
       "title": "Let AI access NoteGen",
@@ -3876,7 +3897,14 @@
       "deleteModelConfirm": "Are you sure you want to delete this model?",
       "rerankResultInvalid": "Rerank result format is invalid.",
       "embeddingResultInvalid": "Embedding result format is invalid.",
-      "ttsResultInvalid": "The TTS model returned an invalid format."
+      "ttsResultInvalid": "The TTS model returned an invalid format.",
+      "embeddingModelNotConfigured": "No embedding model configured, or the model configuration is incorrect",
+      "embeddingModelConfigIncomplete": "Embedding model configuration is incomplete",
+      "embeddingResultFormatInvalid": "Embedding result format is invalid.",
+      "batchEmbeddingCountMismatch": "Batch embedding result count does not match",
+      "rerankResultFormatInvalid": "Rerank result format is invalid.",
+      "rerankResultNoValidScores": "The rerank result has no valid scores",
+      "embeddingIncompleteResult": "The embedding result is incomplete"
     },
     "file": {
       "title": "File Settings",
@@ -4521,7 +4549,9 @@
           "metadata-only": "Only the page title or description was saved; no main content was extracted.",
           "blocked": "The page requires sign-in or verification. The link was still saved.",
           "failed": "The page request failed. The link was still saved."
-        }
+        },
+        "crawlingPageContent": "Crawling page content...",
+        "processing": "Processing..."
       },
       "todo": {
         "title": "Todo Record",
@@ -5573,8 +5603,21 @@
               "createTitle": "Create memory",
               "deleteTitle": "Delete memory",
               "clearAllTitle": "Clear all memories"
+            },
+            "canvas": {
+              "getStateTitle": "Read Current Canvas",
+              "createDiagramTitle": "Create Complete Canvas Diagram",
+              "applyOperationsTitle": "Edit Current Canvas"
+            },
+            "attachment": {
+              "listTitle": "List Attachment Directory",
+              "readTitle": "Read Attachment"
             }
-          }
+          },
+          "confirmationCancelledMessage": "This confirmation was cancelled.",
+          "changeCancelled": "Change cancelled.",
+          "partialSuccessFilesHeader": "Files generated successfully:",
+          "partialSuccessFollowupFailed": "Follow-up validation or additional steps failed: {failureMessage}"
         },
         "fileLink": {
           "tooltip": "Link File",
@@ -6666,7 +6709,9 @@
         "notDirectory": "Not a directory",
         "notDirectoryDesc": "Batch vector calculation can only run on directories",
         "vectorProcessing": "Vector processing",
-        "embeddingModelUnavailable": "No embedding model is configured or the model is unavailable. Please configure an embedding model in AI settings"
+        "embeddingModelUnavailable": "No embedding model is configured or the model is unavailable. Please configure an embedding model in AI settings",
+        "syncFolderNotDirectory": "Not a directory",
+        "syncFolderDirectoriesOnly": "Only folders can be downloaded"
       },
       "folderView": {
         "vectorDbNotEnabled": "Vector database not enabled",
@@ -6987,7 +7032,8 @@
           "start": "Start",
           "clear": "Clear",
           "clearChat": "Clear Chat",
-          "clearContext": "Clear Context"
+          "clearContext": "Clear Context",
+          "clearContextNotice": "Context cleared. Later conversation will only carry content after this message."
         },
         "attachments": {
           "title": "Attachments",
@@ -7049,7 +7095,8 @@
     "audioLoading": "Loading audio...",
     "emptyAudioData": "Audio data is empty",
     "fileSelectFailed": "File selection failed",
-    "fileProcessFailed": "File processing failed"
+    "fileProcessFailed": "File processing failed",
+    "speechRecognitionUnsupported": "The current browser does not support speech recognition. Please use Chrome, Edge, or Safari."
   },
   "quickRecord": {
     "description": "Click to select a recording tool and quickly create records"
@@ -7672,7 +7719,20 @@
     "remoteCursor": {
       "cursorLabel": "{label}'s cursor",
       "otherDevice": "Other device"
-    }
+    },
+    "searchReplace": {
+      "searchPlaceholder": "Search...",
+      "previousTitle": "Previous (Shift+Enter)",
+      "nextTitle": "Next (Enter)",
+      "closeTitle": "Close (Esc)",
+      "replacePlaceholder": "Replace with...",
+      "replaceCurrentTitle": "Replace current (Enter)",
+      "replaceAllTitle": "Replace all (Shift+Enter)",
+      "replaceAll": "All",
+      "title": "Search and Replace"
+    },
+    "infographicLoading": "Loading Infographic...",
+    "infographicRenderFailed": "Infographic failed to render: {message}"
   },
   "editorWindow": {
     "missing": "The editor window session does not exist or is closed",

@@ -318,7 +318,7 @@ async function initializeYjsDocument(binding: DocumentBinding, update: Uint8Arra
   )
   const localBinding = bindings[0]
   if (!localBinding?.syncEpoch) {
-    throw new Error('自托管同步工作区尚未完成初始化')
+    throw new Error('SELF_HOSTED_WORKSPACE_INIT_INCOMPLETE')
   }
 
   const commandId = crypto.randomUUID()
@@ -344,7 +344,7 @@ async function initializeYjsDocument(binding: DocumentBinding, update: Uint8Arra
   const result = response.results[0]
   if (result?.status === 'applied') return 'applied' as const
   if (result?.code === 'document_already_initialized') return 'already-initialized' as const
-  throw new Error(`协作文档初始化失败：${result?.code ?? 'missing_command_result'}`)
+  throw new Error(`SELF_HOSTED_COLLAB_DOC_INIT_FAILED: ${result?.code ?? 'missing_command_result'}`)
 }
 
 async function pullDocumentUpdates(binding: DocumentBinding, assertActive: () => void) {
@@ -672,7 +672,7 @@ async function resolveDocument(localRoot: string, relativePath: string, assertAc
     [localRoot]
   )
   const workspaceId = bindings[0]?.workspaceId
-  if (!workspaceId) throw new Error('文档尚未绑定到自托管工作区')
+  if (!workspaceId) throw new Error('SELF_HOSTED_DOCUMENT_NOT_BOUND')
   const { objectId: resolvedObjectId } = await ensureLibraryObjectMapping(
     workspaceId, 'file', portable.normalized, { deterministicImport: true, assertActive },
   )

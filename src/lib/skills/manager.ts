@@ -219,7 +219,7 @@ class SkillManager {
         hasReferencesDir: false,
         hasAssetsDir: false,
         isValid: false,
-        error: 'SKILL.md 文件不存在',
+        error: 'SKILL.md file does not exist',
       })
       return
     }
@@ -295,7 +295,7 @@ class SkillManager {
         scope
       )
       // 将旧格式内容附加到指令中
-      parsed.content += '\n\n---\n\n## 参考文档 (Legacy)\n\n' + refContent
+      parsed.content += '\n\n---\n\n## Reference Documents (Legacy)\n\n' + refContent
     }
 
     // 向后兼容：加载 KEYWORDS.md
@@ -304,7 +304,7 @@ class SkillManager {
         `${skillDirPath}/${KEYWORDS_FILE_NAME}`,
         scope
       )
-      parsed.content += '\n\n---\n\n## 关键词 (Legacy)\n\n' + keywordsContent
+      parsed.content += '\n\n---\n\n## Keywords (Legacy)\n\n' + keywordsContent
     }
 
     // 构建 Skill 内容
@@ -704,7 +704,7 @@ class SkillManager {
     // 完全匹配
     if (description.includes(input)) {
       score += 1
-      reasons.push('描述包含用户输入')
+      reasons.push('Description contains user input')
     }
 
     // 关键词匹配
@@ -714,13 +714,13 @@ class SkillManager {
     )
     if (matchedKeywords.length > 0) {
       score += matchedKeywords.length * 0.5
-      reasons.push(`匹配关键词: ${matchedKeywords.join(', ')}`)
+      reasons.push(`Matched keywords: ${matchedKeywords.join(', ')}`)
     }
 
     // 语义相似度（简化版）
     if (this.hasSemanticOverlap(description, input)) {
       score += 0.3
-      reasons.push('语义相关')
+      reasons.push('Semantically related')
     }
 
     return {

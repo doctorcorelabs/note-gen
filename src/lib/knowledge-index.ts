@@ -68,7 +68,7 @@ export async function indexKnowledgeDocument(document: KnowledgeSourceDocument):
       ))
     }
     if (embeddings.length !== document.chunks.length || embeddings.some(item => !item)) {
-      throw new Error('Embedding 返回不完整')
+      throw new Error('The embedding result is incomplete')
     }
     await replaceVectorDocumentsByFilename(
       document.sourceKey,

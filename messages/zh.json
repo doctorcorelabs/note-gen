@@ -1783,7 +1783,19 @@
           "title": "识别模型",
           "desc": "可选。配置后可在自动模式下回退使用，或在仅模型模式下强制使用。"
         }
-      }
+      },
+      "textContentEmpty": "文本内容为空",
+      "speechSynthesisUnsupported": "当前浏览器不支持语音合成功能",
+      "audioModelNotConfigured": "未配置音频模型",
+      "audioModelConfigNotFound": "未找到音频模型配置",
+      "audioModelConfigIncomplete": "音频模型配置不完整",
+      "audioContextDestroyed": "音频上下文已被销毁",
+      "audioDecodingFailed": "音频解码失败: {error}",
+      "audioPlaybackFailed": "音频播放失败: {error}",
+      "readAloudModeUnavailable": "当前朗读模式不可用，请检查本地语音支持或模型配置",
+      "speechRecognitionModelNotConfigured": "未配置语音识别模型",
+      "speechRecognitionModelConfigNotFound": "未找到语音识别模型配置",
+      "speechRecognitionModelConfigIncomplete": "语音识别模型配置不完整"
     },
     "readAloud": {
       "title": "朗读",
@@ -2168,8 +2180,15 @@
           "SELF_HOSTED_WORKSPACE_NAME_EMPTY": "工作区名称不能为空",
           "SELF_HOSTED_WORKSPACE_NOT_FOUND_OR_NO_ACCESS": "工作区不存在或当前账号无权访问",
           "SELF_HOSTED_WORKSPACE_NO_MANAGED_KEY": "该工作区没有可用的 managed key",
-          "SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH": "同一目录存在跨平台重名路径：{duplicate} / {normalized}"
-        }
+          "SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH": "同一目录存在跨平台重名路径：{duplicate} / {normalized}",
+          "SELF_HOSTED_WORKSPACE_INIT_INCOMPLETE": "自托管同步工作区尚未完成初始化",
+          "SELF_HOSTED_COLLAB_DOC_INIT_FAILED": "协作文档初始化失败：{code}",
+          "SELF_HOSTED_DOCUMENT_NOT_BOUND": "文档尚未绑定到自托管工作区",
+          "SELF_HOSTED_SERVER_URL_PROTOCOL_INVALID": "服务器地址必须使用 HTTP 或 HTTPS",
+          "SELF_HOSTED_SERVER_URL_CREDENTIALS_FORBIDDEN": "服务器地址不能包含用户名或密码",
+          "SELF_HOSTED_SERVER_URL_QUERY_OR_FRAGMENT_FORBIDDEN": "服务器地址不能包含查询参数或锚点"
+        },
+        "requestFailed": "服务器请求失败 ({status})"
       },
       "connectionTab": "连接设置",
       "syncOptionsTab": "同步选项",
@@ -2294,7 +2313,8 @@
       "gitlabInstanceTypePlaceholder": "选择 GitLab 实例类型",
       "gitlabInstanceTypeOptions": {
         "selfHosted": "自建实例",
-        "selfHostedDesc": "输入您的自建 GitLab 服务器地址（如：https://gitlab.example.com）"
+        "selfHostedDesc": "输入您的自建 GitLab 服务器地址（如：https://gitlab.example.com）",
+        "jihu": "极狐"
       },
       "gitlabAccessTokenDesc": "在 {instanceDisplayName} 创建个人访问令牌，需要 api 权限",
       "giteaInstanceType": "Gitea 实例类型",
@@ -3581,7 +3601,8 @@
       "importConfigSuccessMobile": "配置下载成功，请手动重启应用",
       "exportConfigSuccess": "导出成功",
       "importButton": "导入",
-      "exportButton": "导出"
+      "exportButton": "导出",
+      "importConfigFailed": "title: '导入失败',"
     },
     "localMcp": {
       "title": "让 AI 访问 NoteGen",
@@ -3852,7 +3873,14 @@
       "deleteModelConfirm": "确定要删除这个模型吗？",
       "rerankResultInvalid": "重排序结果格式不正确",
       "embeddingResultInvalid": "嵌入结果格式不正确",
-      "ttsResultInvalid": "TTS模型返回格式不正确"
+      "ttsResultInvalid": "TTS模型返回格式不正确",
+      "embeddingModelNotConfigured": "未配置嵌入模型或模型配置不正确",
+      "embeddingModelConfigIncomplete": "嵌入模型配置不完整",
+      "embeddingResultFormatInvalid": "嵌入结果格式不正确",
+      "batchEmbeddingCountMismatch": "批量嵌入结果数量不匹配",
+      "rerankResultFormatInvalid": "重排序结果格式不正确",
+      "rerankResultNoValidScores": "重排序结果没有有效分数",
+      "embeddingIncompleteResult": "Embedding 返回不完整"
     },
     "imageMethod": {
       "title": "图像识别",
@@ -4530,7 +4558,9 @@
           "metadata-only": "仅保存了网页标题或描述，没有提取到正文。",
           "blocked": "网页要求登录或验证，已保留链接。",
           "failed": "网页请求失败，已保留链接。"
-        }
+        },
+        "crawlingPageContent": "正在爬取页面内容...",
+        "processing": "处理中..."
       },
       "todo": {
         "title": "待办记录",
@@ -5486,8 +5516,21 @@
               "createTitle": "创建记忆",
               "deleteTitle": "删除记忆",
               "clearAllTitle": "清空全部记忆"
+            },
+            "canvas": {
+              "getStateTitle": "title: '读取当前画布',",
+              "createDiagramTitle": "title: '创建完整画布图表',",
+              "applyOperationsTitle": "title: '编辑当前画布',"
+            },
+            "attachment": {
+              "listTitle": "title: '列出附件目录',",
+              "readTitle": "title: '读取附件',"
             }
-          }
+          },
+          "confirmationCancelledMessage": "本次确认已取消。",
+          "changeCancelled": "改动已取消。",
+          "partialSuccessFilesHeader": "已成功生成文件：",
+          "partialSuccessFollowupFailed": "后续校验或附加步骤失败：{failureMessage}"
         },
         "fileLink": {
           "tooltip": "关联文件",
@@ -6666,7 +6709,9 @@
         "notDirectory": "不是目录",
         "notDirectoryDesc": "只能对目录进行批量向量计算",
         "vectorProcessing": "向量处理",
-        "embeddingModelUnavailable": "未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型"
+        "embeddingModelUnavailable": "未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型",
+        "syncFolderNotDirectory": "title: '不是目录',",
+        "syncFolderDirectoriesOnly": "description: '只能下载目录',"
       },
       "folderView": {
         "vectorDbNotEnabled": "向量数据库未启用",
@@ -6987,7 +7032,8 @@
           "start": "开始",
           "clear": "清除",
           "clearChat": "清空对话",
-          "clearContext": "清除上下文"
+          "clearContext": "清除上下文",
+          "clearContextNotice": "content: '上下文已清除，之后的对话将只携带此消息之后的内容。',"
         },
         "attachments": {
           "title": "附件",
@@ -7049,7 +7095,8 @@
     "audioLoading": "加载音频中...",
     "emptyAudioData": "音频数据为空",
     "fileSelectFailed": "文件选择失败",
-    "fileProcessFailed": "文件处理失败"
+    "fileProcessFailed": "文件处理失败",
+    "speechRecognitionUnsupported": "当前浏览器不支持语音识别功能，请使用 Chrome、Edge 或 Safari"
   },
   "quickRecord": {
     "description": "点击选择记录工具，快速创建记录"
@@ -7672,7 +7719,20 @@
     "remoteCursor": {
       "cursorLabel": "{label} 的光标",
       "otherDevice": "其他设备"
-    }
+    },
+    "searchReplace": {
+      "searchPlaceholder": "搜索...",
+      "previousTitle": "上一个 (Shift+Enter)",
+      "nextTitle": "下一个 (Enter)",
+      "closeTitle": "关闭 (Esc)",
+      "replacePlaceholder": "替换为...",
+      "replaceCurrentTitle": "替换当前 (Enter)",
+      "replaceAllTitle": "替换全部 (Shift+Enter)",
+      "replaceAll": "全部",
+      "title": "搜索和替换"
+    },
+    "infographicLoading": "正在加载 Infographic...",
+    "infographicRenderFailed": "Infographic 渲染失败: {message}"
   },
   "editorWindow": {
     "missing": "编辑窗口会话不存在或已经关闭",

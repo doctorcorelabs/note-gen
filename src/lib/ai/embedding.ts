@@ -134,10 +134,10 @@ export async function checkRerankModelAvailable(): Promise<boolean> {
     if (!baseURL || !model) return false;
     
     // 测试重排序模型
-    const testQuery = '测试查询';
+    const testQuery = 'Test query';
     const testDocuments = [
-      '这是一个测试文档', 
-      '这是另一个测试文档'
+      'This is a test document',
+      'This is another test document'
     ];
     
     // 发送测试请求
@@ -172,13 +172,13 @@ export async function fetchEmbedding(
       // 获取嵌入模型信息
       const modelInfo = await getEmbeddingModelInfo();
       if (!modelInfo) {
-        throw new Error('未配置嵌入模型或模型配置不正确');
+        throw new Error('No embedding model configured, or the model configuration is incorrect');
       }
       
       const { baseURL, model } = modelInfo;
 
       if (!baseURL || !model) {
-        throw new Error('嵌入模型配置不完整');
+        throw new Error('Embedding model configuration is incomplete');
       }
       
       // 发送嵌入请求
@@ -193,7 +193,7 @@ export async function fetchEmbedding(
         }
       });
       if (!data || !data.data || !data.data[0] || !data.data[0].embedding) {
-        throw new Error('嵌入结果格式不正确');
+        throw new Error('Embedding result format is invalid.');
       }
       
       return data.data[0].embedding;
@@ -231,7 +231,7 @@ export async function fetchEmbeddings(texts: string[]): Promise<Array<number[] |
     });
     const ordered = [...(data?.data || [])].sort((a, b) => a.index - b.index);
     if (ordered.length !== texts.length || ordered.some(item => !Array.isArray(item.embedding))) {
-      throw new Error('批量嵌入结果数量不匹配');
+      throw new Error('Batch embedding result count does not match');
     }
     return ordered.map(item => item.embedding);
   } catch (error) {
@@ -285,7 +285,7 @@ export async function rerankDocuments(
     });
 
     if (!data || !data.results) {
-      throw new Error('重排序结果格式不正确');
+      throw new Error('Rerank result format is invalid.');
     }
 
     const scoredResults = data.results.flatMap((result, index) => {
@@ -296,7 +296,7 @@ export async function rerankDocuments(
       return Number.isFinite(candidateScore) ? [{ originalDoc, candidateScore }] : [];
     });
     if (scoredResults.length === 0) {
-      throw new Error('重排序结果没有有效分数');
+      throw new Error('The rerank result has no valid scores');
     }
 
     const rawScores = scoredResults.map(result => result.candidateScore);

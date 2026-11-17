@@ -294,13 +294,13 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
       {isMobile ? (
         <Drawer open={open} onOpenChange={handleOpenChange}>
           <DrawerTrigger asChild>
-            <TooltipButton icon={<Link />} tooltipText={t('record.mark.type.link') || '链接'} />
+            <TooltipButton icon={<Link />} tooltipText={t('record.mark.type.link') || 'Link'} />
           </DrawerTrigger>
           <DrawerContent onEscapeKeyDown={event => { if (creatingTag) event.preventDefault() }}>
             <DrawerHeader>
-              <DrawerTitle>{t('record.mark.link.title') || '链接记录'}</DrawerTitle>
+              <DrawerTitle>{t('record.mark.link.title') || 'Record Link'}</DrawerTitle>
               <DrawerDescription>
-                {t('record.mark.link.description') || '输入网页链接，系统将自动爬取页面内容并保存'}
+                {t('record.mark.link.description') || 'Enter a webpage link, and the system will automatically crawl the page content and save it'}
               </DrawerDescription>
             </DrawerHeader>
             <div className="space-y-4 px-4">
@@ -341,19 +341,19 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
                   htmlFor="auto-read-clipboard-mobile"
                   className="text-sm cursor-pointer"
                 >
-                  {t('record.mark.link.autoReadClipboard') || '自动读取剪贴板链接'}
+                  {t('record.mark.link.autoReadClipboard') || 'Auto-read clipboard link'}
                 </Label>
               </div>
               <div className="flex items-center gap-4">
                 <p className="text-sm text-zinc-500">
-                  {loading ? '正在爬取页面内容...' : ''}
+                  {loading ? t('record.mark.link.crawlingPageContent') : ''}
                 </p>
                 <Button
                   type="submit"
                   onClick={handleSuccess}
                   disabled={!url || loading || creatingTag}
                 >
-                  {loading ? '处理中...' : (t('record.mark.link.save') || '保存')}
+                  {loading ? t('record.mark.link.processing') : (t('record.mark.link.save') || 'Save')}
                 </Button>
               </div>
             </DrawerFooter>
@@ -381,14 +381,14 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
             </Tooltip>
           ) : (
             <DialogTrigger asChild>
-              <TooltipButton icon={<Link />} tooltipText={t('record.mark.type.link') || '链接'} />
+              <TooltipButton icon={<Link />} tooltipText={t('record.mark.type.link') || 'Link'} />
             </DialogTrigger>
           )}
           <DialogContent onEscapeKeyDown={event => { if (creatingTag) event.preventDefault() }} className="min-w-full md:min-w-[500px]">
             <DialogHeader>
-              <DialogTitle>{t('record.mark.link.title') || '链接记录'}</DialogTitle>
+              <DialogTitle>{t('record.mark.link.title') || 'Record Link'}</DialogTitle>
               <DialogDescription>
-                {t('record.mark.link.description') || '输入网页链接，系统将自动爬取页面内容并保存'}
+                {t('record.mark.link.description') || 'Enter a webpage link, and the system will automatically crawl the page content and save it'}
               </DialogDescription>
             </DialogHeader>
             <RecordSaveTarget
@@ -427,19 +427,19 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
                   htmlFor="auto-read-clipboard"
                   className="text-sm cursor-pointer"
                 >
-                  {t('record.mark.link.autoReadClipboard') || '自动读取剪贴板链接'}
+                  {t('record.mark.link.autoReadClipboard') || 'Auto-read clipboard link'}
                 </Label>
               </div>}
               <div className="ml-auto flex items-center gap-4">
                 <p className="text-sm text-zinc-500">
-                  {loading ? '正在爬取页面内容...' : ''}
+                  {loading ? t('record.mark.link.crawlingPageContent') : ''}
                 </p>
                 <Button
                   type="submit"
                   onClick={handleSuccess}
                   disabled={!url || loading || creatingTag}
                 >
-                  {loading ? '处理中...' : (t('record.mark.link.save') || '保存')}
+                  {loading ? t('record.mark.link.processing') : (t('record.mark.link.save') || 'Save')}
                 </Button>
               </div>
             </DialogFooter>

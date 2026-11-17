@@ -34,8 +34,8 @@ export default function DownloadFolder({ item, mobile = false }: { item: DirTree
     // 检查是否真的是目录（防止误将文件当作目录处理）
     if (!item.isDirectory) {
       toast({
-        title: '不是目录',
-        description: '只能下载目录',
+        title: t('context.syncFolderNotDirectory'),
+        description: t('context.syncFolderDirectoriesOnly'),
         variant: 'destructive'
       });
       return;

@@ -18,13 +18,13 @@ export const GITEA_INSTANCES: Record<GiteaInstanceType, GiteaInstanceConfig> = {
     type: GiteaInstanceType.OFFICIAL,
     baseUrl: 'https://gitea.com',
     name: 'Gitea.com',
-    description: '官方 Gitea 实例'
+    description: 'Official Gitea instance'
   },
   [GiteaInstanceType.SELF_HOSTED]: {
     type: GiteaInstanceType.SELF_HOSTED,
     baseUrl: '',
-    name: '自建实例',
-    description: '自建 Gitea 服务器'
+    name: 'Self-hosted instance',
+    description: 'Self-hosted Gitea server'
   }
 };
 

@@ -100,10 +100,10 @@ export function normalizeServerUrl(value: string): NormalizedServerUrl {
   const trimmed = value.trim()
   const parsed = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`)
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('服务器地址必须使用 HTTP 或 HTTPS')
+    throw new Error('SELF_HOSTED_SERVER_URL_PROTOCOL_INVALID')
   }
-  if (parsed.username || parsed.password) throw new Error('服务器地址不能包含用户名或密码')
-  if (parsed.search || parsed.hash) throw new Error('服务器地址不能包含查询参数或锚点')
+  if (parsed.username || parsed.password) throw new Error('SELF_HOSTED_SERVER_URL_CREDENTIALS_FORBIDDEN')
+  if (parsed.search || parsed.hash) throw new Error('SELF_HOSTED_SERVER_URL_QUERY_OR_FRAGMENT_FORBIDDEN')
   const local = parsed.hostname === 'localhost'
     || parsed.hostname === '127.0.0.1'
     || parsed.hostname === '::1'
@@ -520,7 +520,7 @@ export class SelfHostedClient {
         const body = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Partial<ApiErrorBody>
         throw new SelfHostedApiError({
           code: body.code ?? 'request_failed',
-          message: body.message ?? `服务器请求失败 (${response.status})`,
+          message: body.message ?? `Server request failed (${response.status})`,
           requestId: body.requestId ?? '',
           retryable: body.retryable ?? response.status >= 500,
           ...(body.details === undefined ? {} : { details: body.details }),
