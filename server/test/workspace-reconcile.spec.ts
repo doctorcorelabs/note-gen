@@ -723,8 +723,8 @@ describe('POST /api/workspace/reconcile', () => {
       url: RECONCILE_PATH,
       headers: AUTHED_HEADERS,
     });
-    expect(response.statusCode).toBe(404);
-    assertErrorBody(response.json(), 'not_found');
+    expect(response.statusCode).toBe(405);
+    assertErrorBody(response.json(), 'method_not_allowed');
   });
 });
 

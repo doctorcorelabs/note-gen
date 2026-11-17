@@ -346,11 +346,11 @@ describe('L2: register 404 by design in closed mode [reference harness]', () => 
     await app.close();
   });
 
-  it('GET on the register path answers 404: the route is POST-only', async () => {
+  it('GET on the register path answers 405: the route is POST-only', async () => {
     const { app } = await buildPresessionApp();
     const res = await app.inject({ method: 'GET', url: '/api/test-register' });
-    expect(res.statusCode).toBe(404);
-    expect(errorOf(res).code).toBe('not_found');
+    expect(res.statusCode).toBe(405);
+    expect(errorOf(res).code).toBe('method_not_allowed');
     await app.close();
   });
 });
@@ -466,10 +466,11 @@ describe('L2: setup answers 404 conditionally after installation [reference harn
     await app.close();
   });
 
-  it('GET on the setup path answers 404: the route is POST-only', async () => {
+  it('GET on the setup path answers 405: the route is POST-only', async () => {
     const { app } = await buildPresessionApp();
     const res = await app.inject({ method: 'GET', url: '/api/test-setup' });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(405);
+    expect(errorOf(res).code).toBe('method_not_allowed');
     await app.close();
   });
 });
@@ -560,11 +561,12 @@ describe('L2: reset request and reset confirm [reference harness]', () => {
     await app.close();
   });
 
-  it('GET on the reset paths answers 404: confirmation never happens over GET', async () => {
+  it('GET on the reset paths answers 405: confirmation never happens over GET', async () => {
     const { app } = await buildPresessionApp();
     for (const url of ['/api/test-reset-request', '/api/test-reset-confirm']) {
       const res = await app.inject({ method: 'GET', url });
-      expect(res.statusCode).toBe(404);
+      expect(res.statusCode).toBe(405);
+      expect(errorOf(res).code).toBe('method_not_allowed');
     }
     await app.close();
   });

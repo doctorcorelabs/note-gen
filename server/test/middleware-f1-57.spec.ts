@@ -19,8 +19,11 @@
 //   are exempt in the hook itself, 6 pre-session auth routes are
 //   exempt by route config plus the Origin preHandler.
 // - One readiness test runs against a real Postgres 17 database
-//   (database v3_01c_tests, trust auth, no password in the DSN). It
-//   skips honestly when the database is unreachable, detected at
+//   (database v3_01c_tests on the persistent Fase 1 cluster at
+//   127.0.0.1:55434, trust auth, no password in the DSN). The
+//   database must exist and be migrated before the suite runs
+//   (gate provisioning); the test itself never migrates. It skips
+//   honestly when the database is unreachable, detected at
 //   collection time.
 //
 // Sources: DAFTAR-TERBUKA-FASE1.md F1-57; desain-auth.md section
@@ -101,10 +104,12 @@ function sessionCookie(sessionId: string): Record<string, string> {
 
 // Postgres availability probe for the real-database readiness test.
 // The DSN carries no password (trust auth on the test cluster); the
-// host and port come from the worker brief and can be overridden with
-// V3_01C_TEST_DATABASE_URL.
+// default targets the persistent Fase 1 cluster (AD-69) at port
+// 55434 and can be overridden with V3_01C_TEST_DATABASE_URL. The
+// previous default port 55433 named the retired throwaway cluster
+// and is stale since the gate moved to 55434 (W4-FAILCLOSED).
 const TEST_DATABASE_URL =
-  process.env['V3_01C_TEST_DATABASE_URL'] ?? 'postgresql://postgres@127.0.0.1:55433/v3_01c_tests';
+  process.env['V3_01C_TEST_DATABASE_URL'] ?? 'postgresql://postgres@127.0.0.1:55434/v3_01c_tests';
 
 const PG_AVAILABLE: boolean = await (async () => {
   try {
@@ -190,11 +195,11 @@ describe('F1-57: health passes without credentials [real app, no database]', () 
     }
   });
 
-  it('POST to a health path answers 404, never 401 and never a health 503', async () => {
+  it('POST to a health path answers 405, never 401 and never a health 503', async () => {
     for (const url of ['/api/health/live', '/api/health/ready', '/api/health']) {
       const res = await app.inject({ method: 'POST', url });
-      expect(res.statusCode).toBe(404);
-      expect(errorOf(res).code).toBe('not_found');
+      expect(res.statusCode).toBe(405);
+      expect(errorOf(res).code).toBe('method_not_allowed');
       expect(res.json() as Record<string, unknown>).not.toHaveProperty('checks');
     }
   });
@@ -641,10 +646,11 @@ describe('middleware fail-closed negatives [real hook]', () => {
     await app.close();
   });
 
-  it('a wrong method on a protected route answers 404, never 401', async () => {
+  it('a wrong method on a protected route answers 405, never 401', async () => {
     const app = await buildGuardedApp(true);
     const res = await app.inject({ method: 'DELETE', url: '/api/test-read' });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(405);
+    expect(errorOf(res).code).toBe('method_not_allowed');
     await app.close();
   });
 

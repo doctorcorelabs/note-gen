@@ -239,11 +239,14 @@ describe('unmatched paths', () => {
     await app.close();
   });
 
-  it('answers 404 for a wrong method on an existing path', async () => {
+  it('answers 405 for a wrong method on an existing path', async () => {
     const app = await buildApp({ config: testConfig(), pool: null, version: '0.39.2-fork.1' });
     app.get('/api/test-read', async () => successEnvelope({ ok: true }));
     const res = await app.inject({ method: 'POST', url: '/api/test-read' });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(405);
+    const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+    expect(body.error['code']).toBe('method_not_allowed');
+    expect(body.error['retryable']).toBe(false);
     await app.close();
   });
 });

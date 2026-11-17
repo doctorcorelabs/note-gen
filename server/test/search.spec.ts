@@ -21,7 +21,8 @@
 //   content, trash is never returned, and snippets stay within
 //   200 characters with offsets inside the snippet.
 // - POST /api/search does not exist (Fase 2 reservation, kontrak
-//   section 8) and answers the generic 404.
+//   section 8) and answers 405 method_not_allowed, because the path
+//   exists under GET; a trailing-slash variant still answers 404.
 //
 // The harness composes the SAME frozen plugins as buildApp
 // (request ids, error handling, auth hooks) and registers the
@@ -459,12 +460,12 @@ describe('fuzzy stub', () => {
     await app.close();
   });
 
-  it('answers 404 for a wrong method and for a trailing slash', async () => {
+  it('answers 405 for a wrong method and 404 for a trailing slash', async () => {
     const counter = countingPort(fixtureItems());
     const app = await searchApp(counter);
     const get = await app.inject({ method: 'GET', url: FUZZY_SEARCH_PATH, headers: SESSION_HEADERS });
-    expect(get.statusCode).toBe(404);
-    assertErrorBody(get.json(), 'not_found');
+    expect(get.statusCode).toBe(405);
+    assertErrorBody(get.json(), 'method_not_allowed');
     const trailing = await app.inject({
       method: 'POST',
       url: `${FUZZY_SEARCH_PATH}/`,
@@ -916,7 +917,7 @@ describe('keyword search', () => {
     await app.close();
   });
 
-  it('answers 404 for POST /api/search, the Fase 2 reservation with no MVP route', async () => {
+  it('answers 405 for POST /api/search, the Fase 2 reservation with no MVP route', async () => {
     const counter = countingPort(fixtureItems());
     const app = await searchApp(counter);
     const authed = await app.inject({
@@ -925,16 +926,16 @@ describe('keyword search', () => {
       headers: { ...MUTATION_HEADERS, 'content-type': 'application/json' },
       payload: JSON.stringify({ q: 'gagal' }),
     });
-    expect(authed.statusCode).toBe(404);
-    assertErrorBody(authed.json(), 'not_found');
+    expect(authed.statusCode).toBe(405);
+    assertErrorBody(authed.json(), 'method_not_allowed');
     const anonymous = await app.inject({
       method: 'POST',
       url: SEARCH_PATH,
       headers: { 'content-type': 'application/json' },
       payload: JSON.stringify({ q: 'gagal' }),
     });
-    expect(anonymous.statusCode).toBe(404);
-    assertErrorBody(anonymous.json(), 'not_found');
+    expect(anonymous.statusCode).toBe(405);
+    assertErrorBody(anonymous.json(), 'method_not_allowed');
     expect(counter.calls).toEqual([]);
     await app.close();
   });

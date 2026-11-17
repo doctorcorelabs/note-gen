@@ -35,6 +35,7 @@ import {
   checkWorker,
   runReadyChecks,
   type CheckResult,
+  type MigrationCheckDeps,
   type ReadyChecks,
   type WorkspaceFs,
 } from '../health/checks.js';
@@ -56,6 +57,11 @@ export interface HealthRouteDeps {
   checkTimeoutMs: number;
   overallTimeoutMs: number;
   workspaceFs?: WorkspaceFs;
+  // Wired by the health registration adapter: the ready endpoint
+  // runs the real migrations drift comparison instead of reporting
+  // check_not_configured. Callers that omit it keep the unwired
+  // skipped result (the unit-level contract in checks.ts).
+  migrationCheck?: MigrationCheckDeps;
 }
 
 export interface HealthEnvelope {
@@ -139,6 +145,7 @@ export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRou
         checkTimeoutMs: deps.checkTimeoutMs,
         overallTimeoutMs: deps.overallTimeoutMs,
         workspaceFs: deps.workspaceFs,
+        migrationCheck: deps.migrationCheck,
       });
       for (const [name, check] of Object.entries(checks)) {
         if (check.status === 'fail') {

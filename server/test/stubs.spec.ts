@@ -503,11 +503,11 @@ describe('restore stub', () => {
     await app.close();
   });
 
-  it('answers 404 for a wrong method and for a trailing slash', async () => {
+  it('answers 405 for a wrong method and 404 for a trailing slash', async () => {
     const app = await stubApp();
     const get = await app.inject({ method: 'GET', url: RESTORE_PATH, headers: AUTHED_HEADERS });
-    expect(get.statusCode).toBe(404);
-    assertErrorBody(get.json(), 'not_found');
+    expect(get.statusCode).toBe(405);
+    assertErrorBody(get.json(), 'method_not_allowed');
     const trailing = await app.inject({
       method: 'POST',
       url: `${RESTORE_PATH}/`,
@@ -672,11 +672,11 @@ describe('document parse stub', () => {
     await app.close();
   });
 
-  it('answers 404 for a wrong method', async () => {
+  it('answers 405 for a wrong method', async () => {
     const app = await stubApp();
     const res = await app.inject({ method: 'GET', url: DOCUMENT_PARSE_PATH, headers: AUTHED_HEADERS });
-    expect(res.statusCode).toBe(404);
-    assertErrorBody(res.json(), 'not_found');
+    expect(res.statusCode).toBe(405);
+    assertErrorBody(res.json(), 'method_not_allowed');
     await app.close();
   });
 });

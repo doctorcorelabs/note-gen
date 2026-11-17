@@ -435,11 +435,11 @@ describe('POST /api/csp-reports through buildApp', () => {
     await app.close();
   });
 
-  it('answers 404 for GET on the report path', async () => {
+  it('answers 405 for GET on the report path', async () => {
     const app = await buildApp({ config: testConfig(), pool: null, version: '0.39.2-fork.1' });
     const res = await app.inject({ method: 'GET', url: '/api/csp-reports' });
-    expect(res.statusCode).toBe(404);
-    expect((res.json() as { error: { code: string } }).error.code).toBe('not_found');
+    expect(res.statusCode).toBe(405);
+    expect((res.json() as { error: { code: string } }).error.code).toBe('method_not_allowed');
     await app.close();
   });
 
