@@ -21,6 +21,12 @@
 // setup through login to a workspace write with the real session
 // and CSRF token (kontrak 3.12).
 //
+// The "without a database" premise is enforced, not assumed: this
+// file removes DATABASE_URL for its whole run (see the module-level
+// block after the imports) and restores it afterwards, so the
+// fail-closed cases pin production behavior under every invocation
+// instead of inheriting the ambient environment.
+//
 // Deliberately NOT covered here: routes that have not landed at
 // this base (records, tags, assets, search, watcher, backup CRUD,
 // mkdir/move/trash/reconcile, admin, auth advanced), media
@@ -45,12 +51,11 @@
 // list not_a_directory; V3-04a section 4), and missing, hidden,
 // and symlink paths keep the generic 404 not_found on reads.
 //
-// Observed app behavior pinned as-is, not as contract text: a
-// wrong method on a known path and an unknown path both answer
-// 404 not_found through the global not-found handler (see
-// plugins/error-handler.ts); the catalog code method_not_allowed
-// is not emitted by the app today. Changing that is out of scope
-// for this slot and is flagged in the slot report.
+// A wrong method on a known path answers 405 method_not_allowed
+// (kontrak 6.2, retryable false) while an unknown path answers 404
+// not_found, both through the global not-found handler (see
+// plugins/error-handler.ts). The 405 split landed in W4-FAILCLOSED
+// (finding F2); before it, both cases answered 404.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -73,6 +78,30 @@ import {
   TEST_SETUP_TOKEN,
   type TestAuth,
 } from './auth/helpers.js';
+
+// Premise enforcement (W4-FAILCLOSED): the production settings deps
+// resolve the Drizzle handle lazily from process.env.DATABASE_URL
+// through a process-wide singleton (the first call wins), so an
+// ambient DATABASE_URL would silently turn this file's fail-closed
+// cases into live-database cases. The stub principal 'user-1' is not
+// a UUID and has no users row, so live settings queries fail with
+// driver errors and answer 500 internal_error instead of the pinned
+// 503; production principals are UUIDs with users rows, and the
+// Postgres positives live in settings-pg.spec.ts. Removing the
+// variable for the whole file (both describes) keeps the premise
+// true under every invocation, following the save/delete/restore
+// precedent in settings-routes.spec.ts. The value is restored in
+// afterAll so a worker reused for another file sees the original
+// environment.
+const SAVED_DATABASE_URL = process.env['DATABASE_URL'];
+delete process.env['DATABASE_URL'];
+afterAll(() => {
+  if (SAVED_DATABASE_URL === undefined) {
+    delete process.env['DATABASE_URL'];
+  } else {
+    process.env['DATABASE_URL'] = SAVED_DATABASE_URL;
+  }
+});
 
 const ORIGIN = 'https://app.example.invalid';
 const PRINCIPAL: SessionPrincipal = { userId: 'user-1', role: 'user', sessionId: 'good-session' };
@@ -240,9 +269,10 @@ describe('contract e2e grup 3: stub-verifier app', () => {
       expectErrorEnvelope(res, 404, 'not_found');
     });
 
-    it('answers 404 not_found for a wrong method on a known path', async () => {
+    it('answers 405 method_not_allowed for a wrong method on a known path', async () => {
       const res = await app.inject({ method: 'DELETE', url: '/api/workspace/list', headers: AUTH_HEADERS });
-      expectErrorEnvelope(res, 404, 'not_found');
+      const error = expectErrorEnvelope(res, 405, 'method_not_allowed');
+      expect(error.retryable).toBe(false);
     });
 
     it('rejects a mutation without Origin with 403 origin_rejected', async () => {

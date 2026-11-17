@@ -1,0 +1,143 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
+// See LICENSE and FORK.md.
+
+// Not-found handler contract (W4-FAILCLOSED, finding F2): a wrong
+// method on a known path answers 405 method_not_allowed (kontrak
+// 6.2, retryable false), while an unknown path answers 404
+// not_found. The unit cases pin the route-pattern matcher
+// (literals, :param, trailing wildcard, trailing slash, case);
+// the HTTP cases pin the split through the real buildApp
+// (literal and :param routes) and through a bare harness for the
+// media wildcard route, which no registration adapter wires into
+// buildApp yet, so the wildcard case cannot be exercised there.
+
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Fastify from 'fastify';
+import { describe, expect, it } from 'vitest';
+import { buildApp } from '../src/app.js';
+import type { ServerConfig } from '../src/config.js';
+import { pathMatchesRoutePattern, registerErrorHandling } from '../src/plugins/error-handler.js';
+import { registerWorkspaceMediaReadRoutes } from '../src/routes/workspace-media-read.js';
+
+describe('pathMatchesRoutePattern', () => {
+  it('matches exact literal paths only', () => {
+    expect(pathMatchesRoutePattern('/api/settings', '/api/settings')).toBe(true);
+    expect(pathMatchesRoutePattern('/api/settings', '/api/settings/')).toBe(false);
+    expect(pathMatchesRoutePattern('/api/settings', '/api/Settings')).toBe(false);
+    expect(pathMatchesRoutePattern('/api/settings', '/api/setting')).toBe(false);
+    expect(pathMatchesRoutePattern('/api/settings', '/api/settings/extra')).toBe(false);
+  });
+
+  it('matches a :param segment against exactly one non-empty segment', () => {
+    expect(pathMatchesRoutePattern('/api/auth/sessions/:id', '/api/auth/sessions/abc')).toBe(true);
+    expect(pathMatchesRoutePattern('/api/auth/sessions/:id', '/api/auth/sessions/')).toBe(false);
+    expect(pathMatchesRoutePattern('/api/auth/sessions/:id', '/api/auth/sessions/a/b')).toBe(false);
+    expect(pathMatchesRoutePattern('/api/auth/sessions/:id', '/api/auth/sessions')).toBe(false);
+    expect(
+      pathMatchesRoutePattern(
+        '/api/settings/secrets/ai-providers/:providerKey',
+        '/api/settings/secrets/ai-providers/acme',
+      ),
+    ).toBe(true);
+  });
+
+  it('matches a trailing wildcard against one or more remaining segments', () => {
+    expect(pathMatchesRoutePattern('/api/workspace/media/*', '/api/workspace/media/a.png')).toBe(true);
+    expect(pathMatchesRoutePattern('/api/workspace/media/*', '/api/workspace/media/a/b.png')).toBe(true);
+    expect(pathMatchesRoutePattern('/api/workspace/media/*', '/api/workspace/media/')).toBe(true);
+    expect(pathMatchesRoutePattern('/api/workspace/media/*', '/api/workspace/media')).toBe(false);
+    expect(pathMatchesRoutePattern('/api/workspace/media/*', '/api/workspace/other/a.png')).toBe(false);
+  });
+
+  it('decodes percent-encoded segments before comparing', () => {
+    expect(pathMatchesRoutePattern('/api/auth/sessions/:id', '/api/auth/sessions/a%20b')).toBe(true);
+    expect(pathMatchesRoutePattern('/api/workspace/list', '/api/workspace/list')).toBe(true);
+  });
+});
+
+describe('not-found handler over HTTP', () => {
+  function testConfig(): ServerConfig {
+    return {
+      host: '127.0.0.1',
+      port: 3001,
+      databaseUrl: 'postgres://placeholder/placeholder',
+      workspaceRoot: '/tmp',
+      nodeEnv: 'development',
+      logLevel: 'silent',
+      checkTimeoutMs: 2000,
+      overallTimeoutMs: 5000,
+      warnings: [],
+      registrationMode: 'closed',
+      publicBaseUrl: undefined,
+      trustProxy: false,
+      cookieSecure: true,
+      cfAccessEnabled: false,
+      cfAccessTeamDomain: undefined,
+      cfAccessAud: undefined,
+      cfAccessServiceAud: undefined,
+      cfAccessJwksCacheTtlSeconds: 3600,
+      jwtAudience: undefined,
+      authSecretConfigured: false,
+      authSecretLengthOk: false,
+      encryptionKeyConfigured: false,
+      setupTokenConfigured: false,
+      setupTokenLengthOk: false,
+      maxBodyBytes: 1048576,
+    };
+  }
+
+  it('answers 405 for a wrong method on literal and :param paths', async () => {
+    const app = await buildApp({ config: testConfig(), pool: null, version: 'test' });
+    try {
+      for (const target of [
+        { method: 'DELETE', url: '/api/workspace/list' },
+        { method: 'GET', url: '/api/settings/secrets/ai-providers/acme' },
+      ] as const) {
+        const res = await app.inject({ method: target.method, url: target.url });
+        expect(res.statusCode).toBe(405);
+        const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+        expect(body.ok).toBe(false);
+        expect(body.error['code']).toBe('method_not_allowed');
+        expect(body.error['retryable']).toBe(false);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('answers 405 for a wrong method on the media wildcard route', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'w4fc-media-'));
+    const app = Fastify({ logger: false });
+    registerErrorHandling(app, { version: 'test' });
+    await registerWorkspaceMediaReadRoutes(app, { workspaceRoot: dir });
+    try {
+      for (const url of ['/api/workspace/media/pic.png', '/api/workspace/media/a/b.png']) {
+        const res = await app.inject({ method: 'POST', url });
+        expect(res.statusCode).toBe(405);
+        const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+        expect(body.ok).toBe(false);
+        expect(body.error['code']).toBe('method_not_allowed');
+        expect(body.error['retryable']).toBe(false);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('answers 404 for unknown paths, trailing-slash variants, and case variants', async () => {
+    const app = await buildApp({ config: testConfig(), pool: null, version: 'test' });
+    try {
+      for (const url of ['/api/nope', '/api/workspace/list/', '/API/workspace/list']) {
+        const res = await app.inject({ method: 'GET', url });
+        expect(res.statusCode).toBe(404);
+        const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+        expect(body.error['code']).toBe('not_found');
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});

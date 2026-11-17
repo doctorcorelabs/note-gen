@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig, type ServerConfig } from '../src/config.js';
+import { readMigrationManifest } from '../src/db/migrate.js';
 import type { HealthDbPool } from '../src/db/pool.js';
 import {
   checkDb,
@@ -42,7 +43,20 @@ interface FakeBehavior {
   queryDelayMs?: number;
   select1Rows?: Array<Record<string, unknown>>;
   pgvectorRows?: Array<Record<string, unknown>>;
+  // Journal rows for the wired migrations check. When omitted the
+  // fake reports zero applied migrations, so a wired ready probe
+  // fails with drift; healthy HTTP tests pass the real manifest
+  // hashes through currentMigrationRows().
+  migrationRows?: Array<Record<string, unknown>>;
   onConnect?: () => void;
+}
+
+// Applied journal rows matching the on-disk manifest: the fake
+// database state in which the wired migrations check reports
+// migrations_current.
+async function currentMigrationRows(): Promise<Array<Record<string, unknown>>> {
+  const manifest = await readMigrationManifest();
+  return manifest.entries.map((entry) => ({ hash: entry.hash }));
 }
 
 function makeFakePool(behavior: FakeBehavior = {}): HealthDbPool & { connectCalls: () => number } {
@@ -62,6 +76,9 @@ function makeFakePool(behavior: FakeBehavior = {}): HealthDbPool & { connectCall
           }
           if (behavior.queryError !== undefined) {
             throw behavior.queryError;
+          }
+          if (text.includes('__drizzle_migrations')) {
+            return { rows: behavior.migrationRows ?? [] };
           }
           if (text.includes('pg_extension')) {
             return { rows: behavior.pgvectorRows ?? [{ present: 1 }] };
@@ -442,7 +459,7 @@ describe('http routes', () => {
   });
 
   it('answers readiness 200 with the fixed envelope when healthy', async () => {
-    const pool = makeFakePool();
+    const pool = makeFakePool({ migrationRows: await currentMigrationRows() });
     const app = await buildApp({ config: testConfig({ workspaceRoot: dir }), pool, version: '0.39.2-fork.1' });
     const res = await app.inject({ method: 'GET', url: '/api/health/ready' });
     expect(res.statusCode).toBe(200);
@@ -456,6 +473,8 @@ describe('http routes', () => {
     for (const check of Object.values(checks)) {
       expect(Object.keys(check).sort()).toEqual(['detail', 'error', 'latencyMs', 'status']);
     }
+    expect(checks['migrations']?.['status']).toBe('ok');
+    expect(checks['migrations']?.['detail']).toBe('migrations_current');
     await app.close();
   });
 
@@ -471,10 +490,11 @@ describe('http routes', () => {
   });
 
   it('serves the alias with the same body as ready, healthy and unhealthy', async () => {
-    const healthy = makeFakePool();
+    const healthy = makeFakePool({ migrationRows: await currentMigrationRows() });
     const app = await buildApp({ config: testConfig({ workspaceRoot: dir }), pool: healthy, version: '0.39.2-fork.1' });
     const ready = await app.inject({ method: 'GET', url: '/api/health/ready' });
     const alias = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(ready.statusCode).toBe(200);
     expect(alias.statusCode).toBe(ready.statusCode);
     expect(stripVolatile(alias.json() as Record<string, unknown>)).toEqual(stripVolatile(ready.json() as Record<string, unknown>));
     await app.close();
@@ -489,17 +509,17 @@ describe('http routes', () => {
     await app2.close();
   });
 
-  it('answers unknown health paths and wrong methods without ok true', async () => {
+  it('answers 404 for unknown health paths and 405 for wrong methods, without ok true', async () => {
     const pool = makeFakePool();
     const app = await buildApp({ config: testConfig({ workspaceRoot: dir }), pool, version: '0.39.2-fork.1' });
     for (const target of [
-      { method: 'GET', url: '/api/health/unknown' },
-      { method: 'POST', url: '/api/health/ready' },
-      { method: 'GET', url: '/health/ready' },
-      { method: 'GET', url: '/health' },
+      { method: 'GET', url: '/api/health/unknown', status: 404 },
+      { method: 'POST', url: '/api/health/ready', status: 405 },
+      { method: 'GET', url: '/health/ready', status: 404 },
+      { method: 'GET', url: '/health', status: 404 },
     ] as const) {
-      const res = await app.inject(target);
-      expect([404, 405]).toContain(res.statusCode);
+      const res = await app.inject({ method: target.method, url: target.url });
+      expect(res.statusCode).toBe(target.status);
       expect(JSON.stringify(res.json())).not.toContain('"ok":true');
     }
     await app.close();

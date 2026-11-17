@@ -579,7 +579,8 @@ describe('auth core routes', () => {
     it('does not mutate on GET', async () => {
       const { cookie } = await seedLoggedInUser(fixture, app, { email: 'a@example.invalid', password: PASSWORD });
       const res = await app.inject({ method: 'GET', url: '/api/auth/logout', headers: { cookie } });
-      expect(res.statusCode).toBe(404);
+      expect(res.statusCode).toBe(405);
+      expect(bodyOf(res).error?.code).toBe('method_not_allowed');
       const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
       expect(me.statusCode).toBe(200);
     });

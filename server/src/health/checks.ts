@@ -237,10 +237,11 @@ export interface MigrationCheckDeps {
 //
 // States:
 // - Database down: fail with DB_UNAVAILABLE, as in Fase 0.
-// - No deps passed: skipped with check_not_configured. Server wiring
-//   passes the deps (V3-15 full wiring, waiting on trunk state); until
-//   then the check honestly reports that it is not wired, and skipped
-//   still does not block readiness.
+// - No deps passed: skipped with check_not_configured. The health
+//   registration adapter wires the deps for every buildApp server,
+//   so the wired ready endpoint never reports this state when the
+//   database is up; skipped remains only for direct callers that
+//   omit the deps, and skipped still does not block readiness.
 // - Journal table or schema missing: treated as zero applied, so a
 //   fresh database fails with MIGRATION_DRIFT, never skipped.
 // - Any other failure (query error, timeout, unreadable manifest):
@@ -487,9 +488,10 @@ export interface ReadyCheckDeps {
   checkTimeoutMs: number;
   overallTimeoutMs: number;
   workspaceFs?: WorkspaceFs;
-  // Optional until server wiring passes it (V3-15 full wiring). When
-  // absent, the migrations check reports skipped and readiness is
-  // decided exactly as before; when present, drift blocks readiness.
+  // Wired by the health registration adapter for every buildApp
+  // server. When absent (direct callers only), the migrations check
+  // reports skipped and readiness is decided exactly as before;
+  // when present, drift blocks readiness.
   migrationCheck?: MigrationCheckDeps;
 }
 

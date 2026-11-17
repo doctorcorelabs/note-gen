@@ -689,15 +689,15 @@ describe('POST /api/transactions with stub handlers', () => {
     expect(typeof body.error['details']).toBe('object');
   });
 
-  it('answers 404 for GET on the transaction path and for versioned paths', async () => {
+  it('answers 405 for GET on the transaction path and 404 for versioned paths', async () => {
     harness = await buildHarness();
     const getRes = await harness.app.inject({
       method: 'GET',
       url: '/api/transactions',
       headers: { cookie: 'notegen_session=good-session' },
     });
-    expect(getRes.statusCode).toBe(404);
-    expect((getRes.json() as { error: Record<string, unknown> }).error['code']).toBe('not_found');
+    expect(getRes.statusCode).toBe(405);
+    expect((getRes.json() as { error: Record<string, unknown> }).error['code']).toBe('method_not_allowed');
     const versioned = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/transactions',

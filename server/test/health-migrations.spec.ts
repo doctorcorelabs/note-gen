@@ -30,6 +30,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../src/app.js';
+import type { ServerConfig } from '../src/config.js';
 import {
   assessMigrationDrift,
   readMigrationManifest,
@@ -350,6 +352,98 @@ describe('readiness composition with the real migrations check', () => {
   });
 });
 
+// Wiring proof (W4-FAILCLOSED, F-MIGCHECK): the ready endpoint runs
+// the real migrations check for every buildApp server, with the
+// default disk manifest. No live database is needed: the fake pool
+// answers the journal query with manifest hashes (current) or a
+// subset (drift). Before the wiring, both cases answered skipped
+// with check_not_configured over HTTP.
+describe('migrations check wired through buildApp', () => {
+  function wiringConfig(workspaceRoot: string): ServerConfig {
+    return {
+      host: '127.0.0.1',
+      port: 3001,
+      databaseUrl: 'postgres://placeholder/placeholder',
+      workspaceRoot,
+      nodeEnv: 'development',
+      logLevel: 'silent',
+      checkTimeoutMs: 2000,
+      overallTimeoutMs: 5000,
+      warnings: [],
+      registrationMode: 'closed',
+      publicBaseUrl: undefined,
+      trustProxy: false,
+      cookieSecure: true,
+      cfAccessEnabled: false,
+      cfAccessTeamDomain: undefined,
+      cfAccessAud: undefined,
+      cfAccessServiceAud: undefined,
+      cfAccessJwksCacheTtlSeconds: 3600,
+      jwtAudience: undefined,
+      authSecretConfigured: false,
+      authSecretLengthOk: false,
+      encryptionKeyConfigured: false,
+      setupTokenConfigured: false,
+      setupTokenLengthOk: false,
+      maxBodyBytes: 1048576,
+    };
+  }
+
+  it('reports migrations_current over HTTP when the journal matches the disk manifest', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'w15-health-wired-'));
+    try {
+      const manifest = await readMigrationManifest();
+      const pool = makeFakePool({
+        migrationRows: manifest.entries.map((entry) => ({ hash: entry.hash })),
+      });
+      const app = await buildApp({ config: wiringConfig(dir), pool, version: 'test' });
+      try {
+        const res = await app.inject({ method: 'GET', url: '/api/health/ready' });
+        expect(res.statusCode).toBe(200);
+        const body = res.json() as Record<string, unknown>;
+        expect(body['ok']).toBe(true);
+        expect(body['status']).toBe('ready');
+        const checks = body['checks'] as Record<string, Record<string, unknown>>;
+        expect(checks['migrations']?.['status']).toBe('ok');
+        expect(checks['migrations']?.['detail']).toBe('migrations_current');
+        expect(checks['migrations']?.['error']).toBeNull();
+      } finally {
+        await app.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks readiness over HTTP when the journal is behind the disk manifest', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'w15-health-wired-'));
+    try {
+      const manifest = await readMigrationManifest();
+      expect(manifest.entries.length).toBeGreaterThan(1);
+      const pool = makeFakePool({
+        migrationRows: manifest.entries.slice(0, -1).map((entry) => ({ hash: entry.hash })),
+      });
+      const app = await buildApp({ config: wiringConfig(dir), pool, version: 'test' });
+      try {
+        const res = await app.inject({ method: 'GET', url: '/api/health/ready' });
+        expect(res.statusCode).toBe(503);
+        const body = res.json() as Record<string, unknown>;
+        expect(body['ok']).toBe(false);
+        expect(body['status']).toBe('not_ready');
+        const checks = body['checks'] as Record<string, Record<string, unknown>>;
+        expect(checks['db']?.['status']).toBe('ok');
+        expect(checks['migrations']?.['status']).toBe('fail');
+        expect(checks['migrations']?.['detail']).toBe('migrations_missing');
+        expect(checks['migrations']?.['error']).toBe('MIGRATION_DRIFT');
+      } finally {
+        await app.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 const LIVE_PG_URL = process.env['MIGRATIONS_PG_TEST_URL'];
 const describePg = LIVE_PG_URL === undefined ? describe.skip : describe;
 
@@ -378,7 +472,14 @@ describePg('migrations check over live Postgres 17', () => {
     expect(result.latencyMs).not.toBeNull();
     const body = JSON.stringify(result);
     expect(body).not.toContain('127.0.0.1');
-    expect(body).not.toContain('55433');
+    // Host and port come from the live URL itself, so the leak check
+    // stays valid when the cluster moves; the previous literal 55433
+    // named the retired throwaway cluster (W4-FAILCLOSED).
+    const liveUrl = new URL(LIVE_PG_URL as string);
+    expect(body).not.toContain(liveUrl.hostname);
+    if (liveUrl.port !== '') {
+      expect(body).not.toContain(liveUrl.port);
+    }
   });
 
   it('reports missing drift against the live journal when the manifest names one more migration', async () => {

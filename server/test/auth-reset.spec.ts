@@ -370,11 +370,11 @@ describe('POST /api/auth/password/reset-request', () => {
     await app.close();
   });
 
-  it('GET on the reset-request path answers 404', async () => {
+  it('GET on the reset-request path answers 405', async () => {
     const { app } = await buildResetApp();
     const res = await app.inject({ method: 'GET', url: '/api/auth/password/reset-request' });
-    expect(res.statusCode).toBe(404);
-    expect(errorOf(res).code).toBe('not_found');
+    expect(res.statusCode).toBe(405);
+    expect(errorOf(res).code).toBe('method_not_allowed');
     await app.close();
   });
 
@@ -556,8 +556,8 @@ describe('POST /api/auth/password/reset-confirm', () => {
     expect(missing.statusCode).toBe(403);
     expect(errorOf(missing).code).toBe('origin_rejected');
     const get = await app.inject({ method: 'GET', url: '/api/auth/password/reset-confirm' });
-    expect(get.statusCode).toBe(404);
-    expect(errorOf(get).code).toBe('not_found');
+    expect(get.statusCode).toBe(405);
+    expect(errorOf(get).code).toBe('method_not_allowed');
     await app.close();
   });
 });

@@ -15,11 +15,19 @@ export const REGISTRATION_ID = 'health' as const;
 export const REGISTRATION_ORDER = 10;
 
 export async function registerGroup(ctx: RegistrationContext): Promise<void> {
+  // F-MIGCHECK wiring: the ready endpoint runs the real migrations
+  // check over the same application pool the db check uses, with the
+  // default disk manifest. Readiness now proves the schema current
+  // (migrations_current) or fails on drift, instead of reporting
+  // check_not_configured while drift was provable only through the
+  // standalone runner. No new RegistrationContext field is needed:
+  // pool and checkTimeoutMs already travel in the context.
   await registerHealthRoutes(ctx.app, {
     pool: ctx.pool,
     workspaceRoot: ctx.config.workspaceRoot,
     version: ctx.version,
     checkTimeoutMs: ctx.config.checkTimeoutMs,
     overallTimeoutMs: ctx.config.overallTimeoutMs,
+    migrationCheck: { pool: ctx.pool, timeoutMs: ctx.config.checkTimeoutMs },
   });
 }
