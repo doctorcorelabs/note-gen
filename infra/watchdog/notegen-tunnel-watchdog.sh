@@ -151,13 +151,17 @@ status = data.get("status")
 checks = data.get("checks")
 failed = []
 warnings = []
+# Keputusan sehat ditentukan oleh CHECKS, bukan oleh veto mentah ok/status/
+# kode: API melipat check non-blokir (pgvector seksi 3.5, worker saat
+# belum di-deploy) ke dalam ok/status/kode, sehingga veto mentah membuat
+# aturan non-blokir mustahil. Kode 200/503 berarti endpoint menjawab
+# dengan amplop; kode lain berarti tidak ada jawaban yang dapat dinilai.
+# ok/status yang bertentangan dengan checks dicatat sebagai peringatan
+# konsistensi amplop, bukan vonis tidak sehat.
 valid = True
-if code != "200":
+if code not in ("200", "503"):
     valid = False
-if ok is not True:
-    valid = False
-if status != "ready":
-    valid = False
+    failed.append("http:code:" + safe(code))
 if not isinstance(checks, dict):
     valid = False
     failed.append("checks:missing:-")
@@ -211,6 +215,8 @@ else:
                     failed.append(name + ":" + safe(st) + ":" + code_s)
                 else:
                     warnings.append("worker_" + safe(st))
+if valid and (ok is not True or status != "ready"):
+    warnings.append("envelope_inconsistent")
 emit(valid, "json", ok, status, failed, warnings)
 PYEOF
 )"
@@ -328,7 +334,7 @@ if ! touch "$LOG_FILE" 2>/dev/null; then
   exit 1
 fi
 
-exec 9>"$LOCK_FILE" 2>/dev/null || {
+exec 9>"$LOCK_FILE" || {
   echo "notegen-tunnel-watchdog: GAGAL membuka lock ($LOCK_FILE)" >&2
   exit 1
 }

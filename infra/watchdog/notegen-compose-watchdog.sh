@@ -148,13 +148,17 @@ status = data.get("status")
 checks = data.get("checks")
 failed = []
 warnings = []
+# Keputusan sehat ditentukan oleh CHECKS, bukan oleh veto mentah ok/status/
+# kode: API melipat check non-blokir (pgvector seksi 3.5, worker saat
+# belum di-deploy) ke dalam ok/status/kode, sehingga veto mentah membuat
+# aturan non-blokir mustahil. Kode 200/503 berarti endpoint menjawab
+# dengan amplop; kode lain berarti tidak ada jawaban yang dapat dinilai.
+# ok/status yang bertentangan dengan checks dicatat sebagai peringatan
+# konsistensi amplop, bukan vonis tidak sehat.
 valid = True
-if code != "200":
+if code not in ("200", "503"):
     valid = False
-if ok is not True:
-    valid = False
-if status != "ready":
-    valid = False
+    failed.append("http:code:" + safe(code))
 if not isinstance(checks, dict):
     valid = False
     failed.append("checks:missing:-")
@@ -208,6 +212,8 @@ else:
                     failed.append(name + ":" + safe(st) + ":" + code_s)
                 else:
                     warnings.append("worker_" + safe(st))
+if valid and (ok is not True or status != "ready"):
+    warnings.append("envelope_inconsistent")
 emit(valid, "json", ok, status, failed, warnings)
 PYEOF
 )"
@@ -325,7 +331,7 @@ if ! touch "$LOG_FILE" 2>/dev/null; then
   exit 1
 fi
 
-exec 9>"$LOCK_FILE" 2>/dev/null || {
+exec 9>"$LOCK_FILE" || {
   echo "notegen-compose-watchdog: GAGAL membuka lock ($LOCK_FILE)" >&2
   exit 1
 }
@@ -437,7 +443,7 @@ clear_resume_file() {
 # Jatah restart (seksi 2.5): berkas berisi baris
 # service|signature|count|window_start|fingerprint
 quota_lookup() {
-  # $1 service, $2 signature. Mengisi Q_COUNT, Q_WINDOW_START, Q_FINGERPRINT.
+  # $1 epoch kini, $2 service, $3 signature. Mengisi Q_COUNT, Q_WINDOW_START, Q_FINGERPRINT.
   local now_s="$1" svc="$2" sig="$3"
   Q_COUNT=0; Q_WINDOW_START=""; Q_FINGERPRINT=""
   if [ ! -f "$QUOTA_FILE" ]; then return 0; fi
@@ -454,7 +460,8 @@ quota_lookup() {
 quota_record() {
   # $1 service, $2 signature, $3 fingerprint, $4 epoch kini. Menambah hitung
   # (atau membuka jendela baru bila jendela lama kedaluwarsa).
-  local svc="$1" sig="$2" fp="$3" now_s="$4" new_count=1 new_start="$now_s"
+  local svc="$1" sig="$2" fp="$3" now_s="$4" new_count=1
+  local new_start="$now_s"
   local tmp="$STATE_DIR/.quotas.$$" kept=""
   quota_lookup "$now_s" "$svc" "$sig"
   if [ "$Q_COUNT" -gt 0 ]; then
@@ -936,12 +943,16 @@ compute_verdict() {
       esac
     fi
   fi
+  # Pemisah "_exited_" (bukan "|"): sidik jari disimpan di berkas kuota
+  # yang memakai "|" sebagai pemisah field, dan sanitizer state membuang
+  # "|"; pemisah ini menjamin sidik jari tersimpan sama dengan sidik jari
+  # live sehingga aturan ketat dapat membandingkannya.
   if [ "$CADDY_SUSPECT" -eq 1 ]; then
-    VERDICT_FINGERPRINT="caddy_suspect|exited:$EXITED_LIST"
+    VERDICT_FINGERPRINT="caddy_suspect_exited_$EXITED_LIST"
   elif [ "$PROCESS_DOWN" -eq 1 ]; then
-    VERDICT_FINGERPRINT="process_down|exited:$EXITED_LIST"
+    VERDICT_FINGERPRINT="process_down_exited_$EXITED_LIST"
   else
-    VERDICT_FINGERPRINT="$AUTH_FAILED|exited:$EXITED_LIST"
+    VERDICT_FINGERPRINT="${AUTH_FAILED}_exited_$EXITED_LIST"
   fi
   # Signature masalah primer: identitas masalah yang STABIL saat kegagalan
   # meluas (dipakai pemicu (b)/(c) seksi 2.4). Berbeda dari sidik jari

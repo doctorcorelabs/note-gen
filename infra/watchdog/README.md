@@ -19,11 +19,16 @@ di keduanya; bila satu diubah, ubah yang lain dan buktikan dengan diff.
 ## Cara kerja singkat
 
 Watchdog tunnel memprobe `GET https://notegen.synapxs.my.id/api/health/ready`
-dengan service token Access (timeout 25 detik). Sehat hanya bila HTTP 200 +
-JSON valid + `ok` true + `status` ready + check `db`/`workspace`/`migrations`
-ok + `worker` ok bila sudah di-deploy. HTTP 401/403/302 berarti masalah
+dengan service token Access (timeout 25 detik). Sehat ditentukan oleh
+CHECKS: amplop JSON valid + check `db`/`workspace`/`migrations` ok +
+`worker` ok bila sudah di-deploy, atas jawaban HTTP 200 atau 503 (dua kode
+jawaban endpoint ready). Nilai `ok`/`status` tingkat atas TIDAK memveto:
+API melipat check non-blokir (pgvector, worker yang belum di-deploy) ke
+dalam `ok`/`status`/kode, sehingga veto mentah membuat aturan non-blokir
+mustahil; ketidaksesuaian `ok`/`status` dengan checks dicatat sebagai
+peringatan `envelope_inconsistent`. HTTP 401/403/302 berarti masalah
 kredensial tepi: exit 2, tanpa restart, tanpa menghubungi muse-2. Gejala
-lain (000/timeout/5xx/body bukan JSON/200 tidak valid) masuk urutan
+lain (000/timeout/5xx/body bukan JSON/jawaban tidak valid) masuk urutan
 diagnosis: probe internal pembeda dulu; restart tunnel (maksimal 1 per run,
 tunggu 15 detik, probe ulang 1 kali) hanya bila probe internal sehat.
 Sesudah 3 upaya restart gagal berturut-turut, masuk mode probe-saja sampai
