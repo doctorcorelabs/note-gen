@@ -28,6 +28,7 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
+import { __setTauriInternalsForTests } from "../platform/detect";
 import {
   getPlatformAdapter,
   hasAdapter,
@@ -88,8 +89,8 @@ function setWebGlobals(storage: FakeStorage): void {
 beforeEach(() => {
   __resetPlatformForTests();
   __resetPocCleanupOnceForTests();
+  __setTauriInternalsForTests(false);
   delete globals()["window"];
-  delete globals()["__TAURI_INTERNALS__"];
   delete globals()["localStorage"];
 });
 
@@ -135,7 +136,7 @@ describe("ensureWebPlatformInitialized", () => {
       [`${POC_STORAGE_PREFIX}store.json`]: "dummy",
     });
     setWebGlobals(storage);
-    globals()["__TAURI_INTERNALS__"] = {};
+    __setTauriInternalsForTests(true);
     ensureWebPlatformInitialized();
     assert.equal(storage.has(`${POC_STORAGE_PREFIX}store.json`), true);
     assert.equal(isRegistryFrozen(), false);

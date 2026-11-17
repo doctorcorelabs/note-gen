@@ -12,6 +12,22 @@ export function isTauri(): boolean {
   return g["__TAURI_INTERNALS__"] !== undefined;
 }
 
+/**
+ * Test-only seam for simulating the Tauri shell: sets or clears the
+ * internals marker exactly as the shell would, so specs exercise
+ * the real isTauri() read without naming the marker outside this
+ * file (platform-guard check 2 enforces an empty allowlist).
+ * Production code must never call this function.
+ */
+export function __setTauriInternalsForTests(present: boolean): void {
+  const g = globalThis as Record<string, unknown>;
+  if (present) {
+    g["__TAURI_INTERNALS__"] = {};
+  } else {
+    delete g["__TAURI_INTERNALS__"];
+  }
+}
+
 export function getPlatformMode(): PlatformMode {
   return isTauri() ? "tauri" : "web";
 }
