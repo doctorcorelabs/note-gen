@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Files, Highlighter, ListTree, Palette } from "lucide-react"
 import { FileSidebar } from "./file"
-import { NoteSidebar } from "./mark"
+import { WebInbox } from "./mark/web-inbox"
 import { FileActions } from "./file/file-actions"
 import { MarkActions } from "./mark/mark-actions"
 import { useLocale, useTranslations } from "next-intl"
@@ -180,7 +180,7 @@ export function LeftSidebar() {
               value="notes"
               className="absolute inset-0 m-0 overflow-hidden data-[state=inactive]:hidden"
             >
-              <NoteSidebar />
+              <WebInbox />
             </TabsContent>
             <TabsContent
               forceMount

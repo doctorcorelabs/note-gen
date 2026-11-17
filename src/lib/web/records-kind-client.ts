@@ -16,9 +16,9 @@
 // Construction: the caller injects a SqlAdapter-shaped object
 // (KindSqlAdapter) and an asset uploader. This module never imports
 // an adapter implementation (*.web) and never touches the platform
-// registry: SQL wiring is owned by the integrator follow-up
-// (wiring.ts records sql as not registered), which constructs the
-// WebSqlAdapter and passes it here. Asset upload stays on the REST
+// registry: the sql adapter is registered by registerWebAdapters
+// (wiring.ts), and the mounted inbox (WebInbox, wave 4) reads
+// platform.sql and passes it here. Asset upload stays on the REST
 // assets route, which exists (contract 3.7); the injected uploader
 // is normally the REST RecordsApi instance.
 //
