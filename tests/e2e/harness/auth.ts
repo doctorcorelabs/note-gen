@@ -17,14 +17,14 @@
 // authenticated / 401-403 unauthenticated). The helpers assert only
 // those wire shapes; they never guess UI selectors.
 //
-// What is NOT wired: the Playwright config serves only the static
-// export, which answers no /api/* route. Against a static-only base
-// URL these helpers fail honestly (404 / connection error with a
-// named cause), they never pretend to log in. Authenticated flows
-// activate only when a backend harness supplies a real API base URL
-// through E2E_API_BASE_URL (or a proxy in front of the static
-// server). Until then, specs that need a session stay pending with a
-// named reason; do not weaken that.
+// What wires the backend: harness/backend.ts boots a real server
+// (server/dist/server.js) per test against a scratch database and a
+// seed workspace, and harness/backend-fixture.ts seeds an account
+// through these helpers. Until a live run on a machine with Postgres
+// proves that wiring, authenticated flows stay pending with a named
+// reason; do not weaken that. Against a static-only base URL these
+// helpers fail honestly (404 / connection error with a named cause),
+// they never pretend to log in.
 //
 // Credentials come ONLY from test-only environment variables supplied
 // by the harness runner. There are no hardcoded credentials, no
@@ -82,15 +82,48 @@ function errorCodeOf(body: unknown): string {
   return 'unknown_error'
 }
 
+export const DEFAULT_E2E_PORT = 4173
+
+/**
+ * Resolve the E2E port from the environment, failing honestly on a
+ * non-numeric or out-of-range value. An unset or blank E2E_PORT means
+ * the default; anything else must be a decimal integer from 1 to
+ * 65535. The error names only the variable, never a value. There is
+ * no silent fallback: a misconfigured port must fail here, at
+ * resolution time, instead of producing an unusable base URL that
+ * fails later inside an unrelated request.
+ */
+export function resolveE2ePort(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.E2E_PORT
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_E2E_PORT
+  }
+  const trimmed = raw.trim()
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(
+      'e2e port is not valid: E2E_PORT must be a decimal integer from 1 to 65535.',
+    )
+  }
+  const port = Number(trimmed)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      'e2e port is not valid: E2E_PORT must be a decimal integer from 1 to 65535.',
+    )
+  }
+  return port
+}
+
 /**
  * Resolve the API base URL from the environment. E2E_API_BASE_URL wins
  * when a backend harness runs the API on its own origin; otherwise
  * the E2E page base URL is used, and finally the default static
- * server origin. The `env` parameter exists so harness checks can
- * pass explicit values without mutating process.env.
+ * server origin. E2E_PORT is validated even when an explicit base URL
+ * wins, so a misconfigured port never hides behind another variable.
+ * The `env` parameter exists so harness checks can pass explicit
+ * values without mutating process.env.
  */
 export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const port = Number(env.E2E_PORT ?? 4173)
+  const port = resolveE2ePort(env)
   return env.E2E_API_BASE_URL ?? env.E2E_BASE_URL ?? `http://127.0.0.1:${port}`
 }
 

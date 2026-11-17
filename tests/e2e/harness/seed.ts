@@ -9,16 +9,13 @@
 // assertions are reproducible across runs. Only the temporary parent
 // directory name is unique per call.
 //
-// WIRING STATUS: NOT LANDED. Nothing in the web fork yet tells the app
-// which directory is the workspace for a test run (no env var, no
-// test API, no auth/session seeding). prepareSeedWorkspace only
-// creates files on disk and returns their paths; it does NOT make the
-// app show them. The boot spec therefore does not depend on seed
-// entries. Wiring the seed directory into the app (backend workspace
-// root per test, or a test-only settings seed) is follow-up work for
-// the backend harness owner. Do not claim a flow "uses the seed"
-// until that wiring exists and a run proves the seed entries appear
-// in the tree.
+// WIRING STATUS: WIRED, LIVE-UNPROVEN. The backend fixture
+// (harness/backend-fixture.ts) passes the directory returned here
+// as WORKSPACE_ROOT to a per-test backend, so the app serves these
+// files. No live run has proved the seed entries appear in the
+// tree yet: the first live run is the merge gate on muse-2. Until
+// it reports, no flow may claim to use the seed through the app,
+// and the boot spec still does not depend on seed entries.
 
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

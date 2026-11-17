@@ -8,8 +8,11 @@ gelombang 2 (login, hapus catatan, record+tag, unduh arsip), semuanya TODO
 yang gagal eksplisit. Perluasan 3D e2e-prep (V3-41, cabang `web-e2e-prep`)
 menambah helper auth API, data seed bersama, varian boot terautentikasi
 `@smoke`, dan 2 kerangka demo `@demo` untuk gate A10; semuanya tetap TODO
-yang gagal eksplisit sampai harness backend mendarat. Tidak ada lulus
-palsu. Pemetaan dan justifikasi penambahan ada di seksi "Alur @scaffold
+yang gagal eksplisit sampai harness backend mendarat. Slot 3E-V41-HARNESS
+menambah harness backend per test (lihat seksi "Backend harness" di bawah)
+beserta 1 spec `@harness` yang membuktikan harness itu; harness tersebut
+BELUM PERNAH jalan live (0 run hijau browser) sampai gate merge di muse-2
+melaporkannya. Tidak ada lulus palsu. Pemetaan dan justifikasi penambahan ada di seksi "Alur @scaffold
 (brief pemulihan)" dan "Alur @demo (gate A10)" di bawah.
 
 ## Cara jalan
@@ -23,12 +26,76 @@ pnpm exec playwright test --grep @scaffold  # hanya 4 spec @scaffold
 pnpm exec playwright test --grep @demo  # hanya 2 kerangka demo @demo (gate A10)
 ```
 
+## Backend harness (3E-V41-HARNESS)
+
+Satu test mendapat satu backend, satu database scratch, dan satu
+workspace, tanpa state bersama antar test (desain-pengujian 4.1).
+Fixture `backendTest` (`harness/backend-fixture.ts`) melakukan,
+per test: (1) menyiapkan workspace seed di disk (`harness/seed.ts`);
+(2) mem-boot `server/dist/server.js` dengan `DATABASE_URL` database
+scratch yang dibuat untuk test itu dan `WORKSPACE_ROOT` direktori
+seed, lalu menunggu `GET /api/health/ready` menjawab ok
+(`harness/backend.ts`); (3) menjalankan gateway
+(`harness/static-server.mjs` mode proxy) yang melayani static export
+`out/` dan meneruskan `/api/*` ke backend test itu, sehingga browser,
+cookie sesi, dan cek Origin melihat satu origin; (4) membuat akun
+seed + login lewat API (`harness/auth.ts`, kredensial dibuat per
+backend dan hanya hidup di memori); (5) men-seed 2 tag + 5 record
+lewat kind layer (`harness/seed-records.ts`, `POST /api/transactions`
+dengan kind `tags.create`/`marks.create`, karena rute REST marks/tags
+TIDAK ADA di trunk). Teardown menghentikan gateway, menghentikan
+backend + menghapus database scratch, lalu menghapus workspace.
+
+Prasyarat, semuanya gagal cepat dengan error bernama bila tidak ada:
+server yang sudah di-build (`server/dist/server.js`), dependensi
+server terinstal (driver `pg` dipakai untuk membuat/menghapus
+database scratch), klaster Postgres 17 yang terjangkau, dan variabel
+`E2E_PG_ADMIN_URL`: URL koneksi ke klaster scratch yang menunjuk
+database maintenance (mis. database `postgres`); URL per test
+diturunkan darinya dengan mengganti nama database saja. Nilai URL
+tidak pernah dicetak atau muncul di pesan error. Tanpa variabel itu,
+fixture gagal dengan pesan yang menyebut nama variabelnya; tidak ada
+default diam-diam dan tidak ada fallback ke backend bersama.
+
+Jalur melewati perimeter Cloudflare Access, HANYA untuk pengujian:
+backend test berjalan dengan `CF_ACCESS_ENABLED=false`,
+`NODE_ENV=development`, `COOKIE_SECURE=false`, dan `PUBLIC_BASE_URL`
+origin gateway loopback. Kombinasi itu persis bentuk dev lokal yang
+diizinkan konfigurasi server sendiri (`server/src/config/env.ts`):
+Access nonaktif ditolak di production dan ditolak dengan origin
+non-localhost, dan harness tidak mengubah aturan itu. Tidak ada kode
+bypass, tidak ada header Access palsu, dan tidak ada berkas produksi
+yang disentuh. Gateway hanya meneruskan ke backend loopback. Jangan
+pakai konfigurasi ini di luar run pengujian di loopback.
+
+Bukti live harness adalah spec `@harness`
+(`backend-harness.spec.ts`, BUKAN `@smoke`, tidak dihitung dalam gate
+6/6): gateway melayani bundle + mem-proxy API, probe sesi
+terautentikasi, berkas seed ada di disk, dan record seed terbaca
+balik lewat kind layer. Jalankan di mesin gate:
+
+```sh
+E2E_PG_ADMIN_URL=<url-ke-database-maintenance> pnpm exec playwright test --grep @harness
+```
+
+Jangan pernah menulis nilai URL nyata di dokumen, log, atau commit.
+Bila run gate mati di tengah jalan, database scratch bernama
+`notegen_e2e_*` dapat tertinggal; operator menghapusnya manual dari
+klaster scratch (database itu hanya ada di klaster scratch, tidak
+pernah di database produksi). Restart backend dan database persisten
+untuk E2E-D2 TIDAK didukung fixture ini (fixture bersifat per test
+dan ephemeral); itu pekerjaan lanjutan terpisah.
+
 Helper auth API (`harness/auth.ts`) memakai origin API dari
 `E2E_API_BASE_URL` (bila harness backend jalan di origin sendiri),
-lalu `E2E_BASE_URL`, lalu origin server statis default. Kredensial
-uji hanya dari environment harness (`E2E_TEST_EMAIL`,
-`E2E_TEST_PASSWORD`, `E2E_SETUP_TOKEN`); tidak ada kredensial
-hardcoded di spec mana pun dan tidak ada nilai yang pernah di-log.
+lalu `E2E_BASE_URL`, lalu origin server statis default. `E2E_PORT`
+yang non-numerik atau di luar 1-65535 gagal secara eksplisit saat
+resolusi (`resolveE2ePort`), tanpa nilai diam-diam. Kredensial
+uji dari environment harness (`E2E_TEST_EMAIL`,
+`E2E_TEST_PASSWORD`, `E2E_SETUP_TOKEN`) tetap berlaku untuk run
+melawan base URL eksternal; fixture backend memakai kredensial yang
+dibuat per test. Tidak ada kredensial hardcoded di spec mana pun
+dan tidak ada nilai yang pernah di-log.
 
 Target adalah build produksi static export (`out/`), BUKAN `next dev` dan
 BUKAN `next start`: fork memakai `output: "export"`, sehingga tidak ada
@@ -51,18 +118,19 @@ Browser: `pnpm exec playwright install chromium` (sekali per mesin/CI).
 |---|---|---|
 | E2E-01 boot tanpa backend | `boot.spec.ts` | Nyata. Ditujukan lulus terhadap build web saat ini: guard boot (M14) memblokir dengan layar error BOOT_SESSION_UNKNOWN yang dapat dipahami, bukan halaman kosong dan bukan redirect buta, karena server statis tidak menjawab `/api/auth/me` (404). Varian boot terautentikasi ada di `boot-auth.spec.ts` (E2E-01-auth); jangan melemahkan assertion fail-closed ini. |
 | E2E-01b boot store rusak | `boot.spec.ts` | `test.skip` sebagai utang terdokumentasi: harness belum bisa merusak store. Bukan lulus. |
-| E2E-01-auth boot terautentikasi | `boot-auth.spec.ts` | TODO `@smoke`: gagal dengan pesan "fitur belum mendarat". Paruh terautentikasi E2E-01 (redirect ke `/core/main` + pohon file); menunggu harness backend + seed wiring. Guard dan halaman `/login` sudah mendarat (V3-03). |
-| E2E-02 buat + simpan | `create-save.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Fixture di `harness/seed-data.ts` (`CREATE_NOTE_FIXTURE`). |
-| E2E-03 ubah artikel lama | `edit-existing.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Edit di `harness/seed-data.ts` (`applyEditToDeepNote`). |
-| E2E-04 cari | `search.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Istilah di `harness/seed-data.ts` (`SEARCH_TERMS`); hook test-id tersedia di `harness/selectors.ts`. |
-| E2E-05 file dari luar | `external-file.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Berkas luar di `harness/seed-data.ts` (`EXTERNAL_FILE`). |
+| E2E-01-auth boot terautentikasi | `boot-auth.spec.ts` | TODO `@smoke`: gagal dengan pesan "fitur belum mendarat". Paruh terautentikasi E2E-01 (redirect ke `/core/main` + pohon file); kode harness backend sudah mendarat (`harness/backend-fixture.ts`) tetapi belum ada live run yang membuktikannya. Guard dan halaman `/login` sudah mendarat (V3-03). |
+| E2E-02 buat + simpan | `create-save.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". API tulis workspace terdaftar + FsAdapter web terpasang; yang belum terbukti adalah run live harness + selector editor visual + input rename. Fixture di `harness/seed-data.ts` (`CREATE_NOTE_FIXTURE`). |
+| E2E-03 ubah artikel lama | `edit-existing.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Rute baca media BELUM terdaftar (modul ada, registrar tanpa pemanggil); navigasi tautan relatif butuh klik modifier di desktop dan belum terbukti runtime; harness belum ada live run. Edit di `harness/seed-data.ts` (`applyEditToDeepNote`). |
+| E2E-04 cari | `search.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Rute search BELUM terdaftar dan implementasi search berindeks belum mendarat (port + fake saja); UI sudah terpasang ke `/api/search`. Istilah di `harness/seed-data.ts` (`SEARCH_TERMS`); hook test-id tersedia di `harness/selectors.ts`. |
+| E2E-05 file dari luar | `external-file.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Rute WebSocket belum mendarat; fallback polling snapshot SUDAH mendarat (V3-09) dengan interval default 10 detik, jauh di atas batas kontrak 1 detik; harness belum ada live run. Berkas luar di `harness/seed-data.ts` (`EXTERNAL_FILE`). |
+| E2E-HARNESS bukti harness | `backend-harness.spec.ts` | NYATA `@harness` (bukan `@smoke`, tidak dihitung gate 6/6): gateway + sesi + seed terbaca balik. Hanya jalan di mesin dengan Postgres + `E2E_PG_ADMIN_URL`; belum pernah jalan live. |
 | E2E-06 pengaturan bertahan | `settings-persist.spec.ts` | TODO: gagal dengan pesan "fitur belum mendarat". Pembuka Settings masih tanpa hook (R3) dan pilihan pengaturannya masih tertunda; V3-29a/29b mendarat tanpa menyelesaikan keduanya. |
-| E2E-S1 login | `login.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI login SUDAH mendarat (`/login`, V3-03); locator terverifikasi di `harness/selectors.ts` + `harness/login-page.ts`. Menunggu seeding akun + harness backend + jalur melewati perimeter Access. |
-| E2E-S2 hapus catatan (CRUD) | `notes-crud.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Create = E2E-02, Read/Update = E2E-03. |
-| E2E-S3 record + tag | `record-tag.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Komponen inbox V3-26a mendarat tetapi belum terpasang di halaman mana pun (V3-26b mendarat tanpa pemasangan; pemasangan = tindak lanjut); seeding lewat kind layer (D-3D-1). Deskriptor di `harness/seed-data.ts`. |
+| E2E-S1 login | `login.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI login SUDAH mendarat (`/login`, V3-03); locator terverifikasi di `harness/selectors.ts` + `harness/login-page.ts`. Kode harness (seeding akun + backend + jalur loopback melewati perimeter Access) sudah mendarat tetapi belum ada live run; konversi butuh varian browser tanpa sesi (fixture selalu login via API). |
+| E2E-S2 hapus catatan (CRUD) | `notes-crud.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Create = E2E-02, Read/Update = E2E-03. Rute trash BELUM terdaftar (registrar tanpa pemanggil di `server/src`). |
+| E2E-S3 record + tag | `record-tag.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". Komponen inbox V3-26a mendarat tetapi belum terpasang di halaman mana pun (0 importer di trunk; V3-26b mendarat tanpa pemasangan; pemasangan = tindak lanjut); seeding lewat kind layer (`harness/seed-records.ts`, belum ada live run). Deskriptor di `harness/seed-data.ts`. |
 | E2E-S4 unduh arsip | `archive-download.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI ekspor belum ada; tanpa locator tebakan. |
-| E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; menunggu pemasangan inbox (tindak lanjut) + pilihan E2E-06 + harness backend. |
-| E2E-D2 cek data A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka cek data utuh sesudah restart backend; menunggu kontrol restart harness + database uji persisten. |
+| E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; menunggu pemasangan inbox (tindak lanjut) + pilihan E2E-06 + live run harness backend. |
+| E2E-D2 cek data A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka cek data utuh sesudah restart backend; menunggu kontrol restart harness + database uji persisten (fixture per test bersifat ephemeral, tidak mendukung ini). |
 
 ## Alur @scaffold (brief pemulihan): pemetaan dan justifikasi
 
@@ -111,8 +179,11 @@ tidak diklaim di sini.
 
 | Berkas | Isi |
 |---|---|
-| `playwright.config.ts` (root) | `testDir`, Chromium headless, 1 worker, retry 1 di CI / 0 lokal, reporter list, `webServer` server statis. |
-| `harness/static-server.mjs` | Server statis `out/` tanpa dependensi; gagal cepat bila `out/` tidak ada; `Cache-Control: no-store`. |
+| `playwright.config.ts` (root) | `testDir`, Chromium headless, 1 worker, retry 1 di CI / 0 lokal, reporter list, `webServer` server statis (tanpa proxy: E2E-01 mem-pin kondisi tanpa backend). |
+| `harness/static-server.mjs` | Server statis `out/` tanpa dependensi; gagal cepat bila `out/` tidak ada; `Cache-Control: no-store`. Mode proxy bila `E2E_API_BASE_URL` di-set: `/api/*` diteruskan ke backend loopback (test-only). |
+| `harness/backend.ts` | Boot backend per test: database scratch, secret per test, tunggu ready, teardown + hapus database. Bypass Access test-only terdokumentasi di header. |
+| `harness/backend-fixture.ts` | Fixture Playwright `backendTest`: workspace seed + backend + gateway + sesi + seed record/tag per test; teardown lengkap. |
+| `harness/seed-records.ts` | Seed tag/record lewat kind layer (`POST /api/transactions`, kind `tags.create`/`marks.create`); tanpa rute REST yang dikarang. |
 | `harness/selectors.ts` | Semua locator, beserta status verifikasi per locator. |
 | `harness/app-page.ts` | Page object: boot, buka file, buat catatan, cari global. |
 | `harness/login-page.ts` | Page object halaman `/login` (V3-03): buka login, sign-in, langkah TOTP, alert. |
@@ -191,19 +262,25 @@ TIDAK BISA diverifikasi (tidak ada hook stabil di source):
 
 - A4 (desain-pengujian 0.4): selector di atas terverifikasi terhadap source,
   belum terhadap DOM hasil render. Run hijau pertama adalah bukti runtime.
-- Seed workspace (`harness/seed.ts`) belum terhubung: belum ada cara
-  (env/API) untuk memberi tahu aplikasi direktori workspace untuk satu test.
-  Sampai wiring itu mendarat, tidak ada alur yang boleh mengklaim memakai seed.
-- Isolasi per test (workspace + database + port per worker, desain 4.1)
-  belum mendarat; konfigurasi memakai 1 worker terhadap satu server statis.
+- Seed workspace (`harness/seed.ts`) terhubung lewat fixture backend
+  (`harness/backend-fixture.ts`: direktori seed menjadi `WORKSPACE_ROOT`
+  per test), tetapi BELUM terbukti live: belum ada run yang membuktikan
+  entri seed tampil di pohon. Sampai run gate membuktikannya, tidak ada
+  alur yang boleh mengklaim memakai seed lewat aplikasi.
+- Isolasi per test (workspace + database + port per test, desain 4.1)
+  diimplementasikan fixture backend (`harness/backend.ts` +
+  `harness/backend-fixture.ts`), tetapi BELUM terbukti live. Konfigurasi
+  tetap 1 worker; menaikkan worker butuh bukti live dulu.
 - Backend/auth: server backend + endpoint auth SUDAH mendarat di trunk
-  (gelombang 3A/3B). Yang belum mendarat adalah harness E2E-nya:
-  backend uji per test + isolasi workspace/database + seed wiring +
-  jalur melewati perimeter Cloudflare Access. Alur yang butuh API
-  tidak dapat ditulis nyata sampai harness itu mendarat. Pengecualian:
-  E2E-01 menguji kontrak fail-closed guard boot persis dalam kondisi
-  tanpa backend (probe sesi 404), dan itu adalah perilaku nyata yang
-  dipin, bukan placeholder.
+  (gelombang 3A/3B), dan harness E2E-nya sudah mendarat sebagai kode
+  (backend uji per test + isolasi workspace/database + seed wiring +
+  jalur loopback melewati perimeter Cloudflare Access, lihat seksi
+  "Backend harness" di atas). Yang belum ada adalah BUKTI LIVE-nya:
+  0 run hijau browser sejauh ini, karena klaster Postgres di VM
+  penulisan down; run live pertama adalah tugas gate merge di muse-2.
+  Pengecualian: E2E-01 menguji kontrak fail-closed guard boot persis
+  dalam kondisi tanpa backend (probe sesi 404), dan itu adalah perilaku
+  nyata yang dipin, bukan placeholder.
 - Seed pengaturan: tidak ada kunci/nilai pengaturan yang dipin di
   `harness/seed-data.ts`; pilihan pengaturan E2E-06 masih tertunda
   (V3-29 mendarat tanpa mencatat pilihan). Jangan mengarang kunci.

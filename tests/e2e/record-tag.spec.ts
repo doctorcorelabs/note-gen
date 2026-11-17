@@ -38,16 +38,18 @@
 //   V3-26b merged without mounting it, so no creation path is
 //   reachable through the browser until inbox mounting lands as
 //   follow-up work. The record under test is seeded through the
-//   backend harness, which has NOT landed. Seeding goes through the
-//   kind layer (tags.create, then marks.create; D-3D-1): REST
-//   marks/tags routes do not exist on trunk.
+//   backend fixture (harness/backend-fixture.ts plus
+//   harness/seed-records.ts), which has no live run yet. Seeding
+//   goes through the kind layer (tags.create, then marks.create;
+//   D-3D-1): REST marks/tags routes do not exist on trunk.
 //
 // Intended steps (replace the notYetLanded call when the feature lands):
 // 1. Seed one record (type text, fixed unique content) and two tags
-//    through the backend harness, with the record assigned only the
+//    through the backend fixture, with the record assigned only the
 //    first tag. Descriptors live in harness/seed-data.ts
-//    (RECORD_SEEDS, TAG_SEEDS). Backend record/tag seeding has NOT
-//    landed.
+//    (RECORD_SEEDS, TAG_SEEDS). The fixture seeds all five records
+//    and both tags; this flow uses the first record and proves the
+//    assignment of the second tag to it.
 // 2. Open the record list, find the seeded record (markDetailButton,
 //    UNVERIFIED), and open the tag editor (AppPage.openTagEditor,
 //    "Manage tags" button, VERIFIED in source). The web inbox list
@@ -83,7 +85,9 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S3 @scaffold record plus tag: assigned tag survives reload', async () => {
   notYetLanded(
     'E2E-S3',
-    'backend record/tag seeding plus inbox mounting and wiring ' +
-      'have not landed; no record can be tagged through the web UI yet.',
+    'inbox mounting and wiring have not landed (WebInboxList and ' +
+      'WebRecordCreate still have no importers on trunk) and the ' +
+      'backend harness has no live run yet; no record can be tagged ' +
+      'through the web UI yet.',
   )
 })

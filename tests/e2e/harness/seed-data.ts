@@ -8,10 +8,9 @@
 // only fixes the exact contents, names, and terms every flow asserts
 // against, so flows cannot drift apart by inventing their own fixtures.
 // Disk creation still lives in ./seed.ts (prepareSeedWorkspace); API
-// seeding does not exist yet, and nothing here pretends otherwise.
-// The backend seeding transport (which endpoint, which session, which
-// workspace) is 3E work, to be verified against the live backend before
-// any flow claims to use this data through the app.
+// seeding lives in ./seed-records.ts (kind layer, through the backend
+// fixture), live-unproven until the merge gate runs it. Nothing here
+// claims a flow already uses this data through the app.
 //
 // Anti-flaky rules (desain-pengujian 4.3): every value below is a fixed
 // constant. No Math.random, no Date.now, no timers. The only uniqueness

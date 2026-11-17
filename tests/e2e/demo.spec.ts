@@ -23,7 +23,9 @@
 //    it, an API-seeded session via harness/auth.ts. The demo protocol
 //    choice belongs to the coordinator; this spec does not choose
 //    silently. The harness path past the Cloudflare Access perimeter
-//    is still open (inventaris-selector-e2e 3.1/11.5).
+//    is the loopback test-only bypass in harness/backend.ts
+//    (CF_ACCESS_ENABLED=false, development, loopback origin); it
+//    has no live run yet.
 // 2. Create a folder and 3 notes: text, image, relative link
 //    (harness/seed-data.ts DEMO_FOLDER and DEMO_NOTES; folder creation
 //    uses the "New Folder" button, locator VERIFIED in source).
@@ -65,9 +67,9 @@ test('E2E-D1 @demo A10 walkthrough: login, folder plus 3 notes, edit, records pl
   notYetLanded(
     'E2E-D1',
     'record creation mounting (inbox follow-up) plus the E2E-06 ' +
-      'settings choice plus the backend test harness plus seed ' +
-      'wiring have not landed; the A10 demo sequence cannot run ' +
-      'through the browser yet.',
+      'settings choice have not landed, and the backend test ' +
+      'harness has no live run yet; the A10 demo sequence cannot ' +
+      'run through the browser yet.',
   )
 })
 
