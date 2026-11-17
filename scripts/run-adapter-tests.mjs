@@ -75,6 +75,7 @@ const ADAPTER_SPECS = [
   "src/lib/platform/shell/shell.web.spec.ts",
   "src/lib/platform/shortcut/shortcut.registry.test.ts",
   "src/lib/platform/store/key-schema.spec.ts",
+  "src/lib/platform/store/poc-cleanup.spec.ts",
   "src/lib/platform/store/store.fake.spec.ts",
   "src/lib/platform/store/store.tauri.spec.ts",
   "src/lib/platform/store/store.web.spec.ts",

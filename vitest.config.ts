@@ -49,6 +49,7 @@ export default defineConfig({
             "src/lib/platform/process/process.web.spec.ts",
             "src/lib/platform/shell/shell.web.spec.ts",
             "src/lib/platform/store/key-schema.spec.ts",
+            "src/lib/platform/store/poc-cleanup.spec.ts",
             "src/lib/platform/store/store.fake.spec.ts",
             "src/lib/platform/store/store.tauri.spec.ts",
             "src/lib/platform/store/store.web.spec.ts",
