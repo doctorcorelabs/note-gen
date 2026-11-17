@@ -24,11 +24,10 @@
 # instead of trusting the allowlist wave column. At G4 the delegation
 # ends: api/core must have 0 lines, including isTauri.
 #
-# plugin-sql is special: the SQL funnel src/db/index.ts keeps its
-# plugin-sql import until V3-14 migrates it to typed operations
-# (AD-90 funnel exception, self-expiring at V3-14). In wave mode this
-# layer allows exactly 1 plugin-sql line, only in src/db/index.ts;
-# any other file or count fails.
+# plugin-sql closed at G1 like every other G1 specifier: 0 lines
+# outside src/lib/platform/. The AD-90 funnel exception (exactly 1
+# plugin-sql line in src/db/index.ts) expired when V3-14 migrated
+# the funnel to typed operations; no special case remains.
 #
 # Usage (from the repo root):
 #   sh scripts/gates/layer1-grep-allowlist.sh [--wave G1|G2|G3|G4|G5|all]
@@ -86,13 +85,12 @@ failures=0
 # deleted by V3-21; the guard fails when its allowlist is missing, so
 # in that state this layer checks the 0-import invariant directly and
 # says so explicitly instead of calling the guard. The direct check
-# excludes the AD-90 funnel line (enforced exactly-once in Step 4
-# below) and pure comment lines (the re-export file mentions the
-# pattern in a comment); anything else fails.
+# excludes pure comment lines (a file may mention the pattern in a
+# comment); anything else fails.
 if [ "$WAVE" = "G5" ] || [ "$WAVE" = "all" ]; then
   if [ ! -f "scripts/ci/tauri-import-allowlist.txt" ]; then
-    echo "layer1: allowlist deleted (G5 state); checking 0 imports directly (funnel + comment lines excluded, funnel enforced in Step 4)"
-    remaining=$(grep -rn --include='*.ts' --include='*.tsx' -e '@tauri-apps/' -e 'tauri-plugin-clipboard-api' src --exclude-dir=platform 2>/dev/null | grep -v '^src/db/index.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | wc -l | tr -d ' ')
+    echo "layer1: allowlist deleted (G5 state); checking 0 imports directly (comment lines excluded)"
+    remaining=$(grep -rn --include='*.ts' --include='*.tsx' -e '@tauri-apps/' -e 'tauri-plugin-clipboard-api' src --exclude-dir=platform 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | wc -l | tr -d ' ')
     if [ "$remaining" != "0" ]; then
       echo "layer1: FAIL: $remaining Tauri import line(s) remain outside src/lib/platform/ after G5"
       failures=$((failures + 1))
@@ -197,18 +195,6 @@ if [ -n "$WAVE" ]; then
           fi
         else
           echo "layer1: FAIL: api/core $WAVE remainder check failed (see output above)"
-          failures=$((failures + 1))
-        fi
-        continue
-      fi
-      if [ "$spec" = "@tauri-apps/plugin-sql" ]; then
-        echo "layer1: plugin-sql: funnel exception AD-90 applies (exactly 1 line in src/db/index.ts until V3-14)"
-        sql_files=$(grep -rln --include='*.ts' --include='*.tsx' "$spec" src --exclude-dir=platform 2>/dev/null || true)
-        sql_count=$(grep -rn --include='*.ts' --include='*.tsx' "$spec" src --exclude-dir=platform 2>/dev/null | wc -l | tr -d ' ')
-        if [ "$sql_count" = "1" ] && [ "$sql_files" = "src/db/index.ts" ]; then
-          echo "layer1: PASS: plugin-sql funnel-only (1 line in src/db/index.ts, AD-90)"
-        else
-          echo "layer1: FAIL: plugin-sql has $sql_count line(s) in: $sql_files (AD-90 allows exactly 1 line in src/db/index.ts)"
           failures=$((failures + 1))
         fi
         continue
