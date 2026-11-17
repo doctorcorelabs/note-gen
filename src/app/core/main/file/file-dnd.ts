@@ -180,11 +180,11 @@ export async function moveFileManagerPaths(plans: Array<{ sourcePath: string; ta
   for (const plan of moves) {
     if (targets.has(plan.targetPath) || moves.some(other => other !== plan
       && (plan.sourcePath.startsWith(`${other.sourcePath}/`) || other.sourcePath.startsWith(`${plan.sourcePath}/`)))) {
-      throw new Error('移动的文件路径重复或互相包含')
+      throw new Error('The moved file paths are duplicated or contain each other.')
     }
     targets.add(plan.targetPath)
     const options = await getFilePathOptions(plan.targetPath)
-    if (await platform.fs.exists(options.path, { baseDir: options.baseDir })) throw new Error(`目标路径已存在：${plan.targetPath}`)
+    if (await platform.fs.exists(options.path, { baseDir: options.baseDir })) throw new Error(`The target path already exists: ${plan.targetPath}`)
   }
   await withWorkspacePathMoves(moves.map(plan => ({ source: plan.sourcePath, target: plan.targetPath })), async () => {
     const moved: typeof moves = []
@@ -192,7 +192,7 @@ export async function moveFileManagerPaths(plans: Array<{ sourcePath: string; ta
       for (const plan of moves) {
         try {
           const result = await moveFileManagerPath(plan.sourcePath, plan.targetPath, false)
-          if (!result.moved) throw new Error('无效的移动目标')
+          if (!result.moved) throw new Error('Invalid move target.')
           moved.push(plan)
         } catch (error) {
           const source = await getFilePathOptions(plan.sourcePath)

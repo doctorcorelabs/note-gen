@@ -29,7 +29,7 @@ export const selectSkillTool: Tool = {
       if (!Array.isArray(skill_ids)) {
         return {
           success: false,
-          error: 'skill_ids 必须是一个数组',
+          error: 'skill_ids must be an array',
         }
       }
 
@@ -49,14 +49,14 @@ export const selectSkillTool: Tool = {
       if (invalidSkills.length > 0) {
         return {
           success: false,
-          error: `无效的 Skill ID: ${invalidSkills.join(', ')}`,
+          error: `Invalid Skill ID: ${invalidSkills.join(', ')}`,
         }
       }
 
       if (validSkills.length === 0) {
         return {
           success: false,
-          error: '没有选择任何有效的 Skill',
+          error: 'No valid Skill was selected',
         }
       }
 
@@ -66,7 +66,7 @@ export const selectSkillTool: Tool = {
           selected_skills: validSkills,
           count: validSkills.length,
         },
-        message: `已选择 ${validSkills.length} 个 Skills: ${validSkills.join(', ')}。这些 Skills 的完整指令将在后续步骤中提供。`,
+        message: `Selected ${validSkills.length} Skills: ${validSkills.join(', ')}. The full instructions for these Skills will be provided in later steps.`,
       }
     } catch (error) {
       console.error('[select_skill] 执行失败', {
@@ -75,7 +75,7 @@ export const selectSkillTool: Tool = {
       })
       return {
         success: false,
-        error: `选择 Skill 失败: ${error}`,
+        error: `Failed to select the Skill: ${error}`,
       }
     }
   },
@@ -113,7 +113,7 @@ export const loadSkillContentTool: Tool = {
       if (!skill) {
         return {
           success: false,
-          error: `未找到 Skill: ${skill_id}`,
+          error: `Skill not found: ${skill_id}`,
         }
       }
 
@@ -122,7 +122,7 @@ export const loadSkillContentTool: Tool = {
       if (!fileInfo) {
         return {
           success: false,
-          error: `无法获取 Skill 文件信息: ${skill_id}`,
+          error: `Could not get the Skill file info: ${skill_id}`,
         }
       }
 
@@ -215,9 +215,9 @@ export const loadSkillContentTool: Tool = {
           data: {
             skill_id,
             available_files: skill.references.map(r => r.name),
-            message: '该 Skill 没有额外的支持文件，所有内容已包含在主 Skill 文件中。',
+            message: 'This Skill has no additional support files; all content is in the main Skill file.',
           },
-          message: `Skill "${skill_id}" 没有找到额外的支持文件。所有必要信息已包含在主 Skill 指令中。`,
+          message: `No additional support files were found for Skill "${skill_id}". All necessary information is in the main Skill instructions.`,
         }
       }
 
@@ -232,7 +232,7 @@ export const loadSkillContentTool: Tool = {
           files: results,
           total_length: totalLength,
         },
-        message: `成功加载 ${loadedFiles.length} 个支持文件（${loadedFiles.join(', ')}），共 ${totalLength} 字符。这些内容将帮助你更好地应用 ${skill_id} Skill。`,
+        message: `Successfully loaded ${loadedFiles.length} support files (${loadedFiles.join(', ')}), ${totalLength} characters in total. This content will help apply the ${skill_id} Skill better.`,
       }
     } catch (error) {
       console.error('[load_skill_content] 执行失败', {
@@ -241,7 +241,7 @@ export const loadSkillContentTool: Tool = {
       })
       return {
         success: false,
-        error: `加载 Skill 内容失败: ${error}`,
+        error: `Failed to load the Skill content: ${error}`,
       }
     }
   },

@@ -81,17 +81,17 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
       const useArticleStore = (await import('@/stores/article')).default
       useArticleStore.getState().loadFileTree()
 
-      toast({ title: `文件夹已复制为 ${targetName}` })
+      toast({ title: `Folder copied as ${targetName}` })
     } catch (error) {
       console.error('Duplicate folder failed:', error)
-      toast({ title: '复制文件夹失败', variant: 'destructive' })
+      toast({ title: 'Failed to copy the folder', variant: 'destructive' })
     }
   }
 
   return (
     <ContextMenuItem inset onClick={handleDuplicateFolder} menuType="file">
       <Copy className="mr-2 h-4 w-4" />
-      创建副本
+      Duplicate
       {shortcut && (
         <ContextMenuShortcut menuType="file">
           <Kbd>{shortcut}</Kbd>

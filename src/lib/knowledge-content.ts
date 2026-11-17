@@ -26,13 +26,13 @@ function recordTitle(mark: Mark) {
 
 function serializeRecord(mark: Mark, tagName: string) {
   return [
-    `记录：${recordTitle(mark)}`,
-    `类型：${mark.type}`,
-    `标签：${tagName}`,
-    `创建时间：${new Date(mark.createdAt).toISOString()}`,
-    mark.desc ? `描述：${mark.desc}` : '',
-    mark.content ? `内容：\n${mark.content}` : '',
-    mark.url ? `链接或文件：${mark.url}` : '',
+    `Record: ${recordTitle(mark)}`,
+    `Type: ${mark.type}`,
+    `Tags: ${tagName}`,
+    `Created: ${new Date(mark.createdAt).toISOString()}`,
+    mark.desc ? `Description: ${mark.desc}` : '',
+    mark.content ? `Content:\n${mark.content}` : '',
+    mark.url ? `Link or file: ${mark.url}` : '',
   ].filter(Boolean).join('\n')
 }
 
@@ -76,14 +76,14 @@ function serializeCanvasNode(project: CanvasProject, nodeId: string): KnowledgeC
     return target?.data.label || id
   }
   const content = [
-    `画布：${project.title}`,
-    `节点：${node.data.label || node.id}`,
-    `节点类型：${node.type}`,
-    node.data.description ? `说明：${node.data.description}` : '',
-    node.data.url ? `链接：${node.data.url}` : '',
-    node.data.filePath ? `关联文件：${node.data.filePath}` : '',
-    ...incoming.map(edge => `入边：${nodeName(edge.source)} --${edge.label || '连接'}--> ${node.data.label || node.id}`),
-    ...outgoing.map(edge => `出边：${node.data.label || node.id} --${edge.label || '连接'}--> ${nodeName(edge.target)}`),
+    `Canvas: ${project.title}`,
+    `Node: ${node.data.label || node.id}`,
+    `Node type: ${node.type}`,
+    node.data.description ? `Description: ${node.data.description}` : '',
+    node.data.url ? `Link: ${node.data.url}` : '',
+    node.data.filePath ? `Linked file: ${node.data.filePath}` : '',
+    ...incoming.map(edge => `Incoming edge: ${nodeName(edge.source)} --${edge.label || 'link'}--> ${node.data.label || node.id}`),
+    ...outgoing.map(edge => `Outgoing edge: ${node.data.label || node.id} --${edge.label || 'link'}--> ${nodeName(edge.target)}`),
   ].filter(Boolean).join('\n')
   return content.trim() ? { content, nodeId: node.id } : null
 }
@@ -97,17 +97,17 @@ export function serializeCanvasDocument(project: CanvasProject) {
   const edgeLines = project.document.edges.map(edge => {
     const source = project.document.nodes.find(node => node.id === edge.source)
     const target = project.document.nodes.find(node => node.id === edge.target)
-    return `- ${source?.data.label || edge.source} --${edge.label || '连接'}--> ${target?.data.label || edge.target}`
+    return `- ${source?.data.label || edge.source} --${edge.label || 'link'}--> ${target?.data.label || edge.target}`
   })
   return [
-    `# 画布：${project.title}`,
-    `类型：${project.canvasType}`,
+    `# Canvas: ${project.title}`,
+    `Type: ${project.canvasType}`,
     '',
-    '## 节点',
+    '## Nodes',
     ...nodeLines,
     '',
-    '## 显式连线',
-    ...(edgeLines.length ? edgeLines : ['无']),
+    '## Explicit edges',
+    ...(edgeLines.length ? edgeLines : ['None']),
   ].join('\n')
 }
 

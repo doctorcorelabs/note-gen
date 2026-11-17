@@ -606,7 +606,21 @@
       "updateFileVectorsFailed": "更新文件 {filePath} 的向量失败",
       "embeddingCheckFailed": "嵌入模型检查失败",
       "vectorDatabaseUpdateTitle": "向量数据库更新",
-      "unnamedFile": "未命名文件"
+      "unnamedFile": "未命名文件",
+      "errors": {
+        "RAG_INVALID_VECTOR_DATA": "知识库包含无效的向量数据",
+        "RAG_CHUNK_FORMAT_INVALID": "知识库分块格式无效",
+        "RAG_CHUNK_FIELDS_INCOMPLETE": "知识库分块字段不完整",
+        "RAG_MANIFEST_FORMAT_INVALID": "远端知识库清单格式无效",
+        "RAG_SCHEMA_VERSION_UNSUPPORTED": "不支持的知识库格式版本：{schemaVersion}",
+        "RAG_MANIFEST_FIELDS_INCOMPLETE": "远端知识库清单字段不完整",
+        "RAG_LOCAL_EMPTY": "本地知识库为空，请先重新计算",
+        "RAG_MIXED_DIMENSIONS": "本地知识库包含不同维度的向量，请先重新计算",
+        "RAG_PAGE_CORRUPT": "知识库分页损坏：{path}",
+        "RAG_VECTOR_COUNT_MISMATCH": "知识库向量数量不匹配：预期 {expectedCount}，实际 {actualCount}",
+        "RAG_DIMENSION_MANIFEST_MISMATCH": "知识库向量维度与清单不一致",
+        "RAG_VECTOR_DIMENSION_MISMATCH": "向量维度不匹配"
+      }
     },
     "mcp": {
       "title": "MCP",
@@ -2093,7 +2107,20 @@
         "presenceDeviceDesktop": "桌面端",
         "errors": {
           "SELF_HOSTED_SYNC_CONFIG_MISSING": "自托管同步配置不存在",
-          "workspaceKeyUnavailable": "工作区密钥不可用：{workspaceId} v{keyVersion}"
+          "workspaceKeyUnavailable": "工作区密钥不可用：{workspaceId} v{keyVersion}",
+          "SELF_HOSTED_INSTANCE_IDENTITY_CHANGED": "服务器实例身份已变化，请先确认服务器是否被重置或替换",
+          "SELF_HOSTED_PROTOCOL_INCOMPATIBLE": "服务器与当前 NoteGen 同步协议不兼容",
+          "SELF_HOSTED_BROWSER_AUTH_EXPIRED": "浏览器授权已过期",
+          "SELF_HOSTED_DEVICE_IDENTITY_CREATE_FAILED": "无法创建新的设备身份",
+          "SELF_HOSTED_MANAGED_KEY_MISSING": "个人数据空间缺少 managed key",
+          "SELF_HOSTED_PROFILE_MISSING": "自托管同步配置不存在",
+          "SELF_HOSTED_LOGIN_EXPIRED": "自托管登录已失效，请重新授权",
+          "SELF_HOSTED_DOMAIN_UNSUPPORTED": "不支持的个人数据同步领域",
+          "SELF_HOSTED_EDIT_IN_PROGRESS": "请先完成当前编辑，再修改同步范围",
+          "SELF_HOSTED_REFRESH_CREDENTIALS_EXPIRED": "自托管刷新凭据已失效",
+          "SELF_HOSTED_SESSION_ACCOUNT_MISMATCH": "刷新会话返回了不同的账号或设备",
+          "SELF_HOSTED_NOT_SYNC_API": "该地址不是自托管同步 API",
+          "SELF_HOSTED_API_UNREACHABLE": "无法连接自托管同步 API"
         }
       },
       "connectionTab": "连接设置",
@@ -2385,7 +2412,8 @@
         "change": "更换",
         "selecting": "正在选择",
         "accessFailedTitle": "无法访问文件夹",
-        "accessFailedDescription": "请选择可读写的 iCloud 文件夹后重试。"
+        "accessFailedDescription": "请选择可读写的 iCloud 文件夹后重试。",
+        "saveBeforeRollbackFailed": "无法在回滚工作区前保存当前编辑内容"
       },
       "autoSync": "自动同步笔记",
       "autoDataSync": "自动同步记录和配置",
@@ -3018,7 +3046,24 @@
           "syncVersionChanged": "路径迁移期间同步版本发生变化，已保留当前同步元数据",
           "renameContentInvalid": "远端重命名内容验证无效"
         }
-      }
+      },
+      "conflict": {
+        "contentIdentical": "内容相同，无需处理",
+        "resolvedWithStrategy": "使用{strategy}策略解决冲突",
+        "manualRequired": "需要用户手动处理",
+        "simpleAppendMergeable": "检测到简单的内容追加，可以自动合并",
+        "formatChangeKeepRemote": "检测到格式变化，使用远程版本",
+        "dialogMessage": "文件 {filePath} 存在冲突\n\n本地版本：{localLength} 字符\n远程版本：{remoteLength} 字符\n\n请选择如何处理：\n• 确定：保留本地版本\n• 取消：保留远程版本",
+        "dialogTitle": "同步冲突",
+        "keepLocalLabel": "保留本地",
+        "keepRemoteLabel": "保留远程",
+        "userKeptLocal": "用户选择保留本地版本",
+        "userKeptRemote": "用户选择保留远程版本"
+      },
+      "remoteFileNotFound": "远程文件不存在: {path}",
+      "remotePathIsDirectory": "远程路径指向的是目录，不是文件: {path}",
+      "remoteFileInvalidFormat": "远程文件内容格式无效: {path}",
+      "remoteFileInvalidBase64": "远程文件内容不是有效的 Base64 字符串"
     },
     "imageHosting": {
       "title": "图片存储",
@@ -3174,7 +3219,10 @@
         "testFailedDesc": "请检查配置信息和网络连接",
         "testFirstDesc": "请先测试连接成功后再设为主要图床",
         "setPrimarySuccess": "设置成功",
-        "setPrimarySuccessDesc": "对象存储已设为主要图床"
+        "setPrimarySuccessDesc": "对象存储已设为主要图床",
+        "configError": "S3 配置错误",
+        "configureParamsFirst": "请先配置 S3 参数",
+        "uploadFailed": "上传失败"
       },
       "lsky": {
         "title": "Lsky Pro",
@@ -4025,6 +4073,15 @@
         }
       }
     },
+    "navigationGroups": {
+      "extensions": "拓展",
+      "basic": "基础设置",
+      "ai": "AI",
+      "data": "数据与存储"
+    },
+    "searchPlaceholder": "搜索设置...",
+    "noSearchResults": "没有找到相关设置",
+    "title": "设置",
     "security": {
       "title": "安全",
       "desc": "此帐户的双重验证和登录会话。",
@@ -4117,15 +4174,6 @@
         "cancel": "取消"
       }
     },
-    "navigationGroups": {
-      "extensions": "拓展",
-      "basic": "基础设置",
-      "ai": "AI",
-      "data": "数据与存储"
-    },
-    "searchPlaceholder": "搜索设置...",
-    "noSearchResults": "没有找到相关设置",
-    "title": "设置",
     "disabled": {
       "canvas": "Canvas is available in Phase 2. This section is disabled in this version.",
       "sync": "Sync is available in a later phase. The server is the single source of truth in this version. No sync credentials can be entered here.",
@@ -6576,7 +6624,14 @@
       "pdfPreviewTitle": "{title} - PDF 打印预览",
       "pdfPrintWindowStartFailed": "PDF 打印窗口启动失败：{payload}",
       "exportPdfDialogTitle": "导出 PDF",
-      "pdfPrintUnsupported": "当前平台不支持系统 PDF 打印"
+      "pdfPrintUnsupported": "当前平台不支持系统 PDF 打印",
+      "movePathsDuplicateOrNested": "移动的文件路径重复或互相包含",
+      "moveTargetExists": "目标路径已存在：{targetPath}",
+      "invalidMoveTarget": "无效的移动目标",
+      "folderCopiedAs": "文件夹已复制为 {targetName}",
+      "copyFolderFailed": "复制文件夹失败",
+      "saveAsPdfInstruction": "请在系统打印窗口中选择“另存为 PDF”。",
+      "exportButton": "导出"
     },
     "editor": {
       "copySuccess": "复制成功",
@@ -6674,7 +6729,14 @@
         "pullSuccess": "拉取成功",
         "pullFailed": "拉取失败",
         "ignored": "已忽略",
-        "ignoreUpdate": "忽略此更新"
+        "ignoreUpdate": "忽略此更新",
+        "checkNetworkAndRetry": "请检查网络连接后重试",
+        "pulling": "拉取中...",
+        "resolveConflict": "处理冲突",
+        "hasConflict": "有冲突",
+        "pullUpdates": "拉取更新",
+        "hasUpdate": "有更新",
+        "manualPullRemoteFile": "手动拉取远程文件"
       },
       "sync": {
         "push": "推送",
@@ -6823,43 +6885,15 @@
       "model": "大模型识别",
       "modelDesc": "需配置STT模型，更准确"
     },
-    "audioLoading": "加载音频中..."
+    "audioLoading": "加载音频中...",
+    "emptyAudioData": "音频数据为空",
+    "fileSelectFailed": "文件选择失败",
+    "fileProcessFailed": "文件处理失败"
   },
   "quickRecord": {
     "description": "点击选择记录工具，快速创建记录"
   },
   "editor": {
-    "revisionConflict": {
-      "title": "保存冲突",
-      "description": "此文件在编辑器外发生了更改。您的编辑内容仍在编辑器中，没有任何内容被覆盖。请选择如何解决 {path} 的冲突。",
-      "serverHeading": "服务器版本",
-      "modifiedAt": "修改时间",
-      "size": "大小",
-      "previewEmpty": "没有可用的预览。",
-      "previewTruncated": "预览已截断。",
-      "reloadChoice": "从服务器重新加载",
-      "reloadHint": "放弃编辑器中的修改，并加载服务器版本。",
-      "copyChoice": "另存为副本",
-      "copyHint": "将您的修改保存到新文件，然后在此处加载服务器版本。",
-      "copyNameLabel": "副本名称",
-      "copyNameTaken": "该名称已被占用，请尝试建议的名称。",
-      "forceChoice": "覆盖服务器版本",
-      "forceHint": "用您的修改替换服务器版本。",
-      "forceWarning": "警告：服务器版本将会丢失，此操作无法撤销。",
-      "decideLater": "稍后决定",
-      "working": "处理中...",
-      "errorLabel": "无法解决冲突，没有任何内容被覆盖。",
-      "unknownDate": "未知",
-      "heldTitle": "保存冲突尚未解决",
-      "heldDescription": "您的修改暂存在编辑器中，请解决冲突后再次保存。",
-      "resolveButton": "解决冲突"
-    },
-    "externalChange": {
-      "title": "文件在编辑器外发生了更改",
-      "description": "此文件在其他地方发生了更改。重新加载以查看最新版本，或继续编辑并在保存时解决冲突。",
-      "reloadButton": "重新加载",
-      "dismissButton": "忽略"
-    },
     "headingFolding": {
       "expand": "展开此标题内容",
       "collapse": "折叠此标题内容"
@@ -7213,6 +7247,37 @@
         "placeholder": "输入 AI 指令",
         "submit": "执行"
       }
+    },
+    "revisionConflict": {
+      "title": "保存冲突",
+      "description": "此文件在编辑器外发生了更改。您的编辑内容仍在编辑器中，没有任何内容被覆盖。请选择如何解决 {path} 的冲突。",
+      "serverHeading": "服务器版本",
+      "modifiedAt": "修改时间",
+      "size": "大小",
+      "previewEmpty": "没有可用的预览。",
+      "previewTruncated": "预览已截断。",
+      "reloadChoice": "从服务器重新加载",
+      "reloadHint": "放弃编辑器中的修改，并加载服务器版本。",
+      "copyChoice": "另存为副本",
+      "copyHint": "将您的修改保存到新文件，然后在此处加载服务器版本。",
+      "copyNameLabel": "副本名称",
+      "copyNameTaken": "该名称已被占用，请尝试建议的名称。",
+      "forceChoice": "覆盖服务器版本",
+      "forceHint": "用您的修改替换服务器版本。",
+      "forceWarning": "警告：服务器版本将会丢失，此操作无法撤销。",
+      "decideLater": "稍后决定",
+      "working": "处理中...",
+      "errorLabel": "无法解决冲突，没有任何内容被覆盖。",
+      "unknownDate": "未知",
+      "heldTitle": "保存冲突尚未解决",
+      "heldDescription": "您的修改暂存在编辑器中，请解决冲突后再次保存。",
+      "resolveButton": "解决冲突"
+    },
+    "externalChange": {
+      "title": "文件在编辑器外发生了更改",
+      "description": "此文件在其他地方发生了更改。重新加载以查看最新版本，或继续编辑并在保存时解决冲突。",
+      "reloadButton": "重新加载",
+      "dismissButton": "忽略"
     },
     "disabled": {
       "badge": "Not available in the web version",

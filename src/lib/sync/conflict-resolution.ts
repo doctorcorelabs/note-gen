@@ -145,7 +145,7 @@ export async function detectAndHandleConflict(
 ): Promise<ConflictResolution> {
   // 如果内容相同，不是冲突
   if (localContent === remoteContent) {
-    return { action: 'keep_local', reason: '内容相同，无需处理' }
+    return { action: 'keep_local', reason: 'The content is identical; no action is needed.' }
   }
 
   // 如果提供了策略，直接使用策略解决
@@ -154,10 +154,10 @@ export async function detectAndHandleConflict(
     if (result.resolved) {
       return {
         action: strategy === 'local' ? 'keep_local' : strategy === 'remote' ? 'keep_remote' : 'manual',
-        reason: `使用${strategy}策略解决冲突`
+        reason: `Resolved the conflict with the ${strategy} strategy.`
       }
     } else {
-      return { action: 'manual', reason: '需要用户手动处理' }
+      return { action: 'manual', reason: 'The user needs to handle this manually.' }
     }
   }
 
@@ -167,7 +167,7 @@ export async function detectAndHandleConflict(
   switch (conflictType) {
     case 'simple_addition':
       // 简单的内容追加，可以自动合并
-      return { action: 'merge', reason: '检测到简单的内容追加，可以自动合并' }
+      return { action: 'merge', reason: 'Detected a simple content append that can be merged automatically.' }
 
     case 'significant_change':
       // 显著内容变化，需要用户选择
@@ -175,7 +175,7 @@ export async function detectAndHandleConflict(
 
     case 'format_only':
       // 仅格式变化，保留远程版本
-      return { action: 'keep_remote', reason: '检测到格式变化，使用远程版本' }
+      return { action: 'keep_remote', reason: 'Detected a format change; using the remote version.' }
 
     default:
       return await promptUserForResolution(filePath, localContent, remoteContent)
@@ -249,22 +249,22 @@ async function promptUserForResolution(
   remoteContent: string
 ): Promise<ConflictResolution> {
   const choice = await platform.dialog.confirm(
-    `文件 ${filePath} 存在冲突\n\n` +
-    `本地版本：${localContent.length} 字符\n` +
-    `远程版本：${remoteContent.length} 字符\n\n` +
-    `请选择如何处理：\n` +
-    `• 确定：保留本地版本\n` +
-    `• 取消：保留远程版本`,
+    `File ${filePath} has a conflict\n\n` +
+    `Local version: ${localContent.length} characters\n` +
+    `Remote version: ${remoteContent.length} characters\n\n` +
+    `Choose how to handle it:\n` +
+    `• Confirm: keep the local version\n` +
+    `• Cancel: keep the remote version`,
     { 
-      title: '同步冲突',
-      okLabel: '保留本地',
-      cancelLabel: '保留远程'
+      title: 'Sync conflict',
+      okLabel: 'Keep local',
+      cancelLabel: 'Keep remote'
     }
   )
   
   return {
     action: choice ? 'keep_local' : 'keep_remote',
-    reason: choice ? '用户选择保留本地版本' : '用户选择保留远程版本'
+    reason: choice ? 'The user chose to keep the local version' : 'The user chose to keep the remote version'
   }
 }
 

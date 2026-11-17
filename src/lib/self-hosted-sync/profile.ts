@@ -17,7 +17,7 @@ export interface SelfHostedProfile {
 
 export class SelfHostedInstanceChangedError extends Error {
   constructor(readonly serverUrl: string, readonly instanceId: string) {
-    super('服务器实例身份已变化，请先确认服务器是否被重置或替换')
+    super('The server instance identity has changed. Confirm first whether the server was reset or replaced.')
     this.name = 'SelfHostedInstanceChangedError'
   }
 }
@@ -63,7 +63,7 @@ export async function connectWithPassword(input: {
 }): Promise<SelfHostedProfile> {
   const { normalized, client: unauthenticated, capabilities } = await resolveServerConnection(input.serverUrl)
   if (capabilities.protocol.minimum > 1 || capabilities.protocol.maximum < 1) {
-    throw new Error('服务器与当前 NoteGen 同步协议不兼容')
+    throw new Error('The server is incompatible with the current NoteGen sync protocol.')
   }
 
   const existing = await profileForServer(normalized.url)
@@ -125,7 +125,7 @@ export async function connectWithBrowser(input: {
 }): Promise<SelfHostedProfile> {
   const { normalized, client, capabilities } = await resolveServerConnection(input.serverUrl)
   if (capabilities.protocol.minimum > 1 || capabilities.protocol.maximum < 1) {
-    throw new Error('服务器与当前 NoteGen 同步协议不兼容')
+    throw new Error('The server is incompatible with the current NoteGen sync protocol.')
   }
   const existing = await profileForServer(normalized.url)
   assertServerInstance(normalized.url, existing?.instanceId, capabilities.instanceId, input.confirmedInstanceId)
@@ -162,7 +162,7 @@ export async function connectWithBrowser(input: {
           throw error
         }
       }
-      throw new Error('浏览器授权已过期')
+      throw new Error('The browser authorization has expired.')
     } catch (error) {
       await client.cancelDeviceAuthorization(authorization.deviceCode).catch(() => undefined)
       if (identityAttempt === 0 && isDeviceKeyConflict(error)) {
@@ -173,7 +173,7 @@ export async function connectWithBrowser(input: {
       throw error
     }
   }
-  throw new Error('无法创建新的设备身份')
+  throw new Error('Could not create a new device identity.')
 }
 
 export async function ensurePersonalWorkspace(profileId: string) {
@@ -188,7 +188,7 @@ export async function ensurePersonalWorkspace(profileId: string) {
   const keys = await client.workspaceKeys(workspace.id)
   const managedKey = keys.find(key => key.keyVersion === 1)?.envelopes
     .find(envelope => envelope.type === 'managed')?.wrappedKey
-  if (!managedKey) throw new Error('个人数据空间缺少 managed key')
+  if (!managedKey) throw new Error('The personal data space is missing a managed key.')
   const session = await client.syncSession(workspace.id, '0')
   await secureSet(workspaceSecretKey(workspace.id, 1), managedKey)
   const now = Date.now()
@@ -334,16 +334,16 @@ export async function authenticatedClient(profileId: string) {
 
 async function loadAuthenticatedSession(profileId: string) {
   const profile = await getProfile(profileId)
-  if (!profile) throw new Error('自托管同步配置不存在')
+  if (!profile) throw new Error('The self-hosted sync configuration does not exist.')
   if (profile.state !== 'connected') {
     console.info('[self-hosted-sync] session.reauthentication-required', { profileId, state: profile.state })
-    throw new Error('自托管登录已失效，请重新授权')
+    throw new Error('The self-hosted sign-in has expired. Authorize again.')
   }
   let accessToken = await secureGet(secretKey(profileId, 'access-token'))
   if (!accessToken) {
     console.warn('[self-hosted-sync] session.access-token-missing', { profileId })
     await markProfileReauthenticationRequired(profileId)
-    throw new Error('自托管登录已失效，请重新授权')
+    throw new Error('The self-hosted sign-in has expired. Authorize again.')
   }
   if ((profile.accessExpiresAt ?? 0) <= Date.now() + 60_000) {
     console.info('[self-hosted-sync] session.refresh-started', { profileId })
@@ -442,9 +442,9 @@ export function updateDomainToggle(profileId: string, domain: string, enabled: b
 }
 
 async function updateDomainToggleRaw(profileId: string, domain: string, enabled: boolean) {
-  if (!Object.hasOwn(DEFAULT_DOMAIN_TOGGLES, domain)) throw new Error('不支持的个人数据同步领域')
+  if (!Object.hasOwn(DEFAULT_DOMAIN_TOGGLES, domain)) throw new Error('Unsupported personal data sync domain.')
   const profile = await getProfile(profileId)
-  if (!profile) throw new Error('自托管同步配置不存在')
+  if (!profile) throw new Error('The self-hosted sync configuration does not exist.')
   if ((profile.domainToggles[domain] !== false) === enabled) return profile.domainToggles
   // Drain the current sender before changing policy. Once this call returns,
   // queued commands from a disabled domain cannot still be sent by that run.
@@ -462,7 +462,7 @@ async function updateDomainToggleRaw(profileId: string, domain: string, enabled:
   }
   const article = articles.getState()
   if (!await prepareActiveEditorDeactivationDurably(article.activeFilePath)) {
-    throw new Error('请先完成当前编辑，再修改同步范围')
+    throw new Error('Finish the current edit first, then change the sync scope.')
   }
   await article.flushAllPendingArticleSaves()
   const resume = pauseSelfHostedCollaboration()
@@ -600,7 +600,7 @@ async function refreshAccessToken(profile: SelfHostedProfile) {
   const refresh = (async () => {
     try {
       const refreshToken = await secureGet(secretKey(profile.id, 'refresh-token'))
-      if (!refreshToken || !profile.deviceId) throw new Error('自托管刷新凭据已失效')
+      if (!refreshToken || !profile.deviceId) throw new Error('The self-hosted refresh credentials have expired.')
       const refreshRequestKey = secretKey(profile.id, 'refresh-request-id')
       let refreshRequestId = await secureGet(refreshRequestKey)
       if (!refreshRequestId) {
@@ -613,7 +613,7 @@ async function refreshAccessToken(profile: SelfHostedProfile) {
         refreshRequestId,
       )
       if (session.accountId !== profile.accountId || session.deviceId !== profile.deviceId) {
-        throw new Error('刷新会话返回了不同的账号或设备')
+        throw new Error('The refreshed session returned a different account or device.')
       }
       await Promise.all([
         secureSet(secretKey(profile.id, 'access-token'), session.accessToken),
@@ -723,14 +723,14 @@ async function resolveServerConnection(value: string) {
     const client = new SelfHostedClient(normalized.url)
     try {
       const capabilities = await client.capabilities()
-      if (capabilities.service !== 'note-gen-server') throw new Error('该地址不是自托管同步 API')
+      if (capabilities.service !== 'note-gen-server') throw new Error('This address is not a self-hosted sync API.')
       return { normalized, client, capabilities }
     } catch (error) {
       lastError = error
     }
   }
   if (lastError instanceof Error) throw lastError
-  throw new Error('无法连接自托管同步 API')
+  throw new Error('Could not connect to the self-hosted sync API.')
 }
 
 async function profileForServer(serverUrl: string) {

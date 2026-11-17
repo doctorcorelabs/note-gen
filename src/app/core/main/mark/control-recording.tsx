@@ -153,7 +153,7 @@ export function ControlRecording() {
     try {
       // 先验证 Blob 是否有效
       if (!audioBlob || audioBlob.size === 0) {
-        throw new Error('音频数据为空')
+        throw new Error(t('recording.emptyAudioData'))
       }
       
       // 保存音频文件
@@ -264,7 +264,7 @@ export function ControlRecording() {
       console.error('文件选择失败:', error)
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : '文件选择失败',
+        description: error instanceof Error ? error.message : t('recording.fileSelectFailed'),
         variant: 'destructive'
       })
     }
@@ -298,7 +298,7 @@ export function ControlRecording() {
       console.error('文件处理失败:', error)
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : '文件处理失败',
+        description: error instanceof Error ? error.message : t('recording.fileProcessFailed'),
         variant: 'destructive'
       })
     }

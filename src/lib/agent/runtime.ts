@@ -79,7 +79,7 @@ async function executeAgentTool(
     const message = error instanceof Error ? error.message : String(error)
     return {
       ok: false,
-      message: `${tool.title}执行时出现异常：${message}`,
+      message: `${tool.title} threw an exception while running: ${message}`,
       error: message,
     }
   }
@@ -387,7 +387,7 @@ function validateQuotedEditorWrite(
     ) {
       return {
         ok: false,
-        message: '引用内容不属于当前活动编辑器。请重新打开并引用目标文件后再修改。',
+        message: 'The quoted content does not belong to the currently active editor. Reopen and quote the target file before editing.',
         error: 'QUOTED_EDITOR_TARGET_CHANGED',
       }
     }
@@ -404,7 +404,7 @@ function validateQuotedEditorWrite(
     }
     return {
       ok: false,
-      message: '当前可读取选中文本，但无法安全映射到 Markdown 源码位置。只能使用 editor_insert_at_cursor，并设置 replaceSelection=true；若选区已变化，该操作会自动失败。',
+      message: 'The selected text can be read now, but it cannot be safely mapped to a Markdown source position. Only use editor_insert_at_cursor with replaceSelection=true; if the selection has changed, the operation will fail automatically.',
       error: 'SELECTION_TARGET_UNAVAILABLE',
     }
   }
@@ -415,7 +415,7 @@ function validateQuotedEditorWrite(
     if (from !== quote.from || to !== quote.to) {
       return {
         ok: false,
-        message: `工具参数越界：当前请求只能替换用户选区 from=${quote.from}, to=${quote.to}，请用这个精确范围重试。`,
+        message: `Tool arguments out of bounds: the current request can only replace the user selection from=${quote.from}, to=${quote.to}. Retry with this exact range.`,
         error: 'INVALID_QUOTED_RANGE',
       }
     }
@@ -439,7 +439,7 @@ function validateEditorTargetFile(
   if (!activeFilePath) {
     return {
       ok: false,
-      message: '当前没有打开的编辑器文件，不能执行 editor_* 写入工具。请改用带明确 filePath 的 note_* 工具。',
+      message: 'No editor file is open, so editor_* write tools cannot run. Use note_* tools with an explicit filePath instead.',
       error: 'EDITOR_TOOL_WITHOUT_ACTIVE_FILE',
     }
   }
@@ -447,7 +447,7 @@ function validateEditorTargetFile(
   if (!targetFilePath) {
     return {
       ok: false,
-      message: `editor_* 写入工具必须在结构化参数 filePath 中声明目标文件。当前编辑器文件是 ${activeFilePath}，请使用这个完整路径重试。`,
+      message: `editor_* write tools must declare the target file in the structured filePath argument. The current editor file is ${activeFilePath}; retry with this full path.`,
       error: 'EDITOR_TOOL_MISSING_TARGET_FILE',
     }
   }
@@ -458,7 +458,7 @@ function validateEditorTargetFile(
 
   return {
     ok: false,
-    message: `工具参数中的目标文件是 ${targetFilePath}，但当前编辑器文件是 ${activeFilePath}。请不要使用 editor_* 工具，改用 note_read_file 和 note_update_file 针对目标文件操作。`,
+    message: `The target file in the tool arguments is ${targetFilePath}, but the current editor file is ${activeFilePath}. Do not use editor_* tools; use note_read_file and note_update_file for the target file instead.`,
     error: 'EDITOR_TOOL_WRONG_TARGET_FILE',
   }
 }
@@ -470,7 +470,7 @@ function validateToolInputShape(tool: AgentTool, args: Record<string, unknown>):
   if (unknownKeys.length > 0) {
     return {
       ok: false,
-      message: `工具参数包含未声明字段：${unknownKeys.join(', ')}。请只使用结构化工具定义中的参数。`,
+      message: `The tool arguments contain undeclared fields: ${unknownKeys.join(', ')}. Only use the arguments from the structured tool definition.`,
       error: 'UNKNOWN_TOOL_ARGUMENTS',
     }
   }
@@ -481,7 +481,7 @@ function validateToolInputShape(tool: AgentTool, args: Record<string, unknown>):
   if (missingKeys.length > 0) {
     return {
       ok: false,
-      message: `工具缺少必填参数：${missingKeys.join(', ')}。`,
+      message: `The tool call is missing required arguments: ${missingKeys.join(', ')}.`,
       error: 'MISSING_TOOL_ARGUMENTS',
     }
   }
@@ -772,7 +772,7 @@ export class AgentRuntime {
     const runWorkspaceIdentity = getSkillWorkspaceIdentity(await getWorkspacePath())
     const assertRunWorkspace = async () => {
       if (getSkillWorkspaceIdentity(await getWorkspacePath()) !== runWorkspaceIdentity) {
-        throw new Error('WORKSPACE_CHANGED: 工作区已切换，本次任务已停止。请在目标工作区重新发起请求。')
+        throw new Error('WORKSPACE_CHANGED: The workspace has changed and this task has stopped. Start a new request in the target workspace.')
       }
     }
 
@@ -935,7 +935,7 @@ export class AgentRuntime {
         if (knowledgeSearchCount >= ragAgentPolicy.maxSearchRounds) {
           return {
             ok: false,
-            message: `本次任务已达到“${ragAgentPolicy.strategy}”策略允许的 ${ragAgentPolicy.maxSearchRounds} 轮知识搜索上限。请基于已有证据完成回答。`,
+            message: `This task has reached the knowledge search limit of ${ragAgentPolicy.maxSearchRounds} rounds allowed by the "${ragAgentPolicy.strategy}" strategy. Complete the answer from the evidence already gathered.`,
             error: 'KNOWLEDGE_SEARCH_BUDGET_EXHAUSTED',
           }
         }
@@ -950,13 +950,13 @@ export class AgentRuntime {
         })
         const nextKeys = requestedKeys.filter(sourceKey => !readKnowledgeSourceKeys.has(sourceKey))
         if (requestedKeys.some(sourceKey => !originalSourceGrants.has(sourceKey) && !isExplicitSource(sourceKey))) {
-          return { ok: false, message: '请先使用 knowledge_search 搜索目标原文，再读取返回的来源候选；Wiki 页面证据不会自动授权读取所有原文。',
+          return { ok: false, message: 'Use knowledge_search to search the target source text first, then read the returned source candidates; Wiki page evidence does not automatically authorize reading all source texts.',
             error: 'KNOWLEDGE_SEARCH_REQUIRED' }
         }
         if (readKnowledgeSourceKeys.size + new Set(nextKeys).size > knowledgeReadLimit) {
           return {
             ok: false,
-            message: `“${ragAgentPolicy.strategy}”策略最多定向读取 ${knowledgeReadLimit} 个知识来源。请只读取最相关的候选。`,
+            message: `The "${ragAgentPolicy.strategy}" strategy allows targeted reading of at most ${knowledgeReadLimit} knowledge sources. Read only the most relevant candidates.`,
             error: 'KNOWLEDGE_READ_BUDGET_EXHAUSTED',
           }
         }
@@ -970,11 +970,11 @@ export class AgentRuntime {
           return typeof pageId === 'string' ? [pageId] : []
         })
         if (pageIds.some(pageId => !wikiPageGrants.has(pageId))) return {
-          ok: false, message: '请先搜索并读取本次检索范围内的 Wiki 页面。', error: 'WIKI_SEARCH_REQUIRED',
+          ok: false, message: 'Search and read the Wiki pages within the scope of this retrieval first.', error: 'WIKI_SEARCH_REQUIRED',
         }
         const newPages = new Set(pageIds.filter(pageId => !readWikiPageIds.has(pageId)))
         if (readWikiPageIds.size + newPages.size > knowledgeReadLimit) return {
-          ok: false, message: '已达到本次知识读取预算，请使用最相关的页面。', error: 'KNOWLEDGE_READ_BUDGET_EXHAUSTED',
+          ok: false, message: 'The knowledge reading budget for this run has been reached. Use the most relevant pages.', error: 'KNOWLEDGE_READ_BUDGET_EXHAUSTED',
         }
         pageIds.forEach(pageId => readWikiPageIds.add(pageId))
         args = { ...args, wikiGrants: Object.fromEntries(pageIds.map(pageId => [pageId, wikiPageGrants.get(pageId)!])) }
@@ -982,7 +982,7 @@ export class AgentRuntime {
       if (tool.name === 'knowledge_cite_sources') {
         const keys = Array.isArray(args.sourceKeys) ? args.sourceKeys : []
         if (keys.some(key => typeof key !== 'string' || !readEvidenceSourceKeys.has(key))) return {
-          ok: false, message: '只能引用本次已读取的 Wiki 证据或原文来源。', error: 'KNOWLEDGE_EVIDENCE_NOT_READ',
+          ok: false, message: 'Only cite Wiki evidence or source texts already read in this run.', error: 'KNOWLEDGE_EVIDENCE_NOT_READ',
         }
       }
 
@@ -1036,10 +1036,10 @@ export class AgentRuntime {
       })
       if (!result.ok && hasFileEditPreview(toolName)
         && !recorder.all().some(event => event.toolName === toolName && event.input === args)) {
-        const event = recorder.add({ type: 'tool_result', title: '改动未应用', status: 'error',
+        const event = recorder.add({ type: 'tool_result', title: 'Change not applied', status: 'error',
           toolName, input: args, output: result, editSkipped: true,
           editOutcome: /CHANGED|MISMATCH|STALE/.test(result.error || '') ? 'stale' : 'not-applied',
-          message: '本次改动未应用。',
+          message: 'This change was not applied.',
         })
         callbacks.onTrace?.(event)
       }
@@ -1100,7 +1100,7 @@ export class AgentRuntime {
         }
 
         discoveredFolderFiles.set(attachmentId, discovered)
-        return `本次列出了 ${entries.length} 项，其中当前累计发现 ${discovered.size} 个可读取文件。`
+        return `Listed ${entries.length} items this time, with ${discovered.size} readable files discovered so far in total.`
       }
 
       const relativePath = typeof args.relativePath === 'string' ? args.relativePath : ''
@@ -1139,18 +1139,18 @@ export class AgentRuntime {
       const unreadPreview = unread.slice(0, 20).join('、')
       const omittedCount = Math.max(0, unread.length - 20)
       return [
-        `当前已读取 ${readCount}/${discovered.size} 个已发现的可读文件。`,
+        `Already read ${readCount} of ${discovered.size} discovered readable files.`,
         unread.length > 0
-          ? `尚未读取：${unreadPreview}${omittedCount > 0 ? `，另有 ${omittedCount} 个` : ''}。请结合用户请求判断是否需要继续读取。`
-          : '当前已发现的可读文件均已读取。',
+          ? `Not yet read: ${unreadPreview}${omittedCount > 0 ? `, plus ${omittedCount} more` : ''}. Judge from the user request whether to keep reading.`
+          : 'All discovered readable files have been read.',
       ].join('\n')
     }
 
     const getSafeStoppedContent = () => {
       if (toolCalls.length > 0 && !finalContent) {
         return [
-          '已停止生成最终说明；已成功执行的操作请以工具结果和改动记录为准。',
-          changes.length > 0 ? `本轮已记录 ${changes.length} 项成功改动。` : '',
+          'Final explanation generation has stopped; for operations already executed successfully, rely on the tool results and the change log.',
+          changes.length > 0 ? `Recorded ${changes.length} successful changes this round.` : '',
         ].filter(Boolean).join('\n')
       }
 
@@ -1165,8 +1165,8 @@ export class AgentRuntime {
         role: 'user',
         content: [
           '## App Context',
-          `工具执行阶段已停止：${reason}`,
-          '请基于用户原始请求和已有工具结果，直接生成自然、完整的最终答复。说明已经完成的内容、未完成的内容及原因；不要再调用任何工具。',
+          `The tool execution phase has stopped: ${reason}`,
+          'Based on the original user request and the tool results so far, generate a natural, complete final reply directly. Explain what was completed, what was not completed, and why; do not call any more tools.',
         ].join('\n'),
       })
     }
@@ -1232,7 +1232,7 @@ export class AgentRuntime {
       })
       const finalTrace = recorder.add({
         type: 'final',
-        title: '完成',
+        title: 'Done',
         status: 'success',
         message: content,
         ...(renderedToolCallId ? { output: { format: 'json-render', toolCallId: renderedToolCallId } } : {}),
@@ -1325,7 +1325,7 @@ export class AgentRuntime {
 
       const steeringTrace = recorder.add({
         type: 'steering',
-        title: '已应用追加信息',
+        title: 'Steering info applied',
         status: 'success',
         message: payloads.map((payload) => payload.text).join('\n'),
       })
@@ -1399,9 +1399,9 @@ export class AgentRuntime {
         })
         const modelTrace = recorder.add({
           type: 'model_call',
-          title: '模型思考',
+          title: 'Model thinking',
           status: 'running',
-          message: `第 ${iteration} 轮`,
+          message: `Round ${iteration}`,
           streamedTokenCount: 0,
         })
         activeModelTraceId = modelTrace.id
@@ -1696,7 +1696,7 @@ export class AgentRuntime {
         )
         const responseTrace = recorder.update(modelTrace.id, {
           type: 'model_response',
-          title: assistantContent ? '模型响应' : toolUses.length > 0 ? '模型选择工具' : '模型思考',
+          title: assistantContent ? 'Model response' : toolUses.length > 0 ? 'Model choosing tools' : 'Model thinking',
           status: 'success',
           duration: Date.now() - modelTrace.timestamp,
           output: modelTraceOutput,
@@ -1752,7 +1752,7 @@ export class AgentRuntime {
           for (const pendingToolUse of toolUses.slice(afterIndex + 1)) {
             appendToolResult(pendingToolUse.id, pendingToolUse.function.name, {}, {
               ok: false,
-              message: `运行保护已停止后续工具调用：${reason}`,
+              message: `The runtime guard has stopped further tool calls: ${reason}`,
               error: 'CANCELLED_BY_RUNTIME_GUARD',
             })
           }
@@ -1775,7 +1775,7 @@ export class AgentRuntime {
             if (toolName === 'render_response') clearResponsePreview()
             const parseErrorResult: AgentToolResult = {
               ok: false,
-              message: `工具参数 JSON 无效：${error instanceof Error ? error.message : String(error)}。请重新发起同一个工具调用，并返回合法 JSON 参数。`,
+              message: `Invalid tool argument JSON: ${error instanceof Error ? error.message : String(error)}. Retry the same tool call and return valid JSON arguments.`,
               error: 'INVALID_TOOL_ARGUMENTS_JSON',
             }
             const toolCall: ToolCall = {
@@ -1833,7 +1833,7 @@ export class AgentRuntime {
           if (!tool) {
             const missingResult: AgentToolResult = {
               ok: false,
-              message: `工具不存在：${toolName}`,
+              message: `Tool does not exist: ${toolName}`,
               error: `Unknown tool ${toolName}`,
             }
             agentDebugLog('tool_missing', {
@@ -1859,7 +1859,7 @@ export class AgentRuntime {
           if (!offeredToolNames.has(toolName)) {
             const blockedResult: AgentToolResult = {
               ok: false,
-              message: `已阻止当前上下文或权限模式未提供的工具调用：${toolName}。`,
+              message: `Blocked a tool call that the current context or permission mode does not provide: ${toolName}.`,
               error: 'BLOCKED_UNAVAILABLE_TOOL',
             }
             agentDebugLog('tool_blocked_as_unavailable', {
@@ -2056,7 +2056,7 @@ export class AgentRuntime {
           if (!permission.allowed) {
             const deniedResult: AgentToolResult = {
               ok: false,
-              message: permission.reason || '工具调用被权限策略阻止。',
+              message: permission.reason || 'The tool call was blocked by the permission policy.',
               error: 'BLOCKED_BY_PERMISSION',
             }
             agentDebugLog('tool_blocked_by_permission', {
@@ -2082,7 +2082,7 @@ export class AgentRuntime {
                 if (approvalPreview.kind === 'editor' && approvalPreview.from === undefined && approvalPreview.to === undefined) {
                   buildEditorTextEdits(approvalPreview.originalContent, approvalPreview.modifiedContent)
                   if (approvalPreview.originalContent === approvalPreview.modifiedContent) {
-                    previewFailure = { ok: false, error: 'EDITOR_NO_CHANGES', message: '内容没有变化，本次未应用新的改动。' }
+                    previewFailure = { ok: false, error: 'EDITOR_NO_CHANGES', message: 'Nothing changed, so no new change was applied.' }
                   }
                 }
                 previewFailure ??= await validateEditApprovalPreview(approvalPreview)
@@ -2090,7 +2090,7 @@ export class AgentRuntime {
             } catch (error) {
               previewFailure = { ok: false,
                 error: error instanceof EditorEditSkipped ? EDITOR_EDIT_SKIPPED : 'EDIT_PREVIEW_UNAVAILABLE',
-                message: '本次改动未应用。可以保留当前内容，并根据拟议差异调整修改范围。',
+                message: 'This change was not applied. The current content can stay; adjust the edit scope from the proposed diff.',
               }
               agentDebugLog('edit_preview_unavailable', { runId, toolName, error: String(error) })
             }
@@ -2099,7 +2099,7 @@ export class AgentRuntime {
             toolCall.status = 'error'
             toolCall.result = toolResultToLegacy(previewFailure)
             callbacks.onToolCall?.(toolCall)
-            const skipped = recorder.add({ type: 'tool_result', title: '改动未应用', status: 'error', toolName,
+            const skipped = recorder.add({ type: 'tool_result', title: 'Change not applied', status: 'error', toolName,
               editOutcome: /CHANGED|MISMATCH|STALE/.test(previewFailure.error || '') ? 'stale' : 'not-applied',
               editSkipped: true, approvalPreview, input: args, output: previewFailure,
               message: previewFailure.message,
@@ -2107,7 +2107,7 @@ export class AgentRuntime {
             callbacks.onTrace?.(skipped)
             appendToolResult(toolUse.id, toolName, args, previewFailure)
             return completeFinalResponse(approvalPreview
-              ? '改动未应用，可以在对话中查看拟议差异。' : '改动未应用，原有内容保持不变。')
+              ? 'Change not applied; the proposed diff can be reviewed in the conversation.' : 'Change not applied; the original content is unchanged.')
           }
           if (permission.requiresApproval) {
             callbacks.onStatus?.('waiting_approval')
@@ -2118,7 +2118,7 @@ export class AgentRuntime {
             })
             const approvalTrace = recorder.add({
               type: 'approval',
-              title: '等待用户确认',
+              title: 'Waiting for user confirmation',
               status: 'running',
               toolName,
               input: args,
@@ -2157,7 +2157,7 @@ export class AgentRuntime {
             if (approvalDecision === 'steered') {
               const supersededResult: AgentToolResult = {
                 ok: false,
-                message: '用户追加了新的引导信息，本次待确认操作已取消。',
+                message: 'The user added new steering info, so this pending operation was cancelled.',
                 error: 'SUPERSEDED_BY_STEERING',
               }
               toolCall.status = 'error'
@@ -2178,7 +2178,7 @@ export class AgentRuntime {
             if (approvalDecision !== 'approved') {
               const deniedResult: AgentToolResult = {
                 ok: false,
-                message: '用户拒绝了这个操作。请不要重复调用同一高风险工具，改用只读回答或询问用户新的处理方式。',
+                message: 'The user rejected this operation. Do not call the same high-risk tool again; answer read-only or ask the user for a different approach.',
                 error: 'USER_DENIED_TOOL',
               }
               toolCall.status = 'error'
@@ -2194,8 +2194,8 @@ export class AgentRuntime {
               if (updatedApprovalTrace) callbacks.onTrace?.(updatedApprovalTrace)
               appendToolResult(toolUse.id, toolName, args, deniedResult)
               finalContent = changes.length > 0
-                ? `已取消当前待确认操作；此前已有 ${changes.length} 项改动成功执行，请以改动记录为准。`
-                : '已取消当前待确认操作，未执行该项改动。'
+                ? `Cancelled the current pending operation; ${changes.length} changes were already executed successfully, so rely on the change log.`
+                : 'Cancelled the current pending operation; the change was not executed.'
               agentDebugLog('approval_denied_final', {
                 runId,
                 toolName,
@@ -2205,7 +2205,7 @@ export class AgentRuntime {
               callbacks.onFinalAnswerRender?.(finalContent)
               const finalTrace = recorder.add({
                 type: 'final',
-                title: '已取消',
+                title: 'Cancelled',
                 status: 'success',
                 message: finalContent,
               })
@@ -2225,7 +2225,7 @@ export class AgentRuntime {
             const updatedApprovalTrace = recorder.update(approvalTrace.id, {
               approvalDecision: 'approved',
               status: 'success',
-              message: '用户已确认操作。',
+              message: 'The user confirmed the operation.',
             })
             if (updatedApprovalTrace) callbacks.onTrace?.(updatedApprovalTrace)
           }
@@ -2280,20 +2280,20 @@ export class AgentRuntime {
           })
           const proposalConflict = approvalPreview
             ? await validateEditApprovalPreview(approvalPreview).catch((): AgentToolResult => ({
-                ok: false, error: 'EDIT_SNAPSHOT_UNAVAILABLE', message: '暂时无法核对文件内容，本次改动未应用。',
+                ok: false, error: 'EDIT_SNAPSHOT_UNAVAILABLE', message: 'The file content cannot be checked right now, so this change was not applied.',
               }))
             : undefined
           if (this.stopped) throw new Error('USER_STOPPED')
           const result: AgentToolResult = proposalConflict ?? (repeatedSuccessfulMutation
             ? {
                 ok: true,
-                message: '相同的写入操作已在本次任务中成功执行，本次重复调用已忽略。请直接完成回答。',
+                message: 'The same write operation already succeeded in this task, so this repeated call was ignored. Finish the answer directly.',
                 data: { deduplicated: true },
               }
             : repeatedFailedMutation
             ? {
                 ok: false,
-                message: '相同的操作此前已经失败，本次重复执行已被阻止。请调整参数、改用其他工具，或向用户说明失败原因。',
+                message: 'The same operation already failed before, so this repeated execution was blocked. Adjust the arguments, use a different tool, or explain the failure to the user.',
                 error: 'REPEATED_FAILED_MUTATION_BLOCKED',
               }
             : reusableEditorStateResult
@@ -2301,7 +2301,7 @@ export class AgentRuntime {
                 ...reusableEditorStateResult,
                 message: [
                   reusableEditorStateResult.message,
-                  '本轮已经读取过相同的编辑器状态，请直接使用此前返回的内容，不要再次读取。',
+                  'The same editor state was already read this round. Use the content returned earlier directly; do not read it again.',
                 ].join('\n\n'),
               }
             : await executeToolWithBudget(tool, args))
@@ -2311,7 +2311,7 @@ export class AgentRuntime {
             && approvalPreview.operation !== 'delete' && actualChange.after !== approvalPreview.modifiedContent) {
             result.ok = false
             result.error = 'EDITOR_RESULT_DIFFERS'
-            result.message = '内容已更新，实际结果与拟议差异不同，请核对已应用的改动。'
+            result.message = 'The content was updated, but the actual result differs from the proposed diff. Check the applied changes.'
           }
           const folderAttachmentProgress = getFolderAttachmentProgress(tool.name, args, result)
           const duration = Date.now() - startedAt
@@ -2335,7 +2335,7 @@ export class AgentRuntime {
               callbacks.onChange?.(change)
               const changeTrace = recorder.add({
                 type: 'change',
-                title: change.summary || '记录改动',
+                title: change.summary || 'Record change',
                 status: 'success',
                 toolName,
                 output: change,
@@ -2366,8 +2366,8 @@ export class AgentRuntime {
             editSkipped: editOutcome === 'not-applied' || editOutcome === 'stale',
             approvalPreview,
             message: editOutcome === 'unverified' ? result.message : editOutcome === 'stale'
-              ? '内容或编辑位置已变化，本次改动未应用。'
-              : editOutcome === 'not-applied' ? '本次改动未应用。'
+              ? 'The content or edit position has changed, so this change was not applied.'
+              : editOutcome === 'not-applied' ? 'This change was not applied.'
                 : [result.message, folderAttachmentProgress].filter(Boolean).join('\n\n'),
           })
           if (updatedTrace) callbacks.onTrace?.(updatedTrace)
@@ -2381,7 +2381,7 @@ export class AgentRuntime {
           if (editOutcome === 'not-applied' || editOutcome === 'stale') {
             appendToolResult(toolUse.id, toolName, args, result)
             return completeFinalResponse(approvalPreview
-              ? '改动未应用，可以在对话中查看拟议差异。' : '改动未应用。')
+              ? 'Change not applied; the proposed diff can be reviewed in the conversation.' : 'Change not applied.')
           }
 
           if (tool.name === 'render_response' && !result.ok) clearResponsePreview()
@@ -2391,12 +2391,12 @@ export class AgentRuntime {
           const cancelledUi = tool.name === 'show_ui' && result.error === 'USER_CANCELLED_UI'
           if (cancelledQuestion || cancelledUi) {
             appendToolResult(toolUse.id, tool.name, args, result)
-            cancelRemainingToolCalls(toolIndex, '用户交互已取消或被新指令取代。')
+            cancelRemainingToolCalls(toolIndex, 'The user interaction was cancelled or superseded by a new instruction.')
             if (this.steeringRequested) continue agentLoop
-            const cancellationTitle = tool.name === 'show_ui' ? '已取消交互' : '已取消提问'
+            const cancellationTitle = tool.name === 'show_ui' ? 'Interaction cancelled' : 'Question cancelled'
             finalContent = changes.length > 0
-              ? `${cancellationTitle}，本轮不再继续执行；此前已有 ${changes.length} 项改动，请以改动记录为准。`
-              : `${cancellationTitle}，本轮不再继续执行。`
+              ? `${cancellationTitle}; this round will not continue. ${changes.length} changes were already made; rely on the change log.`
+              : `${cancellationTitle}; this round will not continue.`
             callbacks.onStatus?.('completed')
             callbacks.onFinalAnswerRender?.(finalContent)
             const finalTrace = recorder.add({ type: 'final', title: cancellationTitle, status: 'success', message: finalContent })
@@ -2447,7 +2447,7 @@ export class AgentRuntime {
                 ...result,
                 message: [
                   result.message,
-                  '这次读取与上次完全相同，上次结果仍在上下文中。不要再次读取；请使用已有结果执行下一步写入，或直接完成回答。',
+                  'This read is identical to the previous one, and the previous result is still in context. Do not read again; use the existing result for the next write, or finish the answer directly.',
                 ].join('\n\n'),
               }
             } else {
@@ -2462,18 +2462,18 @@ export class AgentRuntime {
             modelFacingResult = {
               ...result,
               message: [
-                result.message || '操作已成功完成。',
-                '该操作已经成功，不要再次使用相同参数调用同一工具。如果用户请求已经完成，请直接给出最终答复。',
+                result.message || 'The operation completed successfully.',
+                'This operation already succeeded. Do not call the same tool again with the same arguments. If the user request is complete, give the final answer directly.',
               ].join('\n\n'),
             }
           } else if (!result.ok) {
             modelFacingResult = {
               ...result,
               message: [
-                result.message || result.error || '工具未返回可确认的成功结果。',
+                result.message || result.error || 'The tool did not return a confirmable success result.',
                 guardsFailedToolCall(tool)
-                  ? '该操作未确认成功。不要用相同参数重复执行；请调整方案、改用其他工具，或向用户说明情况。'
-                  : '请根据该结果调整参数、改用其他工具，或直接向用户说明情况；不要无视错误结束对话。',
+                  ? 'This operation was not confirmed successful. Do not repeat it with the same arguments; adjust the approach, use a different tool, or explain the situation to the user.'
+                  : 'Adjust the arguments from this result, use a different tool, or explain the situation to the user directly; do not end the conversation while ignoring the error.',
               ].join('\n\n'),
             }
           }
@@ -2489,8 +2489,8 @@ export class AgentRuntime {
 
           if (repeatedSuccessfulMutation || repeatedFailedMutation) {
             const reason = repeatedSuccessfulMutation
-              ? `相同的 ${tool.title} 操作此前已经成功，本次重复调用未再次执行。`
-              : `相同的 ${tool.title} 操作此前已经失败，本次重复调用已被阻止。`
+              ? `The same ${tool.title} operation already succeeded before, so this repeated call was not executed again.`
+              : `The same ${tool.title} operation already failed before, so this repeated call was blocked.`
             cancelRemainingToolCalls(toolIndex, reason)
             prepareFinalResponse(reason)
             continue agentLoop
@@ -2540,8 +2540,8 @@ export class AgentRuntime {
 
           if (identicalReadResultRepeatCount >= MAX_IDENTICAL_READ_RESULT_REPEATS) {
             const reason = [
-              `模型连续重复调用 ${toolName}，且读取结果始终未变，已停止执行以避免循环。`,
-              writeActionCompleted ? '已保留此前完成的修改。' : '本次修改尚未完成。',
+              `The model kept calling ${toolName} repeatedly while the read results never changed, so execution stopped to avoid a loop.`,
+              writeActionCompleted ? 'Modifications completed earlier were kept.' : 'The modification is not complete yet.',
             ].join('\n')
             cancelRemainingToolCalls(toolIndex, reason)
             prepareFinalResponse(reason)
@@ -2595,24 +2595,24 @@ export class AgentRuntime {
           const completedWrite = writeActionCompleted || changes.length > 0
           const reason = completedWrite
             ? [
-                '修改已成功执行；模型后续没有产生新的工具结果，已停止重复调用。',
-                changes.length > 0 ? `本轮共记录 ${changes.length} 项成功改动。` : '重复写入已被忽略。',
+                'The modification executed successfully; the model produced no new tool results afterwards, so repeated calls were stopped.',
+                changes.length > 0 ? `Recorded ${changes.length} successful changes this round in total.` : 'Repeated writes were ignored.',
               ].join('\n')
             : [
-                `连续 ${MAX_CONSECUTIVE_NO_PROGRESS_ROUNDS} 轮没有获得新的工具结果，已停止执行以避免无效循环。`,
-                '本次任务尚未确认完成。',
+                `No new tool results for ${MAX_CONSECUTIVE_NO_PROGRESS_ROUNDS} consecutive rounds, so execution stopped to avoid a futile loop.`,
+                'This task is not confirmed complete yet.',
               ].join('\n')
           prepareFinalResponse(reason)
           continue
         }
 
         if (iteration >= ABSOLUTE_MAX_MODEL_ROUNDS && !forceFinalResponseReason) {
-          prepareFinalResponse(`已达到 ${ABSOLUTE_MAX_MODEL_ROUNDS} 轮工具执行安全上限。`)
+          prepareFinalResponse(`Reached the tool execution safety limit of ${ABSOLUTE_MAX_MODEL_ROUNDS} rounds.`)
         }
 
       }
 
-      finalContent = finalContent || `已达到 ${ABSOLUTE_MAX_MODEL_ROUNDS} 轮绝对安全上限，任务可能未完全完成。`
+      finalContent = finalContent || `Reached the absolute safety limit of ${ABSOLUTE_MAX_MODEL_ROUNDS} rounds; the task may not be fully complete.`
       callbacks.onFinalAnswerRender?.(finalContent)
       return {
         runId,
@@ -2627,9 +2627,9 @@ export class AgentRuntime {
       clearResponsePreview()
       if (error instanceof Error && error.message.startsWith('WORKSPACE_CHANGED:')) {
         this.abortController?.abort()
-        finalContent = '工作区已切换，本次任务已停止。请在目标工作区重新发起请求。'
-        finalizeInterruptedModelTrace('error', '工作区已切换')
-        const trace = recorder.add({ type: 'error', title: '工作区已切换', status: 'error', message: finalContent, output: { error: 'WORKSPACE_CHANGED' } })
+        finalContent = 'The workspace has changed and this task has stopped. Start a new request in the target workspace.'
+        finalizeInterruptedModelTrace('error', 'Workspace changed')
+        const trace = recorder.add({ type: 'error', title: 'Workspace changed', status: 'error', message: finalContent, output: { error: 'WORKSPACE_CHANGED' } })
         callbacks.onTrace?.(trace)
         callbacks.onStatus?.('stopped')
         callbacks.onFinalAnswerRender?.(finalContent)
@@ -2644,7 +2644,7 @@ export class AgentRuntime {
         // USER_STOPPED. Treat both paths as a normal stop and preserve what the
         // current model has already streamed to the user.
         finalContent = getSafeStoppedContent()
-        finalizeInterruptedModelTrace('success', '模型响应已停止')
+        finalizeInterruptedModelTrace('success', 'Model response stopped')
         callbacks.onStatus?.('stopped')
         if (finalContent) {
           callbacks.onFinalAnswerRender?.(finalContent)
@@ -2661,11 +2661,11 @@ export class AgentRuntime {
       }
 
       callbacks.onStatus?.('failed')
-      finalizeInterruptedModelTrace('error', '模型响应失败')
+      finalizeInterruptedModelTrace('error', 'Model response failed')
       const message = await handleAIError(error, false) || (error instanceof Error ? error.message : String(error))
       const errorTrace = recorder.add({
         type: 'error',
-        title: '执行失败',
+        title: 'Execution failed',
         status: 'error',
         message,
       })

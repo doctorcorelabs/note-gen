@@ -46,15 +46,15 @@ export class WebSearchBudget {
 
   private get stopReason() {
     return this.repeatedEvidence
-      ? '连续搜索没有获得新的来源内容，已停止重复搜索。'
-      : `本次任务已达到 ${MAX_WEB_SEARCH_CALLS} 次联网搜索上限。`
+      ? 'Consecutive searches found no new source content, so repeated searching has stopped.'
+      : `This task has reached the web search limit of ${MAX_WEB_SEARCH_CALLS} searches.`
   }
 
   startSearch(): AgentToolResult | undefined {
     if (!this.canSearch) {
       return {
         ok: false,
-        message: `${this.stopReason} 请使用已有证据回答；如需补充细节，可以读取已找到的网页，并如实说明仍缺失的信息。`,
+        message: `${this.stopReason} Answer from the evidence already gathered; to add details, read the web pages already found, and honestly state what information is still missing.`,
         error: this.repeatedEvidence ? 'WEB_SEARCH_NO_NEW_EVIDENCE' : 'WEB_SEARCH_BUDGET_EXHAUSTED',
       }
     }
