@@ -315,7 +315,7 @@ export async function upsertMemory(
   const db = await getDb()
   const content = input.content.trim()
   if (!content) {
-    throw new Error('记忆内容不能为空')
+    throw new Error('Memory content must not be empty')
   }
 
   const category = input.category || (input.kind ? categoryForKind(input.kind) : categorizeMemory(content))
@@ -323,7 +323,7 @@ export async function upsertMemory(
   const scopeType = input.scopeType || 'global'
   const scopeId = scopeType === 'workspace' ? input.scopeId?.trim() || undefined : undefined
   if (scopeType === 'workspace' && !scopeId) {
-    throw new Error('工作区记忆缺少工作区标识')
+    throw new Error('Workspace memory is missing a workspace identifier')
   }
 
   const existing = (await getAllMemories({ includeInactive: true })).find(memory =>
@@ -462,7 +462,7 @@ export async function updateMemoryAccess(
 
 export async function updateMemory(id: string, updates: MemoryUpdateInput): Promise<void> {
   const current = await getMemoryById(id)
-  if (!current) throw new Error('记忆不存在')
+  if (!current) throw new Error('Memory does not exist')
   const db = await getDb()
 
   const content = updates.content?.trim() || current.content
@@ -473,7 +473,7 @@ export async function updateMemory(id: string, updates: MemoryUpdateInput): Prom
     ? updates.scopeId === undefined ? current.scopeId : updates.scopeId?.trim()
     : undefined
   if (scopeType === 'workspace' && !scopeId) {
-    throw new Error('工作区记忆缺少工作区标识')
+    throw new Error('Workspace memory is missing a workspace identifier')
   }
 
   const contentChanged = content !== current.content
@@ -554,7 +554,7 @@ export async function undoMemoryChange(id: string): Promise<void> {
 
 export async function approveMemory(id: string): Promise<void> {
   const memory = await getMemoryById(id)
-  if (!memory) throw new Error('记忆不存在')
+  if (!memory) throw new Error('Memory does not exist')
   await updateMemory(id, { status: 'active', sensitivity: 'normal' })
   if (memory.conflictKey) {
     const conflicts = (await getAllMemories({ status: 'active' })).filter(candidate =>

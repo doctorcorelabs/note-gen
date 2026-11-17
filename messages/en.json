@@ -461,7 +461,8 @@
       "getApiKey": "Get key",
       "showApiKey": "Show API key",
       "hideApiKey": "Hide API key",
-      "providerApiKeyPlaceholder": "Enter {provider} API key"
+      "providerApiKeyPlaceholder": "Enter {provider} API key",
+      "zhipuProviderName": "Zhipu Web Search"
     },
     "rag": {
       "title": "Knowledge Base",
@@ -620,6 +621,25 @@
         "RAG_VECTOR_COUNT_MISMATCH": "Knowledge base vector count mismatch: expected {expectedCount}, actual {actualCount}",
         "RAG_DIMENSION_MANIFEST_MISMATCH": "The knowledge base vector dimensions do not match the manifest.",
         "RAG_VECTOR_DIMENSION_MISMATCH": "Vector dimensions do not match."
+      },
+      "processing": {
+        "vectorDatabaseTitle": "Vector database",
+        "embeddingModelMissing": "No embedding model is configured or the model is unavailable. Please configure an embedding model in AI settings.",
+        "processingTitle": "Vector processing",
+        "startedDescription": "Started processing document vectors. This may take some time...",
+        "inProgressTitle": "Vector processing in progress",
+        "documentsProgress": "Processed {current}/{total}: {fileName}",
+        "knowledgeBaseTitle": "Knowledge base processing in progress",
+        "structuredProgress": "Processed structured content {current}/{total}: {title}",
+        "completeDocuments": "Successfully processed {success} documents",
+        "completeRecords": ", {structuredSuccess} records or canvases",
+        "completeFailed": ", {totalFailed} sources failed",
+        "failedFiles": "\nFailed files: {failedSample}",
+        "failedFilesMore": " and more",
+        "completePartial": "Vector processing complete (partially incomplete)",
+        "completeTitle": "Vector processing complete",
+        "failedTitle": "Vector processing failed",
+        "failedDescription": "An error occurred while processing document vectors. Please check the console logs."
       }
     },
     "mcp": {
@@ -2120,7 +2140,35 @@
           "SELF_HOSTED_REFRESH_CREDENTIALS_EXPIRED": "The self-hosted refresh credentials have expired.",
           "SELF_HOSTED_SESSION_ACCOUNT_MISMATCH": "The refreshed session returned a different account or device.",
           "SELF_HOSTED_NOT_SYNC_API": "This address is not a self-hosted sync API.",
-          "SELF_HOSTED_API_UNREACHABLE": "Could not connect to the self-hosted sync API."
+          "SELF_HOSTED_API_UNREACHABLE": "Could not connect to the self-hosted sync API.",
+          "SELF_HOSTED_EXISTING_UPLOAD_PENDING": "A self-hosted file upload has not finished yet, and the pending rename was kept.",
+          "SELF_HOSTED_RENAME_RECORD_INVALID": "The self-hosted rename record is invalid.",
+          "SELF_HOSTED_RENAME_OBJECT_RECORD_INVALID": "The self-hosted rename object record is invalid.",
+          "SELF_HOSTED_RENAME_COMMAND_RECORD_INVALID": "The self-hosted rename command record is invalid.",
+          "SELF_HOSTED_RENAME_PATHS_INVALID_OR_NESTED": "The self-hosted rename source and target paths are invalid or contain each other.",
+          "SELF_HOSTED_WORKSPACE_UNBOUND_OR_DISCONNECTED": "The self-hosted workspace is not bound or has been disconnected.",
+          "SELF_HOSTED_SYNC_CONFIG_OR_PATH_CHANGED": "The self-hosted sync configuration or local path has changed, and the pending rename was kept.",
+          "SELF_HOSTED_WORKSPACE_NOT_WRITABLE": "The self-hosted workspace is currently not writable.",
+          "SELF_HOSTED_WORKSPACE_VERSION_OR_PERMISSION_CHANGED": "The self-hosted workspace version or write permission has changed.",
+          "SELF_HOSTED_RENAME_INCOMPLETE_SNAPSHOT": "The self-hosted rename read an incomplete remote snapshot.",
+          "SELF_HOSTED_SNAPSHOT_DUPLICATE_OR_TOO_MANY": "The self-hosted remote snapshot has duplicate members or too many members.",
+          "SELF_HOSTED_REMOTE_PATH_PAYLOAD_INVALID": "The self-hosted remote path payload is invalid.",
+          "SELF_HOSTED_REMOTE_PATH_CASE_CONFLICT": "The self-hosted remote paths have a case conflict.",
+          "SELF_HOSTED_SNAPSHOT_PAGINATION_INVALID": "The self-hosted remote snapshot pagination is invalid.",
+          "SELF_HOSTED_REMOTE_TARGET_EXISTS": "The self-hosted remote target already exists. Nothing was overwritten.",
+          "SELF_HOSTED_TARGET_PARENT_NOT_DIRECTORY_OR_CASE_CONFLICT": "The self-hosted target parent path is not a directory or has a case conflict.",
+          "SELF_HOSTED_TARGET_PARENT_LOCAL_NOT_DIRECTORY": "The local mapping of the self-hosted target parent path is not a directory.",
+          "SELF_HOSTED_WORKSPACE_SYNC_VERSION_CHANGED": "The self-hosted workspace sync version has changed, and the pending item was kept.",
+          "SELF_HOSTED_OLD_DIRECTORY_NEW_OBJECTS": "New remote objects appeared in the self-hosted old directory. No new content was overwritten or deleted, and the pending rename was kept.",
+          "SELF_HOSTED_PATH_MAPPING_CHANGED": "The self-hosted path mapping has changed. No other object identities were replaced.",
+          "SELF_HOSTED_REMOTE_RENAME_NOT_APPLIED": "The self-hosted remote rename was not applied: {lastError}",
+          "SELF_HOSTED_OLD_DIRECTORY_STILL_HAS_OBJECTS": "The self-hosted old directory still has remote objects or new members. This content was not deleted, and the pending rename was kept.",
+          "SELF_HOSTED_REMOTE_RENAME_PENDING": "The self-hosted remote rename has not finished yet. It was added to the durable sync queue.",
+          "SELF_HOSTED_DEVICE_IDENTITY_UNAVAILABLE": "The self-hosted device identity is unavailable. Please re-authorize.",
+          "SELF_HOSTED_WORKSPACE_NAME_EMPTY": "The workspace name must not be empty.",
+          "SELF_HOSTED_WORKSPACE_NOT_FOUND_OR_NO_ACCESS": "The workspace does not exist, or the current account has no access.",
+          "SELF_HOSTED_WORKSPACE_NO_MANAGED_KEY": "This workspace has no available managed key.",
+          "SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH": "Cross-platform duplicate paths exist in the same directory: {duplicate} / {normalized}"
         }
       },
       "connectionTab": "Connection",
@@ -3045,7 +3093,9 @@
           "migrationPathInvalid": "Path migration metadata has an invalid path",
           "syncVersionChanged": "Sync version changed during path migration; current sync metadata was kept",
           "renameContentInvalid": "Remote rename content validation failed"
-        }
+        },
+        "endpointCredentialsOrQuery": "The sync server address must not contain credentials or query parameters.",
+        "workspaceMismatch": "The cloud sync folder does not match the current workspace. Please finish switching workspaces first."
       },
       "conflict": {
         "contentIdentical": "The content is identical; no action is needed.",
@@ -3063,7 +3113,55 @@
       "remoteFileNotFound": "Remote file does not exist: {path}",
       "remotePathIsDirectory": "The remote path points to a directory, not a file: {path}",
       "remoteFileInvalidFormat": "The remote file content format is invalid: {path}",
-      "remoteFileInvalidBase64": "The remote file content is not a valid Base64 string."
+      "remoteFileInvalidBase64": "The remote file content is not a valid Base64 string.",
+      "gitlabSelfHostedUrlMissing": "The self-hosted GitLab instance URL is not configured. Please fill in the GitLab URL in settings first.",
+      "gitlabAccessTokenNotConfigured": "GitLab Access Token is not configured.",
+      "gitlabUsernameOrProjectMissing": "The GitLab username or project ID is not configured.",
+      "gitlabSyncFailed": "Sync failed.",
+      "gitlabUploadError": "An error occurred while uploading the file.",
+      "gitlabProjectIdMissing": "The project ID is not configured.",
+      "gitlabFileListFailed": "Failed to fetch the file list: {status}",
+      "gitlabDeleteFileFailed": "Failed to delete the file.",
+      "gitlabDeleteFileError": "An error occurred while deleting the file.",
+      "gitlabTokenNotConfigured": "The access token is not configured.",
+      "gitlabUserInfoFailed": "Failed to fetch user information.",
+      "gitlabUserInfoError": "An error occurred while fetching user information.",
+      "gitlabUsernameNotConfigured": "The username is not configured.",
+      "gitlabProjectStatusFailed": "Failed to check the project status.",
+      "gitlabProjectListFailed": "Failed to fetch the project list: {status}",
+      "gitlabCreateProjectFailed": "Failed to create the project.",
+      "gitlabCreateProjectError": "An error occurred while creating the project.",
+      "giteeSyncFailed": "Sync failed.",
+      "giteeDeleteFailed": "Deletion failed.",
+      "giteeAccessTokenNotConfigured": "Gitee Access Token is not configured.",
+      "giteeRepoListFailed": "Failed to fetch the repository list: {status}",
+      "giteeCreateRepoFailed": "Failed to create the repository.",
+      "syncManagerFileDeleting": "The file is being deleted.",
+      "syncManagerFileExcluded": "The file is excluded from sync.",
+      "syncManagerBinaryMustSyncAsBytes": "Binary files must be synced as raw bytes. Text-decoded upload results cannot be used.",
+      "syncManagerQueuedSelfHosted": "Added to the self-hosted sync queue.",
+      "syncManagerCloudFolderNotConfigured": "The cloud drive folder is not configured.",
+      "syncManagerPushSuccess": "Push succeeded.",
+      "syncManagerPushFailed": "Push failed.",
+      "syncManagerSelfHostedEventChecked": "Self-hosted sync events checked.",
+      "syncManagerEditorProcessing": "The editor is processing unfinished content.",
+      "syncManagerLocalChangedDuringPull": "The local content changed during the pull.",
+      "syncManagerPullSuccess": "Pull succeeded.",
+      "syncManagerFileNotFound": "The file does not exist.",
+      "syncManagerRemoteFileNotFound": "The remote file does not exist.",
+      "syncManagerDeleteQueued": "The delete operation was added to the self-hosted sync queue.",
+      "syncManagerRemoteFileGone": "The remote file does not exist, so no deletion is needed.",
+      "syncManagerDeleteSuccess": "Deletion succeeded.",
+      "syncManagerDeleteFailed": "Deletion failed.",
+      "syncManagerNeedsUserChoice": "A user choice is required.",
+      "syncManagerConflictTitle": "Conflict handling",
+      "syncManagerKeepLocal": "Keep the local version",
+      "syncManagerUseRemote": "Use the remote version",
+      "syncManagerSyncingMarked": "Syncing; marked for sync.",
+      "syncManagerFileSynced": "The file has been synced.",
+      "syncManagerNoTextMerge": "This file cannot use text merge. Please choose to keep the local or remote version.",
+      "syncManagerUserCancelled": "Cancelled by the user.",
+      "syncManagerConflictNeedsChoice": "The file has a conflict. Please choose to keep the local or remote version."
     },
     "imageHosting": {
       "title": "Image Storage",
@@ -3774,7 +3872,11 @@
       "addModel": "Add Model",
       "newModel": "New Model",
       "checkConnection": "Test Connection",
-      "model": "Model"
+      "model": "Model",
+      "deleteModelConfirm": "Are you sure you want to delete this model?",
+      "rerankResultInvalid": "Rerank result format is invalid.",
+      "embeddingResultInvalid": "Embedding result format is invalid.",
+      "ttsResultInvalid": "The TTS model returned an invalid format."
     },
     "file": {
       "title": "File Settings",
@@ -5314,7 +5416,10 @@
               }
             },
             "previewBefore": "Before changes",
-            "previewAfter": "After changes"
+            "previewAfter": "After changes",
+            "allowOnce": "Allow this time",
+            "allowSessionScript": "Allow this script call for this session",
+            "allowSessionAll": "Allow all for this session"
           },
           "ui": {
             "waiting": "Waiting for input",
@@ -5435,6 +5540,39 @@
               "noValidContent": "Image re-inspection returned no valid content.",
               "reinspected": "Re-inspected image {name}.",
               "reinspectFailed": "Image re-inspection failed: {error}"
+            },
+            "registry": {
+              "dateDiffTitle": "Calculate date difference",
+              "applyTransactionTitle": "Apply editor transaction",
+              "listSkillsTitle": "List installed Skills",
+              "loadSkillTitle": "Load Skill",
+              "validateSkillTitle": "Validate Skill package",
+              "installSkillTitle": "Install Skill package",
+              "searchRemoteSkillsTitle": "Search third-party Skills",
+              "inspectRemoteSkillTitle": "Inspect third-party Skill",
+              "installRemoteSkillTitle": "Install third-party Skill",
+              "removeSkillTitle": "Remove Skill",
+              "readSkillResourceTitle": "Read Skill resource",
+              "callMcpToolTitle": "Call MCP tool",
+              "listMcpResourcesTitle": "List MCP resources",
+              "listMcpResourceTemplatesTitle": "List MCP resource templates",
+              "readMcpResourceTitle": "Read MCP resource",
+              "listMcpToolsTitle": "List MCP tools",
+              "executeSkillScriptTitle": "Execute Skill script",
+              "installSkillPythonDepsTitle": "Install Skill Python dependencies"
+            },
+            "editor": {
+              "readStateTitle": "Read editor state",
+              "readSelectionTitle": "Read editor selection",
+              "insertAtCursorTitle": "Insert at cursor",
+              "replaceSelectionTitle": "Replace editor selection",
+              "replaceLinesTitle": "Replace editor lines"
+            },
+            "memory": {
+              "listTitle": "List memories",
+              "createTitle": "Create memory",
+              "deleteTitle": "Delete memory",
+              "clearAllTitle": "Clear all memories"
             }
           }
         },
@@ -6724,7 +6862,12 @@
         "successDesc": "File saved successfully",
         "error": "Save Failed",
         "errorDesc": "Failed to save file, please try again"
-      }
+      },
+      "copyAsFormat": "Copied as {format} format",
+      "copyFailed": "Copy Failed",
+      "copyFailedDescription": "Unable to copy to the clipboard.",
+      "copyLabel": "Copy",
+      "plainText": "Plain text"
     },
     "footer": {
       "wordCount": "Word Count",
@@ -6775,7 +6918,18 @@
         },
         "status": {
           "calculating": "Calculating"
-        }
+        },
+        "notProcessed": "Not processed",
+        "justNow": "Just now",
+        "minutesAgo": "{diffMins} minutes ago",
+        "hoursAgo": "{diffHours} hours ago",
+        "daysAgo": "{diffDays} days ago",
+        "aiCompletionEnabled": "AI completion enabled",
+        "aiCompletionDisabled": "AI completion disabled",
+        "recalculateTitle": "Click to recalculate vectors",
+        "knowledgeBase": "Knowledge base",
+        "calculatingVectors": "Calculating vectors...",
+        "lastUpdated": "Last updated: {time}"
       }
     }
   },
@@ -7590,7 +7744,26 @@
     "emptyGroup": "Drop a tab here, or open a note from the file list",
     "loadingLayout": "Restoring editor layout…",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "tabError": {
+      "detailsTab": "Tab: {tabName}",
+      "unknownError": "Unknown error",
+      "detailsError": "Error: {message}",
+      "detailsTime": "Time: {time}",
+      "copyFailed": "Unable to copy the error details. Please check clipboard permissions.",
+      "issueTitle": "[bug] Tab entered error isolation mode",
+      "githubCopyFailed": "GitHub is open, but copying the error details failed. Please fill in the error log manually.",
+      "githubOpenFailed": "Unable to open the GitHub feedback page. Please check your network or browser settings.",
+      "title": "The current tab encountered an error",
+      "description": "Only this tab has stopped displaying. The sidebar, other tabs, and settings remain usable.",
+      "detailsTitle": "Error details",
+      "actionFailedTitle": "Action failed",
+      "retry": "Retry this tab",
+      "closeTab": "Close this tab",
+      "copied": "Copied",
+      "copyErrorDetails": "Copy error details",
+      "feedbackGithub": "Report a GitHub Issue"
+    }
   },
   "syncOverview": {
     "selfHostedConflict": {

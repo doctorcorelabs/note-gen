@@ -71,8 +71,8 @@ const SEARCH_PROVIDERS: Array<{
 }> = [
   {
     id: 'zhipu',
-    name: '智谱 Web Search',
-    avatar: '智',
+    name: 'Zhipu Web Search',
+    avatar: 'Z',
     apiKeyUrl: 'https://open.bigmodel.cn/apikey/platform',
   },
   {

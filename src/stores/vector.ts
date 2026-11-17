@@ -77,8 +77,8 @@ const useVectorStore = create<VectorState>((set, get) => ({
         const modelAvailable = await get().checkEmbeddingModel();
         if (!modelAvailable) {
           toast({
-            title: '向量数据库',
-            description: '未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型',
+            title: 'Vector database',
+            description: 'No embedding model is configured or the model is unavailable. Please configure an embedding model in AI settings.',
             variant: 'destructive',
           });
         }
@@ -117,8 +117,8 @@ const useVectorStore = create<VectorState>((set, get) => ({
       const modelAvailable = await get().checkEmbeddingModel();
       if (!modelAvailable) {
         toast({
-          title: '向量处理',
-          description: '未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型',
+          title: 'Vector processing',
+          description: 'No embedding model is configured or the model is unavailable. Please configure an embedding model in AI settings.',
           variant: 'destructive',
         });
         return;
@@ -135,24 +135,24 @@ const useVectorStore = create<VectorState>((set, get) => ({
 
       // 显示处理开始的提示
       processingToast = toast({
-        title: '向量处理',
-        description: '开始处理文档向量，这可能需要一些时间...',
+        title: 'Vector processing',
+        description: 'Started processing document vectors. This may take some time...',
         duration: Infinity,
       });
 
       // 处理所有文档，带进度回调
       const result = await processAllMarkdownFiles((current, total, fileName) => {
         processingToast?.update({
-          title: '向量处理中',
-          description: `已处理 ${current}/${total}：${fileName}`,
+          title: 'Vector processing in progress',
+          description: `Processed ${current}/${total}: ${fileName}`,
           duration: Infinity,
         });
       });
       const { processStructuredKnowledgeSources } = await import('@/lib/knowledge-index');
       const structuredResult = await processStructuredKnowledgeSources((current, total, title) => {
         processingToast?.update({
-          title: '知识库处理中',
-          description: `已处理结构化内容 ${current}/${total}：${title}`,
+          title: 'Knowledge base processing in progress',
+          description: `Processed structured content ${current}/${total}: ${title}`,
           duration: Infinity,
         });
       });
@@ -182,19 +182,19 @@ const useVectorStore = create<VectorState>((set, get) => ({
       await get().refreshIndexStats();
 
       // 显示处理结果
-      let description = `成功处理 ${result.success} 个文档`;
-      description += `、${structuredResult.success} 条记录或画布`;
+      let description = `Successfully processed ${result.success} documents`;
+      description += `, ${structuredResult.success} records or canvases`;
       if (totalFailed > 0) {
-        description += `，失败 ${totalFailed} 个来源`;
+        description += `, ${totalFailed} sources failed`;
         // 如果有失败文件，显示前几个
         if (result.failedFiles && result.failedFiles.length > 0) {
           const failedSample = result.failedFiles.slice(0, 3).map(f => f.fileName).join('、');
-          description += `\n失败文件: ${failedSample}${result.failedFiles.length > 3 ? ' 等' : ''}`;
+          description += `\nFailed files: ${failedSample}${result.failedFiles.length > 3 ? ' and more' : ''}`;
         }
       }
 
       processingToast.update({
-        title: totalFailed > 0 || result.paused || structuredResult.paused ? '向量处理完成（部分未完成）' : '向量处理完成',
+        title: totalFailed > 0 || result.paused || structuredResult.paused ? 'Vector processing complete (partially incomplete)' : 'Vector processing complete',
         description,
         variant: totalFailed > 0 ? 'destructive' : 'default',
         duration: 5000,
@@ -214,8 +214,8 @@ const useVectorStore = create<VectorState>((set, get) => ({
       }
 
       const errorToast = {
-        title: '向量处理失败',
-        description: '处理文档向量时发生错误，请查看控制台日志',
+        title: 'Vector processing failed',
+        description: 'An error occurred while processing document vectors. Please check the console logs.',
         variant: 'destructive',
         duration: 5000,
       } as const;

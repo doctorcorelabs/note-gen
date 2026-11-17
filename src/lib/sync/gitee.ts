@@ -355,20 +355,20 @@ export async function uploadFile(
         const postErrorData = await postResponse.json();
         throw {
           status: postResponse.status,
-          message: postErrorData.message || '同步失败'
+          message: postErrorData.message || 'Sync failed.'
         };
       }
 
       const errorData = await response.json();
       throw {
         status: response.status,
-        message: errorData.message || '同步失败'
+        message: errorData.message || 'Sync failed.'
       };
     })
   } catch (error) {
     if (guarded) throw error
     toast({
-      title: '同步失败',
+      title: 'Sync failed.',
       description: (error as GiteeError).message,
       variant: 'destructive',
     })
@@ -538,13 +538,13 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
         if (guarded) await assertGiteeConditionalResponse(response, sha, path);
         if (response.ok) return { data: await response.json() } as GiteeResponse<unknown>
         const errorData = await response.json();
-        throw { status: response.status, message: errorData.message || '删除失败' };
+        throw { status: response.status, message: errorData.message || 'Deletion failed.' };
       }
     })
   } catch (error) {
     if (guarded) throw error
     toast({
-      title: '删除失败',
+      title: 'Deletion failed.',
       description: (error as GiteeError).message,
       variant: 'destructive',
     })
@@ -674,7 +674,7 @@ export async function checkSyncRepoState(name: string): Promise<GiteeRepoInfo | 
 export async function listUserRepositories(): Promise<string[]> {
   const store = await platform.store.load('store.json')
   const accessToken = await store.get<string>('giteeAccessToken')
-  if (!accessToken) throw new Error('Gitee Access Token 未配置')
+  if (!accessToken) throw new Error('Gitee Access Token is not configured.')
 
   const proxyUrl = await store.get<string>('proxy')
   const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
@@ -689,7 +689,7 @@ export async function listUserRepositories(): Promise<string[]> {
     proxy,
   })
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(`获取仓库列表失败: ${response.status}`)
+    throw new Error(`Failed to fetch the repository list: ${response.status}`)
   }
 
   const repositories = await response.json() as GiteeRepoInfo[]
@@ -721,7 +721,7 @@ export async function createSyncRepo(name: string, isPrivate?: boolean) {
         name,
         private: isPrivate === undefined ? true : isPrivate,
         auto_init: false,
-        description: '由 Note Gen 自动创建'
+        description: 'Automatically created by Note Gen'
       }),
       proxy
     };
@@ -737,11 +737,11 @@ export async function createSyncRepo(name: string, isPrivate?: boolean) {
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '创建仓库失败'
+      message: errorData.message || 'Failed to create the repository.'
     };
   } catch (error) {
     toast({
-      title: '创建仓库失败',
+      title: 'Failed to create the repository.',
       description: (error as GiteeError).message,
       variant: 'destructive',
     })

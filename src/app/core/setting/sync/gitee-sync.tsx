@@ -8,7 +8,7 @@ import useSettingStore from '@/stores/setting'
 const GITEE_CONFIG = {
   platform: 'gitee' as const,
   tokenKey: 'giteeAccessToken',
-  tokenLabel: 'Gitee 私人令牌',
+  tokenLabel: 'Gitee Access Token',
   tokenDesc: '',
   tokenUrl: 'https://gitee.com/profile/personal_access_tokens/new',
   tokenUrlText: '',

@@ -386,7 +386,7 @@ export async function insertChats(chats: Chat[]) {
       `insert into conversations (
          syncId, syncUpdatedAt, title, createdAt, updatedAt, messageCount, isPinned
        ) values ($1, $2, $3, $4, $5, $6, $7)`,
-      [uuid(), syncUpdatedAt, '新对话', now, now, 0, 0]
+      [uuid(), syncUpdatedAt, 'New Chat', now, now, 0, 0]
     )
     fallbackConversationId = result.lastInsertId as number
   }

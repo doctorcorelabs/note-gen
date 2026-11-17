@@ -9,13 +9,13 @@ export interface SyncExcludePattern {
 
 // 默认排除规则
 export const DEFAULT_SYNC_EXCLUDE_PATTERNS: SyncExcludePattern[] = [
-  { pattern: '.notegen/', description: '应用配置目录' },
-  { pattern: '*.tmp', description: '临时文件' },
-  { pattern: '*.bak', description: '备份文件' },
-  { pattern: '*.swp', description: '编辑器临时文件' },
-  { pattern: 'Thumbs.db', description: 'Windows 缩略图' },
-  { pattern: '.DS_Store', description: 'macOS 系统文件' },
-  { pattern: '*.lock', description: '锁定文件' },
+  { pattern: '.notegen/', description: 'App configuration directory' },
+  { pattern: '*.tmp', description: 'Temporary files' },
+  { pattern: '*.bak', description: 'Backup files' },
+  { pattern: '*.swp', description: 'Editor temporary files' },
+  { pattern: 'Thumbs.db', description: 'Windows thumbnails' },
+  { pattern: '.DS_Store', description: 'macOS system files' },
+  { pattern: '*.lock', description: 'Lock files' },
 ]
 
 // 检查路径是否应该排除在同步之外

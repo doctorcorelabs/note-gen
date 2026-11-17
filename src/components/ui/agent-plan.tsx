@@ -923,7 +923,7 @@ export function AgentPlan({
                 onClick={() => handleConfirm("once")}
               >
                 <CheckCircle data-icon="inline-start" />
-                <span>允许这次</span>
+                <span>{rootT('record.chat.input.agent.confirmation.allowOnce')}</span>
               </Button>
               {pendingConfirmation.canApproveForSession && (
                 <Button
@@ -934,8 +934,8 @@ export function AgentPlan({
                   <CheckCircle2 data-icon="inline-start" />
                   <span>
                     {pendingConfirmation.sessionApprovalType === "runtime-script"
-                      ? "本会话允许此次脚本调用"
-                      : "本会话都允许"}
+                      ? rootT("record.chat.input.agent.confirmation.allowSessionScript")
+                      : rootT("record.chat.input.agent.confirmation.allowSessionAll")}
                   </span>
                 </Button>
               )}

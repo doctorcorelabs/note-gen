@@ -55,9 +55,9 @@ export class TabContentErrorBoundary extends Component<
   private getErrorDetails() {
     const { error } = this.state
     return [
-      `标签页：${this.props.tabName}`,
-      `错误：${error?.message || '未知错误'}`,
-      `时间：${new Date().toISOString()}`,
+      `Tab: ${this.props.tabName}`,
+      `Error: ${error?.message || 'Unknown error'}`,
+      `Time: ${new Date().toISOString()}`,
       error?.stack ? `\n${error.stack}` : '',
     ].filter(Boolean).join('\n')
   }
@@ -77,7 +77,7 @@ export class TabContentErrorBoundary extends Component<
       window.setTimeout(() => this.setState({ copied: false }), 2000)
     } catch (error) {
       console.error('复制标签页错误信息失败:', error)
-      this.setState({ actionError: '无法复制错误信息，请检查剪贴板权限' })
+      this.setState({ actionError: 'Unable to copy the error details. Please check clipboard permissions.' })
     }
   }
 
@@ -93,16 +93,16 @@ export class TabContentErrorBoundary extends Component<
     try {
       const issueUrl = new URL(GITHUB_BUG_REPORT_URL)
       issueUrl.searchParams.set('template', 'bug_report.yml')
-      issueUrl.searchParams.set('title', '[bug] 标签页进入错误隔离模式')
+      issueUrl.searchParams.set('title', '[bug] Tab entered error isolation mode')
       await platform.opener.openUrl(issueUrl)
       this.setState({
         actionError: diagnosticsCopied
           ? ''
-          : 'GitHub 已打开，但错误信息复制失败，请手动填写报错日志。',
+          : 'GitHub is open, but copying the error details failed. Please fill in the error log manually.',
       })
     } catch (error) {
       console.error('打开 GitHub 反馈页面失败:', error)
-      this.setState({ actionError: '无法打开 GitHub 反馈页面，请检查网络或浏览器设置。' })
+      this.setState({ actionError: 'Unable to open the GitHub feedback page. Please check your network or browser settings.' })
     }
   }
 
@@ -116,23 +116,23 @@ export class TabContentErrorBoundary extends Component<
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/30 p-4">
         <Card className="w-full max-w-xl">
           <CardHeader>
-            <CardTitle>当前标签页出现错误</CardTitle>
+            <CardTitle>The current tab encountered an error</CardTitle>
             <CardDescription>
-              只有这个标签页已停止显示，侧边栏、其他标签页和设置仍可继续使用。
+              Only this tab has stopped displaying. The sidebar, other tabs, and settings remain usable.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Alert variant="destructive">
               <CircleAlertIcon />
-              <AlertTitle>错误详情</AlertTitle>
+              <AlertTitle>Error details</AlertTitle>
               <AlertDescription className="max-h-24 overflow-auto break-words font-mono text-xs">
-                {error.message || '未知错误'}
+                {error.message || 'Unknown error'}
               </AlertDescription>
             </Alert>
             {actionError ? (
               <Alert variant="destructive">
                 <CircleAlertIcon />
-                <AlertTitle>操作失败</AlertTitle>
+                <AlertTitle>Action failed</AlertTitle>
                 <AlertDescription>{actionError}</AlertDescription>
               </Alert>
             ) : null}
@@ -141,21 +141,21 @@ export class TabContentErrorBoundary extends Component<
             <div className="flex flex-wrap gap-2">
               <Button onClick={this.retry}>
                 <RefreshCwIcon data-icon="inline-start" />
-                重试当前标签页
+                Retry this tab
               </Button>
               <Button variant="outline" onClick={onClose}>
                 <XIcon data-icon="inline-start" />
-                关闭当前标签页
+                Close this tab
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="ghost" size="sm" onClick={() => void this.copyErrorDetails()}>
                 <ClipboardIcon data-icon="inline-start" />
-                {copied ? '已复制' : '复制错误信息'}
+                {copied ? 'Copied' : 'Copy error details'}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => void this.reportGitHubIssue()}>
                 <BugIcon data-icon="inline-start" />
-                反馈 GitHub Issue
+                Report a GitHub Issue
               </Button>
             </div>
           </CardFooter>

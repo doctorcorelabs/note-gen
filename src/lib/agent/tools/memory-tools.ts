@@ -121,28 +121,28 @@ export const saveMemoryTool: Tool = {
 
 Do not persist one-turn instructions merely because they mention a language, format, tone, or temporary preference. If a persistent request conflicts with an existing memory, inspect existing memories, then call save_memory once with the replacement content and the same stable conflict_key. save_memory consolidates the replacement atomically. Never delete the old memory first unless the user explicitly asks to forget it without saving a replacement.
 
-Treat direct phrases such as "请记住……", "你记住……", "记住这个……", and "please remember..." as explicit requests to save a memory.
+Treat direct phrases such as "please remember...", "remember this...", and "keep in mind..." as explicit requests to save a memory.
 Also save clear future-facing defaults or standing instructions, even when the user does not say "remember", for example:
-- "以后都……" / "今后请……" / "从现在起……"
-- "默认……" / "每次都……" / "始终……"
-- "以后不要再……" / "Never ... again" / "From now on ..."
+- "From now on..." / "Always... from now on" / "Starting now..."
+- "By default..." / "Every time..." / "Always..."
+- "Never ... again" / "From now on ..." / "Do not ... anymore"
 
-Judge the meaning, not the presence of a keyword. A question or prediction containing "以后" or "future" is not a memory request. These explicit persistent actions remain available even when automatic learning from conversations is disabled.
+Judge the meaning, not the presence of a keyword. A question or prediction containing "future" is not a memory request. These explicit persistent actions remain available even when automatic learning from conversations is disabled.
 
 Supports two types:
 - preference: User preferences like language, format, style - always included in conversations
 - memory: User's facts, experience, expertise - matched intelligently via context
 
 Examples:
-- "请记住，我希望以后都用中文回答" -> preference
-- "以后都用英文回答我" -> preference
-- "从现在起，发布说明默认先写用户能感知到的变化" -> preference
-- "以后不要在文章里使用过多小标题" -> preference
-- "你记住，NoteGen 项目使用 pnpm" -> memory
+- "Please remember, I want you to always answer in Chinese from now on" -> preference
+- "Always answer me in English from now on" -> preference
+- "From now on, release notes should by default start with user-visible changes" -> preference
+- "From now on, do not use too many subheadings in articles" -> preference
+- "Remember, the NoteGen project uses pnpm" -> memory
 - "Remember that I prefer concise English answers in future conversations" -> preference
 - "From now on, use pnpm commands for this workspace" -> preference
 - "Remember that I maintain a React library" -> memory
-- "以后 AI 会如何发展？" -> do not save
+- "How will AI develop in the future?" -> do not save
 - "Answer this message in English" -> do not save`,
   category: 'system',
   requiresConfirmation: true,

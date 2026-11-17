@@ -36,13 +36,13 @@ export function CopyButton({ editor, markdown, getMarkdown }: CopyButtonProps) {
         : getContent
       await navigator.clipboard.writeText(content)
       toast({
-        title: '复制成功',
-        description: `已复制为 ${format.toUpperCase()} 格式`
+        title: 'Copy Success',
+        description: `Copied as ${format.toUpperCase()} format`
       })
     } catch {
       toast({
-        title: '复制失败',
-        description: '无法复制到剪贴板',
+        title: 'Copy Failed',
+        description: 'Unable to copy to the clipboard.',
         variant: 'destructive'
       })
     } finally {
@@ -93,11 +93,11 @@ export function CopyButton({ editor, markdown, getMarkdown }: CopyButtonProps) {
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <button
-          title="复制"
+          title="Copy"
           className="flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-0"
         >
           <Copy className="size-3" />
-          <span>复制</span>
+          <span>Copy</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -119,7 +119,7 @@ export function CopyButton({ editor, markdown, getMarkdown }: CopyButtonProps) {
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleCopyText} disabled={copying !== null}>
           <FileText size={12} />
-          <span>纯文本</span>
+          <span>Plain text</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

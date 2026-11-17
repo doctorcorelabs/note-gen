@@ -61,7 +61,7 @@ export async function getGitlabApiBaseUrl(): Promise<string> {
 
     // 验证自定义 URL 是否有效
     if (!customUrl) {
-      throw new Error('自建 GitLab 实例的 URL 未配置，请先在设置中填写 GitLab URL');
+      throw new Error('The self-hosted GitLab instance URL is not configured. Please fill in the GitLab URL in settings first.');
     }
 
     // 确保 URL 包含协议
@@ -82,7 +82,7 @@ async function getCommonHeaders(): Promise<any> {
   const accessToken = await store.get<string>('gitlabAccessToken');
 
   if (!accessToken) {
-    throw new Error('GitLab Access Token 未配置');
+    throw new Error('GitLab Access Token is not configured.');
   }
 
   const headers = {
@@ -190,7 +190,7 @@ export async function uploadFile({
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
     
     if (!gitlabUsername || !projectId) {
-      throw new Error('Gitlab 用户名或项目 ID 未配置');
+      throw new Error('The GitLab username or project ID is not configured.');
     }
 
     const id = uuid();
@@ -234,12 +234,12 @@ export async function uploadFile({
       })
       if (response.ok) return { data: await response.json() } as GitlabResponse<GitlabCommit>
       const errorData = await response.json()
-      throw { status: response.status, message: errorData.error || errorData.message || '同步失败' } as GitlabError
+      throw { status: response.status, message: errorData.error || errorData.message || 'Sync failed.' } as GitlabError
     })
   } catch (error) {
     toast({
-      title: '同步失败',
-      description: (error as GitlabError).message || '上传文件时发生错误',
+      title: 'Sync failed.',
+      description: (error as GitlabError).message || 'An error occurred while uploading the file.',
       variant: 'destructive',
     });
     throw error;
@@ -297,7 +297,7 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
 
     if (!projectId) {
-      throw new Error('项目 ID 未配置');
+      throw new Error('The project ID is not configured.');
     }
 
     const branch = await getDefaultBranch(repo)
@@ -365,7 +365,7 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
       const errorData = await response.json().catch(() => ({}));
       throw {
         status: response.status,
-        message: errorData.message || `获取文件列表失败: ${response.status}`
+        message: errorData.message || `Failed to fetch the file list: ${response.status}`
       } as GitlabError;
     }
 
@@ -389,7 +389,7 @@ export async function deleteFile({ path, sha, repo, beforeWrite }: { path: strin
   try {
     const store = await platform.store.load('store.json');
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
-    if (!projectId) throw new Error('项目 ID 未配置');
+    if (!projectId) throw new Error('The project ID is not configured.');
     const baseUrl = await getGitlabApiBaseUrl();
     const headers = await getCommonHeaders();
     const proxy = await getProxyConfig();
@@ -406,10 +406,10 @@ export async function deleteFile({ path, sha, repo, beforeWrite }: { path: strin
       })
       if (response.ok) return true
       const errorData = await response.json()
-      throw { status: response.status, message: errorData.message || '删除文件失败' } as GitlabError
+      throw { status: response.status, message: errorData.message || 'Failed to delete the file.' } as GitlabError
     })
   } catch (error) {
-    toast({ title: '删除文件失败', description: (error as GitlabError).message || '删除文件时发生错误', variant: 'destructive' });
+    toast({ title: 'Failed to delete the file.', description: (error as GitlabError).message || 'An error occurred while deleting the file.', variant: 'destructive' });
     return null;
   }
 }
@@ -466,7 +466,7 @@ export async function getFileContent({ path, ref, repo }: { path: string; ref?: 
     const projectId = await store.get<string>(`gitlab_${repo}_project_id`);
     
     if (!projectId) {
-      throw new Error('项目 ID 未配置');
+      throw new Error('The project ID is not configured.');
     }
 
     const branch = ref || await getDefaultBranch(repo)
@@ -512,7 +512,7 @@ export async function getUserInfo(token?: string): Promise<GitlabUserInfo> {
     const accessToken = token || await store.get<string>('gitlabAccessToken');
     
     if (!accessToken) {
-      throw new Error('访问令牌未配置');
+      throw new Error('The access token is not configured.');
     }
 
     const baseUrl = await getGitlabApiBaseUrl();
@@ -541,13 +541,13 @@ export async function getUserInfo(token?: string): Promise<GitlabUserInfo> {
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '获取用户信息失败'
+      message: errorData.message || 'Failed to fetch user information.'
     } as GitlabError;
 
   } catch (error) {
     toast({
-      title: '获取用户信息失败',
-      description: (error as GitlabError).message || '获取用户信息时发生错误',
+      title: 'Failed to fetch user information.',
+      description: (error as GitlabError).message || 'An error occurred while fetching user information.',
       variant: 'destructive',
     });
     throw error;
@@ -564,7 +564,7 @@ export async function checkSyncProjectState(name: string): Promise<GitlabProject
     const gitlabUsername = await store.get<string>('gitlabUsername');
     
     if (!gitlabUsername) {
-      throw new Error('用户名未配置');
+      throw new Error('The username is not configured.');
     }
 
     const baseUrl = await getGitlabApiBaseUrl();
@@ -598,7 +598,7 @@ export async function checkSyncProjectState(name: string): Promise<GitlabProject
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '检查项目状态失败'
+      message: errorData.message || 'Failed to check the project status.'
     } as GitlabError;
 
   } catch (error) {
@@ -617,7 +617,7 @@ export async function listUserRepositories(): Promise<string[]> {
     { method: 'GET', headers, proxy }
   )
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(`获取项目列表失败: ${response.status}`)
+    throw new Error(`Failed to fetch the project list: ${response.status}`)
   }
 
   const projects = await response.json() as GitlabProjectInfo[]
@@ -641,7 +641,7 @@ export async function createSyncProject(name: string, isPrivate: boolean = true)
     const requestBody = {
       name: name,
       path: name,
-      description: `note-gen 同步项目 - ${name}`,
+      description: `note-gen sync project - ${name}`,
       visibility: isPrivate ? 'private' : 'public',
       initialize_with_readme: true,
       default_branch: 'main'
@@ -668,13 +668,13 @@ export async function createSyncProject(name: string, isPrivate: boolean = true)
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '创建项目失败'
+      message: errorData.message || 'Failed to create the project.'
     } as GitlabError;
 
   } catch (error) {
     toast({
-      title: '创建项目失败',
-      description: (error as GitlabError).message || '创建项目时发生错误',
+      title: 'Failed to create the project.',
+      description: (error as GitlabError).message || 'An error occurred while creating the project.',
       variant: 'destructive',
     });
     return null;

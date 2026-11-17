@@ -461,7 +461,8 @@
       "getApiKey": "申请 Key",
       "showApiKey": "显示 API Key",
       "hideApiKey": "隐藏 API Key",
-      "providerApiKeyPlaceholder": "输入 {provider} API Key"
+      "providerApiKeyPlaceholder": "输入 {provider} API Key",
+      "zhipuProviderName": "智谱 Web Search"
     },
     "rag": {
       "title": "知识库",
@@ -620,6 +621,25 @@
         "RAG_VECTOR_COUNT_MISMATCH": "知识库向量数量不匹配：预期 {expectedCount}，实际 {actualCount}",
         "RAG_DIMENSION_MANIFEST_MISMATCH": "知识库向量维度与清单不一致",
         "RAG_VECTOR_DIMENSION_MISMATCH": "向量维度不匹配"
+      },
+      "processing": {
+        "vectorDatabaseTitle": "向量数据库",
+        "embeddingModelMissing": "未配置嵌入模型或模型不可用，请在AI设置中配置嵌入模型",
+        "processingTitle": "向量处理",
+        "startedDescription": "开始处理文档向量，这可能需要一些时间...",
+        "inProgressTitle": "向量处理中",
+        "documentsProgress": "已处理 {current}/{total}：{fileName}",
+        "knowledgeBaseTitle": "知识库处理中",
+        "structuredProgress": "已处理结构化内容 {current}/{total}：{title}",
+        "completeDocuments": "成功处理 {success} 个文档",
+        "completeRecords": "、{structuredSuccess} 条记录或画布",
+        "completeFailed": "，失败 {totalFailed} 个来源",
+        "failedFiles": "\n失败文件: {failedSample}",
+        "failedFilesMore": " 等",
+        "completePartial": "向量处理完成（部分未完成）",
+        "completeTitle": "向量处理完成",
+        "failedTitle": "向量处理失败",
+        "failedDescription": "处理文档向量时发生错误，请查看控制台日志"
       }
     },
     "mcp": {
@@ -2120,7 +2140,35 @@
           "SELF_HOSTED_REFRESH_CREDENTIALS_EXPIRED": "自托管刷新凭据已失效",
           "SELF_HOSTED_SESSION_ACCOUNT_MISMATCH": "刷新会话返回了不同的账号或设备",
           "SELF_HOSTED_NOT_SYNC_API": "该地址不是自托管同步 API",
-          "SELF_HOSTED_API_UNREACHABLE": "无法连接自托管同步 API"
+          "SELF_HOSTED_API_UNREACHABLE": "无法连接自托管同步 API",
+          "SELF_HOSTED_EXISTING_UPLOAD_PENDING": "自托管已有文件上传尚未完成，重命名待办已保留",
+          "SELF_HOSTED_RENAME_RECORD_INVALID": "自托管重命名记录无效",
+          "SELF_HOSTED_RENAME_OBJECT_RECORD_INVALID": "自托管重命名对象记录无效",
+          "SELF_HOSTED_RENAME_COMMAND_RECORD_INVALID": "自托管重命名命令记录无效",
+          "SELF_HOSTED_RENAME_PATHS_INVALID_OR_NESTED": "自托管重命名源路径和目标路径无效或互相包含",
+          "SELF_HOSTED_WORKSPACE_UNBOUND_OR_DISCONNECTED": "自托管工作区未绑定或已断开",
+          "SELF_HOSTED_SYNC_CONFIG_OR_PATH_CHANGED": "自托管同步配置或本地路径已变化，重命名待办已保留",
+          "SELF_HOSTED_WORKSPACE_NOT_WRITABLE": "自托管工作区当前不可写",
+          "SELF_HOSTED_WORKSPACE_VERSION_OR_PERMISSION_CHANGED": "自托管工作区版本或写入权限已变化",
+          "SELF_HOSTED_RENAME_INCOMPLETE_SNAPSHOT": "自托管重命名读取到不完整的远端快照",
+          "SELF_HOSTED_SNAPSHOT_DUPLICATE_OR_TOO_MANY": "自托管远端快照成员重复或数量过多",
+          "SELF_HOSTED_REMOTE_PATH_PAYLOAD_INVALID": "自托管远端路径载荷无效",
+          "SELF_HOSTED_REMOTE_PATH_CASE_CONFLICT": "自托管远端路径存在大小写冲突",
+          "SELF_HOSTED_SNAPSHOT_PAGINATION_INVALID": "自托管远端快照分页无效",
+          "SELF_HOSTED_REMOTE_TARGET_EXISTS": "自托管远端目标已存在，未覆盖任何内容",
+          "SELF_HOSTED_TARGET_PARENT_NOT_DIRECTORY_OR_CASE_CONFLICT": "自托管目标父路径不是目录或存在大小写冲突",
+          "SELF_HOSTED_TARGET_PARENT_LOCAL_NOT_DIRECTORY": "自托管目标父路径的本地映射不是目录",
+          "SELF_HOSTED_WORKSPACE_SYNC_VERSION_CHANGED": "自托管工作区同步版本已变化，待办已保留",
+          "SELF_HOSTED_OLD_DIRECTORY_NEW_OBJECTS": "自托管旧目录出现新的远端对象，未覆盖或删除新内容，重命名待办已保留",
+          "SELF_HOSTED_PATH_MAPPING_CHANGED": "自托管路径映射已变化，未替换其他对象身份",
+          "SELF_HOSTED_REMOTE_RENAME_NOT_APPLIED": "自托管远端重命名未应用：{lastError}",
+          "SELF_HOSTED_OLD_DIRECTORY_STILL_HAS_OBJECTS": "自托管旧目录仍有远端对象或出现新成员，未删除这些内容，重命名待办已保留",
+          "SELF_HOSTED_REMOTE_RENAME_PENDING": "自托管远端重命名尚未完成，已加入持久同步队列",
+          "SELF_HOSTED_DEVICE_IDENTITY_UNAVAILABLE": "自托管设备身份不可用，请重新授权",
+          "SELF_HOSTED_WORKSPACE_NAME_EMPTY": "工作区名称不能为空",
+          "SELF_HOSTED_WORKSPACE_NOT_FOUND_OR_NO_ACCESS": "工作区不存在或当前账号无权访问",
+          "SELF_HOSTED_WORKSPACE_NO_MANAGED_KEY": "该工作区没有可用的 managed key",
+          "SELF_HOSTED_CROSS_PLATFORM_DUPLICATE_PATH": "同一目录存在跨平台重名路径：{duplicate} / {normalized}"
         }
       },
       "connectionTab": "连接设置",
@@ -3045,7 +3093,9 @@
           "migrationPathInvalid": "路径迁移元数据的路径无效",
           "syncVersionChanged": "路径迁移期间同步版本发生变化，已保留当前同步元数据",
           "renameContentInvalid": "远端重命名内容验证无效"
-        }
+        },
+        "endpointCredentialsOrQuery": "同步服务器地址不能包含凭据或查询参数",
+        "workspaceMismatch": "云同步文件夹与当前工作区不一致，请先完成工作区切换"
       },
       "conflict": {
         "contentIdentical": "内容相同，无需处理",
@@ -3063,7 +3113,55 @@
       "remoteFileNotFound": "远程文件不存在: {path}",
       "remotePathIsDirectory": "远程路径指向的是目录，不是文件: {path}",
       "remoteFileInvalidFormat": "远程文件内容格式无效: {path}",
-      "remoteFileInvalidBase64": "远程文件内容不是有效的 Base64 字符串"
+      "remoteFileInvalidBase64": "远程文件内容不是有效的 Base64 字符串",
+      "gitlabSelfHostedUrlMissing": "自建 GitLab 实例的 URL 未配置，请先在设置中填写 GitLab URL",
+      "gitlabAccessTokenNotConfigured": "GitLab Access Token 未配置",
+      "gitlabUsernameOrProjectMissing": "Gitlab 用户名或项目 ID 未配置",
+      "gitlabSyncFailed": "同步失败",
+      "gitlabUploadError": "上传文件时发生错误",
+      "gitlabProjectIdMissing": "项目 ID 未配置",
+      "gitlabFileListFailed": "获取文件列表失败: {status}",
+      "gitlabDeleteFileFailed": "删除文件失败",
+      "gitlabDeleteFileError": "删除文件时发生错误",
+      "gitlabTokenNotConfigured": "访问令牌未配置",
+      "gitlabUserInfoFailed": "获取用户信息失败",
+      "gitlabUserInfoError": "获取用户信息时发生错误",
+      "gitlabUsernameNotConfigured": "用户名未配置",
+      "gitlabProjectStatusFailed": "检查项目状态失败",
+      "gitlabProjectListFailed": "获取项目列表失败: {status}",
+      "gitlabCreateProjectFailed": "创建项目失败",
+      "gitlabCreateProjectError": "创建项目时发生错误",
+      "giteeSyncFailed": "同步失败",
+      "giteeDeleteFailed": "删除失败",
+      "giteeAccessTokenNotConfigured": "Gitee Access Token 未配置",
+      "giteeRepoListFailed": "获取仓库列表失败: {status}",
+      "giteeCreateRepoFailed": "创建仓库失败",
+      "syncManagerFileDeleting": "文件正在删除",
+      "syncManagerFileExcluded": "文件被排除在同步之外",
+      "syncManagerBinaryMustSyncAsBytes": "二进制文件必须以原始字节同步，不能上传文本解码结果",
+      "syncManagerQueuedSelfHosted": "已加入自托管同步队列",
+      "syncManagerCloudFolderNotConfigured": "网盘文件夹未配置",
+      "syncManagerPushSuccess": "推送成功",
+      "syncManagerPushFailed": "推送失败",
+      "syncManagerSelfHostedEventChecked": "已检查自托管同步事件",
+      "syncManagerEditorProcessing": "编辑器正在处理未完成的内容",
+      "syncManagerLocalChangedDuringPull": "本地内容在拉取期间发生变化",
+      "syncManagerPullSuccess": "拉取成功",
+      "syncManagerFileNotFound": "文件不存在",
+      "syncManagerRemoteFileNotFound": "远程文件不存在",
+      "syncManagerDeleteQueued": "删除操作已加入自托管同步队列",
+      "syncManagerRemoteFileGone": "远程文件不存在，无需删除",
+      "syncManagerDeleteSuccess": "删除成功",
+      "syncManagerDeleteFailed": "删除失败",
+      "syncManagerNeedsUserChoice": "需要用户选择",
+      "syncManagerConflictTitle": "冲突处理",
+      "syncManagerKeepLocal": "保留本地版本",
+      "syncManagerUseRemote": "使用远程版本",
+      "syncManagerSyncingMarked": "同步中，标记待同步",
+      "syncManagerFileSynced": "文件已同步",
+      "syncManagerNoTextMerge": "此文件不能使用文本合并，请选择保留本地或远程版本",
+      "syncManagerUserCancelled": "用户取消",
+      "syncManagerConflictNeedsChoice": "文件存在冲突，需要选择保留本地或远程版本"
     },
     "imageHosting": {
       "title": "图片存储",
@@ -3750,7 +3848,11 @@
           "desc": "用于 Markdown 编辑器的 AI 内联补全，类似 GitHub Copilot，快速生成续写内容"
         },
         "poweredBy": "由 SiliconFlow 提供技术支持"
-      }
+      },
+      "deleteModelConfirm": "确定要删除这个模型吗？",
+      "rerankResultInvalid": "重排序结果格式不正确",
+      "embeddingResultInvalid": "嵌入结果格式不正确",
+      "ttsResultInvalid": "TTS模型返回格式不正确"
     },
     "imageMethod": {
       "title": "图像识别",
@@ -5227,7 +5329,10 @@
               }
             },
             "previewBefore": "修改前",
-            "previewAfter": "修改后"
+            "previewAfter": "修改后",
+            "allowOnce": "允许这次",
+            "allowSessionScript": "本会话允许此次脚本调用",
+            "allowSessionAll": "本会话都允许"
           },
           "ui": {
             "waiting": "等待填写",
@@ -5348,6 +5453,39 @@
               "noValidContent": "图片重新识别未返回有效内容。",
               "reinspected": "已重新识别图片 {name}。",
               "reinspectFailed": "图片重新识别失败：{error}"
+            },
+            "registry": {
+              "dateDiffTitle": "计算日期间隔",
+              "applyTransactionTitle": "应用编辑器事务",
+              "listSkillsTitle": "列出已安装 Skills",
+              "loadSkillTitle": "加载 Skill",
+              "validateSkillTitle": "校验 Skill 包",
+              "installSkillTitle": "安装 Skill 包",
+              "searchRemoteSkillsTitle": "搜索第三方 Skill",
+              "inspectRemoteSkillTitle": "检查第三方 Skill",
+              "installRemoteSkillTitle": "安装第三方 Skill",
+              "removeSkillTitle": "移除 Skill",
+              "readSkillResourceTitle": "读取 Skill 资源",
+              "callMcpToolTitle": "调用 MCP 工具",
+              "listMcpResourcesTitle": "列出 MCP 资源",
+              "listMcpResourceTemplatesTitle": "列出 MCP 资源模板",
+              "readMcpResourceTitle": "读取 MCP 资源",
+              "listMcpToolsTitle": "列出 MCP 工具",
+              "executeSkillScriptTitle": "执行 Skill 脚本",
+              "installSkillPythonDepsTitle": "安装 Skill Python 依赖"
+            },
+            "editor": {
+              "readStateTitle": "读取编辑器状态",
+              "readSelectionTitle": "读取编辑器选区",
+              "insertAtCursorTitle": "在光标处插入",
+              "replaceSelectionTitle": "替换编辑器选区",
+              "replaceLinesTitle": "替换编辑器行"
+            },
+            "memory": {
+              "listTitle": "列出记忆",
+              "createTitle": "创建记忆",
+              "deleteTitle": "删除记忆",
+              "clearAllTitle": "清空全部记忆"
             }
           }
         },
@@ -6724,7 +6862,12 @@
           "customLanguageEmpty": "请输入目标语言",
           "customLanguageExample": "例如：英语、日语、法语等"
         }
-      }
+      },
+      "copyAsFormat": "已复制为 {format} 格式",
+      "copyFailed": "复制失败",
+      "copyFailedDescription": "无法复制到剪贴板",
+      "copyLabel": "复制",
+      "plainText": "纯文本"
     },
     "footer": {
       "wordCount": "字数",
@@ -6775,7 +6918,18 @@
         },
         "status": {
           "calculating": "计算中"
-        }
+        },
+        "notProcessed": "未处理",
+        "justNow": "刚刚",
+        "minutesAgo": "{diffMins} 分钟前",
+        "hoursAgo": "{diffHours} 小时前",
+        "daysAgo": "{diffDays} 天前",
+        "aiCompletionEnabled": "AI 补全已启用",
+        "aiCompletionDisabled": "AI 补全已禁用",
+        "recalculateTitle": "点击重新计算向量",
+        "knowledgeBase": "知识库",
+        "calculatingVectors": "正在计算向量...",
+        "lastUpdated": "最后更新: {time}"
       }
     }
   },
@@ -7590,7 +7744,26 @@
     "emptyGroup": "将标签页拖到此处，或从文件列表打开笔记",
     "loadingLayout": "正在恢复编辑器布局…",
     "undo": "撤销",
-    "redo": "重做"
+    "redo": "重做",
+    "tabError": {
+      "detailsTab": "标签页：{tabName}",
+      "unknownError": "未知错误",
+      "detailsError": "错误：{message}",
+      "detailsTime": "时间：{time}",
+      "copyFailed": "无法复制错误信息，请检查剪贴板权限",
+      "issueTitle": "[bug] 标签页进入错误隔离模式",
+      "githubCopyFailed": "GitHub 已打开，但错误信息复制失败，请手动填写报错日志。",
+      "githubOpenFailed": "无法打开 GitHub 反馈页面，请检查网络或浏览器设置。",
+      "title": "当前标签页出现错误",
+      "description": "只有这个标签页已停止显示，侧边栏、其他标签页和设置仍可继续使用。",
+      "detailsTitle": "错误详情",
+      "actionFailedTitle": "操作失败",
+      "retry": "重试当前标签页",
+      "closeTab": "关闭当前标签页",
+      "copied": "已复制",
+      "copyErrorDetails": "复制错误信息",
+      "feedbackGithub": "反馈 GitHub Issue"
+    }
   },
   "syncOverview": {
     "selfHostedConflict": {

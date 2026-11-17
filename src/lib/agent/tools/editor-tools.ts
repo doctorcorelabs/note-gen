@@ -148,7 +148,7 @@ function getEditorSelectionFallbackResult(): ToolResult {
   return {
     success: false,
     data: { text: '', from: 0, to: 0, startLine: 1, endLine: 1 },
-    message: '当前没有活跃编辑器，无法获取选中内容',
+    message: 'No active editor is available, so the selection cannot be retrieved',
   }
 }
 
@@ -194,8 +194,8 @@ export const getEditorSelectionTool: Tool = {
             success: true,
             data,
             message: data.text
-              ? `选中内容：${data.text.slice(0, 50)}${data.text.length > 50 ? '...' : ''} (行 ${data.startLine}-${data.endLine})`
-              : `当前没有选中文本，光标位于第 ${data.startLine || 1} 行，位置 ${data.from}。`,
+              ? `Selected content: ${data.text.slice(0, 50)}${data.text.length > 50 ? '...' : ''} (lines ${data.startLine}-${data.endLine})`
+              : `No text is currently selected. The cursor is on line ${data.startLine || 1}, position ${data.from}.`,
           })
         },
       })
@@ -232,7 +232,7 @@ export const getEditorContentTool: Tool = {
     return {
       success: true,
       data,
-      message: `编辑器内容：${data.markdown.slice(0, 50)}${data.markdown.length > 50 ? '...' : ''} (${data.wordCount} 字，${data.totalLines} 行, v${data.version})`,
+      message: `Editor content: ${data.markdown.slice(0, 50)}${data.markdown.length > 50 ? '...' : ''} (${data.wordCount} words, ${data.totalLines} lines, v${data.version})`,
     }
   },
 }
@@ -279,7 +279,7 @@ export const insertAtCursorTool: Tool = {
       }
 
       const timeoutId = setTimeout(() => {
-        finalize({ success: false, error: 'EDITOR_UNAVAILABLE', message: '编辑器未及时响应，已取消插入，不会回退为直接覆盖笔记。' })
+        finalize({ success: false, error: 'EDITOR_UNAVAILABLE', message: 'The editor did not respond in time, so the insertion was cancelled. It will not fall back to overwriting the note directly.' })
       }, EDITOR_TOOL_RESPONSE_TIMEOUT_MS)
 
       emitter.emit('editor-insert', {
@@ -302,8 +302,8 @@ export const insertAtCursorTool: Tool = {
             data: result,
             error: result.success ? undefined : result.error || (result.versionMismatch ? 'EDITOR_VERSION_MISMATCH' : 'EDITOR_INSERT_FAILED'),
             message: result.success
-              ? `成功插入 ${result.insertedLength} 个字符`
-              : result.error || '插入失败',
+              ? `Successfully inserted ${result.insertedLength} characters`
+              : result.error || 'Insertion failed',
           })
         },
       })
@@ -431,7 +431,7 @@ When the user quotes content from the editor and exact selection positions are p
         finalize({
           success: false,
           error: 'Missing required parameters',
-          message: '请提供 content 或 searchContent 或 startLine/endLine 参数',
+          message: 'Please provide the content, searchContent, or startLine/endLine parameters.',
         });
         return;
       }
@@ -440,7 +440,7 @@ When the user quotes content from the editor and exact selection positions are p
         finalize({
           success: false,
           error: 'EDITOR_UNAVAILABLE',
-          message: '编辑器未及时响应，已取消写入。请等待编辑器就绪后重新读取状态，不会回退为直接覆盖笔记。',
+          message: 'The editor did not respond in time, so the write was cancelled. Please wait until the editor is ready, then re-read the state. It will not fall back to overwriting the note directly.',
         })
       }, EDITOR_TOOL_RESPONSE_TIMEOUT_MS)
 
@@ -464,19 +464,19 @@ When the user quotes content from the editor and exact selection positions are p
             finalize({
               success: false,
               error: result.error,
-              message: '编辑器内容已变化，请重新获取内容后再操作',
+              message: 'The editor content has changed. Please fetch the content again before continuing.',
             });
           } else if (result.success) {
             finalize({
               success: true,
               data: result,
-              message: result.message || `成功替换 ${result.insertedLength} 个字符`,
+              message: result.message || `Successfully replaced ${result.insertedLength} characters`,
             });
           } else {
             finalize({
               success: false,
               error: result.error,
-              message: result.message || '替换失败',
+              message: result.message || 'Replacement failed',
             });
           }
         },
