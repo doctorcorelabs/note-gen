@@ -6,7 +6,7 @@ Repo ini BUKAN rilis resmi codexu. Rilis resmi tetap berada di repo upstream.
 - Repo fork: doctorcorelabs/note-gen
 - Repo upstream: codexu/note-gen (https://github.com/codexu/note-gen)
 - Lisensi: GNU General Public License v3 (lihat LICENSE)
-- Status: Fase 1 (MVP) dalam pengembangan; Fase 0 lulus 14 Nov 2026. Branch web berisi boot web POC (shim sementara), bahasa default UI Inggris, endpoint health API, dan hygiene repo ini. Target deployment: notegen.synapxs.my.id di muse-2 (belum deploy).
+- Status: Fase 1 (MVP) dalam pengembangan; Fase 0 lulus 14 Nov 2026. Branch web berisi boot web dengan StoreAdapter web (shim Store POC dihapus 17 Nov 2026; shim App sementara tersisa), bahasa default UI Inggris, endpoint health API, dan hygiene repo ini. Target deployment: notegen.synapxs.my.id di muse-2 (belum deploy).
 
 ## Basis upstream
 
@@ -27,7 +27,7 @@ Kode baru fork juga dilisensikan GPLv3.
 
 ## Cara kerja fork (ringkas)
 
-- Frontend Next.js upstream dipertahankan di root; boot web POC berjalan lewat shim sementara di src/lib/platform/ (plaintext, wajib diganti di Fase 1). Rumah kanonis registry shim adalah src/lib/platform/ (keputusan AD-23, Fase 1); src/lib/web/ menampung kode web baru di luar registry shim.
+- Frontend Next.js upstream dipertahankan di root; StoreAdapter web (src/lib/platform/store/store.web.ts) menggantikan shim Store POC yang menyimpan dokumen sebagai plaintext di localStorage. Satu-satunya shim POC yang tersisa adalah poc-app-shim.ts untuk pekerjaan AppAdapter. Rumah kanonis registry shim adalah src/lib/platform/ (keputusan AD-23, Fase 1); src/lib/web/ menampung kode web baru di luar registry shim.
 - Backend baru: API Fastify di server/ dengan package.json dan pnpm-lock.yaml terpisah. Endpoint health (live, ready, alias) sudah ada di Fase 0; endpoint data belum ada.
 - Penyimpanan server yang direncanakan: Postgres 17. File workspace disimpan di disk server (volume), dengan indeks metadata di Postgres. Uji health Fase 0 memakai Postgres 16.15; uji ulang di Postgres 17 dibutuhkan sebelum deploy.
 - Repo note-gen-server TIDAK di-vendor ke fork ini; integrasi sync, bila dibutuhkan, berjalan lewat image publik sebagai layanan terpisah.
@@ -88,6 +88,8 @@ Aturan merge: PR fitur ke web memakai squash merge. PR sync upstream ke web mema
 ## Changelog
 
 ### web-v0.1.0 (belum dirilis)
+
+- 2026-11-17: shim Store POC dihapus (F1-16/V3-12): berkas src/lib/platform/poc-store-shim.ts dihapus dan entri alias Turbopack @tauri-apps/plugin-store dilepas dari next.config.ts; StoreAdapter web (src/lib/platform/store/store.web.ts) menggantikannya. Alias api/app dan poc-app-shim.ts dipertahankan untuk pekerjaan AppAdapter. Kontrak store F1 seksi 8 (design/01-shim-architecture.md) diganti oleh kontrak store yang berlaku (fase1/kontrak-api-kanonis.md; desain-store-adapter.md seksi 4.7); kedua bentuk kontrak tidak dibangun bersamaan.
 
 - 2026-11-16: codemod G5 dan penanda nonaktif (V3-21): 6 spesifier terakhir (`plugin-global-shortcut`, `plugin-shell`, `plugin-process`, `plugin-autostart`, `plugin-updater`, `api/image`) dimigrasikan ke registry platform; penanda nonaktif untuk shortcut global, autostart, updater, dan rute screenshot; daftar fitur nonaktif di web didokumentasikan di bagian "Fitur nonaktif di web (G5)" di atas; allowlist import Tauri dihapus dan Override 1 ESLint menjadi error.
 

@@ -19,14 +19,13 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   turbopack: {
-    // POC (Fase 0, W12): Turbopack module aliases that replace the Tauri
-    // plugin-store and api/app modules with minimal web shims so the app can
-    // boot in a plain browser without Tauri IPC. These aliases are a POC
-    // shortcut only; Fase 1 replaces them with the central adapter registry
-    // from design F1. The alias targets are relative paths, the same form
+    // POC (Fase 0, W12): Turbopack module alias that replaces the Tauri
+    // api/app module with a minimal web shim so the app can boot in a
+    // plain browser without Tauri IPC. This alias is a POC shortcut
+    // only; Fase 1 replaces it with the central adapter registry
+    // from design F1. The alias target is a relative path, the same form
     // the next-intl plugin uses for its own Turbopack alias below.
     resolveAlias: {
-      '@tauri-apps/plugin-store': './src/lib/platform/poc-store-shim.ts',
       '@tauri-apps/api/app': './src/lib/platform/poc-app-shim.ts',
     },
   },
