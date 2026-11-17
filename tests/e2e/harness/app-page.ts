@@ -128,10 +128,30 @@ export class AppPage {
    * Click a folder row in the tree to expand it. The caller waits
    * for the child row it needs afterwards by observation; this
    * method only performs the click, because expansion state is not
-   * exposed as a stable attribute to wait on.
+   * exposed as a stable attribute to wait on. WARNING: the click
+   * TOGGLES. After a reload the tree can start EXPANDED (W4-FLOWS
+   * probe10B: all children visible without any click), so an
+   * unconditional click after reload COLLAPSES the folder. Use
+   * ensureFolderExpanded for post-reload flows.
    */
   async expandFolderByName(folderName: string): Promise<void> {
     await fileTreeItemByName(this.page, folderName).click()
+  }
+
+  /**
+   * Ensure a folder is expanded WITHOUT toggling it closed: click
+   * the folder row only when the named child row is absent, then
+   * wait for the child row by observation. Required after reloads,
+   * where the tree may restore expanded (probe10B). On a fresh
+   * boot the tree starts collapsed, so the click always runs
+   * there; the conditional form is still safe and is preferred
+   * wherever the prior expansion state is unknown.
+   */
+  async ensureFolderExpanded(folderName: string, childFileName: string): Promise<void> {
+    if ((await fileTreeItemByName(this.page, childFileName).count()) === 0) {
+      await fileTreeItemByName(this.page, folderName).click()
+    }
+    await expect(fileTreeItemByName(this.page, childFileName)).toBeVisible({ timeout: 30_000 })
   }
 
   /** Open a file from the tree by workspace-relative path. */

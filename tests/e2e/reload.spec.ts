@@ -60,7 +60,7 @@ backendTest(
     await app.reloadHome()
     await app.expectBooted()
 
-    await app.expandFolderByName('notes')
+    await app.ensureFolderExpanded('notes', SEARCH_TERMS.uniqueTermFileName)
     await fileTreeItemByName(page, SEARCH_TERMS.uniqueTermFileName).click()
     await expect(visibleVisualEditor(page)).toContainText(SEARCH_TERMS.uniqueTerm, {
       timeout: 10_000,

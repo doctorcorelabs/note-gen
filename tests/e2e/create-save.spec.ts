@@ -90,10 +90,7 @@ backendTest(
 
     await app.reloadHome()
     await app.expectBooted()
-    await app.expandFolderByName('notes')
-    await expect(fileTreeItemByName(page, 'e2e-created-note.md')).toBeVisible({
-      timeout: 30_000,
-    })
+    await app.ensureFolderExpanded('notes', 'e2e-created-note.md')
     await fileTreeItemByName(page, 'e2e-created-note.md').click()
     await expect(visibleVisualEditor(page)).toContainText('Created note', { timeout: 10_000 })
     await expect(visibleVisualEditor(page)).toContainText('quokka-created-delta')
