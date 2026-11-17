@@ -4,13 +4,13 @@
 
 // Step-up tests (worker V3-02 part 1, wave 3B overlap).
 //
-// The step-up route module is registered directly onto the app built
-// by buildTestApp, because overlap workers never edit
-// server/src/app.ts (AD-57); the integrator wires
-// registerAuthStepUpRoutes in buildApp at merge. Registration here
-// happens before the first inject, so the frozen global hook
-// (session, then Origin, then CSRF) covers the route exactly as it
-// will in production.
+// The step-up route reaches the app through buildApp: the
+// auth-stepup registration adapter (merge 29b, AD-61) wires
+// registerAuthStepUpRoutes with the same fixture auth the direct
+// registration used before the merge (overlap workers never edit
+// server/src/app.ts, AD-57). The frozen global hook (session,
+// then Origin, then CSRF) covers the route exactly as it will in
+// production.
 //
 // Pinned behaviors (kontrak-api-kanonis.md section 3.12,
 // desain-auth.md section 3.5, L2 reference harness
@@ -28,7 +28,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { deriveSealKey, sealTotpSecret } from '../src/auth/totp-seal.js';
 import { currentTotpCounter, decodeBase32, totpCodeAt } from '../src/auth/totp-verify.js';
 import { STEP_UP_WINDOW_MS } from '../src/auth/values.js';
-import { registerAuthStepUpRoutes } from '../src/routes/auth-stepup.js';
 import { isStepUpFreshForRow, requireFreshStepUp } from '../src/services/auth/step-up.js';
 import {
   CANONICAL_ORIGIN,
@@ -68,7 +67,6 @@ afterEach(async () => {
 async function setup(): Promise<{ fixture: TestAuth; app: FastifyInstance }> {
   const fixture = makeTestAuth();
   const app = await buildTestApp(fixture.auth);
-  await registerAuthStepUpRoutes(app, { auth: fixture.auth });
   apps.push(app);
   return { fixture, app };
 }

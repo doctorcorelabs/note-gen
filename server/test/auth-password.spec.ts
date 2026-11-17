@@ -3,8 +3,10 @@
 // See LICENSE and FORK.md.
 
 // End-to-end tests for POST /api/auth/password/change (V3-02 part 2),
-// through buildApp with inject() and a fake store, with the password
-// route registered the way the integrator will wire it in buildApp.
+// through buildApp with inject() and a fake store. The route is
+// wired by the auth-password registration adapter (merge 29b,
+// AD-61) with the same fixture auth the direct registration used
+// before the merge.
 // They pin the L2 reference harness behaviors from
 // test/auth-negative-lifecycle.spec.ts against the real route: the
 // generic 401 for a wrong current password with no login lockout, the
@@ -22,7 +24,6 @@
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Argon2PasswordHasher } from '../src/auth/passwords.js';
-import { registerAuthPasswordRoutes } from '../src/routes/auth-password.js';
 import {
   bodyOf,
   buildTestApp,
@@ -42,7 +43,6 @@ const HOUR_MS = 60 * 60 * 1000;
 
 async function buildPasswordApp(fixture: TestAuth): Promise<FastifyInstance> {
   const app = await buildTestApp(fixture.auth);
-  await registerAuthPasswordRoutes(app, { auth: fixture.auth });
   return app;
 }
 

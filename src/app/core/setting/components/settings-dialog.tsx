@@ -23,6 +23,7 @@ import SettingFilePage from '../file/page'
 import GeneralSettingsPage from '../general/page'
 import RecordSettingPage from '../record/page'
 import ShortcutsPage from '../shortcuts/page'
+import SecuritySettingsPage from '../security/page'
 import { gatedSettingPages } from './setting-disabled-notice'
 import { SettingTab } from './setting-tab'
 import { hasPluginSettingsContent } from '@/lib/plugins/display-preferences'
@@ -33,6 +34,7 @@ import { PluginSettingsPage } from '../plugins/plugin-settings-page'
 const settingPages: Record<BuiltinSettingSection, ComponentType> = {
   about: AboutPage,
   general: GeneralSettingsPage,
+  security: SecuritySettingsPage,
   record: RecordSettingPage,
   editor: EditorSettingPage,
   file: SettingFilePage,
