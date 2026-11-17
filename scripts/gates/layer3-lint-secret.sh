@@ -178,7 +178,7 @@ else
         if (line ~ /ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_.-]{10,}|AKIA[0-9A-Z]{16}/) found[file] = 1
         else if (line ~ /-----BEGIN [A-Z ]*PRIVATE KEY-----/) found[file] = 1
         else if (line ~ /postgres(ql)?:\/\/[^:\/<> ]+:[^@<> ]+@/) found[file] = 1
-        else if (line ~ /sk-[A-Za-z0-9]{20,}/ && file != "src/app/model-config.ts") found[file] = 1
+        else if (line ~ /sk-[A-Za-z0-9]{20,}/) found[file] = 1
         else if (line ~ /(AUTH_SECRET|SECRETS_ENCRYPTION_KEY|SETUP_TOKEN|INTERNAL_SERVICE_TOKEN|CF_ACCESS_AUD)[ \t]*=[ \t]*["'"'"']?[^ \t#\"'"'"']/ && line !~ /CHANGE_ME/ && line !~ /<[^>]*>/) found[file] = 1
       }
       END { for (f in found) print f }

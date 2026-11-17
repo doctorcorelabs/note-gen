@@ -3849,31 +3849,6 @@
       "newModel": "新模型",
       "checkConnection": "检测连接",
       "model": "模型",
-      "defaultModels": {
-        "title": "NoteGen",
-        "desc": "NoteGen 为用户提供免费的 AI 模型服务，由硅基流动和 AIHubMix 提供支持，无需配置即可使用基础功能。",
-        "chatModel": {
-          "name": "NoteGen AI",
-          "type": "对话模型",
-          "desc": "开箱即用，无需配置"
-        },
-        "embeddingModel": {
-          "name": "BAAI/bge-m3",
-          "type": "嵌入模型",
-          "desc": "用于文本向量化、语义搜索等功能"
-        },
-        "visionModel": {
-          "name": "OpenGVLab/InternVL2-8B",
-          "type": "视觉模型",
-          "desc": "支持图像理解、视觉问答等功能"
-        },
-        "completionModel": {
-          "name": "快速补全",
-          "type": "补全模型",
-          "desc": "用于 Markdown 编辑器的 AI 内联补全，类似 GitHub Copilot，快速生成续写内容"
-        },
-        "poweredBy": "由 SiliconFlow 提供技术支持"
-      },
       "deleteModelConfirm": "确定要删除这个模型吗？",
       "rerankResultInvalid": "重排序结果格式不正确",
       "embeddingResultInvalid": "嵌入结果格式不正确",
@@ -3884,7 +3859,13 @@
       "batchEmbeddingCountMismatch": "批量嵌入结果数量不匹配",
       "rerankResultFormatInvalid": "重排序结果格式不正确",
       "rerankResultNoValidScores": "重排序结果没有有效分数",
-      "embeddingIncompleteResult": "Embedding 返回不完整"
+      "embeddingIncompleteResult": "Embedding 返回不完整",
+      "noProvider": {
+        "title": "No AI provider configured",
+        "description": "Add a provider to enable AI features. No provider is configured by default.",
+        "localHint": "Ollama and LM Studio run on the server (local on server) when the deployment enables them. Models on your own laptop are not reachable from a remote deployment without a bridge."
+      },
+      "localOnServer": "local on server"
     },
     "imageMethod": {
       "title": "图像识别",

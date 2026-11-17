@@ -1,32 +1,28 @@
-import { platform } from '@/lib/platform'
-
+// Local-only provider templates (AD-15). No Config Center fetch, no cache.
+// Pinned bundle: config/provider-templates.json and config/provider-templates-cn.json.
+// See config/PIN-REVIEW.md for the review record. Bundle changes only ship
+// with a reviewed fork release.
 import type { AiConfig } from '@/app/core/setting/config'
-import { fetchConfigCenterConfig } from '@/lib/config-center/client'
-import type { ConfigCenterConfigKey } from '@/lib/config-center/types'
 import {
   excludeBuiltInOpenAIProviders,
   isMainlandChinaAppStore,
 } from '@/lib/ai/storefront-policy'
+import pinnedTemplates from '../../../config/provider-templates.json'
+import pinnedTemplatesChina from '../../../config/provider-templates-cn.json'
 
-export const PROVIDER_TEMPLATE_CACHE_KEY = 'providerTemplatesCache'
+type PinnedTemplateBundleKey = 'providerTemplates' | 'providerTemplatesChina'
 
-export interface ProviderTemplateCache {
-  configKey?: ConfigCenterConfigKey
-  versionCode?: number
-  versionName?: string
-  fetchedAt: string
-  content: {
-    providers: unknown[]
-  }
-}
+// Loopback entries allowed over HTTP, server-side only (AD-12, AD-16).
+// Each entry is one pinned local provider: template key + host + port.
+// No other HTTP baseURL is accepted anywhere in this loader.
+const LOOPBACK_ALLOWLIST: Array<{ key: string; hostname: string; port: string }> = [
+  { key: 'ollama', hostname: 'localhost', port: '11434' },
+  { key: 'ollama', hostname: '127.0.0.1', port: '11434' },
+  { key: 'lmstudio', hostname: 'localhost', port: '1234' },
+  { key: 'lmstudio', hostname: '127.0.0.1', port: '1234' },
+]
 
-function mapBuiltinTemplates(templates: AiConfig[]): AiConfig[] {
-  return templates.map((template) => ({
-    ...template,
-    templateKey: template.templateKey || template.key,
-    templateSource: 'builtin' as const,
-  }))
-}
+const BLOCKED_HOSTS = new Set(['metadata.google.internal'])
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
@@ -36,7 +32,6 @@ function isValidUrl(value: unknown): value is string {
   if (!isNonEmptyString(value)) {
     return false
   }
-
   try {
     new URL(value)
     return true
@@ -45,49 +40,123 @@ function isValidUrl(value: unknown): value is string {
   }
 }
 
-function parseContentPayload(payload: unknown) {
-  if (!payload) {
-    return null
+function isBlockedLiteralIp(hostname: string): boolean {
+  const host = hostname.toLowerCase()
+  if (host === 'localhost' || host === '::1' || host === '[::1]') {
+    return true
   }
-
-  if (typeof payload === 'string') {
-    try {
-      return JSON.parse(payload)
-    } catch {
-      return null
-    }
+  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) {
+    return true
   }
-
-  if (typeof payload === 'object') {
-    return payload
+  const m172 = /^172\.(\d+)\./.exec(host)
+  if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) {
+    return true
   }
-
-  return null
+  if (host.startsWith('fe80:') || host.startsWith('[fe80:')) {
+    return true
+  }
+  return false
 }
 
-function normalizeProviderTemplatesPayload(payload: unknown): AiConfig[] {
-  const parsedPayload = parseContentPayload(payload)
-  const providers = Array.isArray((parsedPayload as { providers?: unknown[] } | null)?.providers)
-    ? (parsedPayload as { providers: unknown[] }).providers
-    : []
+function isAllowedBaseUrl(key: string, raw: string): boolean {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return false
+  }
+  if (url.username || url.password) {
+    return false
+  }
+  if (url.search || url.hash) {
+    return false
+  }
+  const hostname = url.hostname.toLowerCase()
+  if (BLOCKED_HOSTS.has(hostname)) {
+    return false
+  }
+  if (url.protocol === 'http:') {
+    return LOOPBACK_ALLOWLIST.some(
+      (entry) => entry.key === key && entry.hostname === hostname && entry.port === url.port,
+    )
+  }
+  if (url.protocol !== 'https:') {
+    return false
+  }
+  if (isBlockedLiteralIp(hostname)) {
+    return false
+  }
+  return true
+}
 
-  return providers
-    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
-    .filter((item) => item.enabled !== false)
-    .filter((item) => isNonEmptyString(item.key))
-    .filter((item) => isNonEmptyString(item.title))
-    .filter((item) => isValidUrl(item.baseURL))
-    .map((item) => ({
-      key: String(item.key).trim(),
-      title: String(item.title).trim(),
-      baseURL: String(item.baseURL).trim(),
-      icon: isNonEmptyString(item.icon) ? item.icon.trim() : undefined,
-      apiKeyUrl: isValidUrl(item.apiKeyUrl) ? item.apiKeyUrl.trim() : undefined,
-      promotion: isNonEmptyString(item.promotion) ? item.promotion.trim() : undefined,
-      sponsored: item.sponsored === true,
-      enabled: true,
-      templateSource: (item.templateSource as AiConfig['templateSource']) || 'remote',
-    }))
+function neutralizeApiKeyUrl(value: unknown): string | undefined {
+  if (!isValidUrl(value)) {
+    return undefined
+  }
+  const url = new URL(String(value).trim())
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    return undefined
+  }
+  return `${url.origin}${url.pathname}`
+}
+
+function pinnedIcon(value: unknown): string | undefined {
+  const icon = isNonEmptyString(value) ? value.trim() : ''
+  if (!icon.startsWith('https://') || !isValidUrl(icon)) {
+    return undefined
+  }
+  return icon
+}
+
+// Whitelist output: only display metadata is copied. Never copies apiKey,
+// sponsored, promotion, customHeaders, or proxy fields from the bundle.
+// Exported so unit tests can run the validation table against the exact
+// function loadProviderTemplates uses; production callers use
+// loadProviderTemplates, never this export directly.
+export function normalizeTemplateRecords(records: unknown[]): AiConfig[] {
+  const seen = new Set<string>()
+  const out: AiConfig[] = []
+  for (const item of records) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+    const record = item as Record<string, unknown>
+    if (record.enabled === false) {
+      continue
+    }
+    if (!isNonEmptyString(record.key) || !isNonEmptyString(record.title)) {
+      continue
+    }
+    if (!isNonEmptyString(record.baseURL)) {
+      continue
+    }
+    const key = String(record.key).trim()
+    const baseURL = String(record.baseURL).trim()
+    if (seen.has(key)) {
+      console.error(`[provider-templates] duplicate template key dropped: ${key}`)
+      continue
+    }
+    if (!isAllowedBaseUrl(key, baseURL)) {
+      console.error(`[provider-templates] template dropped, invalid baseURL: ${key}`)
+      continue
+    }
+    seen.add(key)
+    out.push({
+      key,
+      title: String(record.title).trim(),
+      baseURL,
+      icon: pinnedIcon(record.icon),
+      apiKeyUrl: neutralizeApiKeyUrl(record.apiKeyUrl),
+      templateKey: key,
+      templateSource: 'builtin',
+    })
+  }
+  return out
+}
+
+function bundleProviders(payload: unknown): unknown[] {
+  const providers = (payload as { providers?: unknown[] } | null)?.providers
+  return Array.isArray(providers) ? providers : []
 }
 
 function matchProviderTemplate({
@@ -100,115 +169,55 @@ function matchProviderTemplate({
   if (!currentConfig || templates.length === 0) {
     return null
   }
-
   if (isNonEmptyString(currentConfig.templateKey)) {
     const matchedByKey = templates.find((item) => item.key === currentConfig.templateKey)
     if (matchedByKey) {
       return matchedByKey
     }
   }
-
   if (isValidUrl(currentConfig.baseURL)) {
     const matchedByBaseUrl = templates.find((item) => item.baseURL === currentConfig.baseURL)
     if (matchedByBaseUrl) {
       return matchedByBaseUrl
     }
   }
-
   return null
-}
-
-function mapRemoteTemplates(content: ProviderTemplateCache['content'] | undefined): AiConfig[] {
-  const templates = normalizeProviderTemplatesPayload(content)
-
-  return templates.map((template: AiConfig) => ({
-    ...template,
-    templateKey: template.key,
-    templateSource: 'remote' as const,
-  }))
 }
 
 function enforceStorefrontPolicy(
   templates: AiConfig[],
-  configKey: ConfigCenterConfigKey,
+  bundleKey: PinnedTemplateBundleKey,
 ): AiConfig[] {
-  return configKey === 'providerTemplatesChina'
+  return bundleKey === 'providerTemplatesChina'
     ? excludeBuiltInOpenAIProviders(templates)
     : templates
 }
 
-export async function getCachedProviderTemplates(): Promise<AiConfig[]> {
-  const configKey = await getProviderTemplateConfigKey()
-  const store = await platform.store.load('store.json')
-  const cached = await store.get<ProviderTemplateCache>(PROVIDER_TEMPLATE_CACHE_KEY)
-
-  if (!cached || cached.configKey !== configKey || !cached.content?.providers?.length) {
-    return []
-  }
-
-  return enforceStorefrontPolicy(mapRemoteTemplates(cached.content), configKey)
-}
-
-async function getProviderTemplateConfigKey(): Promise<ConfigCenterConfigKey> {
-  return await isMainlandChinaAppStore()
-    ? 'providerTemplatesChina'
-    : 'providerTemplates'
-}
-
-async function fetchProviderTemplatesFromConfigCenter(
-  configKey: ConfigCenterConfigKey,
-  versionCode?: number | null,
-): Promise<ProviderTemplateCache | null> {
-  const result = await fetchConfigCenterConfig(configKey, versionCode)
-  if (result.status === 'not-modified') {
-    return null
-  }
-
-  const templates = enforceStorefrontPolicy(
-    normalizeProviderTemplatesPayload(result.payload),
-    configKey,
-  )
-  if (templates.length === 0) {
-    throw new Error('Config center provider templates payload is empty')
-  }
-
-  return {
-    configKey,
-    versionCode: result.versionCode,
-    versionName: result.versionName,
-    fetchedAt: new Date().toISOString(),
-    content: {
-      providers: templates,
-    },
-  }
+async function getPinnedTemplateBundleKey(): Promise<PinnedTemplateBundleKey> {
+  return (await isMainlandChinaAppStore()) ? 'providerTemplatesChina' : 'providerTemplates'
 }
 
 export async function loadProviderTemplates(builtinTemplates: AiConfig[]): Promise<AiConfig[]> {
-  const configKey = await getProviderTemplateConfigKey()
-  const store = await platform.store.load('store.json')
-  const cached = await store.get<ProviderTemplateCache>(PROVIDER_TEMPLATE_CACHE_KEY)
-  const matchingCache = cached?.configKey === configKey ? cached : undefined
-
-  try {
-    const latest = await fetchProviderTemplatesFromConfigCenter(configKey, matchingCache?.versionCode)
-    if (latest) {
-      await store.set(PROVIDER_TEMPLATE_CACHE_KEY, latest)
-      await store.save()
-      return enforceStorefrontPolicy(mapRemoteTemplates(latest.content), configKey)
-    }
-
-    if (matchingCache?.content?.providers?.length) {
-      return enforceStorefrontPolicy(mapRemoteTemplates(matchingCache.content), configKey)
-    }
-  } catch (error) {
-    console.error('[provider-templates] failed to fetch config center templates', error)
+  const bundleKey = await getPinnedTemplateBundleKey()
+  const pinned = enforceStorefrontPolicy(
+    normalizeTemplateRecords(
+      bundleProviders(bundleKey === 'providerTemplatesChina' ? pinnedTemplatesChina : pinnedTemplates),
+    ),
+    bundleKey,
+  )
+  if (pinned.length > 0) {
+    return pinned
   }
-
-  if (matchingCache?.content?.providers?.length) {
-    return enforceStorefrontPolicy(mapRemoteTemplates(matchingCache.content), configKey)
+  console.error('[provider-templates] pinned bundle empty after validation; falling back to built-in templates')
+  const fallback = enforceStorefrontPolicy(
+    normalizeTemplateRecords(builtinTemplates as unknown[]),
+    bundleKey,
+  )
+  if (fallback.length > 0) {
+    return fallback
   }
-
-  return enforceStorefrontPolicy(mapBuiltinTemplates(builtinTemplates), configKey)
+  console.error('[provider-templates] no usable provider templates')
+  return []
 }
 
 export function getProviderTemplateMatch(currentConfig: AiConfig | undefined, templates: AiConfig[]) {

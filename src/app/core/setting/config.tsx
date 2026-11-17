@@ -179,7 +179,7 @@ export interface AiConfig {
   apiKey?: string
   baseURL?: string
   templateKey?: string
-  templateSource?: 'builtin' | 'remote' | 'custom'
+  templateSource?: 'builtin' | 'custom'
   icon?: string
   apiKeyUrl?: string
   promotion?: string

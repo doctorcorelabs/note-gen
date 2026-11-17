@@ -7,6 +7,34 @@ import { normalizeRecordCompletionBehavior, normalizeRecordSaveTargetMode, norma
 import { normalizeCanvasGridGap, normalizeCanvasGridStyle, normalizeCanvasInsertBehavior, normalizeCanvasManagerSortMode, normalizeCanvasManagerViewMode, normalizeCanvasWheelBehavior, normalizeCanvasZoom } from '@/lib/canvas/preferences'
 import { isManagedAgentSystemPrompt } from '@/lib/ai/system-prompt'
 
+// Sponsor-gateway purge (AD-15). Structural twin of isSponsorGatewayConfig
+// in src/stores/setting.ts: same three checks, applied to untyped snapshot
+// records. Keep both copies in sync. The hostname literal below is a purge
+// predicate only: it is never used to build a request URL.
+const SPONSOR_GATEWAY_HOST = 'api.notegen.top'
+const SPONSOR_GATEWAY_MODEL_IDS = new Set([
+  'note-gen-chat',
+  'note-gen-embedding',
+  'note-gen-stt',
+])
+
+function isSponsorGatewayRecord(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  let hostname = ''
+  try {
+    hostname = new URL(String(record.baseURL ?? '')).hostname.toLowerCase()
+  } catch {
+    hostname = ''
+  }
+  if (hostname === SPONSOR_GATEWAY_HOST) return true
+  if (record.templateKey === 'note-gen-free') return true
+  if (Array.isArray(record.models) && record.models.some(
+    (model) => model && typeof model === 'object' && SPONSOR_GATEWAY_MODEL_IDS.has(String((model as Record<string, unknown>).id ?? '')),
+  )) return true
+  return false
+}
+
 /** Pure equivalent of persisted preference migrations, before preview or writes.
  * Defaults come from getInitialState(), never from this device's live choices. */
 export function normalizeSettingsSnapshot(value: Record<string, unknown>, defaults: Record<string, unknown>, options: SyncExclusionOptions = { excludeSensitiveConfig: true }) {
@@ -38,9 +66,13 @@ export function normalizeSettingsSnapshot(value: Record<string, unknown>, defaul
     result.recordToolbarConfig = [...toolbar, ...(defaults.recordToolbarConfig as Array<{ id: string; order: number }>)
       .filter(item => !toolbar.some(existing => existing.id === item.id)).map(item => ({ ...item, order: ++order }))]
   }
+  // Drop sponsor gateway configs from restored snapshots (AD-15).
+  if (Array.isArray(result.aiModelList)) {
+    result.aiModelList = result.aiModelList.filter((item) => !isSponsorGatewayRecord(item))
+  }
   for (const key of ['primaryModel', 'editorModel', 'placeholderModel', 'imageMethodModel', 'completionModel', 'markDescModel', 'commitModel']) {
     const value = result[key]
-    if (typeof value === 'string' && (value.startsWith('note-gen-limited') || value.startsWith('note-gen-free-note-gen-limited') || value === 'note-gen-free-chat' || value === 'note-gen-free-note-gen-free-chat' || value === 'note-gen-vlm' || value === 'note-gen-free-note-gen-vlm')) result[key] = 'note-gen-chat'
+    if (typeof value === 'string' && (value.startsWith('note-gen-limited') || value.startsWith('note-gen-free-') || value === 'note-gen-chat' || value === 'note-gen-embedding' || value === 'note-gen-vlm')) result[key] = ''
   }
   // Keep the final snapshot inside the same boundary even when a migration
   // adds fields. Preview, persistence, verification and recovery share it.

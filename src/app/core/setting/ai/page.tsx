@@ -11,13 +11,11 @@ import { ResponsiveSelect } from "@/components/responsive-select"
 import { SettingType } from "../components/setting-base";
 import { AiConfig, ModelConfig, ProxyMode, builtinProviderTemplates } from "../config";
 import useSettingStore from "@/stores/setting";
-import { noteGenModelKeys } from "@/app/model-config";
 import { BotMessageSquare, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Network, Plus, Server, Settings2, Trash2, X } from "lucide-react";
 import { OpenBroswer } from "@/components/open-broswer";
-import DefaultModelsSection from "./default-models";
 import ModelCard from "./model-card";
 import CreateConfig from "./create";
-import { getCachedProviderTemplates, getProviderTemplateMatch, loadProviderTemplates } from "@/lib/ai/provider-templates-runtime";
+import { getProviderTemplateMatch, loadProviderTemplates } from "@/lib/ai/provider-templates-runtime";
 import { isValidProxyURL } from "@/lib/ai/tauri-client";
 import { excludeBuiltInOpenAIProviders, isMainlandChinaAppStore } from "@/lib/ai/storefront-policy";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -51,44 +49,38 @@ function getCustomPlatformAvatarStyle(config: AiConfig) {
   }
 }
 
-function getProviderPromotion(config: AiConfig, template?: AiConfig | null) {
-  return template?.promotion || config.promotion
-}
 
 function getProviderOptionLabel(config: AiConfig, template?: AiConfig | null) {
   const count = config.models?.filter(model => model.model.trim()).length || 0
   return <ProviderTitle config={config} template={template} modelCount={count} />
 }
 
+function isLocalServerProvider(config: AiConfig, template?: AiConfig | null) {
+  const key = template?.templateKey || template?.key || config.templateKey || config.key
+  if (key !== 'ollama' && key !== 'lmstudio') return false
+  try {
+    const hostname = new URL(template?.baseURL || config.baseURL || '').hostname.toLowerCase()
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
+  } catch {
+    return false
+  }
+}
+
 function ProviderTitle({ config, template, modelCount }: { config: AiConfig; template?: AiConfig | null; modelCount?: number }) {
-  const t = useTranslations('common.providerSponsor')
   const aiText = useTranslations('settings.ai')
   const shouldReduceMotion = useReducedMotion()
   const hasModels = modelCount !== undefined && modelCount > 0
+  const isLocalProvider = isLocalServerProvider(config, template)
   const transition = shouldReduceMotion
     ? { duration: 0 }
     : { type: 'spring' as const, stiffness: 240, damping: 28, mass: 0.8 }
-  const sponsored = template ? template.sponsored === true : config.sponsored === true
-  const promotion = getProviderPromotion(config, template)
   return (
     <motion.span initial="rest" whileHover="hovered" whileFocus="hovered" className="flex min-w-0 w-full items-center justify-start gap-1.5 text-left">
       <span className="min-w-0 flex-1 truncate" title={config.title}>{config.title}</span>
+      {isLocalProvider && (
+        <Badge variant="secondary" className="shrink-0">{aiText('localOnServer')}</Badge>
+      )}
       <span className="grid h-5 shrink-0 items-center overflow-hidden">
-        <motion.span
-          className="col-start-1 row-start-1 inline-flex h-full items-center justify-self-end gap-1.5"
-          variants={{
-            rest: { y: '0%', opacity: 1 },
-            hovered: { y: hasModels ? '-100%' : '0%', opacity: hasModels ? 0 : 1 },
-          }}
-          transition={hasModels ? transition : { duration: 0 }}
-        >
-          {sponsored && (
-            <Badge variant="secondary" title={t('description')} aria-label={`${t('label')}: ${t('description')}`}>
-              {t('label')}
-            </Badge>
-          )}
-          {promotion && <ProviderPromotionText promotion={promotion} />}
-        </motion.span>
         {hasModels && (
           <motion.span
             className="pointer-events-none col-start-1 row-start-1 flex h-full items-center justify-self-end"
@@ -106,25 +98,6 @@ function ProviderTitle({ config, template, modelCount }: { config: AiConfig; tem
   )
 }
 
-function ProviderPromotionText({ promotion }: { promotion: string }) {
-  const shouldReduceMotion = useReducedMotion()
-
-  return (
-      <motion.span
-        title={promotion}
-        animate={shouldReduceMotion ? undefined : { backgroundPosition: ['0% 50%', '100% 50%'] }}
-        className="shrink-0 whitespace-nowrap bg-clip-text text-xs font-medium text-transparent"
-        style={{
-          backgroundImage: 'linear-gradient(90deg, hsl(var(--promotion-gradient-start)) 0%, hsl(var(--promotion-gradient-middle)) 16.667%, hsl(var(--promotion-gradient-end)) 33.333%, hsl(var(--promotion-gradient-start)) 50%, hsl(var(--promotion-gradient-middle)) 66.667%, hsl(var(--promotion-gradient-end)) 83.333%, hsl(var(--promotion-gradient-start)) 100%)',
-          backgroundPosition: '0% 50%',
-          backgroundSize: '200% 100%',
-        }}
-        transition={{ duration: 6, ease: 'linear', repeat: Infinity, repeatType: 'loop' }}
-      >
-        {promotion}
-      </motion.span>
-  )
-}
 
 export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations('settings.ai');
@@ -134,11 +107,11 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   } = useSettingStore()
   const [hideBuiltInOpenAI, setHideBuiltInOpenAI] = useState<boolean | null>(null)
 
-  // 过滤掉默认模型，只显示用户自定义模型
+  // All stored providers; sponsor entries were purged at store load (AD-15).
   const visibleAiModelList = hideBuiltInOpenAI !== false
     ? excludeBuiltInOpenAIProviders(aiModelList)
     : aiModelList
-  const userCustomModels = visibleAiModelList.filter(model => !noteGenModelKeys.includes(model.key) && model.title !== 'NoteGen Limited')
+  const userCustomModels = [...visibleAiModelList]
   const [apiKeyVisible, setApiKeyVisible] = useState<boolean>(false)
   const [headerPairs, setHeaderPairs] = useState<Array<{key: string, value: string, id: string}>>([])
   const [expandedModels, setExpandedModels] = useState<string[]>([])
@@ -322,11 +295,6 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   const deleteCurrentConfig = async () => {
     if (!currentConfig) return
     
-    // 检查是否是NoteGen默认模型
-    if (noteGenModelKeys.includes(currentConfig.key)) {
-      return // 不能删除默认模型
-    }
-
     const confirmed = await platform.dialog.confirm(t('deleteCustomModelConfirm'))
     if (!confirmed) return
 
@@ -338,7 +306,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
     setAiModelList(updatedList)
 
     // 删除后选择下一个用户自定义模型
-    const remainingUserModels = updatedList.filter(model => !noteGenModelKeys.includes(model.key))
+    const remainingUserModels = updatedList
     if (remainingUserModels.length > 0) {
       setSelectedAiConfig(remainingUserModels[0].key)
     } else {
@@ -398,14 +366,6 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       setHideBuiltInOpenAI(shouldHideBuiltInOpenAI)
       let templates: AiConfig[] = []
       try {
-        const cachedTemplates = await getCachedProviderTemplates()
-        if (cachedTemplates.length > 0) {
-          setProviderTemplates(shouldHideBuiltInOpenAI
-            ? excludeBuiltInOpenAIProviders(cachedTemplates)
-            : cachedTemplates)
-          setLoadingTemplates(false)
-        }
-
         templates = await loadProviderTemplates(builtinProviderTemplates)
         if (shouldHideBuiltInOpenAI) {
           templates = excludeBuiltInOpenAIProviders(templates)
@@ -419,9 +379,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       // 再次读取 Store，避免模板加载期间用户新建的平台被旧快照覆盖。
       const storedAiModelList = await store.get<AiConfig[]>('aiModelList') || []
       const migratedList = storedAiModelList.map(migrateOldConfig)
-      const existingPlatforms = migratedList.filter(model => (
-        !noteGenModelKeys.includes(model.key) && model.title !== 'NoteGen Limited'
-      ))
+      const existingPlatforms = migratedList
       const missingTemplates = templates.filter(template => {
         const templateKey = template.templateKey || template.key
         return !existingPlatforms.some(config => {
@@ -449,9 +407,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       aiModelListRef.current = nextAiModelList
       setAiModelList(nextAiModelList)
 
-      const userModels = nextAiModelList.filter(model => (
-        !noteGenModelKeys.includes(model.key) && model.title !== 'NoteGen Limited'
-      ))
+      const userModels = nextAiModelList
       
       // 如果已经有保存的选择，且该配置仍然存在，则使用它
       if (selectedAiConfig && userModels.find(model => model.key === selectedAiConfig)) {
@@ -471,7 +427,17 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <SettingType id="ai" icon={<BotMessageSquare />} title={t('title')} desc={t('desc')}>
-      {userCustomModels.length === 0 && <DefaultModelsSection />}
+      {userCustomModels.length === 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>{t('noProvider.title')}</CardTitle>
+            <CardDescription>{t('noProvider.description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p>{t('noProvider.localHint')}</p>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
             <Card size="sm" className="lg:sticky lg:top-2">
               <CardHeader>

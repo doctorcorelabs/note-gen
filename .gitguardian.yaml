@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# This file is part of the NoteGen web fork, licensed under the GNU
+# General Public License v3. See LICENSE and FORK.md.
+#
+# GitGuardian (ggshield) configuration for the web fork.
+# Decision basis: AD-45 (7 incidents = FALSE POSITIVE, fixture-only,
+# no rotation, fixture values must not change) and AD-55 (TEST_
+# exception in scripts/secret-scan.sh). Placed by gelombang 4
+# hardening (W4-HARDEN, 2026-11-17) from the GG-01 staging draft
+# after re-verification against trunk 18c54f02; the wave-4
+# hardening report records the verdict as well.
+#
+# Scope honesty: this file configures ggshield (local and CI scans
+# that use ggshield). It does NOT by itself close incidents on the
+# GitGuardian dashboard. The 7 dashboard incidents on commits
+# 614d2d56 and d0e9a9b0 must still be dispositioned on the dashboard
+# as false positives under AD-45, and any dashboard filepath
+# exclusion is a separate dashboard setting. The re-verification
+# required before placement was done on 2026-11-17: all 7 incidents
+# are still fixture-only (both commits plus the trunk tree at that
+# time; see the fixture comment below). If any future finding is
+# found outside fixtures, stop and report to the coordinator
+# instead of silencing it.
+#
+# Layering: this file does NOT replace scripts/secret-scan.sh or the
+# CI gitleaks path in .github/workflows/web-ci.yml. The three layers
+# are complementary. Secret-scan remains the only layer that
+# enforces the fork forbidden-file rules (tracked .env files,
+# store.json, local-mcp.json, app-lock.json) and the fork secret
+# names (AUTH_SECRET, SECRETS_ENCRYPTION_KEY, SETUP_TOKEN,
+# INTERNAL_SERVICE_TOKEN, CF_ACCESS_AUD). This file must not grow
+# rules that duplicate or weaken those layers.
+#
+# How this file closes secret-scan gaps: scripts/secret-scan.sh
+# checks a narrow, explicit pattern list only (5 token prefixes,
+# private-key headers, postgres URLs with a password, sk- keys,
+# and assignments to 5 fork secret names). It has no generic or
+# provider detector set. This file adds no detectors; instead it
+# deliberately disables NONE of GitGuardian's built-in detectors
+# (see ignored_detectors below), so the full built-in detector set
+# runs as a second layer over everything except the single fixture
+# path below. Any future ignored_detectors entry needs a recorded
+# coordinator decision; never add one to quiet a finding.
+
+# Required. Without version 2, ggshield treats the file as the
+# deprecated v1 format.
+version: 2
+
+# Findings must fail the scan (exit code 1 when incidents are
+# found), matching scripts/secret-scan.sh exit 1 on findings.
+# Never set this to true: a silent pass would hide a real leak.
+exit_zero: false
+
+secret:
+  # Fixture allowlist, the ONLY path exclusion in this file.
+  # AD-45 verdict: all 7 incidents are test fixtures under
+  # server/test/ that intentionally contain secret-like strings.
+  # Fixture constants (names only, values never recorded here):
+  # TEST_AUTH_SECRET, TEST_SETUP_TOKEN, TEST_ENCRYPTION_KEY,
+  # TEST_DATABASE_URL, TEST_CSRF_TOKEN, TEST_WORKSPACE_KEY, plus
+  # password-fixture flows through FakePasswordHasher.
+  # Re-verified 2026-11-17 against commits 614d2d56 (6 files,
+  # all under server/test/auth/) and d0e9a9b0 (1 file,
+  # server/test/middleware-f1-57.spec.ts), and against trunk
+  # 18c54f02 (18 files, all under server/test/, plus the TEST_
+  # filter pattern names in scripts/secret-scan.sh itself).
+  # Definition sites at trunk 18c54f02: server/test/auth/helpers.ts
+  # defines TEST_AUTH_SECRET, TEST_SETUP_TOKEN, and
+  # TEST_ENCRYPTION_KEY; TEST_DATABASE_URL is defined in
+  # server/test/db/handlers-b.spec.ts,
+  # server/test/middleware-f1-57.spec.ts, and two further db-handler
+  # specs; TEST_WORKSPACE_KEY in
+  # server/test/helpers/workspace-test-ports.ts and
+  # server/test/workspace-media-delete.spec.ts; TEST_CSRF_TOKEN in
+  # server/test/support/settings-test-app.ts and
+  # server/test/assets/assets.spec.ts. Usages are confined to
+  # server/test/, with zero reuse in server/src/ or src/, and
+  # production code does not import server/test/ (only doc comments
+  # reference spec paths). Production secrets stay env-required:
+  # the production config warns and fails closed when AUTH_SECRET
+  # or SETUP_TOKEN is unset (server/src/config/env.ts).
+  # Both globs are needed: the first covers files directly
+  # under server/test/, the second covers nested subdirectories
+  # (auth/, db/, helpers/, support/, workspace/).
+  # Residual risk, accepted only under AD-45: a real secret
+  # committed under server/test/ would be missed by ggshield.
+  # Mitigation: scripts/secret-scan.sh still scans server/test/
+  # (its only exception there is the narrow TEST_ assignment
+  # filter from AD-55; token, private-key, database-url, and
+  # api-key rules still apply), and every new fixture path
+  # needs a coordinator decision. Do NOT extend this list.
+  ignored_paths:
+    - 'server/test/*'
+    - 'server/test/**/*'
+
+  # Deliberately empty. No value-based ignore is used, so no
+  # fixture value (or its hash) is ever copied into this file.
+  # If a narrower ignore is ever needed, generate it with
+  # ggshield tooling from scan output (SHA256 form) under a
+  # recorded decision; never paste a secret value here.
+  ignored_matches: []
+
+  # Deliberately empty. No detector is disabled. Disabling a
+  # detector (for example Generic Password) would reopen the
+  # exact gap this file exists to close as a second layer over
+  # scripts/secret-scan.sh. Any future entry needs a recorded
+  # coordinator decision with a detector-by-detector reason.
+  ignored_detectors: []
+
+  # Never print matched secret values in scan output. This
+  # matches the output safety rule of scripts/secret-scan.sh,
+  # which prints file paths and pattern labels only, so a
+  # value can never leak into a CI log through either scan.
+  show_secrets: false
+
+  # Do not silently hide secrets already known to the
+  # dashboard. Dashboard-known incidents must stay visible in
+  # local scans until they are dispositioned on the dashboard
+  # itself under AD-45. Dashboard-ignored incidents are still
+  # respected by ggshield through the dashboard link.
+  ignore_known_secrets: false
+
+# Deliberately NOT ignored here (do not add without a recorded
+# coordinator decision):
+# - The former upstream shared key in src/app/model-config.ts was
+#   removed together with the file by the AD-15 removal in
+#   gelombang 4, and the secret-scan baseline exception for it was
+#   retired in the same change. No exception for it remains in
+#   any layer. Never add a path ignore that would hide its return.
+# - .env.example files (.env.example, infra/.env.example,
+#   server/.env.example): placeholder values must stay scanned;
+#   secret-scan requires CHANGE_ME placeholders there.
+# - pnpm-lock.yaml, server/pnpm-lock.yaml, and
+#   scripts/secret-scan.sh: secret-scan skips them for its own
+#   reasons (hashes/URLs, search patterns). Do not mirror those
+#   skips here; GitGuardian scanning them is intended.
+# - tests/ and any spec file outside server/test/: no
+#   TEST_AUTH_SECRET/TEST_SETUP_TOKEN fixtures were found there
+#   at trunk 18c54f02. A future fixture there needs a new
+#   decision, not a silent extension.
+# - server/src/** and src/** (production): never ignored.
+# No custom instance is set (default dashboard) and TLS
+# verification stays on (defaults); never add insecure: true.
