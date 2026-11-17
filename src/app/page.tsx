@@ -38,6 +38,7 @@ import {
   type BootStep,
 } from '@/lib/web/boot-guard'
 import { getSharedAuthSessionClient } from '@/lib/web/auth-client'
+import { ensureWebPlatformInitialized } from '@/lib/web/platform-boot'
 
 type PageState =
   | { kind: 'checking'; step: BootStep }
@@ -71,6 +72,10 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    // Boot (N-5): re-assert platform initialization before the guard
+    // chain resolves platform.store. The root layout already ran this
+    // at module scope; this call is a no-op once frozen.
+    ensureWebPlatformInitialized()
     const attemptId = attemptRef.current + 1
     attemptRef.current = attemptId
     const controller = new AbortController()

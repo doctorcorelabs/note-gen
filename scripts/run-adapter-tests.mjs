@@ -75,6 +75,7 @@ const ADAPTER_SPECS = [
   "src/lib/platform/shell/shell.web.spec.ts",
   "src/lib/platform/shortcut/shortcut.registry.test.ts",
   "src/lib/platform/store/key-schema.spec.ts",
+  "src/lib/platform/store/poc-cleanup.spec.ts",
   "src/lib/platform/store/store.fake.spec.ts",
   "src/lib/platform/store/store.tauri.spec.ts",
   "src/lib/platform/store/store.web.spec.ts",
@@ -87,6 +88,7 @@ const ADAPTER_SPECS = [
 const WEB_NODE_SPECS = [
   "src/lib/web/api-client.spec.ts",
   "src/lib/web/errors.spec.ts",
+  "src/lib/web/platform-boot.spec.ts",
   "src/lib/web/search-client.spec.ts",
 ];
 
@@ -120,6 +122,7 @@ const NODE_TEST_SPECS = [...ADAPTER_SPECS, ...WEB_NODE_SPECS];
 // per-spec: applied globally it truncates other specs' counts.
 const FORCE_EXIT_SPECS = new Set([
   "src/lib/platform/__tests__/v3b-11c-registry-wiring.spec.ts",
+  "src/lib/web/platform-boot.spec.ts",
 ]);
 
 function discoverSpecs(dir, out) {

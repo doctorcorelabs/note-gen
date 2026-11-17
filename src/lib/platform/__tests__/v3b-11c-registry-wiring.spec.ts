@@ -18,10 +18,10 @@
  * process; it does not skip or weaken any test.
  *
  * What this file verifies: every web adapter present at the base is
- * registered and retrievable through the registry, the two
- * adapters with no web factory yet (store, sql) stay
- * unregistered, and the freeze holds (late registration throws,
- * double freeze is safe, the boot entry is idempotent).
+ * registered and retrievable through the registry, the adapter
+ * with no web factory yet (sql) stays unregistered, and the freeze
+ * holds (late registration throws, double freeze is safe, the boot
+ * entry is idempotent).
  *
  * What this file cannot verify: real browser behavior of any
  * adapter, the boot call site (owned by the boot/integrator task,
@@ -30,7 +30,7 @@
  * adapter instances only, and first I/O happens when an adapter
  * method is called.
  *
- * When a follow-up registers store or sql, extend
+ * When a follow-up registers sql, extend
  * REGISTERED_WEB_ADAPTER_NAMES in wiring.ts, move the name from the
  * unregistered test to the registered test, and re-run this spec
  * plus the root typecheck and the contract suite.
@@ -54,20 +54,40 @@ import {
   registerWebAdapters,
 } from "../wiring";
 
-const UNREGISTERED_NAMES = ["store", "sql"] as const;
+const UNREGISTERED_NAMES = ["sql"] as const;
 
 beforeEach(() => {
   __resetPlatformForTests();
 });
 
 describe("registerWebAdapters", () => {
-  test("registers all 18 web adapters present at the base", () => {
-    assert.equal(REGISTERED_WEB_ADAPTER_NAMES.length, 18);
+  test("registers all 19 web adapters present at the base", () => {
+    assert.equal(REGISTERED_WEB_ADAPTER_NAMES.length, 19);
     registerWebAdapters();
     for (const name of REGISTERED_WEB_ADAPTER_NAMES) {
       assert.equal(hasAdapter(name), true, `${name} should be registered`);
     }
-    assert.equal(listAdapters().length, 18);
+    assert.equal(listAdapters().length, 19);
+  });
+
+  test("store adapter resolves with the StoreAdapter surface", () => {
+    registerWebAdapters();
+    const store = getPlatformAdapter("store");
+    assert.equal(typeof store.load, "function");
+    assert.equal(typeof store.getStore, "function");
+    assert.equal(typeof store.closeAll, "function");
+  });
+
+  test("accepts a CSRF provider without calling it at registration", () => {
+    let calls = 0;
+    registerWebAdapters({
+      getStoreCsrfToken: () => {
+        calls += 1;
+        return "test-token";
+      },
+    });
+    assert.equal(hasAdapter("store"), true);
+    assert.equal(calls, 0);
   });
 
   test("every registered adapter is retrievable and stable", () => {
@@ -116,7 +136,7 @@ describe("registerWebAdapters", () => {
     );
   });
 
-  test("store and sql stay unregistered (recorded follow-up)", () => {
+  test("sql stays unregistered (recorded follow-up)", () => {
     registerWebAdapters();
     for (const name of UNREGISTERED_NAMES) {
       assert.equal(hasAdapter(name), false, `${name} should stay unregistered`);
@@ -137,7 +157,7 @@ describe("freeze", () => {
     assert.equal(isRegistryFrozen(), false);
     initializeWebPlatform();
     assert.equal(isRegistryFrozen(), true);
-    assert.equal(listAdapters().length, 18);
+    assert.equal(listAdapters().length, 19);
     assert.notEqual(getPlatformAdapter("fs"), undefined);
   });
 
@@ -167,7 +187,7 @@ describe("freeze", () => {
     assert.doesNotThrow(() => initializeWebPlatform());
     assert.equal(isRegistryFrozen(), true);
     assert.equal(getPlatformAdapter("fs"), first);
-    assert.equal(listAdapters().length, 18);
+    assert.equal(listAdapters().length, 19);
   });
 
   test("registering twice before the freeze replaces instances", () => {
@@ -175,6 +195,6 @@ describe("freeze", () => {
     const first = getPlatformAdapter("fs");
     assert.doesNotThrow(() => registerWebAdapters());
     assert.notEqual(getPlatformAdapter("fs"), first);
-    assert.equal(listAdapters().length, 18);
+    assert.equal(listAdapters().length, 19);
   });
 });
