@@ -20,7 +20,7 @@ Pemetaan dan justifikasi penambahan ada di seksi "Alur @scaffold
 ```sh
 pnpm install
 pnpm build
-pnpm e2e:smoke   # alur @smoke live (9 test: E2E-01, E2E-01b, E2E-01-auth, E2E-02..E2E-06, E2E-RELOAD)
+pnpm e2e:smoke   # alur @smoke live (12 test: E2E-01, E2E-01b, E2E-01-auth, E2E-02..E2E-06, E2E-RELOAD, E2E-S1, E2E-S1b, E2E-S3)
 pnpm e2e          # semua spec di tests/e2e (termasuk spec @scaffold, @harness, @stall, @demo, @i18n-profile)
 pnpm exec playwright test --grep @scaffold  # spec @scaffold (E2E-S1/S1b, E2E-S3 live; E2E-S2, E2E-S4 TODO)
 pnpm exec playwright test --grep @demo  # hanya 2 kerangka demo @demo (gate A10)
@@ -131,9 +131,9 @@ Browser: `pnpm exec playwright install chromium` (sekali per mesin/CI).
 | E2E-HARNESS bukti harness | `backend-harness.spec.ts` | NYATA `@harness` (bukan `@smoke`, tidak dihitung gate): gateway + sesi + seed terbaca balik. Hijau di tiap gate merge; hanya jalan di mesin dengan Postgres + `E2E_PG_ADMIN_URL`. |
 | E2E-BOOT-SQL-PROOF | `boot-sql-proof.spec.ts` | NYATA `@harness`: boot + probe SQL + load store + round-trip kind layer. Header diperbarui W4-FLOWS: pemanggil adapter produksi bergating flag (hook H1) dicatat; bukti browser hook ada di `boot-hook.spec.ts`. |
 | E2E-HOOK bukti hook H1 | `boot-hook.spec.ts` | NYATA `@harness` (ditambah W4-FLOWS): deep link `?e2e-boot-proof=1` menulis `window.__notegenBootProof` + POST `/api/db/batch` ber-CSRF teramati; tanpa flag, hook `undefined`. |
-| E2E-S1 login | `login.spec.ts` | Nyata `@scaffold` (dikonversi W4-FLOWS, promosi ke `@smoke` diusulkan ke koordinator): login UI lewat fixture tanpa sesi + varian password salah (alert generik); storage diperiksa tanpa token (boolean saja, tanpa nilai). |
+| E2E-S1 login | `login.spec.ts` | Nyata `@scaffold @smoke` (dikonversi W4-FLOWS; dipromosikan ke `@smoke` sesudah run hijau di tip 86ce4d03, putusan koordinator P-5): login UI lewat fixture tanpa sesi + varian password salah (alert generik); storage diperiksa tanpa token (boolean saja, tanpa nilai). |
 | E2E-S2 hapus catatan (CRUD) | `notes-crud.spec.ts` | TODO `@scaffold` (tetap TODO di W4-FLOWS): TERBLOKIR celah produk - layanan dialog web belum terpasang (AD-33), `platform.dialog.ask()` melempar error sehingga konfirmasi hapus tidak pernah tampil dan berkas tetap ada (probe 8-9). Menu konteks + rute trash berfungsi; yang hilang hanya wiring dialog. |
-| E2E-S3 record + tag | `record-tag.spec.ts` | Nyata `@scaffold` (dikonversi W4-FLOWS, promosi ke `@smoke` diusulkan ke koordinator): tag kedua ditetapkan lewat dialog detail record web (TagChecklist + "Save tags", BUKAN tombol desktop "Manage tags"), terbaca balik lewat API, bertahan sesudah reload. |
+| E2E-S3 record + tag | `record-tag.spec.ts` | Nyata `@scaffold @smoke` (dikonversi W4-FLOWS; dipromosikan ke `@smoke` sesudah run hijau di tip 86ce4d03, putusan koordinator P-5): tag kedua ditetapkan lewat dialog detail record web (TagChecklist + "Save tags", BUKAN tombol desktop "Manage tags"), terbaca balik lewat API, bertahan sesudah reload. |
 | E2E-S4 unduh arsip | `archive-download.spec.ts` | TODO `@scaffold`: gagal dengan pesan "fitur belum mendarat". UI ekspor belum ada; tanpa locator tebakan. Tetap TODO di W4-FLOWS. |
 | I18N-9.5 profil teratentikasi | `i18n-profile.spec.ts` | Pengukuran `@i18n-profile` (ditambah W4-FLOWS, AD-120 Q3): shell teratentikasi diukur di mode en + zh (marker 12+12, CJK, tangkapan shell/editor/Settings); hanya mekanika boot yang di-assert, marker tidak di-gate. Adjudikasi Q3b milik gate penutupan. |
 | E2E-D1 demo A10 | `demo.spec.ts` | TODO `@demo`: gagal dengan pesan "fitur belum mendarat". Kerangka urutan demo gate A10; tetap TODO di W4-FLOWS (di luar lingkup slot). |

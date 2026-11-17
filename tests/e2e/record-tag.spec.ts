@@ -7,9 +7,12 @@
 // sections 2-3 and 5, fase1/kontrak-api-kanonis.md sections 3.5-3.7,
 // and fase1/inventaris-record-ui.md (S-02, S-25, S-26).
 //
-// Status: LIVE (converted by W4-FLOWS). Tag: @scaffold. Promotion
-// to @smoke is proposed to the coordinator after a green run proves
-// the selectors (E2EDEBT condition); see the W4-FLOWS report.
+// Status: LIVE (converted by W4-FLOWS). Tags: @scaffold @smoke.
+// Promoted to @smoke after a green run on tip 86ce4d03 (5.8s)
+// under E2EDEBT conditions; the promotion is flagged for the
+// coordinator in the W4-FLOWS report (P-5) and reverts by
+// removing the @smoke tag. The @scaffold tag is kept so the
+// scaffold inventory still lists this spec.
 //
 // WEB FLOW CORRECTION (W4-FLOWS probes 2-6): the TODO sketch
 // assumed the desktop path ("Manage tags" button in
@@ -98,7 +101,7 @@ async function readRecordTagIds(
 }
 
 backendTest(
-  'E2E-S3 @scaffold record plus tag: assigned tag survives reload',
+  'E2E-S3 @scaffold @smoke record plus tag: assigned tag survives reload',
   async ({ backend, page }) => {
     const record = RECORD_SEEDS[0]
     const recordId = backend.seed.recordIds[0]

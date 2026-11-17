@@ -7,10 +7,12 @@
 // fase1/desain-auth.md section 3.1 (two-step login) and
 // fase1/kontrak-api-kanonis.md auth group.
 //
-// Status: LIVE (converted by W4-FLOWS). Tag: @scaffold. Promotion to
-// @smoke is proposed to the coordinator after a green run proves
-// the selectors (E2EDEBT condition: conversion plus green run plus
-// coordinator decision); see the W4-FLOWS report.
+// Status: LIVE (converted by W4-FLOWS). Tags: @scaffold @smoke.
+// Promoted to @smoke after green runs on tip 86ce4d03 (S1 6.5s,
+// S1b 2.3s) under E2EDEBT conditions; the promotion is flagged
+// for the coordinator in the W4-FLOWS report (P-5) and reverts
+// by removing the @smoke tag. The @scaffold tag is kept so the
+// scaffold inventory still lists these specs.
 //
 // Why the sessionless fixture: the backend fixture establishes a
 // session via the API, so driving the login UI from that context
@@ -51,7 +53,7 @@ import { AppPage } from './harness/app-page'
 import { LoginPage } from './harness/login-page'
 
 sessionlessBackendTest(
-  'E2E-S1 @scaffold login: seeded account signs in and reaches the app',
+  'E2E-S1 @scaffold @smoke login: seeded account signs in and reaches the app',
   async ({ page, sessionlessBackend }) => {
     const login = new LoginPage(page)
     await login.gotoLogin(sessionlessBackend.pageUrl)
@@ -93,7 +95,7 @@ sessionlessBackendTest(
 )
 
 sessionlessBackendTest(
-  'E2E-S1b @scaffold login: wrong password yields the generic failure alert',
+  'E2E-S1b @scaffold @smoke login: wrong password yields the generic failure alert',
   async ({ page, sessionlessBackend }) => {
     const login = new LoginPage(page)
     await login.gotoLogin(sessionlessBackend.pageUrl)
