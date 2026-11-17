@@ -14,8 +14,14 @@
 //    envelope; health paths keep the Fase 0 emergency envelope safety
 //    net; all other errors become the generic envelope without leaking
 //    messages, stack traces, or config values.
-// 3. Auth hooks: routes under /api/ are protected by default (see
-//    middleware/auth-hook.ts). Health routes are explicitly public.
+// 3. Auth hooks: the Cloudflare Access preHandler (when enabled in
+//    config) runs BEFORE the session hook, so a request without a
+//    valid Access JWT never reaches session verification
+//    (desain-auth.md section 7.3 order; AD-132). Routes under /api/
+//    are protected by default (see middleware/auth-hook.ts). Health
+//    routes are explicitly public at the session layer; at the
+//    Access layer only the exemption predicate in
+//    middleware/cf-access-exemptions.ts skips verification.
 //    Without an injected verifySession, protected routes answer 401:
 //    the foundation is deny-by-default until the auth worker lands.
 // 4. Route groups (AD-61): registered by the generated index
@@ -37,6 +43,12 @@ import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import type { AuthContext } from './auth/context.js';
 import type { ServerConfig } from './config.js';
 import type { HealthDbPool } from './db/pool.js';
+import {
+  createCfAccessPreHandler,
+  createCfAccessVerifier,
+  resolveCfAccessConfig,
+} from './middleware/cf-access.js';
+import { isCfAccessExemptRequest } from './middleware/cf-access-exemptions.js';
 import {
   registerAuthHooks,
   type VerifyCsrfTokenFn,
@@ -83,6 +95,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerRequestId(app);
   registerErrorHandling(app, { version: deps.version });
+  // Cloudflare Access perimeter (desain-auth.md section 7; AD-132,
+  // PREDEPLOY finding F-02). When verification is enabled, the
+  // preHandler is registered BEFORE the session hook, so the layer
+  // order is Access, then session, then CSRF/Origin. Construction
+  // throws on an enabled-but-incomplete config (missing audience or
+  // team domain), which loadConfig already refuses at boot; a throw
+  // here fails closed the same way. When verification is disabled
+  // (dev local only, enforced by loadConfig), no hook is installed
+  // and no verifier is built. The exemption predicate lives in
+  // middleware/cf-access-exemptions.ts; session behavior is
+  // unchanged by this block.
+  if (deps.config.cfAccessEnabled) {
+    const verifier = createCfAccessVerifier(resolveCfAccessConfig(deps.config));
+    app.addHook('preHandler', createCfAccessPreHandler(verifier, { isExempt: isCfAccessExemptRequest }));
+  }
   // Resolve the verifiers before the hooks: explicit injections win,
   // then verifiers derived from the injected auth context, then the
   // deny-by-default stubs inside registerAuthHooks (undefined here).

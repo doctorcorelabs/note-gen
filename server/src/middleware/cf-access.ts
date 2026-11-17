@@ -17,10 +17,9 @@
 //
 // This module is SEPARATE from the frozen session hook
 // (middleware/auth-hook.ts, AD-40), which this task must not modify.
-// The integrator wires the preHandler from this module in front of
-// the session hook at merge time (verification order: Access, rate
-// limit, session, CSRF/Origin). Until then, nothing calls this code
-// in production.
+// buildApp (app.ts) wires the preHandler from this module in front
+// of the session hook (verification order: Access, rate limit,
+// session, CSRF/Origin; AD-132, PREDEPLOY finding F-02).
 //
 // Verification algorithm (desain-auth.md section 7.3), all steps
 // mandatory, one failure rejects:
@@ -73,13 +72,15 @@
 //
 // Scope and exemptions (desain-auth.md section 7.5): by default this
 // preHandler verifies EVERY request it sees, including health paths.
-// The live-probe exemption is a network-origin decision (internal
-// compose network versus the public Caddy path), never a header
-// decision, so it cannot live in this module as a path list. The
-// integrator supplies an isExempt predicate only when the infra
-// owner has fixed the network-origin mechanism; until then, no
-// exemption exists and probes through the public path must carry a
-// valid service token.
+// The wired exemption predicate lives in
+// middleware/cf-access-exemptions.ts: GET /api/health/live is exempt
+// as section 7.5 writes it, and GET /api/health/ready (plus its
+// /api/health alias) is exempt only for loopback peers, which is the
+// conservative network-origin reading applied until the infra owner
+// fixes the internal-probe mechanism. Probes through the public path
+// must carry a valid service token. See the exemptions module for
+// the full rationale and the open ambiguity recorded for the
+// coordinator.
 
 import { createPublicKey, createVerify, type KeyObject } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';

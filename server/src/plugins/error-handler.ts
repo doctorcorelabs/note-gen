@@ -20,6 +20,12 @@
 //   path without the query string: an unknown path under /api/health/*
 //   is not a health route and gets the generic envelope, so an auth
 //   rejection on an unknown health-like path is never masked as a 503.
+//   One carve-out: deliberate 401/403 rejections (Cloudflare Access
+//   verification on ready/alias, desain-auth.md sections 7.5-7.6)
+//   pass through with the generic envelope and their own status, so
+//   the watchdog can tell an edge credential problem (401/403) apart
+//   from an origin failure (503). The safety net stays for unexpected
+//   errors only.
 // - All other errors go through toErrorEnvelope: typed ApiError values
 //   keep their status and code, Fastify validation failures become
 //   validation_failed, malformed JSON becomes invalid_json, oversized
@@ -134,6 +140,19 @@ export function registerErrorHandling(app: FastifyInstance, deps: ErrorHandlingD
 
   app.setErrorHandler((error, request, reply) => {
     if (HEALTH_PATHS.includes(requestPath(request))) {
+      const { statusCode, envelope } = toErrorEnvelope(error, request.id);
+      if (statusCode === 401 || statusCode === 403) {
+        // Deliberate auth rejections pass through: masking an Access
+        // rejection as 503 would read as "origin not ready" and
+        // could trigger a tunnel restart for what is actually an
+        // edge credential problem (desain-auth.md section 7.6).
+        request.log.warn({ code: envelope.error.code, statusCode }, 'request failed');
+        if (!reply.sent) {
+          reply.header('Cache-Control', 'no-store');
+          reply.code(statusCode).send(envelope);
+        }
+        return;
+      }
       // Second safety net behind the ready handler's own try/catch:
       // an unexpected error on a real health route still answers 503
       // with a valid health envelope, never a default 500 body.
