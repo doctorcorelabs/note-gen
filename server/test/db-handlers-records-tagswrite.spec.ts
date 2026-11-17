@@ -2,8 +2,9 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Tests for the tags write handler kinds (v3b-25e, V3-25, wave 3B):
-// tags.create and tags.rename.
+// Tests for the tags write handler kinds (v3b-25e, V3-25, wave 3B;
+// tags.delete and tags.reorder added by W4-CODEMOD, wave 4):
+// tags.create, tags.rename, tags.delete, and tags.reorder.
 //
 // Validation and name-normalization tests run always, without a
 // database: the handlers take a Drizzle transaction, and there is no
@@ -29,6 +30,9 @@ import { eq } from 'drizzle-orm';
 import { ApiError } from '../src/plugins/envelope.js';
 import {
   createDb,
+  marks,
+  markTags,
+  notes,
   tags,
   users,
   workspaceMembers,
@@ -37,7 +41,9 @@ import {
   type DbHandle,
 } from '../src/db/index.js';
 import * as tagsCreate from '../src/services/db/tags-create.js';
+import * as tagsDelete from '../src/services/db/tags-delete.js';
 import * as tagsRename from '../src/services/db/tags-rename.js';
+import * as tagsReorder from '../src/services/db/tags-reorder.js';
 
 type Ctx = {
   tx: Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -140,6 +146,70 @@ describe('tags write validation (no database)', () => {
       expect(tagsRename.normalizeTagName(input)).toBe(expected);
     }
   });
+
+  it('accepts valid delete and reorder operations', () => {
+    expect(() => tagsDelete.validate({ kind: 'tags.delete', id: 1 })).not.toThrow();
+    expect(() =>
+      tagsDelete.validate({ kind: 'tags.delete', id: 1, reassignTo: 2 }),
+    ).not.toThrow();
+    expect(() => tagsReorder.validate({ kind: 'tags.reorder', order: [] })).not.toThrow();
+    expect(() =>
+      tagsReorder.validate({
+        kind: 'tags.reorder',
+        order: [
+          { id: 1, sortOrder: 0 },
+          { id: 2, sortOrder: 1 },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects unknown fields, a wrong kind, and a non-object delete/reorder operation', () => {
+    expect(() => tagsDelete.validate({ kind: 'tags.delete', id: 1, extra: 1 })).toThrow(ApiError);
+    expect(() => tagsDelete.validate({ kind: 'tags.reorder', id: 1 })).toThrow(ApiError);
+    expect(() => tagsDelete.validate(null)).toThrow(ApiError);
+    expect(() => tagsReorder.validate({ kind: 'tags.reorder', order: [], extra: 1 })).toThrow(
+      ApiError,
+    );
+    expect(() => tagsReorder.validate({ kind: 'tags.delete', order: [] })).toThrow(ApiError);
+    expect(() => tagsReorder.validate('tags.reorder')).toThrow(ApiError);
+  });
+
+  it('rejects a non-integer delete id/reassignTo and a self reassignTo', () => {
+    expect(() => tagsDelete.validate({ kind: 'tags.delete', id: 1.5 })).toThrow(ApiError);
+    expect(() => tagsDelete.validate({ kind: 'tags.delete', id: '1' })).toThrow(ApiError);
+    expect(() => tagsDelete.validate({ kind: 'tags.delete' })).toThrow(ApiError);
+    expect(() => tagsDelete.validate({ kind: 'tags.delete', id: 1, reassignTo: 1.5 })).toThrow(
+      ApiError,
+    );
+    expect(() => tagsDelete.validate({ kind: 'tags.delete', id: 1, reassignTo: 1 })).toThrow(
+      ApiError,
+    );
+  });
+
+  it('rejects a non-array reorder list and malformed or duplicate entries', () => {
+    expect(() => tagsReorder.validate({ kind: 'tags.reorder', order: 'x' })).toThrow(ApiError);
+    expect(() => tagsReorder.validate({ kind: 'tags.reorder' })).toThrow(ApiError);
+    expect(() => tagsReorder.validate({ kind: 'tags.reorder', order: [7] })).toThrow(ApiError);
+    expect(() =>
+      tagsReorder.validate({ kind: 'tags.reorder', order: [{ id: 1, sortOrder: 0, name: 'A' }] }),
+    ).toThrow(ApiError);
+    expect(() =>
+      tagsReorder.validate({ kind: 'tags.reorder', order: [{ id: 1.5, sortOrder: 0 }] }),
+    ).toThrow(ApiError);
+    expect(() =>
+      tagsReorder.validate({ kind: 'tags.reorder', order: [{ id: 1, sortOrder: 0.5 }] }),
+    ).toThrow(ApiError);
+    expect(() =>
+      tagsReorder.validate({
+        kind: 'tags.reorder',
+        order: [
+          { id: 1, sortOrder: 0 },
+          { id: 1, sortOrder: 1 },
+        ],
+      }),
+    ).toThrow(ApiError);
+  });
 });
 
 const DATABASE_URL = process.env['TAGS_WRITE_DATABASE_URL'];
@@ -200,6 +270,64 @@ dbDescribe('tags write handlers against Postgres', () => {
   async function makeTag(ws: string, name: string): Promise<number> {
     const result = await run(tagsCreate, { kind: 'tags.create', name }, ws);
     return result.id as number;
+  }
+
+  async function makeLockedTag(ws: string, name: string): Promise<number> {
+    const rows = await db
+      .insert(tags)
+      .values({ workspaceId: ws, name, isLocked: true })
+      .returning({ id: tags.id });
+    return rows[0]?.id as number;
+  }
+
+  async function makeMark(
+    ws: string,
+    tagId: number,
+    extraTagIds: number[] = [],
+    deleted = false,
+  ): Promise<number> {
+    const rows = await db
+      .insert(marks)
+      .values({
+        workspaceId: ws,
+        tagId,
+        type: 'text',
+        content: 'tagswrite',
+        deletedAt: deleted ? new Date('2026-01-01T00:00:00.000Z') : null,
+      })
+      .returning({ id: marks.id });
+    const id = rows[0]?.id as number;
+    const tagIds = [...new Set([tagId, ...extraTagIds])];
+    await db
+      .insert(markTags)
+      .values(tagIds.map((tag) => ({ markId: id, tagId: tag, workspaceId: ws })));
+    return id;
+  }
+
+  async function readMark(id: number) {
+    const rows = await db.select().from(marks).where(eq(marks.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async function markTagIds(markId: number): Promise<number[]> {
+    const rows = await db
+      .select({ tagId: markTags.tagId })
+      .from(markTags)
+      .where(eq(markTags.markId, markId));
+    return rows.map((row) => row.tagId).sort((a, b) => a - b);
+  }
+
+  async function makeNote(ws: string, tagId: number): Promise<number> {
+    const rows = await db
+      .insert(notes)
+      .values({ workspaceId: ws, tagId, locale: 'en', count: '1' })
+      .returning({ id: notes.id });
+    return rows[0]?.id as number;
+  }
+
+  async function readNote(id: number) {
+    const rows = await db.select().from(notes).where(eq(notes.id, id)).limit(1);
+    return rows[0];
   }
 
   it('create: inserts a new tag with defaults and reports affected 1', async () => {
@@ -438,5 +566,235 @@ dbDescribe('tags write handlers against Postgres', () => {
       'validation_failed',
     );
     expect((await listTags(ws))[0]?.name).toBe('A');
+  });
+
+  it('delete: removes an unused tag and reports affected 1', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    await makeTag(ws, 'B');
+    const result = await run(tagsDelete, { kind: 'tags.delete', id }, ws);
+    expect(result).toEqual({ affected: 1, id });
+    expect((await listTags(ws)).map((row) => row.name)).toEqual(['B']);
+  });
+
+  it('delete: an unknown id and a foreign-workspace id answer 404 not_found', async () => {
+    const ws = await freshWorkspace();
+    const other = await freshWorkspace();
+    const foreign = await makeTag(other, 'Foreign');
+    const own = await makeTag(ws, 'Own');
+    await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id: 987654321 }, ws),
+      404,
+      'not_found',
+    );
+    await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id: foreign }, ws),
+      404,
+      'not_found',
+    );
+    expect((await listTags(ws)).map((row) => row.name)).toEqual(['Own']);
+    expect((await listTags(other)).map((row) => row.name)).toEqual(['Foreign']);
+    expect(own).toBeGreaterThan(0);
+  });
+
+  it('delete: a locked tag answers 409 tag_locked and stays', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeLockedTag(ws, 'Idea');
+    await expectHandleError(run(tagsDelete, { kind: 'tags.delete', id }, ws), 409, 'tag_locked');
+    expect((await listTags(ws)).map((row) => row.name)).toEqual(['Idea']);
+  });
+
+  it('delete: a used tag without reassignTo answers 409 tag_in_use with recordCount and writes nothing', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    const other = await makeTag(ws, 'B');
+    const first = await makeMark(ws, id);
+    const second = await makeMark(ws, other, [id]);
+    const error = await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id }, ws),
+      409,
+      'tag_in_use',
+    );
+    expect(error.details).toEqual({ recordCount: 2 });
+    expect((await listTags(ws)).map((row) => row.name).sort()).toEqual(['A', 'B']);
+    expect((await readMark(first))?.tagId).toBe(id);
+    expect((await readMark(first))?.deletedAt).toBeNull();
+    expect(await markTagIds(first)).toEqual([id]);
+    expect(await markTagIds(second)).toEqual([id, other].sort((a, b) => a - b));
+  });
+
+  it('delete: a soft-deleted mark still counts as use', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    await makeMark(ws, id, [], true);
+    const error = await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id }, ws),
+      409,
+      'tag_in_use',
+    );
+    expect(error.details).toEqual({ recordCount: 1 });
+    expect((await listTags(ws)).length).toBe(1);
+  });
+
+  it('delete: with reassignTo, primaries and memberships move, duplicates drop, and no record is discarded', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    const target = await makeTag(ws, 'B');
+    const extra = await makeTag(ws, 'C');
+    const primary = await makeMark(ws, id);
+    const member = await makeMark(ws, extra, [id, target]);
+    const result = await run(tagsDelete, { kind: 'tags.delete', id, reassignTo: target }, ws);
+    expect(result).toEqual({ affected: 1, id });
+    expect((await listTags(ws)).map((row) => row.name).sort()).toEqual(['B', 'C']);
+    const moved = await readMark(primary);
+    expect(moved?.tagId).toBe(target);
+    expect(moved?.deletedAt).toBeNull();
+    expect(await markTagIds(primary)).toEqual([target]);
+    expect((await readMark(member))?.tagId).toBe(extra);
+    expect(await markTagIds(member)).toEqual([extra, target].sort((a, b) => a - b));
+  });
+
+  it('delete: a missing or foreign reassignTo answers 400 tag_not_found and writes nothing', async () => {
+    const ws = await freshWorkspace();
+    const other = await freshWorkspace();
+    const foreign = await makeTag(other, 'Foreign');
+    const id = await makeTag(ws, 'A');
+    const mark = await makeMark(ws, id);
+    await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id, reassignTo: 987654321 }, ws),
+      400,
+      'tag_not_found',
+    );
+    await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id, reassignTo: foreign }, ws),
+      400,
+      'tag_not_found',
+    );
+    expect((await listTags(ws)).map((row) => row.name)).toEqual(['A']);
+    expect((await readMark(mark))?.tagId).toBe(id);
+  });
+
+  it('delete: notes referencing the tag count as use and move with reassignTo', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    const target = await makeTag(ws, 'B');
+    const note = await makeNote(ws, id);
+    await expectHandleError(run(tagsDelete, { kind: 'tags.delete', id }, ws), 409, 'tag_in_use');
+    const result = await run(tagsDelete, { kind: 'tags.delete', id, reassignTo: target }, ws);
+    expect(result).toEqual({ affected: 1, id });
+    expect((await readNote(note))?.tagId).toBe(target);
+    expect((await listTags(ws)).map((row) => row.name)).toEqual(['B']);
+  });
+
+  it('delete: invalid operations answer 400 validation_failed through handle', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id, reassignTo: id }, ws),
+      400,
+      'validation_failed',
+    );
+    await expectHandleError(
+      run(tagsDelete, { kind: 'tags.delete', id: 'x' }, ws),
+      400,
+      'validation_failed',
+    );
+    expect((await listTags(ws)).length).toBe(1);
+  });
+
+  it('reorder: applies the given sort orders and reports affected entries', async () => {
+    const ws = await freshWorkspace();
+    const first = await makeTag(ws, 'A');
+    const second = await makeTag(ws, 'B');
+    const third = await makeTag(ws, 'C');
+    const result = await run(
+      tagsReorder,
+      {
+        kind: 'tags.reorder',
+        order: [
+          { id: third, sortOrder: 0 },
+          { id: first, sortOrder: 1 },
+          { id: second, sortOrder: 2 },
+        ],
+      },
+      ws,
+    );
+    expect(result).toEqual({ affected: 3 });
+    const rows = await listTags(ws);
+    expect(rows.map((row) => [row.id, row.sortOrder])).toEqual([
+      [first, 1],
+      [second, 2],
+      [third, 0],
+    ]);
+  });
+
+  it('reorder: an empty order list is a no-op with affected 0', async () => {
+    const ws = await freshWorkspace();
+    await makeTag(ws, 'A');
+    const result = await run(tagsReorder, { kind: 'tags.reorder', order: [] }, ws);
+    expect(result).toEqual({ affected: 0 });
+  });
+
+  it('reorder: an unknown id answers 404 and writes nothing', async () => {
+    const ws = await freshWorkspace();
+    const other = await freshWorkspace();
+    const foreign = await makeTag(other, 'Foreign');
+    const id = await makeTag(ws, 'A');
+    await expectHandleError(
+      run(
+        tagsReorder,
+        {
+          kind: 'tags.reorder',
+          order: [
+            { id, sortOrder: 5 },
+            { id: 987654321, sortOrder: 6 },
+          ],
+        },
+        ws,
+      ),
+      404,
+      'not_found',
+    );
+    await expectHandleError(
+      run(tagsReorder, { kind: 'tags.reorder', order: [{ id: foreign, sortOrder: 1 }] }, ws),
+      404,
+      'not_found',
+    );
+    expect((await listTags(ws))[0]?.sortOrder).toBe(0);
+  });
+
+  it('reorder: re-applying the same order leaves the same values', async () => {
+    const ws = await freshWorkspace();
+    const first = await makeTag(ws, 'A');
+    const second = await makeTag(ws, 'B');
+    const order = [
+      { id: first, sortOrder: 2 },
+      { id: second, sortOrder: 1 },
+    ];
+    await run(tagsReorder, { kind: 'tags.reorder', order }, ws);
+    const secondRun = await run(tagsReorder, { kind: 'tags.reorder', order }, ws);
+    expect(secondRun).toEqual({ affected: 2 });
+    expect((await listTags(ws)).map((row) => row.sortOrder)).toEqual([2, 1]);
+  });
+
+  it('reorder: invalid operations answer 400 validation_failed through handle', async () => {
+    const ws = await freshWorkspace();
+    const id = await makeTag(ws, 'A');
+    await expectHandleError(
+      run(
+        tagsReorder,
+        {
+          kind: 'tags.reorder',
+          order: [
+            { id, sortOrder: 0 },
+            { id, sortOrder: 1 },
+          ],
+        },
+        ws,
+      ),
+      400,
+      'validation_failed',
+    );
+    expect((await listTags(ws))[0]?.sortOrder).toBe(0);
   });
 });

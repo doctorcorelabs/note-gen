@@ -33,14 +33,16 @@
 //   marks.restore, marks.deletePermanent.
 // - tags list/read/create/rename: tags.list, tags.get,
 //   tags.create, tags.rename.
-// - tag delete: NO handler is registered for tags.delete (a W1
-//   kind), and emptying the trash has no kind at all. Both throw
+// - tag delete: tags.delete, with reassignTo when the caller
+//   supplies one (D-03: refusing an in-use tag without reassignTo
+//   is the server's answer, surfaced as 409 tag_in_use). Emptying
+//   the trash has no kind at all and throws
 //   capability_unavailable locally, honestly, instead of calling a
-//   path that cannot answer. When the handler or the REST route
-//   lands, the integrator switches these two methods; see the
-//   method docs. Do not emulate empty-trash with per-record calls:
-//   the contract defines it as one transaction with an activity
-//   event, which client-side looping cannot reproduce.
+//   path that cannot answer. When the REST route lands, the
+//   integrator switches empty-trash; do not emulate it with
+//   per-record calls: the contract defines it as one transaction
+//   with an activity event, which client-side looping cannot
+//   reproduce.
 //
 // Divergences from the REST contract, all deliberate and recorded
 // here (integrator escalation D-3D-1):
@@ -853,20 +855,24 @@ export class KindRecordsApi implements RecordsApiPort {
   }
 
   /**
-   * Delete a tag. No handler is registered for tags.delete, so
-   * the call is honestly unavailable until the handler lands or
-   * the REST route lands (V3-25). When the handler registers, this
-   * method switches to executing the kind with reassignTo; the UI
-   * already passes reassignTo and handles tag_in_use. Deleting a
-   * tag never trashes records (D-03), on either path.
+   * Delete a tag through the tags.delete kind (handler registered
+   * by W4-CODEMOD, wave 4). When the tag is still in use the
+   * caller passes reassignTo; without it the server answers 409
+   * tag_in_use with the affected record count. Deleting a tag
+   * never trashes records (D-03).
    */
   async deleteTag(
-    _tagId: number,
-    _reassignTo?: number,
+    tagId: number,
+    reassignTo?: number,
   ): Promise<DeleteTagResult> {
-    void _tagId;
-    void _reassignTo;
-    throw capabilityUnavailableError("tags.delete");
+    await this.call(() =>
+      this.sql.execute({
+        kind: "tags.delete",
+        id: tagId,
+        ...(reassignTo !== undefined ? { reassignTo } : {}),
+      }),
+    );
+    return { id: tagId, deleted: true, reassignedTo: reassignTo ?? null };
   }
 
   // -- Record assets (create flows only) ------------------------------------

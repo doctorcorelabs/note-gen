@@ -6,9 +6,9 @@
 // test sends real HTTP and no test touches a database. The fake
 // mirrors the server kind handlers closely enough to prove the
 // client-side logic: the five create flows, duplicate sourceId,
-// optimistic guards, trash/restore, tag moves, sequential
-// stop-and-report multi-select, and the honest unavailability of
-// tag delete and empty-trash. Handler semantics the fake mirrors
+// optimistic guards, trash/restore, tag moves, tag delete with
+// reassign, sequential stop-and-report multi-select, and the honest
+// unavailability of empty-trash. Handler semantics the fake mirrors
 // include first-write-wins sourceId (affected 0), the version and
 // tag-set guards with their canonical wire codes, primary-always-
 // present tag sets, and tags.create returning the existing id with
@@ -343,6 +343,34 @@ class FakeKindSql implements KindSqlAdapter {
         if (op.isPin !== undefined) state.isPin = op.isPin;
         if (op.sortOrder !== undefined) state.sortOrder = op.sortOrder;
         return { affected: 1, id: state.id };
+      }
+      case "tags.delete": {
+        const state = this.tags.get(op.id);
+        if (state === undefined) throw kindFailure("not_found", 404);
+        if (state.isLocked) throw kindFailure("tag_locked", 409);
+        const used = [...this.marks.values()].filter((row) =>
+          row.tagIds.includes(op.id),
+        );
+        if (op.reassignTo === undefined) {
+          if (used.length > 0) {
+            throw kindFailure("tag_in_use", 409, {
+              recordCount: used.length,
+            });
+          }
+          this.tags.delete(op.id);
+          return { affected: 1, id: op.id };
+        }
+        if (!this.tags.has(op.reassignTo)) {
+          throw kindFailure("tag_not_found", 400, { tagId: op.reassignTo });
+        }
+        for (const row of used) {
+          if (row.tagId === op.id) row.tagId = op.reassignTo;
+          row.tagIds = [...new Set([...row.tagIds.filter((id) => id !== op.id), op.reassignTo])].sort(
+            (a, b) => a - b,
+          );
+        }
+        this.tags.delete(op.id);
+        return { affected: 1, id: op.id };
       }
       default:
         throw new Error(`FakeKindSql does not implement write kind ${op.kind}`);
@@ -797,12 +825,37 @@ describe("KindRecordsApi tags", () => {
     });
   });
 
-  it("reports tag delete and empty-trash as honestly unavailable", async () => {
+  it("deletes an unused tag through the tags.delete kind", async () => {
     const { api } = makeApi();
+    const result = await api.deleteTag(2);
+    expect(result).toEqual({ id: 2, deleted: true, reassignedTo: null });
+    expect((await api.listTags()).tags.map((tag) => tag.id)).toEqual([1]);
     await expect(api.deleteTag(2)).rejects.toMatchObject({
-      wireCode: "capability_unavailable",
-      status: 410,
+      wireCode: "not_found",
+      status: 404,
     });
+    await expect(api.deleteTag(1)).rejects.toMatchObject({
+      wireCode: "tag_locked",
+      status: 409,
+    });
+  });
+
+  it("refuses an in-use tag without reassignTo and moves records with it", async () => {
+    const { api } = makeApi();
+    const record = await api.createRecord(buildTextCreateBody("held", { tagIds: [2] }));
+    const refused = await api.deleteTag(2).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ wireCode: "tag_in_use", status: 409 });
+    expect((refused as ApiError).details).toMatchObject({ recordCount: 1 });
+    const result = await api.deleteTag(2, 1);
+    expect(result).toEqual({ id: 2, deleted: true, reassignedTo: 1 });
+    const moved = await api.getRecord(record.id);
+    expect(moved.tagId).toBe(1);
+    expect(moved.tagIds).toEqual([1]);
+    expect(moved.deleted).toBe(false);
+  });
+
+  it("reports empty-trash as honestly unavailable", async () => {
+    const { api } = makeApi();
     await expect(api.emptyTrash()).rejects.toMatchObject({
       wireCode: "capability_unavailable",
       status: 410,
