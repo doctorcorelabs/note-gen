@@ -5,7 +5,7 @@ import type { AgentTool, JsonSchema } from '../types'
 
 export const renderResponseTool: AgentTool = {
   name: 'render_response',
-  title: '生成组件回复',
+  title: 'Generate a component reply',
   category: 'chat',
   risk: 'read',
   description: [

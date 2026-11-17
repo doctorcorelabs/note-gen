@@ -13,12 +13,12 @@ export const listTagsTool: Tool = {
       return {
         success: true,
         data: tags,
-        message: `找到 ${tags.length} 个标签`,
+        message: `Found ${tags.length} tags`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `获取标签列表失败: ${error}`,
+        error: `Failed to fetch the tag list: ${error}`,
       }
     }
   },
@@ -45,19 +45,19 @@ export const createTagTool: Tool = {
         return {
           success: true,
           data: { id: existing.id, name: existing.name, alreadyExists: true },
-          message: `标签 "${params.name}" 已存在，无需重复创建`,
+          message: `The tag "${params.name}" already exists; no need to create it again`,
         }
       }
       const result = await insertTag({ name: params.name })
       return {
         success: true,
         data: { id: result.lastInsertId, name: params.name, alreadyExists: false },
-        message: `成功创建标签 "${params.name}"，ID: ${result.lastInsertId}`,
+        message: `Successfully created the tag "${params.name}", ID: ${result.lastInsertId}`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `创建标签失败: ${error}`,
+        error: `Failed to create the tag: ${error}`,
       }
     }
   },
@@ -96,7 +96,7 @@ export const updateTagTool: Tool = {
       if (!tag) {
         return {
           success: false,
-          error: `未找到ID为 ${params.id} 的标签`,
+          error: `No tag found with ID ${params.id}`,
         }
       }
       
@@ -110,19 +110,19 @@ export const updateTagTool: Tool = {
         return {
           success: true,
           data: { id: tag.id, unchanged: true },
-          message: `标签 ID: ${params.id} 已是目标状态，无需重复更新`,
+          message: `Tag ID ${params.id} is already in the target state; no need to update it again`,
         }
       }
       
       await updateTag(updatedTag)
       return {
         success: true,
-        message: `成功更新标签 ID: ${params.id}`,
+        message: `Successfully updated tag ID: ${params.id}`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `更新标签失败: ${error}`,
+        error: `Failed to update the tag: ${error}`,
       }
     }
   },
@@ -153,12 +153,12 @@ export const searchTagsTool: Tool = {
       return {
         success: true,
         data: results,
-        message: `找到 ${results.length} 个匹配的标签`,
+        message: `Found ${results.length} matching tags`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `搜索标签失败: ${error}`,
+        error: `Failed to search tags: ${error}`,
       }
     }
   },
@@ -186,14 +186,14 @@ export const deleteTagTool: Tool = {
         return {
           success: true,
           data: { id: params.id, alreadyAbsent: true },
-          message: `标签 ID: ${params.id} 已不存在，无需重复删除`,
+          message: `Tag ID ${params.id} no longer exists; no need to delete it again`,
         }
       }
       
       if (tag.isLocked) {
         return {
           success: false,
-          error: `标签 "${tag.name}" 已锁定，无法删除`,
+          error: `The tag "${tag.name}" is locked and cannot be deleted`,
         }
       }
       
@@ -201,12 +201,12 @@ export const deleteTagTool: Tool = {
       return {
         success: true,
         data: { id: params.id, alreadyAbsent: false },
-        message: `成功删除标签 "${tag.name}"`,
+        message: `Successfully deleted the tag "${tag.name}"`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `删除标签失败: ${error}`,
+        error: `Failed to delete the tag: ${error}`,
       }
     }
   },
@@ -230,7 +230,7 @@ export const createTagsBatchTool: Tool = {
       if (!Array.isArray(params.tags) || params.tags.length === 0) {
         return {
           success: false,
-          error: '参数 tags 必须是非空数组',
+          error: 'The tags argument must be a non-empty array',
         }
       }
 
@@ -243,12 +243,12 @@ export const createTagsBatchTool: Tool = {
       return {
         success: true,
         data: { count: results.length, tags: results },
-        message: `成功批量创建 ${results.length} 个标签`,
+        message: `Successfully created ${results.length} tags in bulk`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `批量创建标签失败: ${error}`,
+        error: `Failed to create tags in bulk: ${error}`,
       }
     }
   },
@@ -272,7 +272,7 @@ export const updateTagsBatchTool: Tool = {
       if (!Array.isArray(params.tags) || params.tags.length === 0) {
         return {
           success: false,
-          error: '参数 tags 必须是非空数组',
+          error: 'The tags argument must be a non-empty array',
         }
       }
 
@@ -284,7 +284,7 @@ export const updateTagsBatchTool: Tool = {
         if (!existingTag) {
           return {
             success: false,
-            error: `未找到ID为 ${tagUpdate.id} 的标签`,
+            error: `No tag found with ID ${tagUpdate.id}`,
           }
         }
         
@@ -302,12 +302,12 @@ export const updateTagsBatchTool: Tool = {
       return {
         success: true,
         data: { count: tagsToUpdate.length },
-        message: `成功批量更新 ${tagsToUpdate.length} 个标签`,
+        message: `Successfully updated ${tagsToUpdate.length} tags in bulk`,
       }
     } catch (error) {
       return {
         success: false,
-        error: `批量更新标签失败: ${error}`,
+        error: `Failed to update tags in bulk: ${error}`,
       }
     }
   },

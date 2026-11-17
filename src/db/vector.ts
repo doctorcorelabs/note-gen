@@ -454,7 +454,7 @@ export async function getSimilarDocuments(
 // 余弦相似度计算
 function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
-    throw new Error('向量维度不匹配');
+    throw new Error('Vector dimensions do not match.');
   }
   
   let dotProduct = 0;

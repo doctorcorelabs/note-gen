@@ -208,7 +208,7 @@ export function ICloudFolderSync({ onActiveProviderChange }: ICloudFolderSyncPro
         await refreshWorkspaceContent()
       } catch (cause) {
         if (!await prepareWorkspaceSwitch()) {
-          throw new Error('无法在回滚工作区前保存当前编辑内容')
+          throw new Error(t('saveBeforeRollbackFailed'))
         }
         await setIOSWorkspaceFolderAccess(previousWorkspaceAccess)
         await setWorkspacePath(previousWorkspacePath)

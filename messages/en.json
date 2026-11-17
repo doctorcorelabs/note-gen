@@ -593,7 +593,21 @@
       "ragDescription": "Optional enhancement. Build vector indexes of original material for semantic search across larger collections. Works independently of LLM Wiki.",
       "optionalEnhancement": "Enable when needed",
       "disabledDescription": "No vector model is needed while disabled. LLM Wiki organization and reading remain available.",
-      "ragAdvanced": "RAG advanced settings, retrieval tests, and maintenance"
+      "ragAdvanced": "RAG advanced settings, retrieval tests, and maintenance",
+      "errors": {
+        "RAG_INVALID_VECTOR_DATA": "The knowledge base contains invalid vector data.",
+        "RAG_CHUNK_FORMAT_INVALID": "The knowledge base chunk format is invalid.",
+        "RAG_CHUNK_FIELDS_INCOMPLETE": "The knowledge base chunk fields are incomplete.",
+        "RAG_MANIFEST_FORMAT_INVALID": "The remote knowledge base manifest format is invalid.",
+        "RAG_SCHEMA_VERSION_UNSUPPORTED": "Unsupported knowledge base format version: {schemaVersion}",
+        "RAG_MANIFEST_FIELDS_INCOMPLETE": "The remote knowledge base manifest fields are incomplete.",
+        "RAG_LOCAL_EMPTY": "The local knowledge base is empty. Recalculate it first.",
+        "RAG_MIXED_DIMENSIONS": "The local knowledge base contains vectors of different dimensions. Recalculate it first.",
+        "RAG_PAGE_CORRUPT": "Knowledge base page corrupted: {path}",
+        "RAG_VECTOR_COUNT_MISMATCH": "Knowledge base vector count mismatch: expected {expectedCount}, actual {actualCount}",
+        "RAG_DIMENSION_MANIFEST_MISMATCH": "The knowledge base vector dimensions do not match the manifest.",
+        "RAG_VECTOR_DIMENSION_MISMATCH": "Vector dimensions do not match."
+      }
     },
     "mcp": {
       "title": "MCP",
@@ -2071,6 +2085,21 @@
           "viewer": "Viewer",
           "editor": "Editor",
           "manager": "Manager"
+        },
+        "errors": {
+          "SELF_HOSTED_INSTANCE_IDENTITY_CHANGED": "The server instance identity has changed. Confirm first whether the server was reset or replaced.",
+          "SELF_HOSTED_PROTOCOL_INCOMPATIBLE": "The server is incompatible with the current NoteGen sync protocol.",
+          "SELF_HOSTED_BROWSER_AUTH_EXPIRED": "The browser authorization has expired.",
+          "SELF_HOSTED_DEVICE_IDENTITY_CREATE_FAILED": "Could not create a new device identity.",
+          "SELF_HOSTED_MANAGED_KEY_MISSING": "The personal data space is missing a managed key.",
+          "SELF_HOSTED_PROFILE_MISSING": "The self-hosted sync configuration does not exist.",
+          "SELF_HOSTED_LOGIN_EXPIRED": "The self-hosted sign-in has expired. Authorize again.",
+          "SELF_HOSTED_DOMAIN_UNSUPPORTED": "Unsupported personal data sync domain.",
+          "SELF_HOSTED_EDIT_IN_PROGRESS": "Finish the current edit first, then change the sync scope.",
+          "SELF_HOSTED_REFRESH_CREDENTIALS_EXPIRED": "The self-hosted refresh credentials have expired.",
+          "SELF_HOSTED_SESSION_ACCOUNT_MISMATCH": "The refreshed session returned a different account or device.",
+          "SELF_HOSTED_NOT_SYNC_API": "This address is not a self-hosted sync API.",
+          "SELF_HOSTED_API_UNREACHABLE": "Could not connect to the self-hosted sync API."
         }
       },
       "connectionTab": "Connection",
@@ -2360,7 +2389,8 @@
         "change": "Change",
         "selecting": "Choosing",
         "accessFailedTitle": "Folder unavailable",
-        "accessFailedDescription": "Choose a writable iCloud folder and try again."
+        "accessFailedDescription": "Choose a writable iCloud folder and try again.",
+        "saveBeforeRollbackFailed": "Could not save the current edits before rolling back the workspace."
       },
       "autoSync": "Auto sync notes",
       "autoDataSync": "Auto sync records and settings",
@@ -2754,7 +2784,24 @@
         "nativeLocalSnapshotPending": "The server accepted local changes, but the local copy still needs restoration. It will be retried; retain existing backups.",
         "nativeTagIdentityMissing": "This tag has no local sync identity. Restart NoteGen to finish local data initialization, then retry.",
         "nativeStorageBudgetExceeded": "The account or instance storage budget is exhausted. Ask the administrator to adjust it or clear retained data before retrying."
-      }
+      },
+      "conflict": {
+        "contentIdentical": "The content is identical; no action is needed.",
+        "resolvedWithStrategy": "Resolved the conflict with the {strategy} strategy.",
+        "manualRequired": "The user needs to handle this manually.",
+        "simpleAppendMergeable": "Detected a simple content append that can be merged automatically.",
+        "formatChangeKeepRemote": "Detected a format change; using the remote version.",
+        "dialogMessage": "File {filePath} has a conflict\n\nLocal version: {localLength} characters\nRemote version: {remoteLength} characters\n\nChoose how to handle it:\n• Confirm: keep the local version\n• Cancel: keep the remote version",
+        "dialogTitle": "Sync conflict",
+        "keepLocalLabel": "Keep local",
+        "keepRemoteLabel": "Keep remote",
+        "userKeptLocal": "The user chose to keep the local version",
+        "userKeptRemote": "The user chose to keep the remote version"
+      },
+      "remoteFileNotFound": "Remote file does not exist: {path}",
+      "remotePathIsDirectory": "The remote path points to a directory, not a file: {path}",
+      "remoteFileInvalidFormat": "The remote file content format is invalid: {path}",
+      "remoteFileInvalidBase64": "The remote file content is not a valid Base64 string."
     },
     "imageHosting": {
       "title": "Image Storage",
@@ -2909,7 +2956,10 @@
         "testFailedDesc": "Please check configuration and network connection",
         "testFirstDesc": "Please test connection successfully before setting as primary",
         "setPrimarySuccess": "Set Successfully",
-        "setPrimarySuccessDesc": "Object storage has been set as the active image service"
+        "setPrimarySuccessDesc": "Object storage has been set as the active image service",
+        "configError": "S3 configuration error",
+        "configureParamsFirst": "Configure the S3 parameters first.",
+        "uploadFailed": "Upload failed"
       },
       "lsky": {
         "title": "Lsky Pro",
@@ -5970,7 +6020,18 @@
         "moveFailed": "Move failed",
         "refreshFailed": "Could not refresh the file list. Check your network and sync settings, then try again."
       },
-      "deleteConfirm": "Are you sure you want to delete this file?"
+      "deleteConfirm": "Are you sure you want to delete this file?",
+      "movePathsDuplicateOrNested": "The moved file paths are duplicated or contain each other.",
+      "moveTargetExists": "The target path already exists: {targetPath}",
+      "invalidMoveTarget": "Invalid move target.",
+      "folderCopiedAs": "Folder copied as {targetName}",
+      "copyFolderFailed": "Failed to copy the folder",
+      "pdfPreparing": "Preparing PDF",
+      "saveAsPdfInstruction": "In the system print window, choose \"Save as PDF\".",
+      "pdfPrintWindowOpened": "PDF print window opened",
+      "exportSuccess": "Export successful",
+      "exportFailed": "Export failed",
+      "exportButton": "Export"
     },
     "editor": {
       "copySuccess": "Copy Success",
@@ -6068,7 +6129,14 @@
         "pullSuccess": "Pull Successful",
         "pullFailed": "Pull Failed",
         "ignored": "Ignored",
-        "ignoreUpdate": "Ignore This Update"
+        "ignoreUpdate": "Ignore This Update",
+        "checkNetworkAndRetry": "Check the network connection and try again.",
+        "pulling": "Pulling...",
+        "resolveConflict": "Resolve conflict",
+        "hasConflict": "Conflict",
+        "pullUpdates": "Pull updates",
+        "hasUpdate": "Update available",
+        "manualPullRemoteFile": "Manually pull the remote file"
       },
       "sync": {
         "push": "Push",
@@ -6215,7 +6283,10 @@
       "builtinDesc": "Free, real-time recognition",
       "model": "AI Model Recognition",
       "modelDesc": "Requires STT model, more accurate"
-    }
+    },
+    "emptyAudioData": "Audio data is empty",
+    "fileSelectFailed": "File selection failed",
+    "fileProcessFailed": "File processing failed"
   },
   "quickRecord": {
     "description": "Click to select a recording tool and quickly create records"

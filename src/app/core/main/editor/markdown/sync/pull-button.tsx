@@ -226,8 +226,8 @@ export function usePullSync({ editor, markdown, getMarkdown, prepareExternalActi
       console.error('Pull failed:', error)
       setStatus('error')
       toast({
-        title: '拉取失败',
-        description: error instanceof Error ? error.message : '请检查网络连接后重试',
+        title: 'Pull Failed',
+        description: error instanceof Error ? error.message : 'Check the network connection and try again.',
         variant: 'destructive',
       })
     } finally {
@@ -311,43 +311,43 @@ export function PullButton(props: PullButtonProps) {
         {pullStatus === 'pulling' ? (
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <Loader2 size={12} className="animate-spin" />
-            拉取中...
+            Pulling...
           </span>
         ) : pullStatus === 'conflict' ? (
           /* 冲突状态 - 提示用户处理 */
           <button
             onClick={handleConflict}
             className="p-0.5 rounded transition-colors hover:bg-red-500/10 text-red-500 flex items-center gap-1"
-            title="处理冲突"
+            title="Resolve conflict"
           >
             <ArrowDownCircle size={14} />
-            <span className="text-xs">有冲突</span>
+            <span className="text-xs">Conflict</span>
           </button>
         ) : hasUpdate ? (
           /* 有更新可以拉取 */
           <button
             onClick={handlePull}
             className="p-0.5 rounded transition-colors hover:bg-amber-500/10 text-amber-500 flex items-center gap-1"
-            title="拉取更新"
+            title="Pull updates"
           >
             <ArrowDownCircle size={14} />
-            <span className="text-xs">有更新</span>
+            <span className="text-xs">Update available</span>
           </button>
         ) : pullStatus === 'checking' ? (
           /* 检查中状态 */
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <Loader2 size={12} className="animate-spin" />
-            检查中
+            Checking
           </span>
         ) : (
           /* 无需拉取时也显示可点击的按钮，让用户可以手动拉取 */
           <button
             onClick={handlePull}
             className="p-0.5 rounded transition-colors hover:bg-accent text-muted-foreground flex items-center gap-1"
-            title="手动拉取远程文件"
+            title="Manually pull the remote file"
           >
             <ArrowDownCircle size={14} />
-            <span className="text-xs">拉取</span>
+            <span className="text-xs">Pull</span>
           </button>
         )}
       </div>

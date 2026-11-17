@@ -42,7 +42,7 @@ async function refreshOutputFiles(paths: string[], workspaceIdentity: string): P
 
 export const runSkillCodeTool: AgentTool = {
   name: 'skill_run_code',
-  title: '运行 Skill 任务代码',
+  title: 'Run Skill task code',
   description: 'Run task-specific Python, JavaScript, or Bash source required by a loaded Skill, including official inline examples. Every invocation requires approval of this exact source, language, and arguments. Source is saved under the isolated runtime/generated directory; installed Skill files remain read-only. Use SKILL_ROOT_DIR to read package resources, SKILL_RUNTIME_DIR for scratch files, and SKILL_OUTPUT_DIR for final artifacts. The working directory is a unique outputs/<skill_id>/runs/<execution_id> directory. Prepare original attachment/workspace inputs with skill_prepare_inputs first. Never use this tool in read-only mode.',
   category: 'skill',
   risk: 'script',
@@ -94,7 +94,7 @@ export const runSkillCodeTool: AgentTool = {
 
 export const installSkillNodeDependenciesTool: AgentTool = {
   name: 'skill_install_node_dependencies',
-  title: '安装 Skill Node 依赖',
+  title: 'Install Skill Node dependencies',
   description: 'Install explicitly named npm registry packages into a loaded Skill’s isolated runtime. Use package names or exact semver specs, such as docx or docx@9.5.1. URLs, local paths, flags, tags, and version ranges are rejected. Every invocation requires separate approval of the exact package list. This does not change the installed Skill package.',
   category: 'skill',
   risk: 'script',
@@ -124,7 +124,7 @@ export const installSkillNodeDependenciesTool: AgentTool = {
 
 export const inspectSkillEnvironmentTool: AgentTool = {
   name: 'skill_inspect_environment',
-  title: '查看 Skill 运行环境',
+  title: 'Inspect the Skill runtime environment',
   description: 'Inspect Python, Node.js, npm, and the supported document command dependencies for a loaded Skill. Returns actual availability and paths for pandoc, soffice, pdftoppm, pdftotext, qpdf, and tesseract. Reads status only; does not install anything.',
   category: 'skill',
   risk: 'read',
@@ -170,7 +170,7 @@ async function createInputDirectory(runtimeDir: string, runId: string): Promise<
 
 export const prepareSkillInputsTool: AgentTool = {
   name: 'skill_prepare_inputs',
-  title: '准备 Skill 原始文件',
+  title: 'Prepare the original Skill files',
   description: 'Copy original binary or text inputs into a loaded Skill’s isolated runtime/inputs/<run_id> directory without changing the originals. Attachments must use IDs from this task’s attachment context; folder attachments require an exact relative file path. Workspace paths must be normalized relative paths. Returns absolute staged file paths for Python/JavaScript/Bash and registered scripts; use this instead of recreating attachments from summaries. Does not copy folders or follow symbolic links.',
   category: 'skill',
   risk: 'read',

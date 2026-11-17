@@ -593,7 +593,21 @@
       "ragDescription": "可选增强。为原始资料建立向量索引，适合资料较多、需要按语义查找的场景。可独立于 LLM Wiki 使用。",
       "optionalEnhancement": "需要时再启用",
       "disabledDescription": "关闭时无需配置向量模型，LLM Wiki 的整理和阅读仍可使用。",
-      "ragAdvanced": "RAG 高级设置、检索测试与维护"
+      "ragAdvanced": "RAG 高级设置、检索测试与维护",
+      "errors": {
+        "RAG_INVALID_VECTOR_DATA": "知识库包含无效的向量数据",
+        "RAG_CHUNK_FORMAT_INVALID": "知识库分块格式无效",
+        "RAG_CHUNK_FIELDS_INCOMPLETE": "知识库分块字段不完整",
+        "RAG_MANIFEST_FORMAT_INVALID": "远端知识库清单格式无效",
+        "RAG_SCHEMA_VERSION_UNSUPPORTED": "不支持的知识库格式版本：{schemaVersion}",
+        "RAG_MANIFEST_FIELDS_INCOMPLETE": "远端知识库清单字段不完整",
+        "RAG_LOCAL_EMPTY": "本地知识库为空，请先重新计算",
+        "RAG_MIXED_DIMENSIONS": "本地知识库包含不同维度的向量，请先重新计算",
+        "RAG_PAGE_CORRUPT": "知识库分页损坏：{path}",
+        "RAG_VECTOR_COUNT_MISMATCH": "知识库向量数量不匹配：预期 {expectedCount}，实际 {actualCount}",
+        "RAG_DIMENSION_MANIFEST_MISMATCH": "知识库向量维度与清单不一致",
+        "RAG_VECTOR_DIMENSION_MISMATCH": "向量维度不匹配"
+      }
     },
     "mcp": {
       "title": "MCP",
@@ -2071,6 +2085,21 @@
           "viewer": "查看者",
           "editor": "编辑者",
           "manager": "管理员"
+        },
+        "errors": {
+          "SELF_HOSTED_INSTANCE_IDENTITY_CHANGED": "服务器实例身份已变化，请先确认服务器是否被重置或替换",
+          "SELF_HOSTED_PROTOCOL_INCOMPATIBLE": "服务器与当前 NoteGen 同步协议不兼容",
+          "SELF_HOSTED_BROWSER_AUTH_EXPIRED": "浏览器授权已过期",
+          "SELF_HOSTED_DEVICE_IDENTITY_CREATE_FAILED": "无法创建新的设备身份",
+          "SELF_HOSTED_MANAGED_KEY_MISSING": "个人数据空间缺少 managed key",
+          "SELF_HOSTED_PROFILE_MISSING": "自托管同步配置不存在",
+          "SELF_HOSTED_LOGIN_EXPIRED": "自托管登录已失效，请重新授权",
+          "SELF_HOSTED_DOMAIN_UNSUPPORTED": "不支持的个人数据同步领域",
+          "SELF_HOSTED_EDIT_IN_PROGRESS": "请先完成当前编辑，再修改同步范围",
+          "SELF_HOSTED_REFRESH_CREDENTIALS_EXPIRED": "自托管刷新凭据已失效",
+          "SELF_HOSTED_SESSION_ACCOUNT_MISMATCH": "刷新会话返回了不同的账号或设备",
+          "SELF_HOSTED_NOT_SYNC_API": "该地址不是自托管同步 API",
+          "SELF_HOSTED_API_UNREACHABLE": "无法连接自托管同步 API"
         }
       },
       "connectionTab": "连接设置",
@@ -2361,7 +2390,8 @@
         "change": "更换",
         "selecting": "正在选择",
         "accessFailedTitle": "无法访问文件夹",
-        "accessFailedDescription": "请选择可读写的 iCloud 文件夹后重试。"
+        "accessFailedDescription": "请选择可读写的 iCloud 文件夹后重试。",
+        "saveBeforeRollbackFailed": "无法在回滚工作区前保存当前编辑内容"
       },
       "autoSync": "自动同步笔记",
       "autoDataSync": "自动同步记录和配置",
@@ -2754,7 +2784,24 @@
         "nativeLocalSnapshotPending": "服务器已接受本地修改，但本机副本尚未恢复完整，正在等待重试；请保留现有备份。",
         "nativeTagIdentityMissing": "此标签缺少本地同步身份，已暂停相关条目。请重启 NoteGen 完成本地数据初始化后重试。",
         "nativeStorageBudgetExceeded": "实例或账号存储预算已用尽。请联系管理员调整预算或清理保留数据后重试。"
-      }
+      },
+      "conflict": {
+        "contentIdentical": "内容相同，无需处理",
+        "resolvedWithStrategy": "使用{strategy}策略解决冲突",
+        "manualRequired": "需要用户手动处理",
+        "simpleAppendMergeable": "检测到简单的内容追加，可以自动合并",
+        "formatChangeKeepRemote": "检测到格式变化，使用远程版本",
+        "dialogMessage": "文件 {filePath} 存在冲突\n\n本地版本：{localLength} 字符\n远程版本：{remoteLength} 字符\n\n请选择如何处理：\n• 确定：保留本地版本\n• 取消：保留远程版本",
+        "dialogTitle": "同步冲突",
+        "keepLocalLabel": "保留本地",
+        "keepRemoteLabel": "保留远程",
+        "userKeptLocal": "用户选择保留本地版本",
+        "userKeptRemote": "用户选择保留远程版本"
+      },
+      "remoteFileNotFound": "远程文件不存在: {path}",
+      "remotePathIsDirectory": "远程路径指向的是目录，不是文件: {path}",
+      "remoteFileInvalidFormat": "远程文件内容格式无效: {path}",
+      "remoteFileInvalidBase64": "远程文件内容不是有效的 Base64 字符串"
     },
     "imageHosting": {
       "title": "图片存储",
@@ -2909,7 +2956,10 @@
         "testFailedDesc": "请检查配置信息和网络连接",
         "testFirstDesc": "请先测试连接成功后再设为主要图床",
         "setPrimarySuccess": "设置成功",
-        "setPrimarySuccessDesc": "对象存储已设为主要图床"
+        "setPrimarySuccessDesc": "对象存储已设为主要图床",
+        "configError": "S3 配置错误",
+        "configureParamsFirst": "请先配置 S3 参数",
+        "uploadFailed": "上传失败"
       },
       "lsky": {
         "title": "Lsky Pro",
@@ -5970,7 +6020,18 @@
         "moveFailed": "移动失败",
         "refreshFailed": "刷新文件列表失败，请检查网络和同步配置后重试。"
       },
-      "deleteConfirm": "确认删除此文件吗？"
+      "deleteConfirm": "确认删除此文件吗？",
+      "movePathsDuplicateOrNested": "移动的文件路径重复或互相包含",
+      "moveTargetExists": "目标路径已存在：{targetPath}",
+      "invalidMoveTarget": "无效的移动目标",
+      "folderCopiedAs": "文件夹已复制为 {targetName}",
+      "copyFolderFailed": "复制文件夹失败",
+      "pdfPreparing": "正在准备 PDF",
+      "saveAsPdfInstruction": "请在系统打印窗口中选择“另存为 PDF”。",
+      "pdfPrintWindowOpened": "已打开 PDF 打印窗口",
+      "exportSuccess": "导出成功",
+      "exportFailed": "导出失败",
+      "exportButton": "导出"
     },
     "editor": {
       "copySuccess": "复制成功",
@@ -6068,7 +6129,14 @@
         "pullSuccess": "拉取成功",
         "pullFailed": "拉取失败",
         "ignored": "已忽略",
-        "ignoreUpdate": "忽略此更新"
+        "ignoreUpdate": "忽略此更新",
+        "checkNetworkAndRetry": "请检查网络连接后重试",
+        "pulling": "拉取中...",
+        "resolveConflict": "处理冲突",
+        "hasConflict": "有冲突",
+        "pullUpdates": "拉取更新",
+        "hasUpdate": "有更新",
+        "manualPullRemoteFile": "手动拉取远程文件"
       },
       "sync": {
         "push": "推送",
@@ -6215,7 +6283,10 @@
       "builtinDesc": "免费，实时识别",
       "model": "大模型识别",
       "modelDesc": "需配置STT模型，更准确"
-    }
+    },
+    "emptyAudioData": "音频数据为空",
+    "fileSelectFailed": "文件选择失败",
+    "fileProcessFailed": "文件处理失败"
   },
   "quickRecord": {
     "description": "点击选择记录工具，快速创建记录"

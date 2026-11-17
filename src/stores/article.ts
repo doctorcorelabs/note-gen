@@ -3169,7 +3169,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
     const workspace = await getWorkspacePath()
     
     // 创建新文件
-    const file = `新建文件-${new Date().getTime()}.md`
+    const file = `New File-${new Date().getTime()}.md`
     const fullPath = `${path}/${file}`
     const pathOptions = await getFilePathOptions(fullPath)
     
@@ -3519,7 +3519,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         const result = await getSyncManager().pullFile(actualPath, getEditorPathMutationRevision(actualPath))
         if (!isCurrentArticleRead()) return
         if (!result.success || result.action !== 'pull' || result.content === undefined) {
-          throw new Error(result.error || '无法获取远程文件内容')
+          throw new Error(result.error || 'Cannot fetch remote file content')
         }
         const remoteContent = result.content
 

@@ -259,8 +259,8 @@ export async function uploadImageByS3(file: File): Promise<string | undefined> {
     
     if (!config) {
       toast({
-        title: 'S3 配置错误',
-        description: '请先配置 S3 参数',
+        title: 'S3 configuration error',
+        description: 'Configure the S3 parameters first.',
         variant: 'destructive',
       });
       return undefined;
@@ -320,7 +320,7 @@ export async function uploadImageByS3(file: File): Promise<string | undefined> {
     
   } catch (error) {
     toast({
-      title: '上传失败',
+      title: 'Upload failed',
       description: (error as Error).message,
       variant: 'destructive',
     });

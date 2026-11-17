@@ -180,8 +180,8 @@ export function getChatTokenLimitParams(
 export async function validateAIService(baseURL: string | undefined): Promise<string | null> {
   if (!baseURL) {
     toast({
-      title: 'AI 错误',
-      description: '请先设置 AI 地址',
+      title: 'AI Error',
+      description: 'Please set AI address first',
       variant: 'destructive',
     })
     return null

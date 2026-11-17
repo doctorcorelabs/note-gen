@@ -56,26 +56,26 @@ function inputRecord(value: unknown): Input {
 
 function requiredString(input: Input, key: string): string {
   const value = input[key]
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`参数 ${key} 必须是非空字符串`)
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`Argument ${key} must be a non-empty string`)
   return value
 }
 
 function optionalString(input: Input, key: string): string | undefined {
   const value = input[key]
   if (value === undefined) return undefined
-  if (typeof value !== 'string') throw new Error(`参数 ${key} 必须是字符串`)
+  if (typeof value !== 'string') throw new Error(`Argument ${key} must be a string`)
   return value
 }
 
 function requiredContent(input: Input): string {
   const value = input.content
-  if (typeof value !== 'string') throw new Error('参数 content 必须是字符串')
+  if (typeof value !== 'string') throw new Error('Argument content must be a string')
   return value
 }
 
 function requiredInteger(input: Input, key: string): number {
   const value = input[key]
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) throw new Error(`参数 ${key} 必须是正整数`)
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) throw new Error(`Argument ${key} must be a positive integer`)
   return value
 }
 
@@ -91,9 +91,9 @@ async function assertWorkspaceUnchanged(expected: string): Promise<void> {
 }
 
 async function safeMarkdownPath(rawPath: string, allowMissingLeaf = false): Promise<string> {
-  if (isAbsoluteFsPath(rawPath.trim())) throw new Error('不允许使用绝对路径')
+  if (isAbsoluteFsPath(rawPath.trim())) throw new Error('Absolute paths are not allowed')
   const normalized = await ensureSafeWorkspaceRelativePath(rawPath)
-  if (!normalized.endsWith('.md')) throw new Error('只允许操作以 .md 结尾的 Markdown 文章')
+  if (!normalized.endsWith('.md')) throw new Error('Only Markdown articles ending in .md can be operated on')
   await assertNoSymlink(normalized, allowMissingLeaf)
   return normalized
 }
@@ -111,12 +111,12 @@ async function assertNoSymlink(normalized: string, allowMissingLeaf = false): Pr
     const info = options.baseDir
       ? await platform.fs.lstat(options.path, { baseDir: options.baseDir })
       : await platform.fs.lstat(options.path)
-    if (info.isSymlink) throw new Error('路径包含符号链接，已拒绝访问')
+    if (info.isSymlink) throw new Error('The path contains a symbolic link; access was denied')
   }
 }
 
 async function safeFolderPath(rawPath: string): Promise<string> {
-  if (isAbsoluteFsPath(rawPath.trim())) throw new Error('不允许使用绝对路径')
+  if (isAbsoluteFsPath(rawPath.trim())) throw new Error('Absolute paths are not allowed')
   const normalized = await ensureSafeWorkspaceRelativePath(rawPath)
   await assertNoSymlink(normalized)
   return normalized
@@ -174,7 +174,7 @@ async function readNote(filePath: string, workspace: string): Promise<NoteSnapsh
 
 async function runAgentTool(name: string, input: Input, contextOverrides: { activeCanvasId?: string } = {}) {
   const tool = getToolByName(name)
-  if (!tool) throw new Error(`NoteGen 内部工具不可用: ${name}`)
+  if (!tool) throw new Error(`NoteGen internal tool unavailable: ${name}`)
   const article = useArticleStore.getState()
   const currentEditorState = article.activeFilePath ? await readCurrentEditorState() : undefined
   const result = await tool.execute(input, {
@@ -227,7 +227,7 @@ async function updateWithRevision(input: Input, contentBuilder: (current: string
   return withFileWrite(filePath, async () => {
     const before = await readNote(filePath, workspace)
     if (before.revision !== expectedRevision) {
-      return errorResult('revision_conflict', '文章内容已发生变化，请重新读取后再修改', {
+      return errorResult('revision_conflict', 'The article content has changed. Read it again before editing.', {
         filePath,
         expectedRevision,
         currentRevision: before.revision,
@@ -238,7 +238,7 @@ async function updateWithRevision(input: Input, contentBuilder: (current: string
     await runAgentTool('note_update_file', { filePath, content: nextContent })
     await assertWorkspaceUnchanged(workspace)
     const after = await readNote(filePath, workspace)
-    return textResult(`已更新 ${filePath}`, serializeNote(after))
+    return textResult(`Updated ${filePath}`, serializeNote(after))
   })
 }
 
@@ -274,7 +274,7 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         const article = useArticleStore.getState()
         const editor = article.activeFilePath ? await readCurrentEditorState() : undefined
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已读取 NoteGen 当前上下文', {
+        return textResult('Read the current NoteGen context', {
           workspace,
           currentFile: article.activeFilePath || null,
           editor: editor ? {
@@ -302,16 +302,16 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           limit: typeof input.limit === 'number' ? Math.min(50, Math.max(1, input.limit)) : undefined,
         })
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`找到 ${results.length} 个知识来源`, { results })
+        return textResult(`Found ${results.length} knowledge sources`, { results })
       }
       case 'notegen_read_sources': {
-        if (!Array.isArray(input.requests) || input.requests.length === 0) throw new Error('requests 必须是非空数组')
+        if (!Array.isArray(input.requests) || input.requests.length === 0) throw new Error('requests must be a non-empty array')
         const pages = await Promise.all(input.requests.map(async request => {
           const item = inputRecord(request)
           return readKnowledgeSourcePage(requiredString(item, 'sourceKey'), optionalString(item, 'cursor'))
         }))
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`已读取 ${pages.filter(Boolean).length} 个知识来源`, { pages })
+        return textResult(`Read ${pages.filter(Boolean).length} knowledge sources`, { pages })
       }
       case 'note_list': {
         const rawFolder = optionalString(input, 'folderPath')?.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '')
@@ -332,15 +332,15 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         }))
         const folders = await listWorkspaceFolders(folderPath, recursive)
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`找到 ${files.length} 个 Markdown 文件`, { files, folders })
+        return textResult(`Found ${files.length} Markdown files`, { files, folders })
       }
       case 'note_read': {
         const note = await readNote(requiredString(input, 'filePath'), workspace)
-        return textResult(`已读取 ${note.filePath}`, serializeNote(note))
+        return textResult(`Read ${note.filePath}`, serializeNote(note))
       }
       case 'note_get_document_map': {
         const note = await readNote(requiredString(input, 'filePath'), workspace)
-        return textResult(`已生成 ${note.filePath} 的文档地图`, {
+        return textResult(`Generated a document map for ${note.filePath}`, {
           filePath: note.filePath,
           revision: note.revision,
           ...buildDocumentMap(note.content),
@@ -356,7 +356,7 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           await runAgentTool('note_create_file', { fileName, folderPath: parts.join('/') || undefined, content })
           await assertWorkspaceUnchanged(workspace)
           const note = await readNote(filePath, workspace)
-          return textResult(`已创建 ${filePath}`, serializeNote(note))
+          return textResult(`Created ${filePath}`, serializeNote(note))
         })
       }
       case 'note_update':
@@ -365,7 +365,7 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         return updateWithRevision(input, current => current + requiredContent(input))
       case 'note_patch':
         return updateWithRevision(input, current => {
-          if (!Array.isArray(input.operations)) throw new Error('operations 必须是数组')
+          if (!Array.isArray(input.operations)) throw new Error('operations must be an array')
           const prepared = prepareEditorLineTransaction(current, input.operations)
           if (!prepared.ok) throw new Error(prepared.error)
           return prepared.markdown
@@ -378,7 +378,7 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         const operationInput: Input = { ...input, filePath }
         if (toolName === 'note_rename') {
           const requestedName = requiredString(input, 'newName')
-          if (requestedName.includes('/') || requestedName.includes('\\')) throw new Error('newName 只能是文件名，不能包含路径')
+          if (requestedName.includes('/') || requestedName.includes('\\')) throw new Error('newName must be a file name and cannot contain a path')
           const newName = requestedName.endsWith('.md') ? requestedName : `${requestedName}.md`
           const folder = filePath.split('/').slice(0, -1).join('/')
           await safeMarkdownPath(folder ? `${folder}/${newName}` : newName, true)
@@ -387,7 +387,7 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           const targetFolderPath = optionalString(input, 'targetFolderPath')?.trim() || ''
           const normalizedFolder = targetFolderPath ? await safeFolderPath(targetFolderPath) : ''
           const requestedName = toolName === 'note_copy' ? optionalString(input, 'newName') : undefined
-          if (requestedName?.includes('/') || requestedName?.includes('\\')) throw new Error('newName 只能是文件名，不能包含路径')
+          if (requestedName?.includes('/') || requestedName?.includes('\\')) throw new Error('newName must be a file name and cannot contain a path')
           const targetName = requestedName
             ? (requestedName.endsWith('.md') ? requestedName : `${requestedName}.md`)
             : filePath.split('/').pop() || filePath
@@ -401,7 +401,7 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
             useArticleStore.getState().activeFilePath,
             [filePath],
           )) {
-            return errorResult('editor_busy', '当前编辑器正在处理异步内容，复制已取消')
+            return errorResult('editor_busy', 'The editor is currently processing async content, so the copy was cancelled.')
           }
           const result = await runAgentTool(mapping[toolName], operationInput)
           await assertWorkspaceUnchanged(workspace)
@@ -414,17 +414,17 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           await assertWorkspaceUnchanged(workspace)
           const article = useArticleStore.getState()
           if (!await prepareActiveEditorPathMutationDurably(article.activeFilePath, [filePath])) {
-            return errorResult('editor_busy', '当前编辑器正在处理异步内容，删除已取消')
+            return errorResult('editor_busy', 'The editor is currently processing async content, so the deletion was cancelled.')
           }
           const moved = await moveEntryToSystemTrash(filePath)
-          if (!moved) return errorResult('not_found', `文件不存在: ${filePath}`)
+          if (!moved) return errorResult('not_found', `File does not exist: ${filePath}`)
           await article.cleanTabsByDeletedFile(filePath)
           if (!article.removeLocalEntry(filePath)) await article.loadFileTree()
           await deleteVectorDocumentsByFilename(filePath)
           const legacyName = filePath.split('/').pop() || filePath
           if (legacyName !== filePath) await deleteVectorDocumentsByFilename(legacyName)
           await assertWorkspaceUnchanged(workspace)
-          return textResult(`已将 ${filePath} 移入系统回收站`, { filePath, trashed: true })
+          return textResult(`Moved ${filePath} to the system trash`, { filePath, trashed: true })
         })
       }
       case 'note_open': {
@@ -442,13 +442,13 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           (tagId === undefined || recordMatchesTag(record, tagId, tags)) && (includeDeleted || record.deleted === 0)
         )
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`找到 ${records.length} 条记录`, { records })
+        return textResult(`Found ${records.length} records`, { records })
       }
       case 'record_create': {
         const tagId = requiredInteger(input, 'tagId')
         const type = optionalString(input, 'type') || 'text'
         const allowedTypes: Mark['type'][] = ['scan', 'text', 'image', 'link', 'file', 'recording', 'todo']
-        if (!allowedTypes.includes(type as Mark['type'])) throw new Error('参数 type 不是支持的记录类型')
+        if (!allowedTypes.includes(type as Mark['type'])) throw new Error('Argument type is not a supported record type')
         const result = await insertMark({
           tagId,
           type: type as Mark['type'],
@@ -457,15 +457,15 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           url: optionalString(input, 'url') || '',
         })
         const id = result.lastInsertId
-        if (!id) throw new Error('记录创建失败')
+        if (!id) throw new Error('Failed to create the record')
         await refreshRecordState()
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已创建记录', { record: await getMarkById(id) })
+        return textResult('Record created', { record: await getMarkById(id) })
       }
       case 'record_update': {
         const id = requiredInteger(input, 'id')
         const current = await getMarkById(id)
-        if (!current || current.deleted) throw new Error(`记录不存在: ${id}`)
+        if (!current || current.deleted) throw new Error(`Record does not exist: ${id}`)
         await updateMark({
           ...current,
           tagId: typeof input.tagId === 'number' ? requiredInteger(input, 'tagId') : current.tagId,
@@ -475,36 +475,36 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         })
         await refreshRecordState()
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已更新记录', { record: await getMarkById(id) })
+        return textResult('Record updated', { record: await getMarkById(id) })
       }
       case 'record_delete':
       case 'record_restore': {
         const id = requiredInteger(input, 'id')
         const current = await getMarkById(id)
-        if (!current) throw new Error(`记录不存在: ${id}`)
+        if (!current) throw new Error(`Record does not exist: ${id}`)
         if (toolName === 'record_delete') await delMark(id)
         else await restoreMark(id)
         await refreshRecordState()
         await assertWorkspaceUnchanged(workspace)
-        return textResult(toolName === 'record_delete' ? '已将记录移入回收站' : '已恢复记录', {
+        return textResult(toolName === 'record_delete' ? 'Moved the record to the trash' : 'Record restored', {
           record: await getMarkById(id),
         })
       }
       case 'conversation_list': {
         const conversations = await getAllConversations()
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`找到 ${conversations.length} 个对话`, { conversations })
+        return textResult(`Found ${conversations.length} conversations`, { conversations })
       }
       case 'conversation_read': {
         const id = requiredInteger(input, 'id')
         const conversation = await getConversation(id)
-        if (!conversation) throw new Error(`对话不存在: ${id}`)
+        if (!conversation) throw new Error(`Conversation does not exist: ${id}`)
         const limit = typeof input.limit === 'number' ? Math.min(200, Math.max(1, Math.trunc(input.limit))) : 100
         const offset = typeof input.offset === 'number' ? Math.max(0, Math.trunc(input.offset)) : 0
         const allMessages = await getChatsByConversation(id)
         const messages = allMessages.slice(offset, offset + limit)
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`已读取对话“${conversation.title}”`, {
+        return textResult(`Read the conversation "${conversation.title}"`, {
           conversation,
           messages,
           offset,
@@ -514,15 +514,15 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
       case 'conversation_create': {
         const id = await useChatStore.getState().createConversation(requiredString(input, 'title'))
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已创建对话', { conversation: await getConversation(id) })
+        return textResult('Conversation created', { conversation: await getConversation(id) })
       }
       case 'conversation_append': {
         const id = requiredInteger(input, 'id')
-        if (!await getConversation(id)) throw new Error(`对话不存在: ${id}`)
+        if (!await getConversation(id)) throw new Error(`Conversation does not exist: ${id}`)
         const role = input.role === 'assistant' || input.role === 'system'
           ? 'system'
           : input.role === 'user' ? 'user' : null
-        if (!role) throw new Error('参数 role 必须是 user、assistant 或 system')
+        if (!role) throw new Error('Argument role must be user, assistant, or system')
         const store = useChatStore.getState()
         if (store.currentConversationId !== id) await store.switchConversation(id)
         const message = await useChatStore.getState().insert({
@@ -533,27 +533,27 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
           content: requiredContent(input),
           inserted: false,
         })
-        if (!message) throw new Error('消息写入失败')
+        if (!message) throw new Error('Failed to write the message')
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已追加对话消息', { message })
+        return textResult('Conversation message appended', { message })
       }
       case 'conversation_rename': {
         const id = requiredInteger(input, 'id')
         await useChatStore.getState().updateConversationTitle(id, requiredString(input, 'title'))
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已重命名对话', { conversation: await getConversation(id) })
+        return textResult('Conversation renamed', { conversation: await getConversation(id) })
       }
       case 'conversation_open': {
         const id = requiredInteger(input, 'id')
         await useChatStore.getState().switchConversation(id)
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已在 NoteGen 中打开对话', { id })
+        return textResult('Opened the conversation in NoteGen', { id })
       }
       case 'conversation_delete': {
         const id = requiredInteger(input, 'id')
         await useChatStore.getState().deleteConversation(id)
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已删除对话', { id, deleted: true })
+        return textResult('Conversation deleted', { id, deleted: true })
       }
       case 'canvas_list': {
         await useCanvasStore.getState().loadProjects()
@@ -561,21 +561,21 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         const state = useCanvasStore.getState()
         const projects = includeDeleted ? [...state.projects, ...state.deletedProjects] : state.projects
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`找到 ${projects.length} 个画布`, { projects })
+        return textResult(`Found ${projects.length} canvases`, { projects })
       }
       case 'canvas_create': {
         const requestedType = optionalString(input, 'canvasType') || 'blank'
         const allowedTypes: CanvasProjectType[] = ['blank', 'flowchart', 'mindmap', 'timeline', 'quadrant', 'kanban', 'swot']
-        if (!allowedTypes.includes(requestedType as CanvasProjectType)) throw new Error('参数 canvasType 不是支持的画布类型')
+        if (!allowedTypes.includes(requestedType as CanvasProjectType)) throw new Error('Argument canvasType is not a supported canvas type')
         const project = await useCanvasStore.getState().createProject(requestedType as CanvasProjectType, requiredString(input, 'title'))
-        if (!project) throw new Error('画布创建失败')
+        if (!project) throw new Error('Failed to create the canvas')
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已创建画布', { project })
+        return textResult('Canvas created', { project })
       }
       case 'canvas_read': {
         const canvasId = requiredString(input, 'canvasId')
         const project = await useCanvasStore.getState().openProject(canvasId)
-        if (!project) throw new Error(`画布不存在: ${canvasId}`)
+        if (!project) throw new Error(`Canvas does not exist: ${canvasId}`)
         const result = await runAgentTool('canvas_get_state', {}, { activeCanvasId: canvasId })
         await assertWorkspaceUnchanged(workspace)
         return textResult(result.message, { canvas: result.data ?? null })
@@ -583,15 +583,15 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
       case 'canvas_open': {
         const canvasId = requiredString(input, 'canvasId')
         const project = await useCanvasStore.getState().openProject(canvasId)
-        if (!project) throw new Error(`画布不存在: ${canvasId}`)
+        if (!project) throw new Error(`Canvas does not exist: ${canvasId}`)
         await useArticleStore.getState().addTab(createCanvasTab(project))
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已在 NoteGen 中打开画布', { canvasId })
+        return textResult('Opened the canvas in NoteGen', { canvasId })
       }
       case 'canvas_create_diagram':
       case 'canvas_apply_operations': {
         const canvasId = requiredString(input, 'canvasId')
-        if (!await useCanvasStore.getState().openProject(canvasId)) throw new Error(`画布不存在: ${canvasId}`)
+        if (!await useCanvasStore.getState().openProject(canvasId)) throw new Error(`Canvas does not exist: ${canvasId}`)
         const internalName = toolName === 'canvas_create_diagram' ? 'canvas_create_diagram' : 'canvas_apply_operations'
         const result = await runAgentTool(internalName, input, { activeCanvasId: canvasId })
         await useCanvasStore.getState().saveProject(canvasId)
@@ -602,28 +602,28 @@ export async function executeLocalMcpTool(toolName: string, rawArguments: unknow
         const canvasId = requiredString(input, 'canvasId')
         await useCanvasStore.getState().renameProject(canvasId, requiredString(input, 'title'))
         await assertWorkspaceUnchanged(workspace)
-        return textResult('已重命名画布', { canvasId, title: input.title })
+        return textResult('Canvas renamed', { canvasId, title: input.title })
       }
       case 'canvas_delete':
       case 'canvas_restore': {
         const canvasId = requiredString(input, 'canvasId')
         if (toolName === 'canvas_delete') await useCanvasStore.getState().deleteProject(canvasId)
-        else if (!await useCanvasStore.getState().restoreProject(canvasId)) throw new Error(`画布不存在: ${canvasId}`)
+        else if (!await useCanvasStore.getState().restoreProject(canvasId)) throw new Error(`Canvas does not exist: ${canvasId}`)
         await assertWorkspaceUnchanged(workspace)
-        return textResult(toolName === 'canvas_delete' ? '已将画布移入回收站' : '已恢复画布', { canvasId })
+        return textResult(toolName === 'canvas_delete' ? 'Moved the canvas to the trash' : 'Canvas restored', { canvasId })
       }
       case 'tag_list': {
         const tags = await getTags()
         await assertWorkspaceUnchanged(workspace)
-        return textResult(`找到 ${tags.length} 个标签`, { tags })
+        return textResult(`Found ${tags.length} tags`, { tags })
       }
       default:
-        return errorResult('unknown_tool', `未知的 NoteGen 工具: ${toolName}`)
+        return errorResult('unknown_tool', `Unknown NoteGen tool: ${toolName}`)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return message === 'workspace_changed'
-      ? errorResult('workspace_changed', '执行期间工作区已切换，操作已取消')
+      ? errorResult('workspace_changed', 'The workspace changed during execution, so the operation was cancelled.')
       : errorResult('tool_error', message)
   }
 }
