@@ -173,8 +173,10 @@ export class AppPage {
    * sidebar closed, and the tab state survives reloads).
    */
   async switchToRecordsTab(): Promise<void> {
-    if ((await this.page.locator('#web-inbox').count()) > 0) {
-      await expect(this.page.locator('#web-inbox')).toBeVisible({ timeout: 10_000 })
+    // Visibility, not presence: #web-inbox stays mounted (hidden)
+    // while the Files tab is selected, so a count check would skip
+    // the click and then time out waiting for a hidden element.
+    if (await this.page.locator('#web-inbox').isVisible()) {
       return
     }
     const clicked = await this.page.evaluate(() => {
@@ -200,8 +202,9 @@ export class AppPage {
    * click is performed.
    */
   async switchToFilesTab(): Promise<void> {
-    if ((await fileTree(this.page).count()) > 0) {
-      await expect(fileTree(this.page)).toBeVisible({ timeout: 10_000 })
+    // Visibility, not presence: the tree stays mounted (hidden)
+    // while the Record tab is selected (same trap as #web-inbox).
+    if (await fileTree(this.page).isVisible()) {
       return
     }
     const clicked = await this.page.evaluate(() => {

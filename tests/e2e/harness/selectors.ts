@@ -33,7 +33,9 @@
 //   pages (W4-FLOWS), the Settings opener (W4-FLOWS, top-app-bar),
 //   and the rename input (W4-FLOWS, file-item). The reference repo
 //   had ZERO data-testid attributes anywhere in src/.
-// - File tree: role "tree", aria-label "Workspace files".
+// - File tree: role "tree", aria-label is the TRANSLATED
+//   treeLabel ("Workspace files" / "工作区文件"); the fileTree
+//   locator matches the first tree role and is locale-free.
 //   Tree items: role "treeitem", aria-label = file name, plus
 //   data-file-manager-item-path. The tree starts COLLAPSED (only
 //   the top folder renders); flows must expand folders first.
@@ -64,8 +66,18 @@
 import type { Locator, Page } from '@playwright/test'
 
 /** VERIFIED (source). File tree container. */
+/**
+ * The workspace file tree. Locale-independent on purpose: the
+ * tree's aria-label is the translated `article.file.treeLabel`
+ * ("Workspace files" in en, "工作区文件" in zh; proven by the
+ * I18N-9.5-ZH run, whose snapshot shows the zh tree while the
+ * en-named locator found nothing). The shell renders exactly one
+ * tree in the Files tab state all tree specs run in, so the
+ * first tree role is the workspace tree; scoping treeitem
+ * lookups inside it keeps them out of dialogs.
+ */
 export function fileTree(page: Page): Locator {
-  return page.getByRole('tree', { name: 'Workspace files' })
+  return page.getByRole('tree').first()
 }
 
 /**

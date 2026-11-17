@@ -222,7 +222,7 @@ TERVERIFIKASI (source):
 
 | Selector | Bukti source |
 |---|---|
-| `getByRole('tree', { name: 'Workspace files' })` | `file-manager.tsx` `getContainerProps(t('treeLabel'))`; `article.file.treeLabel` = "Workspace files"; `@headless-tree/core` container props (`role: "tree"`, `aria-label`). |
+| `getByRole('tree').first()` (locale-free; JANGAN pakai nama) | `file-manager.tsx` `getContainerProps(t('treeLabel'))`; `article.file.treeLabel` TERLOKALISASI ("Workspace files" / "工作区文件", dibuktikan run I18N-9.5-ZH); `@headless-tree/core` container props (`role: "tree"`, `aria-label`). |
 | `getByRole('treeitem', { name: '<nama file>' })` | `@headless-tree/core` item props (`role: "treeitem"`, `aria-label: getItemName()`); `use-file-tree.ts` `getItemName` = nama item. |
 | `[data-file-manager-item-path="<path relatif>"]` | `file-tree-row.tsx`; nilai dari `computedParentPath` (`lib/path.ts`): path relatif workspace, mis. `notes/getting-started.md`. |
 | `getByRole('textbox', { name: 'Search files' })` | `file-manager.tsx` input filter, `aria-label={t('search.label')}`; `article.file.search.label` = "Search files". |
