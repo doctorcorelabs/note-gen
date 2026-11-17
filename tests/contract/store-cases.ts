@@ -285,7 +285,11 @@ export function defineStoreCases(
     expect(read.nested).toEqual({ kept: 2 });
     expect("dropped" in (read.nested as Record<string, unknown>)).toBe(false);
     expect(read.list).toEqual([null, 3, { kept: 4 }]);
-    expect("dropped" in (read.list as Array<unknown>)[2]!).toBe(false);
+    const listObject = (read.list as Array<unknown>)[2] as Record<
+      string,
+      unknown
+    >;
+    expect("dropped" in listObject).toBe(false);
     expect("explicitNull" in read).toBe(true);
     expect(read.explicitNull).toBeNull();
     expect(JSON.stringify(read)).toBe(
