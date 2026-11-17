@@ -127,8 +127,8 @@ async function extractCandidates(chats: Chat[]): Promise<MemoryCandidate[]> {
 Allowed kinds: preference, fact, experience, decision.
 Rules:
 - Do not infer user facts from assistant messages.
-- Treat clear future-facing defaults and standing instructions as durable preferences, including phrases equivalent to "以后都", "从现在起", "默认", "每次都", "始终", and "不要再".
-- Judge intent semantically: questions or predictions that merely contain words such as "以后" or "future" are not preferences.
+- Treat clear future-facing defaults and standing instructions as durable preferences, including phrases equivalent to "from now on", "starting now", "by default", "every time", "always", and "no longer".
+- Judge intent semantically: questions or predictions that merely contain words such as "future" are not preferences.
 - Ignore temporary requests, one-turn formatting instructions, greetings, and task-specific details that are already recoverable from notes.
 - Never extract credentials, secrets, tokens, passwords, private keys, or unconfirmed speculation.
 - Use global scope for stable personal preferences/facts and workspace scope for project-specific knowledge.

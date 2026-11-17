@@ -163,22 +163,22 @@ export function getSkillDirectoryStructure(): {
   structure: Record<string, { description: string; required: boolean }>
 } {
   return {
-    description: 'Agent Skills 目录结构 (遵循官方规范)',
+    description: 'Agent Skills directory structure (following the official specification)',
     structure: {
       [SKILL_FILE_NAME]: {
-        description: 'Skill 定义文件 (必填)',
+        description: 'Skill definition file (required)',
         required: true,
       },
       [SCRIPTS_DIR_NAME + '/']: {
-        description: '可执行脚本目录 (可选)',
+        description: 'Executable scripts directory (optional)',
         required: false,
       },
       [REFERENCES_DIR_NAME + '/']: {
-        description: '参考文档目录 (可选)',
+        description: 'Reference documentation directory (optional)',
         required: false,
       },
       [ASSETS_DIR_NAME + '/']: {
-        description: '静态资源目录 (可选)',
+        description: 'Static assets directory (optional)',
         required: false,
       },
     },
@@ -190,10 +190,10 @@ export function getSkillDirectoryStructure(): {
  */
 export function formatSkillList(skills: Array<{ id: string; name: string; description: string }>): string {
   if (skills.length === 0) {
-    return '没有可用的 Skills'
+    return 'No Skills available'
   }
 
-  const lines: string[] = [`可用的 Skills (${skills.length} 个):`, '']
+  const lines: string[] = [`Available Skills (${skills.length}):`, '']
 
   for (const skill of skills) {
     lines.push(`- ${skill.name}`)
@@ -233,19 +233,19 @@ export function validateSkillDirectoryStructure(files: string[]): {
 
   if (hasOldReferenceFile) {
     warnings.push(
-      '检测到旧格式的 REFERENCE.md 文件，建议将其移动到 references/ 目录'
+      'Detected a legacy REFERENCE.md file; move it to the references/ directory'
     )
   }
 
   if (hasOldExamplesFile) {
     warnings.push(
-      '检测到旧格式的 EXAMPLES.md 文件，建议将其移动到 references/ 目录'
+      'Detected a legacy EXAMPLES.md file; move it to the references/ directory'
     )
   }
 
   if (hasOldKeywordsFile) {
     warnings.push(
-      '检测到旧格式的 KEYWORDS.md 文件，建议将其内容合并到 SKILL.md 或移动到 references/ 目录'
+      'Detected a legacy KEYWORDS.md file; merge its content into SKILL.md or move it to the references/ directory'
     )
   }
 
@@ -269,33 +269,33 @@ export function getMigrationGuide(): {
   steps: Array<{ from: string; to: string; description: string }>
 } {
   return {
-    title: 'Skill 目录结构迁移指南',
-    description: '将旧格式的 Skill 迁移到符合官方规范的新格式',
+    title: 'Skill directory structure migration guide',
+    description: 'Migrate a legacy-format Skill to the new format that follows the official specification',
     steps: [
       {
         from: 'REFERENCE.md',
         to: 'references/REFERENCE.md',
-        description: '将参考文档移动到 references/ 目录',
+        description: 'Move reference documentation to the references/ directory',
       },
       {
         from: 'EXAMPLES.md',
         to: 'references/EXAMPLES.md',
-        description: '将示例文档移动到 references/ 目录',
+        description: 'Move example documentation to the references/ directory',
       },
       {
         from: 'KEYWORDS.md',
-        to: 'SKILL.md 或 references/KEYWORDS.md',
-        description: '将关键词内容合并到 SKILL.md 或移动到 references/ 目录',
+        to: 'SKILL.md or references/KEYWORDS.md',
+        description: 'Merge the keywords content into SKILL.md or move it to the references/ directory',
       },
       {
-        from: '无脚本目录',
+        from: 'No scripts directory',
         to: 'scripts/',
-        description: '创建 scripts/ 目录存放可执行脚本',
+        description: 'Create a scripts/ directory for executable scripts',
       },
       {
-        from: '无资源目录',
+        from: 'No assets directory',
         to: 'assets/',
-        description: '创建 assets/ 目录存放模板、图片等静态资源',
+        description: 'Create an assets/ directory for templates, images, and other static assets',
       },
     ],
   }

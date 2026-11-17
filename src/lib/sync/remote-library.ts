@@ -232,7 +232,7 @@ async function listObjectStorageFiles(
 ): Promise<RemoteLibraryFile[]> {
   if (platform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
-    if (!config) throw new Error('S3 未配置')
+    if (!config) throw new Error('S3 is not configured.')
     const folder = options.folderPath?.replace(/^\/+|\/+$/g, '')
     const objects = await s3ListObjects(config, options.scope === 'data' ? '.data/' : folder ? `${folder}/` : '')
     return objects
@@ -246,7 +246,7 @@ async function listObjectStorageFiles(
   }
 
   const config = await store.get<WebDAVConfig>('webdavSyncConfig')
-  if (!config) throw new Error('WebDAV 未配置')
+  if (!config) throw new Error('WebDAV is not configured.')
   const queue = [options.folderPath?.replace(/^\/+|\/+$/g, '') || '']
   const visited = new Set<string>()
   const files: RemoteLibraryFile[] = []
@@ -603,7 +603,7 @@ async function downloadRemoteBytesRaw(
   if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     const file = config ? await s3DownloadBytes(config, path) : null
-    if (!file) throw new Error('S3 下载失败')
+    if (!file) throw new Error('S3 download failed.')
     onVersion?.(file.etag)
     return file.content
   }
@@ -611,7 +611,7 @@ async function downloadRemoteBytesRaw(
   if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     const file = config ? await webdavDownloadBytes(config, path) : null
-    if (!file) throw new Error('WebDAV 下载失败')
+    if (!file) throw new Error('WebDAV download failed.')
     onVersion?.(file.etag)
     return file.content
   }
@@ -625,13 +625,13 @@ async function downloadRemoteBytesRaw(
           ? await cloudFolderDownloadBytes(config, path)
           : null
       : null
-    if (!file) throw new Error('云盘文件夹下载失败')
+    if (!file) throw new Error('Cloud folder download failed.')
     onVersion?.(file.etag)
     return file.content
   }
 
   if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') {
-    throw new Error('当前同步方式不支持远端工作区下载')
+    throw new Error('The current sync method does not support remote workspace download.')
   }
 
   const repo = await getGitRepository(effectivePlatform, scope)
@@ -756,14 +756,14 @@ async function uploadRemoteContentRaw(
   if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     const result = config ? await s3Upload(config, path, content, undefined, contentType, condition, beforeWrite) : null
-    if (!result) throw new Error('S3 上传失败')
+    if (!result) throw new Error('S3 upload failed.')
     return result.etag || `uploaded:${path}`
   }
 
   if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     const result = config ? await webdavUpload(config, path, content, undefined, contentType, condition, beforeWrite) : null
-    if (!result) throw new Error('WebDAV 上传失败')
+    if (!result) throw new Error('WebDAV upload failed.')
     return result.etag || `uploaded:${path}`
   }
 
@@ -777,12 +777,12 @@ async function uploadRemoteContentRaw(
           ? await cloudFolderUpload(config, path, content, condition)
           : null
       : null
-    if (!result) throw new Error('云盘文件夹上传失败')
+    if (!result) throw new Error('Cloud folder upload failed.')
     return result.etag
   }
 
   if (effectivePlatform === 'selfHosted' || effectivePlatform === 'local') {
-    throw new Error('当前同步方式不支持远端工作区上传')
+    throw new Error('The current sync method does not support remote workspace upload.')
   }
 
   const repo = await getGitRepository(effectivePlatform, scope)
@@ -809,7 +809,7 @@ async function uploadRemoteContentRaw(
       break
   }
 
-  if (!response) throw new Error(`${effectivePlatform} 上传失败`)
+  if (!response) throw new Error(`${effectivePlatform} upload failed.`)
   return getUploadedRemoteVersion(response) || sha || `uploaded:${path}`
 }
 
@@ -920,19 +920,19 @@ export async function getRemoteFileMetadata(
   const effectivePlatform = target ?? await getPlatform(store)
   if (effectivePlatform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
-    if (!config) throw new Error('S3 未配置')
+    if (!config) throw new Error('S3 is not configured.')
     const file = await s3HeadObject(config, path)
     return file ? { version: file.etag } : null
   }
   if (effectivePlatform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
-    if (!config) throw new Error('WebDAV 未配置')
+    if (!config) throw new Error('WebDAV is not configured.')
     const file = await webdavHeadObject(config, path)
     return file ? { version: file.etag } : null
   }
   if (effectivePlatform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-    if (!config?.path) throw new Error('云盘文件夹未配置')
+    if (!config?.path) throw new Error('The cloud folder is not configured.')
     const file = scope === 'workspace' && supportsCloudFolderWorkspace(config)
       ? await androidCloudFolderWorkspaceHead(config, path)
       : await cloudFolderHeadObject(config, path)

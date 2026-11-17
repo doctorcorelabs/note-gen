@@ -113,7 +113,7 @@ export function AudioPlayer({ audioPath, compact = false }: AudioPlayerProps) {
 
     return (
       <div className="w-full py-1 px-2 bg-muted/30 rounded text-center text-xs text-muted-foreground">
-        加载音频中...
+        Loading audio...
       </div>
     )
   }

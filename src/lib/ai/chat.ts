@@ -459,7 +459,7 @@ export async function fetchAiStream(
       
       if (iteration >= maxIterations) {
         console.warn('达到最大工具调用次数限制')
-        const maxIterationsText = t ? t('record.mark.mark.chat.mcp.maxIterationsReached') : '⚠️ 达到最大工具调用次数限制'
+        const maxIterationsText = t ? t('record.mark.mark.chat.mcp.maxIterationsReached') : '⚠️ Maximum tool call iterations reached'
         onUpdate(fullContent + '\n\n' + maxIterationsText)
       }
     }

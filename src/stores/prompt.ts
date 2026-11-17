@@ -24,8 +24,8 @@ const usePromptStore = create<PromptState>((set, get) => ({
   promptList: [
     {
       id: '0',
-      title: '写作助手',
-      content: '请你扮演一个笔记软件的智能助手，可以参考记录内容，使用 markdown 语法，回答用户的问题。',
+      title: 'Writing Assistant',
+      content: 'Act as the intelligent assistant of a note-taking app. You may refer to record content, use Markdown syntax, and answer user questions.',
       isDefault: true
     }
   ],

@@ -43,7 +43,7 @@ export async function getGiteaApiBaseUrl(): Promise<string> {
 
     // 验证自定义 URL 是否有效
     if (!customUrl) {
-      throw new Error('自建 Gitea 实例的 URL 未配置，请先在设置中填写 Gitea URL');
+      throw new Error('The self-hosted Gitea instance URL is not configured. Please fill in the Gitea URL in settings first.');
     }
 
     // 确保 URL 包含协议
@@ -64,7 +64,7 @@ async function getCommonHeaders(): Promise<any> {
   const accessToken = await store.get<string>('giteaAccessToken');
 
   if (!accessToken) {
-    throw new Error('Gitea Access Token 未配置');
+    throw new Error('Gitea Access Token is not configured.');
   }
 
   const headers = {
@@ -173,7 +173,7 @@ export async function uploadFile({
     const giteaUsername = await store.get<string>('giteaUsername');
 
     if (!giteaUsername) {
-      throw new Error('Gitea 用户名未配置');
+      throw new Error('The Gitea username is not configured.');
     }
 
     const id = uuid();
@@ -257,22 +257,22 @@ export async function uploadFile({
         const postErrorData = await postResponse.json();
         throw {
           status: postResponse.status,
-          message: postErrorData.message || '同步失败'
+          message: postErrorData.message || 'Sync failed.'
         } as GiteaError;
       }
 
       const errorData = await response.json();
       throw {
         status: response.status,
-        message: errorData.message || '同步失败'
+        message: errorData.message || 'Sync failed.'
       } as GiteaError;
 
     })
   } catch (error) {
     if (guarded) throw error
     toast({
-      title: '同步失败',
-      description: (error as GiteaError).message || '上传文件时发生错误',
+      title: 'Sync failed.',
+      description: (error as GiteaError).message || 'An error occurred while uploading the file.',
       variant: 'destructive',
     });
     throw error;
@@ -311,8 +311,8 @@ export async function updateFileContent({
     });
   } catch (error) {
     toast({
-      title: '更新文件失败',
-      description: (error as GiteaError).message || '更新文件时发生错误',
+      title: 'Failed to update the file.',
+      description: (error as GiteaError).message || 'An error occurred while updating the file.',
       variant: 'destructive',
     });
     throw error;
@@ -420,7 +420,7 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
-      throw new Error('用户名未配置');
+      throw new Error('The username is not configured.');
     }
 
     const baseUrl = await getGiteaApiBaseUrl();
@@ -457,15 +457,15 @@ export async function deleteFile({ path, sha, repo, guarded = false, beforeWrite
       const errorData = await response.json();
       throw {
         status: response.status,
-        message: errorData.message || '删除文件失败'
+        message: errorData.message || 'Failed to delete the file.'
       } as GiteaError;
 
     })
   } catch (error) {
     if (guarded) throw error
     toast({
-      title: '删除文件失败',
-      description: (error as GiteaError).message || '删除文件时发生错误',
+      title: 'Failed to delete the file.',
+      description: (error as GiteaError).message || 'An error occurred while deleting the file.',
       variant: 'destructive',
     });
     return null; // 确保在错误情况下也有返回值
@@ -529,7 +529,7 @@ export async function getFileContentFromCommit({ path, ref, repo }: { path: stri
     const giteaUsername = await store.get<string>('giteaUsername');
 
     if (!giteaUsername) {
-      throw new Error('用户名未配置');
+      throw new Error('The username is not configured.');
     }
 
     const baseUrl = await getGiteaApiBaseUrl();
@@ -609,7 +609,7 @@ export async function getFileContent({ path, ref, repo }: { path: string; ref?: 
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
-      throw new Error('用户名未配置');
+      throw new Error('The username is not configured.');
     }
 
     const baseUrl = await getGiteaApiBaseUrl();
@@ -660,7 +660,7 @@ export async function getUserInfo(token?: string): Promise<GiteaUserInfo> {
     const accessToken = token || await store.get<string>('giteaAccessToken');
     
     if (!accessToken) {
-      throw new Error('访问令牌未配置');
+      throw new Error('The access token is not configured.');
     }
 
     const baseUrl = await getGiteaApiBaseUrl();
@@ -689,13 +689,13 @@ export async function getUserInfo(token?: string): Promise<GiteaUserInfo> {
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '获取用户信息失败'
+      message: errorData.message || 'Failed to fetch user information.'
     } as GiteaError;
 
   } catch (error) {
     toast({
-      title: '获取用户信息失败',
-      description: (error as GiteaError).message || '获取用户信息时发生错误',
+      title: 'Failed to fetch user information.',
+      description: (error as GiteaError).message || 'An error occurred while fetching user information.',
       variant: 'destructive',
     });
     throw error;
@@ -712,7 +712,7 @@ export async function checkSyncRepoState(name: string): Promise<GiteaRepositoryI
     const giteaUsername = await store.get<string>('giteaUsername');
     
     if (!giteaUsername) {
-      throw new Error('用户名未配置');
+      throw new Error('The username is not configured.');
     }
 
     const baseUrl = await getGiteaApiBaseUrl();
@@ -740,7 +740,7 @@ export async function checkSyncRepoState(name: string): Promise<GiteaRepositoryI
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '检查仓库状态失败'
+      message: errorData.message || 'Failed to check the repository status.'
     } as GiteaError;
 
   } catch (error) {
@@ -760,7 +760,7 @@ export async function listUserRepositories(): Promise<string[]> {
     proxy,
   })
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(`获取仓库列表失败: ${response.status}`)
+    throw new Error(`Failed to fetch the repository list: ${response.status}`)
   }
 
   const repositories = await response.json() as GiteaRepositoryInfo[]
@@ -783,7 +783,7 @@ export async function createSyncRepo(name: string, isPrivate: boolean = true): P
 
     const requestBody = {
       name: name,
-      description: `note-gen 同步仓库 - ${name}`,
+      description: `note-gen sync repository - ${name}`,
       private: isPrivate,
       auto_init: true,
       default_branch: 'main'
@@ -804,13 +804,13 @@ export async function createSyncRepo(name: string, isPrivate: boolean = true): P
     const errorData = await response.json();
     throw {
       status: response.status,
-      message: errorData.message || '创建仓库失败'
+      message: errorData.message || 'Failed to create the repository.'
     } as GiteaError;
 
   } catch (error) {
     toast({
-      title: '创建仓库失败',
-      description: (error as GiteaError).message || '创建仓库时发生错误',
+      title: 'Failed to create the repository.',
+      description: (error as GiteaError).message || 'An error occurred while creating the repository.',
       variant: 'destructive',
     });
     return null;

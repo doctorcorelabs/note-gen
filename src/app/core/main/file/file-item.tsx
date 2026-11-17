@@ -73,8 +73,8 @@ function buildFileRenamePlan({
 
 function showPdfExportStartToast() {
   toast({
-    title: '正在准备 PDF',
-    description: '请在系统打印窗口中选择“另存为 PDF”。',
+    title: 'Preparing PDF',
+    description: 'In the system print window, choose "Save as PDF".',
   })
 }
 
@@ -652,12 +652,12 @@ export function FileItem({
       )
 
       if (exported) {
-        toast({ title: format === 'pdf' ? '已打开 PDF 打印窗口' : '导出成功' })
+        toast({ title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess') })
       }
     } catch (error) {
       console.error(`Export selected file failed: ${path}`, error)
       toast({
-        title: '导出失败',
+        title: t('exportFailed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       })
