@@ -574,7 +574,19 @@ async function persistChangedSettings(
 
   for (const key of changedKeys) {
     if (key === 'primaryBackupMethod' || key === 'platformSwitchRecovery') continue
-    await store.set(key, stateRecord[key])
+    const value = stateRecord[key]
+    if (value === undefined) {
+      // F122-Q2: a future undefined assignment (for example through a
+      // cast) must not throw mid-batch and lose the whole flush: the
+      // pending keys are already cleared by the caller, so a throw
+      // here would drop every other changed key in this batch. Skip
+      // the undefined key, warn with the key name only, and keep the
+      // stored value unchanged. Never delete the key here: deletion
+      // is an explicit caller decision, not a funnel side effect.
+      console.warn(`Skipping persist of setting "${key}": value is undefined`)
+      continue
+    }
+    await store.set(key, value)
   }
 
   await store.save()
@@ -990,6 +1002,11 @@ const useSettingStore = create<SettingState>((set, get) => ({
           hydratedSettings[key] = res
         }
       } else {
+        // F122-Q2: same guard as the persist funnel above. An
+        // undefined default must not throw inside hydration and abort
+        // init; the key simply stays absent, which reads back as
+        // undefined anyway. Never delete here either.
+        if (value === undefined) return
         await store.set(key, value)
       }
     }))
