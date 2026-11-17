@@ -91,7 +91,7 @@ import { createWebAutostartAdapter } from "./autostart/autostart.web";
 import { createWebClipboardAdapter } from "./clipboard/clipboard.web";
 import { createWebDialogAdapter } from "./dialog/dialog.web";
 import { createWebEventAdapter } from "./event/event.web";
-import { createWebFsAdapter } from "./fs/fs.web";
+import { createWebFsAdapter, type WebFsAdapterDeps } from "./fs/fs.web";
 import { createWebHttpAdapter } from "./http/http.web";
 import { createWebChannelAdapter } from "./invoke/channel.web";
 import { createWebInvokeAdapter } from "./invoke/web";
@@ -102,7 +102,7 @@ import { createWebPathAdapter } from "./path/path.web";
 import { createWebProcessAdapter } from "./process/process.web";
 import { createWebShellAdapter } from "./shell/shell.web";
 import { createWebShortcutAdapter } from "./shortcut/shortcut.web";
-import { createSqlDbClient, type SqlDbCsrfTokenProvider } from "./sql/db-client";
+import { createSqlDbClient, type SqlDbCsrfTokenProvider, type SqlDbCsrfTokenRefresher } from "./sql/db-client";
 import {
   createWebSqlAdapter,
   type SqlHealthProbeResult,
@@ -149,11 +149,24 @@ export const REGISTERED_WEB_ADAPTER_NAMES: readonly string[] = [
 ];
 
 /**
- * Optional boot-supplied seams for registration. The store and
- * sql adapters take injected deps; every other factory is still
+ * Optional boot-supplied seams for registration. The fs, store, and
+ * sql adapters take injected CSRF deps; every other factory is still
  * called with no arguments.
  */
 export interface WebAdapterWiringOptions {
+  /**
+   * CSRF token provider for fs mutations, from the one shared
+   * V3-30 seam owned by boot. Same contract as
+   * WebFsAdapterDeps.getCsrfToken: return null when no token is
+   * available instead of throwing. When absent, fs mutations go
+   * out without the header and the server answers honestly. The
+   * fs adapter has no csrf_invalid refresh retry: its transport
+   * returns raw responses, so a retry would need a clone-based
+   * design; that is recorded as an open follow-up, not fixed
+   * here. The store and sql adapters do refresh and retry once
+   * (see their refresh options below).
+   */
+  getFsCsrfToken?: WebFsAdapterDeps["getCsrfToken"];
   /**
    * CSRF token provider for store mutations, from the one shared
    * V3-30 seam owned by boot. Same contract as
@@ -163,6 +176,14 @@ export interface WebAdapterWiringOptions {
    */
   getStoreCsrfToken?: WebStoreAdapterDeps["getCsrfToken"];
   /**
+   * CSRF token refresher for store mutations, from the same shared
+   * seam. Called at most once per request, only after the server
+   * answers 403 `csrf_invalid`; the request is then retried once
+   * with a freshly read token. When absent, a stale token fails
+   * the request with the server error.
+   */
+  refreshStoreCsrfToken?: WebStoreAdapterDeps["refreshCsrfToken"];
+  /**
    * CSRF token provider for sql requests, from the one shared
    * V3-30 seam owned by boot. Same contract as
    * SqlDbClientDeps.getCsrfToken: return null when no token is
@@ -170,6 +191,13 @@ export interface WebAdapterWiringOptions {
    * out without the header and the server answers honestly.
    */
   getSqlCsrfToken?: SqlDbCsrfTokenProvider;
+  /**
+   * CSRF token refresher for sql requests, from the same shared
+   * seam. Same once-per-request semantics as
+   * `refreshStoreCsrfToken`, sharing the single retry budget of
+   * the sql retry policy.
+   */
+  refreshSqlCsrfToken?: SqlDbCsrfTokenRefresher;
 }
 
 /** Ready path, mirroring HEALTH_READY_PATH in server/src/routes/health.ts. */
@@ -238,9 +266,12 @@ async function probeSqlHealth(): Promise<SqlHealthProbeResult> {
  * calling it twice before the freeze replaces the registered
  * instances. Production boot calls initializeWebPlatform instead.
  * The store adapter is built with the key-schema classifier; the
- * CSRF provider arrives through options (see the module header).
- * The sql adapter is built with a db-client port plus the health
- * probe; its CSRF provider arrives through options the same way.
+ * CSRF providers and refreshers arrive through options (see the
+ * module header). The sql adapter is built with a db-client port
+ * plus the health probe; its CSRF provider and refresher arrive
+ * through options the same way. The fs adapter receives its CSRF
+ * provider through options too; it has no refresh retry (see the
+ * option comment).
  */
 export function registerWebAdapters(
   options: WebAdapterWiringOptions = {},
@@ -251,7 +282,11 @@ export function registerWebAdapters(
   registerPlatformAdapter("clipboard", createWebClipboardAdapter(), ["web"]);
   registerPlatformAdapter("dialog", createWebDialogAdapter(), ["web"]);
   registerPlatformAdapter("event", createWebEventAdapter(), ["web"]);
-  registerPlatformAdapter("fs", createWebFsAdapter(), ["web"]);
+  registerPlatformAdapter(
+    "fs",
+    createWebFsAdapter({ getCsrfToken: options.getFsCsrfToken }),
+    ["web"],
+  );
   registerPlatformAdapter("http", createWebHttpAdapter(), ["web"]);
   registerPlatformAdapter("invoke", createWebInvokeAdapter(), ["web"]);
   registerPlatformAdapter(
@@ -268,7 +303,10 @@ export function registerWebAdapters(
   registerPlatformAdapter(
     "sql",
     createWebSqlAdapter({
-      port: createSqlDbClient({ getCsrfToken: options.getSqlCsrfToken }),
+      port: createSqlDbClient({
+        getCsrfToken: options.getSqlCsrfToken,
+        refreshCsrfToken: options.refreshSqlCsrfToken,
+      }),
       health: probeSqlHealth,
     }),
     ["web"],
@@ -278,6 +316,7 @@ export function registerWebAdapters(
     createWebStoreAdapter({
       classifyKey,
       getCsrfToken: options.getStoreCsrfToken,
+      refreshCsrfToken: options.refreshStoreCsrfToken,
     }),
     ["web"],
   );

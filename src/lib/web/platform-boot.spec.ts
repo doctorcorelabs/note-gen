@@ -18,12 +18,14 @@
  *
  * What this spec pins: in web mode the boot call runs the POC
  * cleanup before registration and freezes the registry with the
- * store and sql adapters registered; during SSR (no window) and
- * inside the Tauri shell it does nothing; repeated calls keep the
- * same instances; and each CSRF provider returns null instead of
- * throwing when the token fetch fails. The browser ordering
- * guarantee (root layout module evaluation precedes all effects)
- * is not provable in node and stays a merge-gate browser check.
+ * fs, store, and sql adapters registered; during SSR (no window)
+ * and inside the Tauri shell it does nothing; repeated calls keep
+ * the same instances; each CSRF provider returns null instead of
+ * throwing when the token fetch fails; and each CSRF refresher
+ * propagates a failed refresh instead of masking it. The browser
+ * ordering guarantee (root layout module evaluation precedes all
+ * effects) is not provable in node and stays a merge-gate browser
+ * check.
  */
 
 import assert from "node:assert/strict";
@@ -42,8 +44,11 @@ import {
 } from "../platform/store/poc-cleanup";
 import {
   ensureWebPlatformInitialized,
+  getFsCsrfTokenFromSharedSeam,
   getSqlCsrfTokenFromSharedSeam,
   getStoreCsrfTokenFromSharedSeam,
+  refreshSqlCsrfTokenFromSharedSeam,
+  refreshStoreCsrfTokenFromSharedSeam,
 } from "./platform-boot";
 
 class FakeStorage implements PocCleanupStorage {
@@ -158,6 +163,20 @@ describe("ensureWebPlatformInitialized", () => {
   });
 });
 
+describe("getFsCsrfTokenFromSharedSeam", () => {
+  test("returns null instead of throwing when the fetch fails", async () => {
+    const savedFetch = globals()["fetch"];
+    globals()["fetch"] = async () => {
+      throw new Error("network down");
+    };
+    try {
+      assert.equal(await getFsCsrfTokenFromSharedSeam(), null);
+    } finally {
+      globals()["fetch"] = savedFetch;
+    }
+  });
+});
+
 describe("getStoreCsrfTokenFromSharedSeam", () => {
   test("returns null instead of throwing when the fetch fails", async () => {
     const savedFetch = globals()["fetch"];
@@ -172,6 +191,20 @@ describe("getStoreCsrfTokenFromSharedSeam", () => {
   });
 });
 
+describe("refreshStoreCsrfTokenFromSharedSeam", () => {
+  test("propagates a failed refresh instead of masking it", async () => {
+    const savedFetch = globals()["fetch"];
+    globals()["fetch"] = async () => {
+      throw new Error("network down");
+    };
+    try {
+      await assert.rejects(refreshStoreCsrfTokenFromSharedSeam());
+    } finally {
+      globals()["fetch"] = savedFetch;
+    }
+  });
+});
+
 describe("getSqlCsrfTokenFromSharedSeam", () => {
   test("returns null instead of throwing when the fetch fails", async () => {
     const savedFetch = globals()["fetch"];
@@ -180,6 +213,20 @@ describe("getSqlCsrfTokenFromSharedSeam", () => {
     };
     try {
       assert.equal(await getSqlCsrfTokenFromSharedSeam(), null);
+    } finally {
+      globals()["fetch"] = savedFetch;
+    }
+  });
+});
+
+describe("refreshSqlCsrfTokenFromSharedSeam", () => {
+  test("propagates a failed refresh instead of masking it", async () => {
+    const savedFetch = globals()["fetch"];
+    globals()["fetch"] = async () => {
+      throw new Error("network down");
+    };
+    try {
+      await assert.rejects(refreshSqlCsrfTokenFromSharedSeam());
     } finally {
       globals()["fetch"] = savedFetch;
     }
