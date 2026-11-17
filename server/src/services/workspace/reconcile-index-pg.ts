@@ -26,6 +26,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { files, type Database } from '../../db/index.js';
+import { ApiError } from '../../plugins/envelope.js';
 import { resolveDefaultWorkspaceId } from '../db/workspace.js';
 import type { WorkspaceIdentityResolver } from './write-ports.js';
 import type { ReconcileIndexPort } from './reconcile.js';
@@ -54,9 +55,17 @@ export function createDrizzleReconcileIndexPort(db: Database): ReconcileIndexPor
 
 export function createDrizzleWorkspaceIdentityResolver(db: Database): WorkspaceIdentityResolver {
   return async (principal) => {
-    const workspaceId = await db.transaction(async (tx) =>
-      resolveDefaultWorkspaceId(tx, principal.userId),
-    );
+    let workspaceId: string | null;
+    try {
+      workspaceId = await db.transaction(async (tx) =>
+        resolveDefaultWorkspaceId(tx, principal.userId),
+      );
+    } catch {
+      // A database failure is "cannot verify", not "no
+      // workspace": fail closed with 503, the same rule the
+      // session verifier applies (middleware/session.ts).
+      throw ApiError.serviceUnavailable('The database is not available.');
+    }
     if (workspaceId === null) {
       return null;
     }
