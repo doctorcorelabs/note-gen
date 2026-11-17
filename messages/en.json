@@ -4033,7 +4033,39 @@
     },
     "searchPlaceholder": "Search settings...",
     "noSearchResults": "No matching settings found",
-    "title": "Settings"
+    "title": "Settings",
+    "disabled": {
+      "canvas": "Canvas is available in Phase 2. This section is disabled in this version.",
+      "sync": "Sync is available in a later phase. The server is the single source of truth in this version. No sync credentials can be entered here.",
+      "backup": "Backups are managed by the server. Local backup folders are not used in the web version.",
+      "imageHosting": "Image hosting is available in Phase 2. Assets in this version are handled through the workspace media and record asset endpoints. No image hosting credentials can be entered here.",
+      "ai": "AI providers and models are available in Phase 2. No API keys can be entered here.",
+      "webSearch": "Web search is available in Phase 2, as part of AI providers. No API keys can be entered here.",
+      "rag": "The knowledge base is available in Phase 2. This section is disabled in this version.",
+      "mcp": "MCP servers are available in a later phase. No MCP server configuration can be entered here.",
+      "skills": "Skills are available in a later phase. This section is disabled in this version.",
+      "plugins": "Plugins are off in this version. Plugin installation and management are disabled.",
+      "prompt": "Prompts depend on AI features in Phase 2. This section is disabled in this version.",
+      "memories": "Memory management is outside the scope of this version. This section is disabled.",
+      "template": "Templates depend on organize features in Phase 2. This section is disabled in this version.",
+      "imageMethod": "Image recognition needs native OCR or a Phase 2 vision model. This section is disabled in this version.",
+      "audio": "Audio features depend on AI transport in Phase 2. This section is disabled in this version.",
+      "editorModels": "Model selection for editor AI actions is available in Phase 2. It is disabled in this version.",
+      "recordModel": "Record description models are available in Phase 2. Automatic descriptions are disabled in this version.",
+      "webClipper": "The web clipper is available in a later phase. It is disabled in this version.",
+      "proxy": "Proxy settings are determined by the browser and the deployment. They cannot be changed here.",
+      "configFiles": "Configuration file import and export are only available in the desktop app.",
+      "systemPermissions": "System permissions do not apply in the browser. This section is disabled in the web version.",
+      "appLock": "App lock is not available in the web version. Signing in protects access to your notes instead.",
+      "clearData": "Deleting app data and files is not available in the web version.",
+      "workspaceSwitch": "The workspace comes from your sign-in session. Switching workspaces is not available in the web version.",
+      "assetsPath": "Assets are managed by the server in the web version. The assets folder cannot be changed here."
+    },
+    "persistence": {
+      "saved": "All changes saved",
+      "saving": "Saving...",
+      "failed": "Could not save changes. Try again."
+    }
   },
   "record": {
     "tagging": {

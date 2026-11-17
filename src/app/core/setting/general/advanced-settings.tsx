@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { platform, BaseDirectory } from '@/lib/platform'
+import { platform, BaseDirectory, isTauri } from '@/lib/platform'
 import { useTranslations } from 'next-intl'
 import {
   AlertDialog,
@@ -33,12 +33,16 @@ import useSettingStore from '@/stores/setting'
 import { ConfigFileActions } from './config-file-actions'
 import { AlertTriangle, Code2, Database, FolderX, Gauge, MonitorCog, Network } from 'lucide-react'
 import { SettingSection } from '../components/setting-base'
+import { DisabledFeatureNote } from '../components/setting-disabled-notice'
 import { DeveloperDiagnostics } from './developer-diagnostics'
 import { SystemPermissions } from './system-permissions'
 import { AppLockSettings } from './app-lock-settings'
 
 export function AdvancedSettings({ showConfigFileActions = true }: { showConfigFileActions?: boolean }) {
   const t = useTranslations('settings.dev')
+  const disabledT = useTranslations('settings.disabled')
+  const permT = useTranslations('settings.general.permissions')
+  const lockT = useTranslations('appLock')
   const [proxy, setProxy] = useState('')
   const [systemProxy, setSystemProxy] = useState(false)
   const [proxyLoaded, setProxyLoaded] = useState(false)
@@ -49,6 +53,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
   const developerPerformanceInfo = useSettingStore(state => state.developerPerformanceInfo)
   const setDeveloperPerformanceInfo = useSettingStore(state => state.setDeveloperPerformanceInfo)
   const desktop = supportsNativeDeveloperTools()
+  const isDesktopApp = isTauri()
   const { toast } = useToast()
 
   async function handleOpenDeveloperTools() {
@@ -64,6 +69,10 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
   }
 
   async function handleClearData() {
+    // Desktop-only destructive action. In the web version the buttons
+    // are disabled; this guard keeps the store from being cleared even
+    // if the handler is ever reached another way.
+    if (!isDesktopApp) return
     setPendingAction('data')
     try {
       const store = await platform.store.load('store.json')
@@ -81,6 +90,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
   }
 
   async function handleClearFile() {
+    if (!isDesktopApp) return
     setPendingAction('files')
     try {
       const folders = ['screenshot', 'article', 'clipboard', 'image']
@@ -96,6 +106,9 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
   }
 
   function saveProxy(address: string, useSystem: boolean) {
+    // Proxy settings are inert in the web version: the browser and the
+    // deployment decide the proxy, so no write is attempted here.
+    if (!isDesktopApp) return
     // Serialize blur and switch events so an older save cannot restore a manual
     // address after system proxy has been enabled.
     proxySaveQueue.current = proxySaveQueue.current.then(async () => {
@@ -141,7 +154,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
               <ItemActions className="ml-auto">
                 <Switch
                   checked={systemProxy}
-                  disabled={!proxyLoaded}
+                  disabled={!isDesktopApp || !proxyLoaded}
                   onCheckedChange={(checked) => {
                     setSystemProxy(checked)
                     saveProxy(proxy, checked)
@@ -162,19 +175,32 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
                 className="w-full sm:w-[280px]"
                 placeholder={t('proxyPlaceholder')}
                 aria-label={t('proxyTitle')}
-                disabled={!proxyLoaded || systemProxy}
+                disabled={!isDesktopApp || !proxyLoaded || systemProxy}
                 value={proxy}
                 onChange={(event) => setProxy(event.target.value)}
                 onBlur={() => saveProxy(proxy, systemProxy)}
               />
             </ItemActions>
           </Item>
-          {showConfigFileActions ? <ConfigFileActions /> : null}
+          {!isDesktopApp ? (
+            <DisabledFeatureNote>{disabledT('proxy')}</DisabledFeatureNote>
+          ) : null}
+          {showConfigFileActions ? (isDesktopApp ? <ConfigFileActions /> : (
+            <DisabledFeatureNote>{disabledT('configFiles')}</DisabledFeatureNote>
+          )) : null}
         </ItemGroup>
       </SettingSection>
 
-      <SystemPermissions />
-      <AppLockSettings />
+      {isDesktopApp ? <SystemPermissions /> : (
+        <SettingSection title={permT('title')}>
+          <DisabledFeatureNote>{disabledT('systemPermissions')}</DisabledFeatureNote>
+        </SettingSection>
+      )}
+      {isDesktopApp ? <AppLockSettings /> : (
+        <SettingSection title={lockT('title')}>
+          <DisabledFeatureNote>{disabledT('appLock')}</DisabledFeatureNote>
+        </SettingSection>
+      )}
 
       <SettingSection title={t('developerTitle')} desc={t('developerDesc')}>
         <ItemGroup className="gap-3">
@@ -242,7 +268,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
             <ItemActions className="ml-auto">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" disabled={pendingAction !== null}>
+                  <Button variant="destructive" disabled={!isDesktopApp || pendingAction !== null}>
                     {t('clearButton')}
                   </Button>
                 </AlertDialogTrigger>
@@ -272,7 +298,7 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
             <ItemActions className="ml-auto">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" disabled={pendingAction !== null}>
+                  <Button variant="destructive" disabled={!isDesktopApp || pendingAction !== null}>
                     {t('clearButton')}
                   </Button>
                 </AlertDialogTrigger>
@@ -293,6 +319,9 @@ export function AdvancedSettings({ showConfigFileActions = true }: { showConfigF
             </ItemActions>
           </Item>
         </ItemGroup>
+        {!isDesktopApp ? (
+          <DisabledFeatureNote>{disabledT('clearData')}</DisabledFeatureNote>
+        ) : null}
       </SettingSection>
     </>
   )

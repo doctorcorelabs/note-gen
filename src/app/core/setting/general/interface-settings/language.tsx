@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { isTauri } from '@/lib/platform'
 import { usePluginResources } from '@/lib/plugins/resources'
 import { usePluginStore } from '@/stores/plugins'
 import useSettingStore from '@/stores/setting'
@@ -28,12 +29,13 @@ export function LanguageSettings({ mobile = false }: { mobile?: boolean }) {
   const refreshMarket = usePluginStore(state => state.refreshMarket)
   const appVersion = useSettingStore(state => state.version)
   const availableLanguages = getPluginLanguages()
+  const desktopApp = isTauri()
 
   useEffect(() => {
-    if (mobile) return
+    if (mobile || !desktopApp) return
     const { catalog, marketLoading } = usePluginStore.getState()
     if (!marketLoading && (!catalog || catalog.stale)) void refreshMarket()
-  }, [mobile, refreshMarket])
+  }, [mobile, desktopApp, refreshMarket])
 
   const knownLocales = new Set([
     ...SUPPORTED_LOCALES,
@@ -42,7 +44,7 @@ export function LanguageSettings({ mobile = false }: { mobile?: boolean }) {
   const installedIds = new Set(installed.map(plugin => plugin.manifest.id))
   const marketLanguages: { name: string; pluginId: string }[] = []
 
-  if (!mobile && catalog && !catalog.stale) {
+  if (!mobile && desktopApp && catalog && !catalog.stale) {
     // Official language packs encode their BCP 47 locale in the plugin ID.
     const plugins = [...catalog.plugins].sort((left, right) => (
       Number(Boolean(right.official)) - Number(Boolean(left.official))
@@ -68,6 +70,31 @@ export function LanguageSettings({ mobile = false }: { mobile?: boolean }) {
     marketLanguages.sort((left, right) => left.name.localeCompare(right.name))
   }
 
+  // Plugin language packs and discovery stay desktop-only: plugins are
+  // off in the web MVP, so the web picker offers only zh/en. The
+  // default stays English (AD-21); this only removes plugin entries.
+  const languageOptions = desktopApp
+    ? [
+        { value: 'zh', label: '中文' },
+        { value: 'en', label: 'English' },
+        ...availableLanguages.filter(x => !(SUPPORTED_LOCALES as readonly string[]).includes(x.value)),
+        ...marketLanguages.map(language => ({
+          value: `${INSTALL_LANGUAGE_PREFIX}${language.pluginId}`,
+          label: (
+            <span className="flex items-center gap-2">
+              <span>{language.name}</span>
+              <Download aria-hidden="true" />
+              <span className="sr-only">{pluginActions('install')}</span>
+            </span>
+          ),
+        })),
+        ...(!mobile ? [{ value: DISCOVER_LANGUAGES, label: t('language.findInPlugins') }] : []),
+      ]
+    : [
+        { value: 'zh', label: '中文' },
+        { value: 'en', label: 'English' },
+      ]
+
   return (
     <Item variant="outline">
       <ItemMedia variant="icon"><Languages /></ItemMedia>
@@ -91,22 +118,7 @@ export function LanguageSettings({ mobile = false }: { mobile?: boolean }) {
             void changeLanguage(value)
           }}
           className="w-full sm:w-[180px]"
-          options={[
-            { value: 'zh', label: '中文' },
-            { value: 'en', label: 'English' },
-            ...availableLanguages.filter(x => !(SUPPORTED_LOCALES as readonly string[]).includes(x.value)),
-            ...marketLanguages.map(language => ({
-              value: `${INSTALL_LANGUAGE_PREFIX}${language.pluginId}`,
-              label: (
-                <span className="flex items-center gap-2">
-                  <span>{language.name}</span>
-                  <Download aria-hidden="true" />
-                  <span className="sr-only">{pluginActions('install')}</span>
-                </span>
-              ),
-            })),
-            ...(!mobile ? [{ value: DISCOVER_LANGUAGES, label: t('language.findInPlugins') }] : []),
-          ]}
+          options={languageOptions}
         />
       </ItemActions>
     </Item>

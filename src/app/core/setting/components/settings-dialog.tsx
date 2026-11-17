@@ -18,26 +18,12 @@ import {
   useSettingsDialogStore,
 } from '@/stores/settings-dialog'
 import AboutPage from '../about/page'
-import AiPage from '../ai/page'
-import AudioPage from '../audio/page'
-import CanvasSettingPage from '../canvas/page'
 import EditorSettingPage from '../editor/page'
 import SettingFilePage from '../file/page'
 import GeneralSettingsPage from '../general/page'
-import ImageHostingPage from '../imageHosting/page'
-import ImageMethodPage from '../imageMethod/page'
-import McpSettingPage from '../mcp/page'
-import MemoriesSettingsPage from '../memories/page'
-import PromptSettingPage from '../prompt/page'
-import RagSettingPage from '../rag/page'
 import RecordSettingPage from '../record/page'
 import ShortcutsPage from '../shortcuts/page'
-import SkillsSettingPage from '../skills/page'
-import PluginsSettingPage from '../plugins/page'
-import SyncPage from '../sync/page'
-import BackupPage from '../backup/page'
-import TemplatePage from '../template/page'
-import WebSearchSettingPage from '../webSearch/page'
+import { gatedSettingPages } from './setting-disabled-notice'
 import { SettingTab } from './setting-tab'
 import { hasPluginSettingsContent } from '@/lib/plugins/display-preferences'
 import { useShallow } from 'zustand/react/shallow'
@@ -49,23 +35,12 @@ const settingPages: Record<BuiltinSettingSection, ComponentType> = {
   general: GeneralSettingsPage,
   record: RecordSettingPage,
   editor: EditorSettingPage,
-  canvas: CanvasSettingPage,
-  sync: SyncPage,
-  backup: BackupPage,
-  imageHosting: ImageHostingPage,
-  ai: AiPage,
-  webSearch: WebSearchSettingPage,
-  rag: RagSettingPage,
-  mcp: McpSettingPage,
-  skills: SkillsSettingPage,
-  plugins: PluginsSettingPage,
-  prompt: PromptSettingPage,
-  memories: MemoriesSettingsPage,
-  template: TemplatePage,
   file: SettingFilePage,
   shortcuts: ShortcutsPage,
-  imageMethod: ImageMethodPage,
-  audio: AudioPage,
+  // Sections that are not usable in the web MVP render only an explicit
+  // disabled notice (V2-27 catalogue); their upstream pages stay in the
+  // tree for later phases and are never mounted here.
+  ...gatedSettingPages,
 }
 
 export function SettingsDialog() {
