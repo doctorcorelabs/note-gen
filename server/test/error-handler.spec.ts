@@ -7,13 +7,20 @@
 // 6.2, retryable false), while an unknown path answers 404
 // not_found. The unit cases pin the route-pattern matcher
 // (literals, :param, trailing wildcard, trailing slash, case);
-// the HTTP cases pin the split through the real buildApp,
-// including a :param route and the media wildcard route.
+// the HTTP cases pin the split through the real buildApp
+// (literal and :param routes) and through a bare harness for the
+// media wildcard route, which no registration adapter wires into
+// buildApp yet, so the wildcard case cannot be exercised there.
 
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { ServerConfig } from '../src/config.js';
-import { pathMatchesRoutePattern } from '../src/plugins/error-handler.js';
+import { pathMatchesRoutePattern, registerErrorHandling } from '../src/plugins/error-handler.js';
+import { registerWorkspaceMediaReadRoutes } from '../src/routes/workspace-media-read.js';
 
 describe('pathMatchesRoutePattern', () => {
   it('matches exact literal paths only', () => {
@@ -82,15 +89,33 @@ describe('not-found handler over HTTP', () => {
     };
   }
 
-  it('answers 405 for a wrong method on literal, :param, and wildcard paths', async () => {
+  it('answers 405 for a wrong method on literal and :param paths', async () => {
     const app = await buildApp({ config: testConfig(), pool: null, version: 'test' });
     try {
       for (const target of [
         { method: 'DELETE', url: '/api/workspace/list' },
         { method: 'GET', url: '/api/settings/secrets/ai-providers/acme' },
-        { method: 'POST', url: '/api/workspace/media/pic.png' },
       ] as const) {
         const res = await app.inject({ method: target.method, url: target.url });
+        expect(res.statusCode).toBe(405);
+        const body = res.json() as { ok: boolean; error: Record<string, unknown> };
+        expect(body.ok).toBe(false);
+        expect(body.error['code']).toBe('method_not_allowed');
+        expect(body.error['retryable']).toBe(false);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('answers 405 for a wrong method on the media wildcard route', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'w4fc-media-'));
+    const app = Fastify({ logger: false });
+    registerErrorHandling(app, { version: 'test' });
+    await registerWorkspaceMediaReadRoutes(app, { workspaceRoot: dir });
+    try {
+      for (const url of ['/api/workspace/media/pic.png', '/api/workspace/media/a/b.png']) {
+        const res = await app.inject({ method: 'POST', url });
         expect(res.statusCode).toBe(405);
         const body = res.json() as { ok: boolean; error: Record<string, unknown> };
         expect(body.ok).toBe(false);
