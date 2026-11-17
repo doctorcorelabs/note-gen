@@ -25,7 +25,7 @@ async function getMermaid(): Promise<MermaidApi> {
       mermaid.initialize({
         startOnLoad: false,
         theme: 'default',
-        securityLevel: 'loose',
+        securityLevel: 'strict',
         fontFamily: 'inherit',
       })
       return mermaid
