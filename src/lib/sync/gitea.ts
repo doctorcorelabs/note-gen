@@ -1,4 +1,5 @@
 import { withGitRepoWriteLock } from './git-repo-write-lock'
+import { requireApiUsername } from './api-username'
 import { assertConditionalResponse } from './write-condition'
 import { fetchRemoteRead, recoverRemoteMutation } from './remote-mutation-recovery'
 import { gitBlobVersion } from './remote-content-cache'
@@ -680,7 +681,7 @@ export async function getUserInfo(token?: string): Promise<GiteaUserInfo> {
       const userInfo = await response.json() as GiteaUserInfo;
       
       // 保存用户名到存储
-      await store.set('giteaUsername', userInfo.login);
+      await store.set('giteaUsername', requireApiUsername(userInfo.login, "Gitea"));
       await store.save();
       
       return userInfo;

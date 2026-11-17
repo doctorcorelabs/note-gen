@@ -2,6 +2,7 @@ import { GithubFile } from '@/lib/sync/github';
 import { getImageFiles } from '@/lib/imageHosting/github';
 import { GithubRepoInfo, OctokitResponse, SyncStateEnum, UserInfo } from '@/lib/sync/github.types';
 import { platform } from '@/lib/platform';
+import { requireApiUsername } from '@/lib/sync/api-username';
 import { create } from 'zustand'
 import type { S3Config } from '@/lib/imageHosting/types';
 import type { ImageHostingType } from '@/lib/image-hosting-config';
@@ -94,7 +95,7 @@ const useImageStore = create<ImageHostingState>((set, get) => ({
     set({ imageRepoUserInfo })
     if (!imageRepoUserInfo) return
     const store = await platform.store.load('store.json');
-    await store.set('githubImageUsername', imageRepoUserInfo?.data?.login)
+    await store.set('githubImageUsername', requireApiUsername(imageRepoUserInfo?.data?.login, "GitHub"))
     await store.save()
   },
   imageRepoState: SyncStateEnum.fail,

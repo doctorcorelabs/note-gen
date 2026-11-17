@@ -254,6 +254,42 @@ describe("fake store: F1-22 H3 behavior (CT-02, AD-106)", () => {
     assert.equal(await store.has("missing"), false);
     assert.equal(await store.length(), 0);
   });
+
+  it("nested undefined fields follow the JSON wire form (F1-22 step 3, W4-F122Q)", async () => {
+    const store = await createFakeStoreAdapter().load("store.json");
+    const written: Record<string, unknown> = {
+      dropped: undefined,
+      kept: 1,
+      nested: { dropped: undefined, kept: 2 },
+      list: [undefined, 3, { dropped: undefined, kept: 4 }],
+      explicitNull: null,
+    };
+    const seen: unknown[] = [];
+    await store.onKeyChange("nested", (value) => {
+      seen.push(value);
+    });
+    await store.set("nested", written);
+    assert.equal("dropped" in written, true);
+    const read = (await store.get<Record<string, unknown>>(
+      "nested",
+    )) as Record<string, unknown>;
+    assert.equal("dropped" in read, false);
+    assert.deepEqual(Object.keys(read).sort(), [
+      "explicitNull",
+      "kept",
+      "list",
+      "nested",
+    ]);
+    assert.deepEqual(read["nested"], { kept: 2 });
+    assert.deepEqual(read["list"], [null, 3, { kept: 4 }]);
+    assert.equal("explicitNull" in read, true);
+    assert.equal(read["explicitNull"], null);
+    assert.equal(seen.length, 1);
+    assert.equal("dropped" in (seen[0] as Record<string, unknown>), false);
+    const entries = await store.entries<Record<string, unknown>>();
+    assert.equal(entries.length, 1);
+    assert.equal("dropped" in entries[0]![1], false);
+  });
 });
 
 describe("fake store: secret keys are invisible, reject writes (CT-09)", () => {

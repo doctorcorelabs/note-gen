@@ -20,6 +20,10 @@
 // set(key, undefined) throws a validation error
 // (PlatformCapabilityError, invalid_argument) and leaves the key
 // unchanged. See tests/contract/EXCEPTIONS.md entry E4.
+// CT-02-nested asserts the step 3 rule for F1-22 (W4-F122Q): a nested
+// undefined field inside an object value is dropped at the set()
+// boundary and an undefined array element becomes null, matching the
+// JSON wire form, while explicit null is preserved.
 //
 // C-ST-06 (persistence across restart) runs through factory.reopen(),
 // which returns a new adapter over the same backing. Against the fake
@@ -245,6 +249,57 @@ export function defineStoreCases(
     // The explicit delete() path still removes the key.
     await expect(handle.delete(target)).resolves.toBe(true);
     await expect(handle.has(target)).resolves.toBe(false);
+  });
+
+  it("CT-02-nested (F1-22 step 3, W4-F122Q): nested undefined fields follow the JSON wire form", async () => {
+    const handle = await getImpl().load("store.json");
+    // E10: the web column writes a catalogued S key.
+    const key = isWeb ? "language" : "nested";
+    const written: Record<string, unknown> = {
+      dropped: undefined,
+      kept: 1,
+      nested: { dropped: undefined, kept: 2 },
+      list: [undefined, 3, { dropped: undefined, kept: 4 }],
+      explicitNull: null,
+    };
+    // set() resolves: only a top-level undefined throws (CT-02).
+    await handle.set(key, written);
+    // The caller's object is never mutated by normalization.
+    expect("dropped" in written).toBe(true);
+    expect(written.list).toEqual([undefined, 3, { dropped: undefined, kept: 4 }]);
+
+    const read = (await handle.get<Record<string, unknown>>(key)) as Record<
+      string,
+      unknown
+    >;
+    // toEqual alone cannot pin this: it ignores undefined-valued
+    // fields. Key presence is the assertion.
+    expect("dropped" in read).toBe(false);
+    expect(Object.keys(read).sort()).toEqual([
+      "explicitNull",
+      "kept",
+      "list",
+      "nested",
+    ]);
+    expect(read.kept).toBe(1);
+    expect(read.nested).toEqual({ kept: 2 });
+    expect("dropped" in (read.nested as Record<string, unknown>)).toBe(false);
+    expect(read.list).toEqual([null, 3, { kept: 4 }]);
+    const listObject = (read.list as Array<unknown>)[2] as Record<
+      string,
+      unknown
+    >;
+    expect("dropped" in listObject).toBe(false);
+    expect("explicitNull" in read).toBe(true);
+    expect(read.explicitNull).toBeNull();
+    expect(JSON.stringify(read)).toBe(
+      '{"kept":1,"nested":{"kept":2},"list":[null,3,{"kept":4}],"explicitNull":null}',
+    );
+
+    const entries = await handle.entries<Record<string, unknown>>();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]![0]).toBe(key);
+    expect("dropped" in entries[0]![1]).toBe(false);
   });
 
   it("CT-03a: basic semantics, keys/values/entries/length stay consistent", async () => {

@@ -1,4 +1,5 @@
 import { withGitRepoWriteLock } from './git-repo-write-lock'
+import { requireApiUsername } from './api-username'
 import { assertConditionalResponse, type RemoteWriteCondition } from './write-condition'
 import { fetchRemoteRead, recoverRemoteRead, recoverRemoteMutation } from './remote-mutation-recovery'
 import { gitBlobVersion } from './remote-content-cache'
@@ -532,7 +533,7 @@ export async function getUserInfo(token?: string): Promise<GitlabUserInfo> {
       const userInfo = await response.json() as GitlabUserInfo;
       
       // 保存用户名到存储
-      await store.set('gitlabUsername', userInfo.username);
+      await store.set('gitlabUsername', requireApiUsername(userInfo.username, "Gitlab"));
       await store.save();
       
       return userInfo;

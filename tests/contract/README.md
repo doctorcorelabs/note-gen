@@ -334,6 +334,7 @@ Two design points are only partly testable through the mirror:
 | C-ST-06 | Settings survive a restart simulated by reopening over the same backing (in-process only, see E1) |
 | CT-01 | Handle and adapter expose the full `IStore` surface |
 | CT-02 | `set(key, undefined)` throws a validation error and leaves the key unchanged (F1-22 H3, AD-106, see E4) |
+| CT-02-nested | Nested undefined fields follow the JSON wire form: object fields dropped, array elements null, explicit null preserved (F1-22 step 3, W4-F122Q) |
 | CT-03a | Basic semantics: keys/values/entries/length stay consistent |
 | CT-03b | Deep clone in both directions; `set` is visible without `save()` |
 | CT-03c | Listeners, reload without events, close, reset, `getStore` |
