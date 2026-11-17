@@ -14,46 +14,54 @@
 // section 4, and its justification is recorded in tests/e2e/README.md
 // as section 4.4 requires.
 //
-// SELECTOR STATUS: NOT VERIFIABLE. No login UI exists in the reference
-// repo (HEAD 4dcaa3f): the only credential-adjacent UI is the desktop
-// app-lock gate (src/components/app-lock-gate.tsx) and sync token
-// inputs, neither of which is a web login page. Desain-auth specifies
-// the API endpoints and the /setup install page, but it does NOT
-// specify a login page route, field labels, or button text. There are
-// deliberately no login locators in harness/selectors.ts: the flow
-// author must NOT guess a route or a selector. The UI owner must
-// either ship the login page with accessible names or add a
-// documented test hook, and the flow author then derives locators
-// from that shipped UI.
+// SELECTOR STATUS: VERIFIED (source) against trunk 69c77dac. The login
+// page shipped in V3-03 (src/app/login/page.tsx, route /login): label
+// associated Email/Password fields, a "Sign in" submit button, and a
+// second TOTP step ("Two-step verification", "Verification code" /
+// "Recovery code" fields, "Verify" button). Locators live in
+// harness/selectors.ts and the page object is harness/login-page.ts.
+// Runtime behavior is still unverified until a green run. The page
+// carries no data-testid; the auth-* test ids the selector inventory
+// asked for were not added by V3-03. Strings are hardcoded English in
+// the page source (no auth catalog namespace yet). What still blocks
+// this spec is the harness side, not the UI: account seeding, the
+// backend test harness, and a path past the Cloudflare Access
+// perimeter (inventaris-selector-e2e.md 3.1/11.5). This spec keeps
+// the @scaffold tag until the coordinator promotes it after a green
+// run proves the selectors.
 //
-// Intended steps (replace the notYetLanded call when the feature lands):
+// Intended steps (replace the notYetLanded call when the harness lands):
 // 1. Seed a test account through the backend test harness (account
 //    seeding has NOT landed). Credentials come from test-only
-//    environment values supplied by the harness, never hardcoded in
-//    this spec and never a real operator credential. Seed one account
-//    without TOTP for the happy path; TOTP coverage is a separate
-//    variant, not part of this spec.
-// 2. Open the login page at the route the shipped UI defines. Do not
-//    guess the route: read it from the shipped UI or the UI owner.
-// 3. Fill the email and password fields (accessible names from the
-//    shipped UI) and submit. Wait for the authenticated state by
-//    observation: the URL reaching /core/main and the file tree
+//    environment values supplied by the harness (readTestCredentials
+//    in harness/auth.ts), never hardcoded in this spec and never a
+//    real operator credential. Seed one account without TOTP for the
+//    happy path; TOTP coverage is a separate variant, not part of
+//    this spec.
+// 2. Open /login (LoginPage.gotoLogin) and wait for the sign-in form
+//    by observation: the title text appears only after the page's
+//    session probe finishes.
+// 3. Fill the email and password fields and submit
+//    (LoginPage.signInWithPassword). Wait for the authenticated state
+//    by observation: the URL reaching /core/main and the file tree
 //    becoming visible (AppPage.gotoHome / expectBooted), never by a
 //    fixed sleep.
 // 4. Assert the session is a browser session, not a token in web
 //    storage: after login, localStorage and sessionStorage hold no
 //    value resembling a token (desain-auth section 5.4 / T5). Read
 //    storage through page.evaluate and assert the auth key allowlist
-//    the lint config defines; do not log storage contents.
+//    the lint config defines; do not log storage contents. (The page
+//    itself keeps the TOTP challenge token in component state only,
+//    never in storage or the URL, verified in source.)
 // 5. Failed-login variant (same spec file, second test, when the
 //    feature lands): a wrong password yields the generic failure
-//    response with no account enumeration (same status, body shape,
-//    and coarse timing for a known vs unknown email, desain-auth
-//    section 3.7). CAUTION: login attempts count toward the login
-//    rate-limit buckets and progressive lockout (desain-auth
-//    section 6.3). Use a fresh seeded account per run and keep the
-//    number of failed attempts small and fixed, so the suite cannot
-//    lock its own test account.
+//    alert "Email or password is incorrect." with no account
+//    enumeration (same status, body shape, and coarse timing for a
+//    known vs unknown email, desain-auth section 3.7). CAUTION: login
+//    attempts count toward the login rate-limit buckets and
+//    progressive lockout (desain-auth section 6.3). Use a fresh
+//    seeded account per run and keep the number of failed attempts
+//    small and fixed, so the suite cannot lock its own test account.
 
 import { test } from '@playwright/test'
 
@@ -62,8 +70,8 @@ import { notYetLanded } from './harness/todo'
 test('E2E-S1 @scaffold login: seeded account signs in and reaches the app', async () => {
   notYetLanded(
     'E2E-S1',
-    'the web login page plus account seeding plus the session backend ' +
-      'have not landed; no login route, field, or button exists in the ' +
-      'shipped UI to drive yet.',
+    'account seeding plus the backend test harness plus a path ' +
+      'past the Cloudflare Access perimeter have not landed; no ' +
+      'seeded account can sign in through the shipped /login page yet.',
   )
 })

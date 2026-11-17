@@ -4,8 +4,11 @@
 // API-level login and setup helpers for E2E flows (desain-auth.md,
 // kontrak-api-kanonis.md auth group). These helpers drive the HTTP API
 // through a Playwright APIRequestContext; they do NOT drive any login
-// UI, because no login UI exists in the shipped web app yet (see
-// login.spec.ts: route, fields, and button text are NOT VERIFIABLE).
+// UI. UI login is covered separately by harness/login-page.ts over
+// the shipped /login page (V3-03, locators in harness/selectors.ts):
+// use the page object when the flow under test IS the login UI, and
+// use these helpers when a flow needs a session without driving the
+// UI (for example, seeding the session before a UI flow).
 //
 // What is real here: POST /api/auth/setup, POST /api/auth/login, and
 // GET /api/auth/me exist on the trunk server (server/src/routes/

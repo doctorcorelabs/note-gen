@@ -14,6 +14,8 @@
 // 2. Type the fixture content (heading, list, code block, table,
 //    relative image, relative link) into the visual editor
 //    (selectors.visualEditor, UNVERIFIED until a run proves it).
+//    The fixture is CREATE_NOTE_FIXTURE at CREATE_NOTE_RELATIVE_PATH
+//    in harness/seed-data.ts; do not invent a second fixture.
 // 3. Wait for the autosave EFFECT, never a fixed sleep: poll the file
 //    on disk through the backend harness until its content equals the
 //    fixture, with a timeout derived from the autosave debounce.

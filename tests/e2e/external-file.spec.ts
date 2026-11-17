@@ -11,8 +11,9 @@
 // Intended steps (replace the notYetLanded call when the feature lands):
 // 1. Open the app and record the tree contents.
 // 2. An external process writes a new .md file atomically into the
-//    workspace (harness/external-writer.ts writeFileAtomically:
-//    temp file plus rename).
+//    workspace (EXTERNAL_FILE in harness/seed-data.ts, written with
+//    harness/external-writer.ts writeFileAtomically: temp file plus
+//    rename).
 // 3. Wait for the file to appear in the tree by polling the treeitem
 //    locator (VERIFIED in source), with a timeout equal to
 //    WATCHER_MAX_LATENCY_MS. The watcher replacement in the web fork

@@ -13,7 +13,11 @@
 //    the seed entries appear in the tree. Seed wiring has NOT landed.
 // 2. Open the seed .md file (AppPage.openFileByPath, locator VERIFIED
 //    in source).
-// 3. Change one paragraph and one heading in the visual editor.
+// 3. Change one paragraph and one heading in the visual editor. The
+//    edit is applyEditToDeepNote over SEED_CONTENTS.deepNote
+//    (harness/seed-data.ts): heading EDIT_DEEP_NOTE_HEADING plus
+//    paragraph EDIT_DEEP_NOTE_PARAGRAPH; everything else must survive
+//    byte-for-byte.
 // 4. Wait for the save effect by polling disk content (see E2E-02:
 //    no save indicator exists in the UI).
 // 5. Assert disk content contains the changes and preserves the
