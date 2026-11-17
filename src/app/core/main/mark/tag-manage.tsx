@@ -14,7 +14,8 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Spinner } from '@/components/ui/spinner'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import type { GroupImperativeHandle, Layout } from 'react-resizable-panels'
-import { initTagsDb, insertTag, delTag, updateTag, updateTagsOrder, normalizeTagName, type Tag } from '@/db/tags'
+import { initAllDatabases } from '@/db'
+import { insertTag, delTag, updateTag, updateTagsOrder, normalizeTagName, type Tag } from '@/db/tags'
 import { buildRecordTagTree, type RecordTagNode } from '@/lib/record-tag-tree'
 import { recordTagIds, tagPathMatches } from '@/lib/record-tags'
 import { cn } from '@/lib/utils'
@@ -77,7 +78,7 @@ export function TagManage() {
   const initialize = React.useCallback(async () => {
     setLoadError(false)
     try {
-      await initTagsDb()
+      await initAllDatabases()
       await initTags()
       await fetchTags()
       const tagState = useTagStore.getState()

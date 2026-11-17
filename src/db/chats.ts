@@ -1,4 +1,5 @@
-import { getDb } from "./index"
+import { getDb, getSqlAdapter } from "./index"
+import type { SqlChatMessageRow } from '../lib/platform/sql/ops-catalog'
 import { insertActivityEvent } from './activity'
 import { truncateActivityText } from '@/lib/activity/events'
 import { v4 as uuid, v5 as uuidv5 } from 'uuid'
@@ -318,13 +319,58 @@ export async function getChatsByConversation(conversationId: number) {
   return result
 }
 
+function jsonText(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  return JSON.stringify(value)
+}
+
+/**
+ * Map a `messages.get` row back to the upstream `Chat` shape, whose
+ * JSON-bearing fields are strings. The kind returns parsed JSON
+ * values (and string arrays for `images`/`ragSources`); callers
+ * read those fields as JSON text, so each defined value is
+ * re-serialized here. Writers store `JSON.stringify` output
+ * (see chat-send.tsx), so the round-trip reproduces the stored
+ * text; the compare-and-swap in `updateChatAgentHistory` relies
+ * on that. `originalTokenCount`/`originalMessageCount` have no
+ * `Chat` field and are dropped, as are `syncId`/`syncUpdatedAt`,
+ * which the kind never returns.
+ */
+function chatFromRow(row: SqlChatMessageRow): Chat {
+  return {
+    id: row.id,
+    tagId: row.tagId,
+    conversationId: row.conversationId,
+    content: row.content,
+    role: row.role,
+    type: row.type,
+    image: row.image,
+    images: jsonText(row.images),
+    imageAnalyses: jsonText(row.imageAnalyses),
+    attachments: jsonText(row.attachments),
+    inserted: row.inserted,
+    createdAt: row.createdAt,
+    ragSources: jsonText(row.ragSources),
+    ragSourceDetails: jsonText(row.ragSourceDetails),
+    agentHistory: jsonText(row.agentHistory),
+    uiBlocks: jsonText(row.uiBlocks),
+    thinking: row.thinking,
+    quoteData: jsonText(row.quoteData),
+    condensedContent: row.condensedContent,
+    condensedAt: row.condensedAt,
+  }
+}
+
 export async function getChatById(id: number): Promise<Chat | undefined> {
-  const db = await getDb()
-  const chats = await db.select<Chat[]>(
-    'select * from chats where id = $1',
-    [id]
-  )
-  return chats[0]
+  // Migrated to kind `messages.get` (kind 74, AD-44) in wave 4
+  // (W4-CODEMOD). A negative id answers null without an error
+  // (the handler returns an empty batch); callers keep their
+  // store fallback for negative ids and never reach this call
+  // with one. A row owned by another workspace is
+  // indistinguishable from a missing row.
+  const row = await getSqlAdapter().queryOne({ kind: 'messages.get', id })
+  if (row === null) return undefined
+  return chatFromRow(row)
 }
 
 /** Update only the review history, without overwriting a concurrent message edit. */

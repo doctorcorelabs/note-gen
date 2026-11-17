@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { initVectorDb, processAllMarkdownFiles, processMarkdownFile, checkEmbeddingModelAvailable, initBM25Search } from '@/lib/rag';
+import { initAllDatabases } from '@/db';
+import { processAllMarkdownFiles, processMarkdownFile, checkEmbeddingModelAvailable, initBM25Search } from '@/lib/rag';
 import { checkRerankModelAvailable } from '@/lib/ai/embedding';
 import { platform } from "@/lib/platform";
 import { toast } from '@/hooks/use-toast';
@@ -56,7 +57,7 @@ const useVectorStore = create<VectorState>((set, get) => ({
   initVectorDb: async () => {
     try {
       await useRagSettingsStore.getState().initSettings();
-      await initVectorDb();
+      await initAllDatabases();
 
       // 初始化 BM25 索引
       await initBM25Search();

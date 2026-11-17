@@ -1,5 +1,5 @@
 import { platform, BaseDirectory } from "@/lib/platform"
-import { getDb } from "./index"
+import { getSqlAdapter } from "./index"
 
 export interface Note {
   id: number
@@ -10,52 +10,39 @@ export interface Note {
   createdAt: number
 }
 
-// 创建 marks 表
+// Filesystem setup only: the `article` directory. The notes table
+// itself is server-owned (migrations); no DDL runs here. The DDL
+// half of this function died with the V3-14 funnel closure.
 export async function initNotesDb() {
   const isExist = await platform.fs.exists('article', { baseDir: BaseDirectory.AppData})
   if (!isExist) {
     await platform.fs.mkdir('article', { baseDir: BaseDirectory.AppData})
   }
-  const db = await getDb()
-  await db.execute(`
-    create table if not exists notes (
-      id integer primary key autoincrement,
-      tagId integer not null,
-      content text default null,
-      locale text not null,
-      count text not null,
-      createdAt integer not null
-    )
-  `)
 }
 
 export async function insertNote(note: Partial<Note>) {
-  const db = await getDb()
-  const createdAt = Date.now();
-  return await db.execute(
-    "insert into notes (tagId, content, locale, count, createdAt) values ($1, $2, $3, $4, $5)",
-    [note.tagId, note.content, note.locale, note.count, createdAt]
-  )
+  // Migrated to kind `notes.insert` in wave 4 (W4-CODEMOD).
+  // `createdAt` is server-assigned; a caller-supplied value is
+  // ignored, matching the kind input shape.
+  return await getSqlAdapter().execute({
+    kind: 'notes.insert',
+    note: {
+      tagId: note.tagId as number,
+      content: note.content,
+      locale: note.locale as string,
+      count: note.count as string,
+    },
+  })
 }
 
 export async function getNoteByTagId(tagId: number) {
-  const db = await getDb()
-  return (await db.select<Note[]>("select * from notes where tagId = $1 order by createdAt desc limit 1", [tagId]))[0]
+  // Migrated to kind `notes.latestByTag` in wave 4 (W4-CODEMOD).
+  const row = await getSqlAdapter().queryOne({ kind: 'notes.latestByTag', tagId })
+  return row ?? undefined
 }
 
-export async function getNoteById(id: number) {
-  const db = await getDb()
-  // 根据 id 获取 note
-  return (await db.select<Note[]>("select * from notes where id = $1", [id]))[0]
-}
-
-export async function getNotesByTagId(tagId: number) {
-  const db = await getDb()
-  return await db.select<Note[]>("select * from notes where tagId = $1 order by createdAt desc", [tagId])
-}
-
-// 删除
-export async function delNote(id: number) {
-  const db = await getDb()
-  return await db.execute("delete from notes where id = $1", [id])
-}
+// Class C (desain-rekonsiliasi-tiga-bentuk-sql section 4):
+// `getNoteById`, `getNotesByTagId`, and `delNote` have no catalog
+// kind, were verified to have zero callers, and were deleted in
+// wave 4 (W4-CODEMOD) instead of migrated. Do not revive them
+// without a kind.

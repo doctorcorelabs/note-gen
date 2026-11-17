@@ -1,6 +1,6 @@
 import { invalidateMemoryCache } from '@/lib/memory/cache-version'
 import { enqueueAutoDataSync } from '@/lib/sync/auto-data-sync-queue'
-import { getDb } from './index'
+import { getDb, getSqlAdapter } from './index'
 
 export interface MemoryPolicy {
   useMemories: boolean
@@ -12,6 +12,9 @@ export interface MemoryPolicy {
 
 let memoryPolicySchemaPromise: Promise<void> | undefined
 
+// Kept for `src/db/memories.ts`, which still calls it. Pure DDL
+// plus seeding; dies with the memories module migration. Do not
+// call it from migrated code: `getMemoryPolicy` no longer does.
 export async function initMemoryPolicyDb() {
   if (!memoryPolicySchemaPromise) {
     memoryPolicySchemaPromise = (async () => {
@@ -76,32 +79,30 @@ export async function initMemoryPolicyDb() {
 }
 
 export async function getMemoryPolicy(): Promise<MemoryPolicy> {
-  await initMemoryPolicyDb()
-  const db = await getDb()
-  const result = await db.select<Array<{
-    generateMemories: number
-    generationStartedAt: number
-    updatedAt: number
-  }>>(
-    `select
-      generate_memories as generateMemories,
-      generation_started_at as generationStartedAt,
-      updated_at as updatedAt
-     from memory_global_policy where id = 1`,
-    []
-  )
+  // Migrated to kind `policy.get` in wave 4 (W4-CODEMOD). The
+  // handler returns the stored row, or the defaults row when no
+  // row exists. Upstream never read the two flag columns and
+  // hardcoded both true; that forcing is preserved here so every
+  // caller keeps seeing the upstream behavior.
+  const row = await getSqlAdapter().queryOne({ kind: 'policy.get' })
+  const now = Date.now()
   return {
     useMemories: true,
-    generateMemories: result[0]?.generateMemories !== 0,
+    generateMemories: row?.generateMemories ?? true,
     excludeExternalContext: true,
-    generationStartedAt: result[0]?.generationStartedAt ?? Date.now(),
-    updatedAt: result[0]?.updatedAt ?? Date.now(),
+    generationStartedAt: row?.generationStartedAt ?? now,
+    updatedAt: row?.updatedAt ?? now,
   }
 }
 
 export async function updateMemoryPolicy(
   policy: Partial<MemoryPolicy>
 ): Promise<MemoryPolicy> {
+  // NOT migrated in wave 4: kind `policy.put` is a 410 stub in
+  // Fase 1 (server/src/services/db/policy-put.ts throws
+  // `capability_unavailable`), so the write has no live target.
+  // The read half (`getMemoryPolicy` above) is migrated; this
+  // function migrates when the handler lands in Fase 2.
   const current = await getMemoryPolicy()
   const generateMemories = policy.generateMemories ?? current.generateMemories
   const updatedAt = Date.now()
@@ -135,6 +136,9 @@ export async function updateMemoryPolicy(
 }
 
 export async function replaceMemoryPolicy(policy: MemoryPolicy): Promise<void> {
+  // NOT migrated in wave 4: same `policy.put` 410 stub as
+  // `updateMemoryPolicy` above. Its only caller is sync code
+  // (Class B, slated for deletion).
   await initMemoryPolicyDb()
   const db = await getDb()
   await db.execute(
