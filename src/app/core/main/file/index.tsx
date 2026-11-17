@@ -1,3 +1,4 @@
+// Modified for the web fork on 2026-11-16; see FORK.md.
 'use client'
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
@@ -13,6 +14,7 @@ import { toast } from '@/hooks/use-toast'
 import { pasteIntoFolder } from './folder-item/paste-into-folder'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspaceFileWatcher } from './use-workspace-file-watcher'
+import { WatcherStatus } from './watcher-status'
 import useSettingStore from '@/stores/setting'
 import { getWritingAssetsFolderName } from '@/lib/writing-assets-path'
 import { filterFileTreeByVisibility } from './file-tree-model'
@@ -288,6 +290,7 @@ export function FileSidebar() {
       className="flex h-full w-full flex-col bg-background text-foreground outline-none"
       tabIndex={-1}
     >
+      <WatcherStatus />
       <div className="min-h-0 flex-1 overflow-hidden">
         <FileManager focusSidebar={focusSidebar} showSearch={false} />
       </div>

@@ -1,8 +1,10 @@
+// Modified for the web fork on 2026-11-16; see FORK.md.
 'use client'
 
 import type { WatchEvent } from '@/lib/platform'
 import { platform } from '@/lib/platform'
 import { useEffect } from 'react'
+import { createWatcherClient, type WatcherClient } from '@/lib/web/watcher-client'
 
 import useSettingStore from '@/stores/setting'
 import useArticleStore from '@/stores/article'
@@ -58,15 +60,16 @@ export function useWorkspaceFileWatcher() {
 
   useEffect(() => {
     let disposed = false
-    let unwatch: (() => void) | undefined
+    let client: WatcherClient | null = null
 
     async function startWatching() {
       const workspaceRoot = workspacePath
         ? workspacePath
         : await platform.path.join(await platform.path.appDataDir(), 'article')
+      if (disposed) return
       const normalizedRoot = workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '')
 
-      unwatch = await platform.fs.watch(workspaceRoot, event => {
+      const handleEvent = (event: WatchEvent) => {
         if (disposed) return
         if (workspacePath !== useSettingStore.getState().workspacePath) return
         void getSelfHostedSyncRuntime().wake('file-watcher')
@@ -213,10 +216,28 @@ export function useWorkspaceFileWatcher() {
             skipRemoteSync: true,
           })
         }
-      }, {
-        recursive: true,
-        delayMs: 300,
+      }
+
+      // Single watch subscription owned by FsAdapter.watch() via the
+      // V3-09 layer: no second WebSocket, seq tracker, or polling
+      // loop. Tree-level resync on visibility/focus/online reloads
+      // the file tree without a full page reload; seq-level resync
+      // stays in the adapter. The watcher path uses the internal
+      // emitter, not EventAdapter.
+      client = createWatcherClient({
+        root: workspaceRoot,
+        watch: (root, cb, options) => platform.fs.watch(root, cb, options),
+        onEvent: handleEvent,
+        onResyncRequested: () => {
+          if (disposed) return
+          if (workspacePath !== useSettingStore.getState().workspacePath) return
+          void useArticleStore.getState().loadFileTree({ skipRemoteSync: true })
+        },
+        onError: (error, context) => {
+          console.warn(`Workspace file watcher ${context} failed:`, error)
+        },
       })
+      await client.start()
     }
 
     void startWatching().catch(error => {
@@ -225,7 +246,7 @@ export function useWorkspaceFileWatcher() {
 
     return () => {
       disposed = true
-      unwatch?.()
+      client?.dispose()
     }
   }, [workspacePath])
 }

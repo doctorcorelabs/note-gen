@@ -109,6 +109,7 @@ const VITEST_SPECS = [
   "src/lib/web/records-kind-client.spec.ts",
   "src/lib/web/security-settings.spec.ts",
   "src/lib/web/tag-inputs.spec.ts",
+  "src/lib/web/watcher-client.spec.ts",
 ];
 
 const NODE_TEST_SPECS = [...ADAPTER_SPECS, ...WEB_NODE_SPECS];
