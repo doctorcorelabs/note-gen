@@ -4926,7 +4926,15 @@
           "deleteTagConfirmTitle": "删除这个标签？",
           "deleteTagConfirmDescription": "删除标签不会删除记录，仍在使用此标签的记录需要先移到另一个标签。",
           "tagInUse": "此标签仍被记录使用，请选择一个目标标签来转移这些记录。",
-          "reassignLabel": "将记录移到"
+          "reassignLabel": "将记录移到",
+          "pinTag": "置顶标签",
+          "unpinTag": "取消置顶标签",
+          "tagNameTaken": "已存在同名标签。",
+          "tagLocked": "此标签已锁定，无法更改。",
+          "tagNameTooLong": "标签名称最多 100 个字符。",
+          "tagNameInvalid": "标签名称不能包含控制字符。",
+          "deleteTagAffected": "{count} 条记录正在使用此标签。",
+          "deleteUnavailable": "标签删除暂不支持。"
         }
       }
     },
