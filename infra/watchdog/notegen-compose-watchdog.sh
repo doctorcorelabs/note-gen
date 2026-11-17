@@ -376,6 +376,7 @@ FILE_Q="$(printf '%q' "$COMPOSE_FILE")"
 read_prev_file() {
   PREV_VERDICT=""; PREV_FIRST_FAIL=""; PREV_ACTION=""
   PREV_FINGERPRINT=""; PREV_EXITED_COUNT=""; PREV_FAIL_COUNT=""; PREV_EPOCH=""
+  PREV_SIG=""
   if [ -f "$PREV_FILE" ]; then
     while IFS='=' read -r k v; do
       case "$k" in
@@ -386,16 +387,19 @@ read_prev_file() {
         EXITED_COUNT) PREV_EXITED_COUNT="$v";;
         FAIL_COUNT) PREV_FAIL_COUNT="$v";;
         EPOCH) PREV_EPOCH="$v";;
+        SIG) PREV_SIG="$v";;
       esac
     done < "$PREV_FILE"
   fi
 }
 
 write_prev_file() {
-  # $1 verdict, $2 first_fail, $3 tindakan, $4 sidik jari, $5 exited, $6 fail, $7 epoch
-  local safe_action="" safe_fp=""
+  # $1 verdict, $2 first_fail, $3 tindakan, $4 sidik jari, $5 exited,
+  # $6 fail, $7 epoch, $8 signature masalah primer tindakan terakhir.
+  local safe_action="" safe_fp="" safe_sig=""
   safe_action="$(printf '%s' "$3" | tr -cd 'A-Za-z0-9_ .,:/-' | head -c 120)"
   safe_fp="$(printf '%s' "$4" | tr -cd 'A-Za-z0-9_,:.-' | head -c 200)"
+  safe_sig="$(printf '%s' "$8" | tr -cd 'A-Za-z0-9_:.-' | head -c 80)"
   write_state_file "$PREV_FILE" "VERDICT=$1
 FIRST_FAIL=$2
 ACTION=$safe_action
@@ -403,6 +407,7 @@ FINGERPRINT=$safe_fp
 EXITED_COUNT=$5
 FAIL_COUNT=$6
 EPOCH=$7
+SIG=$safe_sig
 " || log "WARN gagal menulis berkas keadaan lalu ($PREV_FILE)"
 }
 
@@ -619,13 +624,17 @@ validate_live() {
 
 # ---------------- Akhir run ----------------
 # $1 exit code, $2 verdict, $3 first_fail, $4 tindakan, $5 sidik jari,
-# $6 exited, $7 fail, $8 ringkasan stdout.
+# $6 exited, $7 fail, $8 ringkasan stdout. Signature masalah primer (SIG)
+# dibaca dari global SAVE_SIG: dipertahankan dari run lalu kecuali run ini
+# mengeksekusi tindakan (diisi PRIMARY_SIG) atau sehat penuh (dikosongkan).
+
+SAVE_SIG=""
 
 finish_run() {
   local code="$1" verdict="$2" first_fail="$3" action="$4" fp="$5"
   local exited="$6" failc="$7" summary="$8" dur=0
   dur=$(( $(date +%s) - RUN_START_EPOCH ))
-  write_prev_file "$verdict" "$first_fail" "$action" "$fp" "$exited" "$failc" "$RUN_START_EPOCH"
+  write_prev_file "$verdict" "$first_fail" "$action" "$fp" "$exited" "$failc" "$RUN_START_EPOCH" "$SAVE_SIG"
   log "INFO run_end exit=$code durasi_detik=$dur verdict=$verdict tindakan=$action"
   echo "notegen-compose-watchdog: $summary (exit $code, log: $LOG_FILE)"
   exit "$code"
@@ -882,8 +891,8 @@ service_state() {
 compute_verdict() {
   VERDICT="unhealthy"; AUTH_FAILED=""; AUTH_SOURCE=""
   CADDY_SUSPECT=0; PROCESS_DOWN=0; DIAG_BLOCKED=0; LIVE_OK=0
-  WEB_BAD=0; WORKER_DOWN=0; FAIL_COUNT=0; VERDICT_FINGERPRINT=""
-  local caddy_gated=0
+  WEB_BAD=0; WORKER_DOWN=0; FAIL_COUNT=0; VERDICT_FINGERPRINT=""; PRIMARY_SIG=""
+  local caddy_gated=0 _first="" _c="" _s="" _code=""
   if [ "$CL_OK" -eq 1 ] || [ "$DL_OK" -eq 1 ]; then LIVE_OK=1; fi
   case "$CR_CODE" in 401|403) caddy_gated=1;; esac
   if [ "$CR_VALID" = "1" ]; then
@@ -933,6 +942,22 @@ compute_verdict() {
     VERDICT_FINGERPRINT="process_down|exited:$EXITED_LIST"
   else
     VERDICT_FINGERPRINT="$AUTH_FAILED|exited:$EXITED_LIST"
+  fi
+  # Signature masalah primer: identitas masalah yang STABIL saat kegagalan
+  # meluas (dipakai pemicu (b)/(c) seksi 2.4). Berbeda dari sidik jari
+  # penuh yang berubah bila daftar gagal/daftar exited berubah.
+  if [ "$CADDY_SUSPECT" -eq 1 ]; then
+    PRIMARY_SIG="caddy:CADDY_PROBE_FAIL"
+  elif [ "$PROCESS_DOWN" -eq 1 ]; then
+    PRIMARY_SIG="api:PROCESS_DOWN"
+  elif [ "$VERDICT" = "healthy" ]; then
+    PRIMARY_SIG="healthy"
+  elif [ -n "$AUTH_FAILED" ]; then
+    _first="${AUTH_FAILED%%,*}"
+    _c="${_first%%:*}"; _s="${_first#*:}"; _code="${_s#*:}"
+    PRIMARY_SIG="$_c:$_code"
+  else
+    PRIMARY_SIG="unknown:NO_FAILED_CHECKS"
   fi
 }
 
@@ -1110,7 +1135,7 @@ decide_action() {
     return 0
   fi
   if [ -n "$RESUME_AT" ] && is_number "$RESUME_AT" && [ "$UP_DONE" -eq 0 ] && [ "$now_s" -ge $(( RESUME_AT + RESUME_GRACE_GENERAL )) ]; then
-    if [ -n "$PREV_FINGERPRINT" ] && [ "$PREV_FINGERPRINT" = "$VERDICT_FINGERPRINT" ]; then
+    if [ -n "$PREV_SIG" ] && [ "$PREV_SIG" = "$PRIMARY_SIG" ]; then
       case "$PREV_ACTION" in
         restart\ *)
           if is_number "$PREV_EPOCH" && [ "$PREV_EPOCH" -ge "$RESUME_AT" ]; then
@@ -1122,7 +1147,7 @@ decide_action() {
       esac
     fi
   fi
-  if [ -n "$PREV_FINGERPRINT" ] && [ "$PREV_FINGERPRINT" = "$VERDICT_FINGERPRINT" ]; then
+  if [ -n "$PREV_SIG" ] && [ "$PREV_SIG" = "$PRIMARY_SIG" ]; then
     case "$PREV_ACTION" in
       restart\ *)
         if is_number "$PREV_EXITED_COUNT"; then prev_exited="$PREV_EXITED_COUNT"; fi
@@ -1330,6 +1355,7 @@ grace_poll() {
 # ---------------- Alur utama ----------------
 
 read_prev_file
+SAVE_SIG="$PREV_SIG"
 read_resume_file
 if [ -n "$RESUME_AT" ] && is_number "$RESUME_AT" && [ $(( RUN_START_EPOCH - RESUME_AT )) -gt 3600 ]; then
   clear_resume_file
@@ -1400,6 +1426,7 @@ fi
 if [ "$VERDICT" = "healthy" ] && [ "$WEB_BAD" -eq 0 ] && [ "$WORKER_DOWN" -eq 0 ]; then
   quota_clear_all
   note_transition "healthy"
+  SAVE_SIG=""
   finish_run 0 "healthy" "" "tidak ada" "" "" "" "SEHAT"
 fi
 
@@ -1493,6 +1520,7 @@ parse_action_payload "$REMOTE_PAYLOAD"
 ACTION_OUT_SAFE="$(safe_line "$ACTION_OUT")"
 log "INFO tindakan: $ACTION_CMD_LINE pemicu=$ACTION_TRIGGER rc=$ACTION_RC out=[$ACTION_OUT_SAFE]"
 quota_record "$Q_SERVICE" "$Q_SIGNATURE" "$PRE_FP" "$(date +%s)"
+SAVE_SIG="$Q_SIGNATURE"
 if [ "$ACTION_KIND" = "up" ] && [ -n "$RESUME_AT" ]; then
   UP_DONE=1
   write_resume_file
@@ -1502,6 +1530,7 @@ if [ "$ACTION_RC" != "0" ]; then
 fi
 if poll_until_healthy; then
   quota_clear_all
+  SAVE_SIG=""
   if [ "$ACTION_TARGET" = "postgres" ]; then
     log "INFO PULIH TANPA RESTART API: ready sehat sesudah restart Postgres (bukti T03)"
   fi
