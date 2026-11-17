@@ -14,14 +14,18 @@
 // idempotence, lock contention) belongs to the merge gate.
 
 import { describe, expect, it, vi } from 'vitest';
+import { DrizzleQueryError } from 'drizzle-orm';
 import { isMigrateOnStartEnabled, runStartupMigrationStep, type StartupMigrationRunners } from '../src/server.js';
-import type {
-  CheckDriftOptions,
-  CheckDriftResult,
-  DriftResult,
-  MigrationManifest,
-  RunMigrationsOptions,
-  RunMigrationsResult,
+import {
+  MIGRATION_DRIFT_CODE,
+  MIGRATION_LOCK_TIMEOUT_CODE,
+  MIGRATION_MANIFEST_CODE,
+  type CheckDriftOptions,
+  type CheckDriftResult,
+  type DriftResult,
+  type MigrationManifest,
+  type RunMigrationsOptions,
+  type RunMigrationsResult,
 } from '../src/db/migrate.js';
 
 const DATABASE_URL = 'postgres://user@db.example.test:5432/notegen';
@@ -295,7 +299,13 @@ describe('runStartupMigrationStep', () => {
   it('keeps the migration lock name in the log when the lock times out', async () => {
     const runners = recordingRunners({
       runMigrations: async () => {
-        throw new Error('Timed out waiting for the migration advisory lock; another migrator may be running.');
+        // The lock family is identified by its machine code, not by
+        // quoting the message: the message carries a marker that must
+        // never reach the log line.
+        throw codedError(
+          'Timed out waiting for the migration advisory lock; MARKER-MUST-NOT-APPEAR',
+          MIGRATION_LOCK_TIMEOUT_CODE,
+        );
       },
     });
     const outcome = await runStartupMigrationStep({
@@ -310,12 +320,16 @@ describe('runStartupMigrationStep', () => {
     }
     expect(outcome.kind).toBe('migration-failed');
     expect(outcome.message).toContain('migration advisory lock');
+    expect(outcome.message).not.toContain('MARKER-MUST-NOT-APPEAR');
   });
 
   it('keeps the journal file name in the log when the manifest is unreadable', async () => {
     const runners = recordingRunners({
       runMigrations: async () => {
-        throw new Error('Migration journal not found: /srv/api/drizzle/meta/_journal.json');
+        throw codedError(
+          'Migration journal not found: /srv/api/drizzle/meta/_journal.json',
+          MIGRATION_MANIFEST_CODE,
+        );
       },
     });
     const outcome = await runStartupMigrationStep({
@@ -330,6 +344,7 @@ describe('runStartupMigrationStep', () => {
     }
     expect(outcome.kind).toBe('migration-failed');
     expect(outcome.message).toContain('_journal.json');
+    expect(outcome.message).not.toContain('/srv/api/drizzle/meta/_journal.json');
   });
 
   it('logs only the machine code for driver errors whose message may quote SQL', async () => {
@@ -352,6 +367,166 @@ describe('runStartupMigrationStep', () => {
     expect(outcome.message).toContain('42P07');
     expect(outcome.message).not.toContain('CREATE TABLE');
     expect(outcome.message).not.toContain('marks');
+  });
+
+  it('never logs SQL from a real drizzle apply error, but keeps the code and the failing migration (F-01, K4(c) shape)', async () => {
+    // The exact PREDEPLOY K4(c) shape: a real DrizzleQueryError whose
+    // message embeds the failing statement, with no top-level code;
+    // the driver code lives on the cause, and the failing tag is
+    // supplied by the migrator wrapper as a structured property.
+    const cause = codedError('relation "nonexistent_table_k4c" does not exist', '42P01');
+    const drizzleError = new DrizzleQueryError(
+      'ALTER TABLE "nonexistent_table_k4c" ADD COLUMN "x" integer',
+      [],
+      cause,
+    );
+    (drizzleError as unknown as Record<string, unknown>).migrationTag = '0002_m8-tighten';
+    const runners = recordingRunners({
+      runMigrations: async () => {
+        throw drizzleError;
+      },
+    });
+    const outcome = await runStartupMigrationStep({
+      databaseUrl: DATABASE_URL,
+      migrateOnStart: true,
+      runners,
+      log: () => {},
+    });
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') {
+      throw new Error('unreachable');
+    }
+    expect(outcome.kind).toBe('migration-failed');
+    expect(outcome.message).toContain('42P01');
+    expect(outcome.message).toContain('0002_m8-tighten');
+    expect(outcome.message).not.toContain('ALTER TABLE');
+    expect(outcome.message).not.toContain('nonexistent_table_k4c');
+    expect(outcome.message).not.toContain('Failed query');
+    expect(outcome.message).not.toContain('params:');
+  });
+
+  it('keeps the failing migration when a drizzle apply error carries no code at all', async () => {
+    const drizzleError = new DrizzleQueryError('CREATE TABLE "audit_events" ("id" text)', [], undefined);
+    (drizzleError as unknown as Record<string, unknown>).migrationTag = '0000_init';
+    const runners = recordingRunners({
+      runMigrations: async () => {
+        throw drizzleError;
+      },
+    });
+    const outcome = await runStartupMigrationStep({
+      databaseUrl: DATABASE_URL,
+      migrateOnStart: true,
+      runners,
+      log: () => {},
+    });
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') {
+      throw new Error('unreachable');
+    }
+    expect(outcome.kind).toBe('migration-failed');
+    expect(outcome.message).toContain('0000_init');
+    expect(outcome.message).not.toContain('CREATE TABLE');
+    expect(outcome.message).not.toContain('audit_events');
+  });
+
+  it('uses a fixed message for a codeless error whose message carries SQL', async () => {
+    const runners = recordingRunners({
+      runMigrations: async () => {
+        throw new Error('Failed query: INSERT INTO "secrets" VALUES (\'top-secret-value\'); params: []');
+      },
+    });
+    const outcome = await runStartupMigrationStep({
+      databaseUrl: DATABASE_URL,
+      migrateOnStart: true,
+      runners,
+      log: () => {},
+    });
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') {
+      throw new Error('unreachable');
+    }
+    expect(outcome.kind).toBe('migration-failed');
+    expect(outcome.message).toContain('unknown reason');
+    expect(outcome.message).not.toContain('INSERT INTO');
+    expect(outcome.message).not.toContain('top-secret-value');
+  });
+
+  it('recovers a driver code from the cause chain without quoting any message', async () => {
+    const outer = new Error('outer wrapper message');
+    (outer as unknown as Record<string, unknown>).cause = codedError(
+      'duplicate key; CREATE TABLE "marks" (...)',
+      '42P07',
+    );
+    const runners = recordingRunners({
+      runMigrations: async () => {
+        throw outer;
+      },
+    });
+    const outcome = await runStartupMigrationStep({
+      databaseUrl: DATABASE_URL,
+      migrateOnStart: true,
+      runners,
+      log: () => {},
+    });
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') {
+      throw new Error('unreachable');
+    }
+    expect(outcome.kind).toBe('migration-failed');
+    expect(outcome.message).toContain('42P07');
+    expect(outcome.message).not.toContain('CREATE TABLE');
+    expect(outcome.message).not.toContain('outer wrapper message');
+  });
+
+  it('rejects hostile code and tag values instead of logging them', async () => {
+    const hostile = new Error('boom') as Error & { code: string; migrationTag: string };
+    hostile.code = '42P07; DROP TABLE users';
+    hostile.migrationTag = '../../etc/passwd';
+    const runners = recordingRunners({
+      runMigrations: async () => {
+        throw hostile;
+      },
+    });
+    const outcome = await runStartupMigrationStep({
+      databaseUrl: DATABASE_URL,
+      migrateOnStart: true,
+      runners,
+      log: () => {},
+    });
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') {
+      throw new Error('unreachable');
+    }
+    expect(outcome.kind).toBe('migration-failed');
+    expect(outcome.message).toContain('unknown reason');
+    expect(outcome.message).not.toContain('DROP TABLE');
+    expect(outcome.message).not.toContain('etc/passwd');
+  });
+
+  it('names missing migrations for a drift failure from structured tags only', async () => {
+    const driftError = new Error('migration drift detected (digests: deadbeefcafebabe)');
+    const holder = driftError as unknown as Record<string, unknown>;
+    holder.code = MIGRATION_DRIFT_CODE;
+    holder.missingTags = ['0003_m8-contract-columns', '0004_m8-indexes'];
+    const runners = recordingRunners({
+      runMigrations: async () => {
+        throw driftError;
+      },
+    });
+    const outcome = await runStartupMigrationStep({
+      databaseUrl: DATABASE_URL,
+      migrateOnStart: true,
+      runners,
+      log: () => {},
+    });
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') {
+      throw new Error('unreachable');
+    }
+    expect(outcome.kind).toBe('migration-failed');
+    expect(outcome.message).toContain('0003_m8-contract-columns');
+    expect(outcome.message).toContain('0004_m8-indexes');
+    expect(outcome.message).not.toContain('deadbeefcafebabe');
   });
 
   it('uses a fixed message when a runner throws a non-error value', async () => {

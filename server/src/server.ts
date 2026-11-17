@@ -40,6 +40,10 @@ import type { AuthStore } from './auth/store.js';
 import { loadConfig, MIN_SECRET_LENGTH, type ServerConfig } from './config.js';
 import {
   checkMigrationDrift,
+  MIGRATION_DRIFT_CODE,
+  MIGRATION_LOCK_TIMEOUT_CODE,
+  MIGRATION_MANIFEST_CODE,
+  readMigrationErrorDetails,
   runMigrations,
   type CheckDriftOptions,
   type CheckDriftResult,
@@ -157,23 +161,22 @@ const DATABASE_UNREACHABLE_CODES = new Set([
   'ECONNABORTED',
 ]);
 
-function migrationErrorCode(error: unknown): string | undefined {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === 'string' && code !== '') {
-      return code;
-    }
-  }
-  return undefined;
-}
-
 // Converts a runner failure into a failed outcome with a message
-// that is safe to log: migration or lock names from migrate.ts
-// errors (whose contract guarantees no URL, SQL, or credential
-// material), a machine error code for driver errors, or a fixed
-// message when nothing safe can be said.
+// built ONLY from validated structured details (machine code,
+// failure family, migration tags) read through
+// readMigrationErrorDetails. This function never reads an error
+// message, query, params, or cause message: a drizzle apply error
+// embeds the failing SQL verbatim in its message with no top-level
+// code (PREDEPLOY finding F-01, AD-131), and quoting any message
+// would put that SQL in the boot log. The driver code, when one
+// exists, is recovered from the cause chain by the reader; the
+// failing migration tag is supplied by the migrator wrapper in
+// db/migrate.ts. Every branch below composes its message from fixed
+// templates plus validated tokens, so no log line from this
+// function can contain SQL, a URL, or credential material.
 function toFailedMigrationOutcome(error: unknown): Extract<StartupMigrationOutcome, { status: 'failed' }> {
-  const code = migrationErrorCode(error);
+  const details = readMigrationErrorDetails(error);
+  const code = details.code;
   if (code !== undefined && DATABASE_UNREACHABLE_CODES.has(code)) {
     return {
       status: 'failed',
@@ -184,18 +187,49 @@ function toFailedMigrationOutcome(error: unknown): Extract<StartupMigrationOutco
         'Startup fails; no traffic is served.',
     };
   }
-  if (error instanceof Error && code === undefined) {
+  if (code === MIGRATION_LOCK_TIMEOUT_CODE) {
     return {
       status: 'failed',
       kind: 'migration-failed',
-      message: `Startup migrations failed: ${error.message}`,
+      message:
+        'Startup migrations failed: timed out waiting for the migration advisory lock. ' +
+        'Startup fails; no traffic is served.',
     };
   }
-  if (code !== undefined) {
+  if (code === MIGRATION_MANIFEST_CODE) {
+    const tagSuffix = details.migrationTag !== undefined ? ` (migration ${details.migrationTag})` : '';
     return {
       status: 'failed',
       kind: 'migration-failed',
-      message: `Startup migrations failed (database error ${code}). Startup fails; no traffic is served.`,
+      message:
+        `Startup migrations failed: the migration manifest could not be read (_journal.json)${tagSuffix}. ` +
+        'Startup fails; no traffic is served.',
+    };
+  }
+  if (code === MIGRATION_DRIFT_CODE) {
+    const tags = details.missingTags;
+    const detail =
+      tags !== undefined && tags.length > 0 ? ` (missing or changed migrations: ${tags.join(', ')})` : '';
+    return {
+      status: 'failed',
+      kind: 'migration-failed',
+      message:
+        `Startup migrations failed: migration drift detected${detail}. ` +
+        'Startup fails; no traffic is served.',
+    };
+  }
+  if (code !== undefined || details.migrationTag !== undefined) {
+    const parts: string[] = [];
+    if (code !== undefined) {
+      parts.push(`database error ${code}`);
+    }
+    if (details.migrationTag !== undefined) {
+      parts.push(`migration ${details.migrationTag}`);
+    }
+    return {
+      status: 'failed',
+      kind: 'migration-failed',
+      message: `Startup migrations failed (${parts.join('; ')}). Startup fails; no traffic is served.`,
     };
   }
   return {
