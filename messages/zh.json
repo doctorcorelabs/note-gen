@@ -3540,10 +3540,10 @@
         },
         "poweredBy": "由 SiliconFlow 提供技术支持"
       },
-      "deleteModelConfirm": "platform.dialog.confirm('确定要删除这个模型吗？')",
-      "rerankResultInvalid": "throw new Error('重排序结果格式不正确')",
-      "embeddingResultInvalid": "throw new Error('嵌入结果格式不正确')",
-      "ttsResultInvalid": "throw new Error('TTS模型返回格式不正确')"
+      "deleteModelConfirm": "确定要删除这个模型吗？",
+      "rerankResultInvalid": "重排序结果格式不正确",
+      "embeddingResultInvalid": "嵌入结果格式不正确",
+      "ttsResultInvalid": "TTS模型返回格式不正确"
     },
     "imageMethod": {
       "title": "图像识别",
