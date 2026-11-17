@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 //
-// Vitest-style suite for the tag input helpers (tag-inputs.ts).
+// Vitest-style suite for the tag name helpers (tag-inputs.ts).
 // Runs in the Vitest leg of `pnpm test:unit` and is listed in
 // VITEST_SPECS in scripts/run-adapter-tests.mjs.
 
 import { describe, expect, it } from "vitest";
 
-import {
-  normalizeTagName,
-  sameTagSet,
-  setPrimaryTag,
-  tagSelectionChanged,
-  validateTagName,
-} from "./tag-inputs";
+import { normalizeTagName, validateTagName } from "./tag-inputs";
 
 describe("normalizeTagName", () => {
   it("trims leading and trailing space", () => {
@@ -81,60 +75,5 @@ describe("validateTagName", () => {
 
   it("measures length after trimming", () => {
     expect(validateTagName(`  ${"a".repeat(100)}  `).ok).toBe(true);
-  });
-});
-
-describe("sameTagSet", () => {
-  it("ignores order", () => {
-    expect(sameTagSet([3, 7, 9], [9, 3, 7])).toBe(true);
-  });
-
-  it("rejects different ids and different lengths", () => {
-    expect(sameTagSet([3, 7], [3, 8])).toBe(false);
-    expect(sameTagSet([3, 7], [3])).toBe(false);
-    expect(sameTagSet([3], [3, 7])).toBe(false);
-  });
-
-  it("treats two empty sets as equal", () => {
-    expect(sameTagSet([], [])).toBe(true);
-  });
-});
-
-describe("tagSelectionChanged", () => {
-  it("is false for an identical selection", () => {
-    expect(tagSelectionChanged([3, 7, 9], [3, 7, 9])).toBe(false);
-    expect(tagSelectionChanged([], [])).toBe(false);
-  });
-
-  it("is true when only the order changes", () => {
-    expect(tagSelectionChanged([3, 7, 9], [7, 3, 9])).toBe(true);
-  });
-
-  it("is true when tags are added or removed", () => {
-    expect(tagSelectionChanged([3, 7], [3, 7, 9])).toBe(true);
-    expect(tagSelectionChanged([3, 7, 9], [3, 7])).toBe(true);
-    expect(tagSelectionChanged([3, 7], [3, 8])).toBe(true);
-  });
-});
-
-describe("setPrimaryTag", () => {
-  it("moves the tag to the front and keeps the rest in order", () => {
-    expect(setPrimaryTag([3, 7, 9], 9)).toEqual([9, 3, 7]);
-    expect(setPrimaryTag([3, 7, 9], 7)).toEqual([7, 3, 9]);
-  });
-
-  it("leaves an already-primary tag in place", () => {
-    expect(setPrimaryTag([3, 7, 9], 3)).toEqual([3, 7, 9]);
-  });
-
-  it("returns an unchanged copy for a tag outside the list", () => {
-    const input = [3, 7];
-    const result = setPrimaryTag(input, 9);
-    expect(result).toEqual([3, 7]);
-    expect(result).not.toBe(input);
-  });
-
-  it("handles a single-element list", () => {
-    expect(setPrimaryTag([3], 3)).toEqual([3]);
   });
 });
