@@ -408,6 +408,11 @@ export function editorLinkByName(page: Page, linkText: string): Locator {
  * collapsed (D-DEMO-7). Names are locale-dependent: the en names
  * are the harness default, matching the other pinned en strings
  * here. Prefer this over buttonWithIcon for tab switching.
+ * CAUTION: do not use this helper for "Canvas": the shell top
+ * bar carries a second, pre-existing button named "Canvas", so
+ * an unscoped "Canvas" role query resolves to two buttons (see
+ * sidebar-tabs-a11y.spec.ts for the scoped form). "Record" and
+ * "Notes" resolve uniquely shell-wide.
  */
 export function sidebarTabButton(page: Page, tabName: string): Locator {
   return page.getByRole('button', { name: tabName, exact: true })

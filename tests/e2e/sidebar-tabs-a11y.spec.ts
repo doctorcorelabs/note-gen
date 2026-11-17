@@ -27,10 +27,24 @@
 // resolution itself, which is the same accessible-name
 // computation assistive technology uses.
 //
+// Scoping note (probe-measured, W5-DEMOCODE): the shell carries
+// a second, pre-existing button named "Canvas" in the fixed top
+// bar (aria-label "Canvas", no title attribute), unrelated to
+// the sidebar tabs. The tab counts below therefore intersect
+// the role query with the title attribute the fix sets, so each
+// count measures the TAB button only; the name resolution
+// itself is still proven by the role query (aria-label), while
+// the title only disambiguates which button is counted. The
+// behavior clicks stay unscoped on purpose: they are the
+// verbatim W4-DEMO locator, and strict mode enforces the
+// uniqueness of "Record" and "Notes" (each resolves to exactly
+// one button shell-wide, as the probe confirmed).
+//
 // Before/after: this spec file is intentionally free of any
 // harness helper added by W5-DEMOCODE (it uses page.getByRole
-// directly; sidebarTabButton in harness/selectors.ts is the
-// harness spelling of the same locator), so the identical file
+// directly, plus a local title intersection for the tab scope;
+// sidebarTabButton in harness/selectors.ts is the harness
+// spelling of the same role locator), so the identical file
 // runs against the trunk tree and the fixed tree. On trunk the
 // Record and Canvas counts resolve to 0 and the spec fails at
 // the first count assertion; on the fixed tree all three counts
@@ -58,9 +72,24 @@
 // first); tab switches wait for the target surface by
 // observation.
 
+import type { Locator, Page } from '@playwright/test'
+
 import { backendTest, expect } from './harness/backend-fixture'
 import { AppPage } from './harness/app-page'
 import { fileTree } from './harness/selectors'
+
+/**
+ * The sidebar TAB button with the given accessible name: the
+ * role query (proving the accessible name resolves) intersected
+ * with the title attribute the D-DEMO-7 fix sets (excluding the
+ * pre-existing top-bar button also named "Canvas"). See the
+ * scoping note in the header.
+ */
+function tabButtonByName(page: Page, tabName: string): Locator {
+  return page
+    .getByRole('button', { name: tabName, exact: true })
+    .and(page.locator(`button[title="${tabName}"]`))
+}
 
 backendTest(
   'E2E-D-A11Y @demo sidebar tabs: collapsed tabs expose accessible names and switch by role',
@@ -73,9 +102,9 @@ backendTest(
     // selected (title text rendered), Record and Canvas are
     // collapsed (icon only). Each tab button must expose
     // exactly one role-plus-name match.
-    const notesCount = await page.getByRole('button', { name: 'Notes', exact: true }).count()
-    const recordCount = await page.getByRole('button', { name: 'Record', exact: true }).count()
-    const canvasCount = await page.getByRole('button', { name: 'Canvas', exact: true }).count()
+    const notesCount = await tabButtonByName(page, 'Notes').count()
+    const recordCount = await tabButtonByName(page, 'Record').count()
+    const canvasCount = await tabButtonByName(page, 'Canvas').count()
     expect(notesCount, 'exactly one tab button must expose the accessible name "Notes"').toBe(1)
     expect(recordCount, 'exactly one tab button must expose the accessible name "Record"').toBe(1)
     expect(canvasCount, 'exactly one tab button must expose the accessible name "Canvas"').toBe(1)
