@@ -1,12 +1,14 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Contract factories: web, Tauri, Postgres
 
-No factory lives here yet. This directory holds the factory
-modules the integrator adds when the real adapters land:
-one module per implementation column (`web.ts`, `tauri.ts`, and
-the Postgres-backed SQL factory, e.g. `postgres.ts`). The fake
-column stays in `tests/fakes/` and is wired directly from the
-`*.contract.ts` entries; it is never registered from here.
+One factory lives here so far: `web.ts`, the Store web column
+(3E-STOREWIRE), running the real web adapter over a fake settings
+server. This directory holds the factory modules the integrator
+adds when the real adapters land: one module per implementation
+column (`web.ts`, `tauri.ts`, and the Postgres-backed SQL factory,
+e.g. `postgres.ts`). The fake column stays in `tests/fakes/` and is
+wired directly from the `*.contract.ts` entries; it is never
+registered from here.
 
 ## Factory shape
 

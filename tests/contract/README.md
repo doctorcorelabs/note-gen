@@ -19,17 +19,20 @@ integrator must reconcile at merge time (see EXCEPTIONS.md E9).
 
 ## Status
 
-Scaffold state: fake column only. The web and Tauri factories do not
-exist yet. The suite proves the cases are runnable and can detect
-violations (see Negative control). It does not prove anything about a
-real backend, a real database, or a real filesystem.
+Scaffold state: fake column for every suite, plus the Store web
+column (`tests/contract/implementations/web.ts`, running the real
+web adapter over a fake settings server). The Tauri factory does
+not exist yet. The suite proves the cases are runnable and can
+detect violations (see Negative control). The web column proves
+adapter behavior over the fake transport; it does not prove
+anything about a real backend, a real database, or a real
+filesystem.
 
 What this scaffold deliberately does NOT do (integrator follow-ups,
 not oversights):
 
-- No web or Tauri factory (`tests/contract/implementations/` does not
-  exist yet). The Tauri column runs only with `CONTRACT_TAURI=1` and
-  must never block PRs.
+- No Tauri factory. The Tauri column runs only with
+  `CONTRACT_TAURI=1` and must never block PRs.
 - No AI transport cases (C-AI-01 to C-AI-06) and no event/cache cases
   (C-EV-01 to C-EV-04). Those belong to later scaffold work, not to
   this store/filesystem/SQL scaffold.
@@ -425,7 +428,11 @@ Store (`fase1/desain-store-adapter.md` section 8):
   clear/reset server transaction, revision conflict, persistence
   and flush semantics, cross-tab sync, auth/security (need the
   Fastify server over Postgres 17).
-- CT-16: POC cleanup in the browser (needs `localStorage`).
+- CT-16: POC cleanup in the browser (needs `localStorage`). Covered
+  outside this suite by the node:test spec
+  `src/lib/platform/store/poc-cleanup.spec.ts` (3E-STOREWIRE); it
+  stays deferred here because the contract harness has no browser
+  `localStorage`.
 - CT-19: desktop parity (needs the desktop harness).
 - CT-20: POC removal gates (lives in CI, not in Vitest).
 

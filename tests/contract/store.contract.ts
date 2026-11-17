@@ -2,12 +2,18 @@
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
 // Store contract suite entry: the parameterized cases from
-// store-cases.ts run against the fake in-memory store.
+// store-cases.ts run against the fake in-memory store and the real
+// web adapter over a fake settings server.
 //
-// Factories: fake only. Web and Tauri factories are registered by the
-// integrator in tests/contract/implementations/ once the adapters
-// land; the Tauri column runs only with CONTRACT_TAURI=1 and must
+// Factories: fake plus web. The web factory lives in
+// implementations/web.ts. The Tauri factory is registered by the
+// integrator in tests/contract/implementations/ once the adapter
+// lands; the Tauri column runs only with CONTRACT_TAURI=1 and must
 // never block PRs.
+//
+// The web column remaps arbitrary keys to catalogued S keys and
+// asserts the real error taxonomy; see EXCEPTIONS.md E10-E12. The
+// fake column assertions are unchanged.
 //
 // Negative control: with CONTRACT_BROKEN_STORE=1 this entry uses the
 // deliberately broken fake (tests/fakes/broken-fake-store.ts) instead
@@ -22,6 +28,10 @@ import {
   createFakeStoreAdapter,
   FakeStoreAdapter,
 } from "../fakes/fake-store";
+import {
+  webCorruptStoreFactory,
+  webStoreFactory,
+} from "./implementations/web";
 import {
   defineCorruptStoreCases,
   defineStoreCases,
@@ -57,13 +67,17 @@ const fakeFactory: StoreContractFactory = {
 
 defineContractSuite<StoreAdapter>(
   "Store contract",
-  [fakeFactory as ContractFactory<StoreAdapter>],
+  [
+    fakeFactory as ContractFactory<StoreAdapter>,
+    webStoreFactory as ContractFactory<StoreAdapter>,
+  ],
   defineStoreCases,
 );
 
 // Corrupt-backing cases run in their own suite because they need a
 // factory that fails on load(). The corrupt flag is fake-only; the
-// web factory must provide its own corrupt-backing construction.
+// web factory provides its own corrupt-backing construction (an
+// unreachable backend; see implementations/web.ts and E12).
 defineContractSuite<StoreAdapter>(
   "Store contract (corrupt backing)",
   [
@@ -74,6 +88,7 @@ defineContractSuite<StoreAdapter>(
         await impl.closeAll();
       },
     },
+    webCorruptStoreFactory,
   ],
-  (getImpl) => defineCorruptStoreCases(getImpl),
+  (getImpl, factory) => defineCorruptStoreCases(getImpl, factory),
 );
