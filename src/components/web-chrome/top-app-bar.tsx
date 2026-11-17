@@ -273,6 +273,8 @@ export function TopAppBar() {
                 variant="ghost"
                 size="icon"
                 className={`h-8 w-8 relative ${settingsOpen ? 'bg-primary/50 hover:bg-primary/60' : ''}`}
+                aria-label={settingsOpen ? t('common.back') : t('common.settings')}
+                data-testid="settings-open"
                 onClick={() => settingsOpen ? closeSettings() : openSettings()}
               >
                 {settingsOpen ? (

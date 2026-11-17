@@ -3,13 +3,14 @@
 
 // Record and tag seeding through the kind layer (D-3D-1).
 //
-// REST routes POST /api/marks and POST /api/tags do NOT exist on
-// trunk: there is no marks/tags route file and nothing registers
-// those paths (re-verified on trunk 314ff87e: the route groups in
-// server/src/routes-generated.ts contain no marks or tags group).
-// The only live data path is POST /api/transactions with kind
-// operations (kontrak-api-kanonis.md section 3.4), the same path
-// the shipped inbox client uses (src/lib/web/records-kind-client.ts).
+// REST routes POST /api/marks and POST /api/tags EXIST on trunk
+// since W4-WIRE (AD-122 S5-Q2); the kind surface remains alongside
+// them. This seeder keeps using the kind layer by design: it is the
+// path the shipped inbox client uses
+// (src/lib/web/records-kind-client.ts), and the kind operations
+// below are the ones whose affected/id semantics the fixture
+// asserts. The live data path used here is POST /api/transactions
+// with kind operations (kontrak-api-kanonis.md section 3.4).
 // This seeder calls exactly that endpoint with exactly these kinds:
 // tags.create, then marks.create. It never invents a REST route.
 //
@@ -38,10 +39,11 @@
 //   several tag names, or with an unknown tag name, is refused
 //   here rather than guessed.
 //
-// LIVE STATUS: UNPROVEN. No live run has exercised this module yet
-// (see harness/backend.ts). The operation builders are pure and are
-// checked without a database; the HTTP path waits for the merge
-// gate on muse-2.
+// LIVE STATUS: PROVEN. Live runs exercise this module at every
+// merge gate on muse-2 (the @harness specs read the seeds back)
+// and in every backendTest flow since; the W4-FLOWS conversion
+// runs on trunk 3b9a8809 re-proved it (see
+// laporan-3e-w4-flows-r12.md for tallies).
 
 import type { APIRequestContext } from '@playwright/test'
 

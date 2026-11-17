@@ -204,6 +204,7 @@ export default function SetupPage() {
                 </label>
                 <Input
                   id="setup-email"
+                  data-testid="auth-setup-email"
                   name="email"
                   type="email"
                   autoComplete="username"
@@ -220,6 +221,7 @@ export default function SetupPage() {
                 </label>
                 <Input
                   id="setup-password"
+                  data-testid="auth-setup-password"
                   name="password"
                   type="password"
                   autoComplete="new-password"
@@ -265,7 +267,7 @@ export default function SetupPage() {
                   {fieldError}
                 </p>
               )}
-              <Button type="submit" disabled={busy} className="w-full">
+              <Button type="submit" disabled={busy} data-testid="auth-setup-submit" className="w-full">
                 {busy ? 'Creating account...' : 'Create first account'}
               </Button>
             </div>

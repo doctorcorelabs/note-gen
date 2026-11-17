@@ -10,12 +10,20 @@
 // is no Next.js server to start. The static server is the dependency-free
 // harness script tests/e2e/harness/static-server.mjs.
 //
-// Backend, database, and auth wiring for per-test isolation has NOT
-// landed yet (wave 2 backend work). Until it lands, the suite runs with
-// a single worker against one shared static server, and only the boot
-// flow (E2E-01) is a real test. The other five flows fail explicitly
-// with "fitur belum mendarat" instead of passing falsely. See
-// tests/e2e/README.md for the full status table.
+// Backend, database, and auth wiring for per-test isolation landed
+// in wave 3 (3E-V41-HARNESS) and the six @smoke flows were converted
+// to live specs by W4-FLOWS: the suite now runs with a single worker
+// against one shared static server for the no-backend flows, while
+// the backend flows boot their own per-test gateway through the
+// backend fixture (see tests/e2e/README.md for the full status
+// table). The config webServer stays static-only on purpose: it
+// serves no /api/* route, so the fail-closed boot guard pins in
+// boot.spec.ts keep proving the no-backend contract. Backend flows
+// must NEVER navigate through the config baseURL: AppPage.gotoHome
+// and LoginPage.gotoLogin take the fixture gateway origin as a
+// required parameter, because navigating to a bare `/` resolves
+// against this static-only baseURL and always lands on the guard
+// screen (finding T-8, W4-FLOWS).
 //
 // To run against an already running server (CI deploy preview, local
 // manual server), set E2E_BASE_URL. In that mode no webServer is
@@ -35,8 +43,8 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
-  // One worker until per-test workspace/database isolation lands.
-  // Parallel workers would share one static server and one workspace.
+  // One worker: the static server is shared and the backend
+  // fixture boots one backend per test sequentially.
   workers: 1,
   // Desain-pengujian 4.3: at most 1 retry in CI, and a retry that
   // succeeds is still reported as flaky by the list reporter. No

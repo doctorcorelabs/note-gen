@@ -35,13 +35,20 @@ import {
   loginVerifyButton,
   setupTitleText,
 } from './selectors'
+import { assertGatewayOrigin } from './app-page'
 
 export class LoginPage {
   constructor(private readonly page: Page) {}
 
-  /** Open /login and wait for the sign-in form to appear. */
-  async gotoLogin(): Promise<void> {
-    await this.page.goto('/login')
+  /**
+   * Open /login at the given gateway origin and wait for the
+   * sign-in form to appear. The origin is required for the same
+   * reason as AppPage.gotoHome: the config baseURL is static-only
+   * and the session lives on the fixture gateway origin. Pass
+   * backend.pageUrl from the backend fixture.
+   */
+  async gotoLogin(pageUrl: string): Promise<void> {
+    await this.page.goto(`${assertGatewayOrigin(pageUrl)}/login`)
     await expect(loginTitleText(this.page)).toBeVisible()
   }
 
@@ -72,9 +79,13 @@ export class LoginPage {
     await expect(loginAlertByText(this.page, text)).toBeVisible()
   }
 
-  /** Open /setup and wait for the first-account form to appear. */
-  async gotoSetup(): Promise<void> {
-    await this.page.goto('/setup')
+  /**
+   * Open /setup at the given gateway origin and wait for the
+   * first-account form to appear. See gotoLogin for why the origin
+   * is required.
+   */
+  async gotoSetup(pageUrl: string): Promise<void> {
+    await this.page.goto(`${assertGatewayOrigin(pageUrl)}/setup`)
     await expect(setupTitleText(this.page)).toBeVisible()
   }
 }

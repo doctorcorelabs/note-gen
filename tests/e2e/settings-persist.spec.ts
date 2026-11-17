@@ -1,44 +1,83 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // This file is part of the NoteGen web fork. See LICENSE and FORK.md.
 
-// E2E-06: settings persist. Change one setting, reload, it stays.
-// Design: fase1/desain-pengujian.md section 4.2.
+// E2E-06: settings persist. Change one setting through the settings
+// API, reload, read it back through the settings API: the value
+// survives. Design: fase1/desain-pengujian.md section 4.2; the
+// setting under test is darkMode (AD-113), recorded in
+// harness/seed-data.ts SETTINGS_SEED.
 //
-// Status: TODO. This test fails explicitly with "fitur belum mendarat"
-// until the feature lands. Do not convert it to skip/fixme and do not
-// add placeholder assertions.
+// Status: LIVE (converted by W4-FLOWS).
 //
-// Intended steps (replace the notYetLanded call when the feature lands):
-// 1. Open settings. BLOCKER, NOT VERIFIABLE: the buttons that open
-//    settings (title bar, app sidebar) have NO aria-label in source,
-//    only tooltip text. V3-29 settings UI has merged (29a gating,
-//    29b TOTP/sessions) without adding an opener hook, so register
-//    item R3 is still open on trunk. The flow author must either add
-//    an accessible name or a data-testid to the opener (UI owner
-//    decision), or drive the settings dialog through a documented
-//    test hook. Do not guess a click target.
-// 2. Change ONE setting whose effect is observable and which does not
-//    depend on any upstream service. The setting is NOT chosen yet:
-//    desain-pengujian leaves the choice to the scaffold, and V3-29
-//    merged without recording a choice. The selector inventory
-//    recommends theme as the strongest candidate (7.3), but a
-//    recommendation is not a choice: the coordinator/3E decides, and
-//    no key is baked into harness/seed-data.ts until then. Pick a
-//    display preference with a visible UI effect, or a value readable
-//    through the settings API.
-// 3. Reload the page and read the setting back.
-// 4. Assert the value after reload equals the changed value, and the
-//    observable effect (if any) still applies.
+// Why the flow is programmatic, not UI-driven (AD-123 (11)): no UI
+// control references the darkMode key, the zustand setter is
+// synchronous and non-persisting, and the visible theme comes from
+// next-themes. Driving a nonexistent control would test nothing, so
+// this spec drives the shipped persistence path (GET/PATCH
+// /api/settings, kontrak-api-kanonis.md 3.2) and asserts persistence
+// only: the written value, the revision advance, and the read-back
+// after a full browser reload. It claims NO UI read-back of
+// darkMode and NO visible theme effect. The Settings dialog opener
+// hook (register R3, finding T-5) is covered separately: the
+// i18n-profile spec opens the dialog through the test-id opener and
+// the E2EDEBT evidence recount.
+//
+// Steps:
+// 1. Boot the shell through the backend fixture (session established).
+// 2. Read the settings document (GET /api/settings) through
+//    page.request: record the revision and the current darkMode
+//    value (the zustand default is 'system'; the document value on
+//    a fresh install may be absent or 'system', either is fine, the
+//    assertion is on the written value, not the starting value).
+// 3. PATCH { baseRevision, settings: { darkMode: 'dark' } } with a
+//    fresh CSRF token. Assert the response revision advanced by
+//    exactly one, darkMode is in the applied list, and the rejected
+//    list is empty.
+// 4. Reload the shell in the browser (AppPage.reloadHome) and read
+//    the document again. Assert darkMode is 'dark' and the revision
+//    is unchanged by the reload.
+// 5. Assert the settings read observed in the browser during boot
+//    carried the written value: after reload the browser re-reads
+//    settings (GET /api/settings 200), so a second read through
+//    page.request after the reload observes the same document the
+//    browser loaded. The spec does not parse browser storage: the
+//    settings document is the persistence surface.
 
-import { test } from '@playwright/test'
+import { backendTest, expect } from './harness/backend-fixture'
+import { AppPage } from './harness/app-page'
+import { fetchCsrfToken } from './harness/seed-records'
+import { getSettingsDocument, patchSettingsDocument } from './harness/settings-api'
+import { SETTINGS_SEED } from './harness/seed-data'
 
-import { notYetLanded } from './harness/todo'
+backendTest(
+  'E2E-06-darkMode @smoke settings persist: darkMode written through the API survives reload',
+  async ({ backend, page }) => {
+    const app = new AppPage(page)
+    await app.gotoHome(backend.pageUrl)
+    await app.expectBooted()
 
-test('E2E-06 @smoke settings persist: changed setting survives reload', async () => {
-  notYetLanded(
-    'E2E-06',
-    'the settings persistence backend plus an accessible settings ' +
-      'opener plus the chosen observable setting have not landed; no ' +
-      'setting can be changed and re-read through the web UI yet.',
-  )
-})
+    const before = await getSettingsDocument(page.request, backend.apiBaseUrl)
+    const csrfToken = await fetchCsrfToken(page.request, backend.apiBaseUrl)
+    const patched = await patchSettingsDocument(
+      page.request,
+      backend.apiBaseUrl,
+      csrfToken,
+      before.revision,
+      { [SETTINGS_SEED.key]: SETTINGS_SEED.value },
+    )
+    expect(patched.revision, 'PATCH must advance the revision by exactly one').toBe(
+      before.revision + 1,
+    )
+    expect(patched.applied, 'darkMode must be in the applied list').toContain(SETTINGS_SEED.key)
+    expect(patched.rejected, 'no key may be rejected').toEqual([])
+
+    await app.reloadHome()
+    await app.expectBooted()
+
+    const after = await getSettingsDocument(page.request, backend.apiBaseUrl)
+    expect(after.revision, 'reload must not change the revision').toBe(patched.revision)
+    expect(after.settings[SETTINGS_SEED.key], 'darkMode must read back the written value').toBe(
+      SETTINGS_SEED.value,
+    )
+  },
+)

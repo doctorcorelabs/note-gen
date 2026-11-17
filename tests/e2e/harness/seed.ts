@@ -9,13 +9,11 @@
 // assertions are reproducible across runs. Only the temporary parent
 // directory name is unique per call.
 //
-// WIRING STATUS: WIRED, LIVE-UNPROVEN. The backend fixture
+// WIRING STATUS: WIRED, LIVE-PROVEN. The backend fixture
 // (harness/backend-fixture.ts) passes the directory returned here
-// as WORKSPACE_ROOT to a per-test backend, so the app serves these
-// files. No live run has proved the seed entries appear in the
-// tree yet: the first live run is the merge gate on muse-2. Until
-// it reports, no flow may claim to use the seed through the app,
-// and the boot spec still does not depend on seed entries.
+// as WORKSPACE_ROOT to a per-test backend, and live runs prove the
+// seed entries appear in the tree (merge gates plus the W4-FLOWS
+// conversion runs; see laporan-3e-w4-flows-r12.md).
 
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

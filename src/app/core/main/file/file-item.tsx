@@ -836,6 +836,8 @@ export function FileItem({
                   ref={inputRef}
                   className={`h-5 min-w-0 flex-1 rounded-sm text-${fileManagerTextSize} px-1 font-normal mr-1 ${renameError ? 'border-destructive focus-visible:ring-destructive/30' : ''}`}
                   value={name}
+                  aria-label={t('context.rename')}
+                  data-testid="file-rename-input"
                   aria-invalid={Boolean(renameError)}
                   title={renameError ?? undefined}
                   onBlur={handleRename}
