@@ -466,7 +466,7 @@ async function probeReady(apiBaseUrl: string): Promise<{ ready: boolean; failing
       }
     }
     if (failing.length === 0) {
-      failing.push(`http_${response.status()}`)
+      failing.push(`http_${response.status}`)
     }
     return { ready: false, failingChecks: failing }
   } catch {
