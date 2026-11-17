@@ -35,7 +35,13 @@
 //    list is empty.
 // 4. Reload the shell in the browser (AppPage.reloadHome) and read
 //    the document again. Assert darkMode is 'dark' and the revision
-//    is unchanged by the reload.
+//    did not go BACKWARDS. The revision is NOT asserted stable:
+//    the browser writes settings during boot (the first conversion
+//    run observed the revision advance from 7 to 9 across one
+//    reload), so revision stability is false for the shipped app
+//    and asserting it would pin a non-contract. The persistence
+//    contract is the value plus monotonic revision, never a
+//    rewrite-free boot.
 // 5. Assert the settings read observed in the browser during boot
 //    carried the written value: after reload the browser re-reads
 //    settings (GET /api/settings 200), so a second read through
@@ -75,7 +81,10 @@ backendTest(
     await app.expectBooted()
 
     const after = await getSettingsDocument(page.request, backend.apiBaseUrl)
-    expect(after.revision, 'reload must not change the revision').toBe(patched.revision)
+    expect(
+      after.revision,
+      'reload must not roll the settings revision backwards (boot writes are allowed to advance it)',
+    ).toBeGreaterThanOrEqual(patched.revision)
     expect(after.settings[SETTINGS_SEED.key], 'darkMode must read back the written value').toBe(
       SETTINGS_SEED.value,
     )

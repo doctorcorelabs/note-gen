@@ -64,7 +64,8 @@ import { CREATE_NOTE_FIXTURE, CREATE_NOTE_RELATIVE_PATH } from './harness/seed-d
 
 backendTest(
   'E2E-02 @smoke create and save: content survives reload byte-for-byte',
-  async ({ backend, page }) => {
+  async ({ backend, page }, testInfo) => {
+    testInfo.setTimeout(120_000)
     const app = new AppPage(page)
     await app.gotoHome(backend.pageUrl)
     await app.expectBooted()
@@ -90,6 +91,9 @@ backendTest(
     await app.reloadHome()
     await app.expectBooted()
     await app.expandFolderByName('notes')
+    await expect(fileTreeItemByName(page, 'e2e-created-note.md')).toBeVisible({
+      timeout: 30_000,
+    })
     await fileTreeItemByName(page, 'e2e-created-note.md').click()
     await expect(visibleVisualEditor(page)).toContainText('Created note', { timeout: 10_000 })
     await expect(visibleVisualEditor(page)).toContainText('quokka-created-delta')

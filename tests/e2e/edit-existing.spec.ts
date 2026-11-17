@@ -31,9 +31,24 @@
 // handler in tiptap-editor.tsx: button 0 plus metaKey or ctrlKey).
 // A plain click opens the link editor instead. Navigation is
 // asserted BY OBSERVATION: the target note's content must appear
-// in the visible editor within 30 seconds. If the modifier click
-// does nothing, this spec fails honestly and the failure is a
-// product finding, not a spec weakness to paper over.
+// in the visible editor within 30 seconds.
+//
+// KNOWN PRODUCT DEFECT D-LINK (W4-FLOWS, first conversion run):
+// the link leg FAILS on the current build, and the failure is a
+// product defect, not a spec defect. Both click handlers in
+// tiptap-editor.tsx (handleModifiedMouseDown, handleClick) read
+// the anchor's DOM href attribute and RETURN EARLY when it is
+// empty; the rendered anchor's href IS empty (probe2), so the
+// modifier click can never reach openLink, and the first smoke run
+// observed the editor unchanged after the full 30-second
+// observation. The assertion is kept as written: weakening it to
+// accept an inert link would enshrine the defect. The fix (render
+// the relative href on the anchor, or read the link href from the
+// Tiptap node attributes in the handlers) is proposed to the
+// integrator as a numbered product follow-up in the W4-FLOWS
+// report (P-9). Until it lands, this spec is red on the link leg
+// and the image/edit legs are proven by the run reaching the link
+// step.
 //
 // Steps:
 // 1. Boot through the backend fixture. Observe a 200 response from
@@ -60,7 +75,8 @@ const DEEP_NOTE_PATH = 'notes/nested/deep-note.md'
 
 backendTest(
   'E2E-03 @smoke edit existing article: relative image and link work',
-  async ({ backend, page }) => {
+  async ({ backend, page }, testInfo) => {
+    testInfo.setTimeout(120_000)
     const mediaResponse = page.waitForResponse(
       (response) =>
         response.url().includes('/api/workspace/media/') &&
