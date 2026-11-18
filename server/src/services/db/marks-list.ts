@@ -30,7 +30,7 @@
 // schema accessor, the canonical error type, drizzle-orm). It imports
 // no other handler file and no shared helper.
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
 import { markTags, marks, type Database } from '../../db/index.js';
 
@@ -187,6 +187,33 @@ export function validate(op: unknown): asserts op is HandlerOperation {
   }
 }
 
+// DA08-01 anchor: the exact epoch microseconds of the cursor
+// row, read in SQL. Postgres timestamps carry microseconds, but
+// a JS Date (and therefore the cursor) carries only
+// milliseconds, so the anchor must never pass through a Date.
+// Returns null when the anchor row is gone or the value is not
+// a plain decimal, in which case the caller falls back to the
+// millisecond bucket predicate.
+async function readAnchorMicros(ctx: HandlerContext, id: number): Promise<string | null> {
+  const rows = await ctx.tx
+    .select({ micros: sql`extract(epoch from ${marks.createdAt}) * 1000000` })
+    .from(marks)
+    .where(and(eq(marks.workspaceId, ctx.workspaceId), eq(marks.id, id)))
+    .limit(1);
+  if (rows.length === 0) {
+    return null;
+  }
+  const raw: unknown = rows[0].micros;
+  if (typeof raw === 'number') {
+    return Number.isInteger(raw) ? String(raw) : null;
+  }
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const text = raw.trim();
+  return /^-?\d+(\.\d+)?$/.test(text) ? text : null;
+}
+
 export async function handle(ctx: HandlerContext, op: unknown): Promise<readonly MarkRow[]> {
   validate(op);
   const limit = clampLimit(op.limit);
@@ -199,19 +226,38 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<readonly
     conditions.push(isNotNull(marks.deletedAt));
   }
   if (position !== null) {
-    const at = new Date(position.createdAtMs);
-    const next = new Date(position.createdAtMs + 1);
-    // Postgres timestamps carry microseconds, but the cursor carries
-    // milliseconds (the precision of a JS Date). Rows sharing the
-    // cursor's millisecond fall in [at, next); within that bucket the
-    // id tiebreak applies. An exact equality on the timestamp would
-    // miss every row whose microseconds are nonzero.
-    const after = or(
-      lt(marks.createdAt, at),
-      and(gte(marks.createdAt, at), lt(marks.createdAt, next), lt(marks.id, position.id)),
-    );
-    if (after !== undefined) {
-      conditions.push(after);
+    // DA08-01: the cursor carries only milliseconds, but
+    // Postgres timestamps carry microseconds. Anchoring the
+    // page on the cursor row's exact epoch microseconds (read
+    // in SQL, never truncated through a JS Date) keeps rows
+    // that share the cursor millisecond from being duplicated
+    // or skipped. When the anchor row is gone, the millisecond
+    // bucket predicate below is the best available fallback.
+    const anchorMicros = await readAnchorMicros(ctx, position.id);
+    if (anchorMicros !== null) {
+        const epochMicros = sql`extract(epoch from ${marks.createdAt}) * 1000000`;
+        const after = or(
+          sql`${epochMicros} < ${anchorMicros}`,
+          and(sql`${epochMicros} = ${anchorMicros}`, lt(marks.id, position.id)),
+        );
+        if (after !== undefined) {
+          conditions.push(after);
+        }
+    } else {
+      const at = new Date(position.createdAtMs);
+      const next = new Date(position.createdAtMs + 1);
+      // Postgres timestamps carry microseconds, but the cursor carries
+      // milliseconds (the precision of a JS Date). Rows sharing the
+      // cursor's millisecond fall in [at, next); within that bucket the
+      // id tiebreak applies. An exact equality on the timestamp would
+      // miss every row whose microseconds are nonzero.
+      const after = or(
+        lt(marks.createdAt, at),
+        and(gte(marks.createdAt, at), lt(marks.createdAt, next), lt(marks.id, position.id)),
+      );
+      if (after !== undefined) {
+        conditions.push(after);
+      }
     }
   }
   const rows = await ctx.tx

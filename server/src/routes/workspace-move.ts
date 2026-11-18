@@ -60,7 +60,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { Dirent, Stats } from 'node:fs';
-import { lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isTextFilePath } from '../lib/paths.js';
@@ -430,6 +430,98 @@ async function ensureTargetParents(targetAbsolute: string, rootReal: string): Pr
   }
 }
 
+// Serialize the check-then-rename window of a move per
+// workspace (DA05-03). POSIX rename(2) silently replaces an
+// existing file, so a target check followed by I/O and then
+// rename lets two concurrent moves to the same target both pass
+// the check, after which the second rename destroys the first
+// move's file without an error. Running the check, the revision
+// guard, the subtree count, the parent creation, and the
+// rename/link as one critical section per workspace closes
+// that window for every move through this process. This is
+// move-vs-move serialization only, not the general write queue
+// the file header leaves to the integrator.
+const moveQueues = new Map<string, Promise<void>>();
+
+function runMoveSerialized<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = moveQueues.get(key) ?? Promise.resolve();
+  const result = previous.catch(() => undefined).then(task);
+  const settled = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  moveQueues.set(key, settled);
+  void settled.then(() => {
+    if (moveQueues.get(key) === settled) {
+      moveQueues.delete(key);
+    }
+  });
+  return result;
+}
+
+// Move one file without ever overwriting the target: link(2)
+// creates the target name atomically and fails with EEXIST when
+// the name is taken, then the source name is removed. Returns
+// 'fallback' when the filesystem cannot link (EXDEV across
+// devices, EPERM/ENOSYS/EACCES on filesystems that forbid hard
+// links) so the caller can rename under the lock instead; the
+// target was rechecked immediately before, so the fallback only
+// races a target created by another process. A failed unlink
+// removes the new target name again so the file is not left
+// under both names.
+async function linkThenUnlink(
+  sourceAbsolute: string,
+  targetAbsolute: string,
+): Promise<'linked' | 'fallback'> {
+  try {
+    await link(sourceAbsolute, targetAbsolute);
+  } catch (error) {
+    const code = errnoOf(error);
+    if (code === 'EEXIST') {
+      throw ApiError.alreadyExists();
+    }
+    if (code === 'ENOENT') {
+      throw ApiError.notFound();
+    }
+    if (code === 'EXDEV' || code === 'EPERM' || code === 'ENOSYS' || code === 'EACCES') {
+      return 'fallback';
+    }
+    throw error;
+  }
+  try {
+    await unlink(sourceAbsolute);
+  } catch (error) {
+    await unlink(targetAbsolute).catch(() => undefined);
+    throw error;
+  }
+  return 'linked';
+}
+
+// Rename with the move error mapping: a missing source is 404,
+// an occupied target is 409, and a directory/file shape
+// mismatch is 400 invalid_move. Folder moves use this under
+// the move lock with an immediate recheck: rename onto a
+// non-empty directory still fails instead of overwriting, so
+// the only target a racing rename could replace is an empty
+// directory created by another process.
+async function renameMove(sourceAbsolute: string, targetAbsolute: string): Promise<void> {
+  try {
+    await rename(sourceAbsolute, targetAbsolute);
+  } catch (error) {
+    const code = errnoOf(error);
+    if (code === 'ENOENT') {
+      throw ApiError.notFound();
+    }
+    if (code === 'EEXIST' || code === 'ENOTEMPTY') {
+      throw ApiError.alreadyExists();
+    }
+    if (code === 'ENOTDIR' || code === 'EISDIR') {
+      throw invalidMove('The move cannot be performed at the target path.');
+    }
+    throw error;
+  }
+}
+
 // Collect rewrite candidates: .md files (case-sensitive suffix)
 // anywhere under the root, skipping hidden segments and symlink
 // entries, never following symlinked directories. Candidates are
@@ -712,61 +804,78 @@ export async function registerWorkspaceMoveRoutes(
         throw invalidMove('A folder cannot be moved into its own subtree.');
       }
 
-      try {
-        await lstat(targetResolved.absolute);
-        throw ApiError.alreadyExists();
-      } catch (error) {
-        if (error instanceof ApiError) {
-          throw error;
-        }
-        if (errnoOf(error) !== 'ENOENT') {
-          throw error;
-        }
-      }
-
-      // Revision guard: files only, and only when the caller sent
-      // one. A stale guard answers 412 (amended K-03: move is a
-      // 412 endpoint even though its guard arrives in the body)
-      // with the section 3.4 conflict payload in details. The
-      // guard is ignored for folders, whatever its value.
-      if (!isFolderMove && expectedRevision !== undefined) {
-        const content = await readFile(sourceResolved.absolute);
-        const currentRevision = buildRevision(workspaceKey, source, content);
-        if (expectedRevision !== currentRevision) {
-          const preview = buildPreview(content, isTextFilePath(source));
-          const state: ConflictState = {
-            path: source,
-            serverRevision: currentRevision,
-            serverVersion: null,
-            serverModifiedAt: sourceStats.mtime.toISOString(),
-            serverSize: content.length,
-            currentPreview: preview.currentPreview,
-            previewTruncated: preview.previewTruncated,
-            suggestedCopyPath: await suggestedCopyPath(rootReal, source),
-          };
-          throw new ApiError(412, 'revision_conflict', 'The file has changed since it was last read.', {
-            details: { detail: `path: ${source}`, ...conflictDetails(state) },
-          });
-        }
-      }
-
-      const affectedCount = await countSubtree(sourceResolved.absolute, isFolderMove);
-      await ensureTargetParents(targetResolved.absolute, rootReal);
-      try {
-        await rename(sourceResolved.absolute, targetResolved.absolute);
-      } catch (error) {
-        const code = errnoOf(error);
-        if (code === 'ENOENT') {
-          throw ApiError.notFound();
-        }
-        if (code === 'EEXIST' || code === 'ENOTEMPTY') {
+      // DA05-03: serialize the check-then-rename window per
+      // workspace (see runMoveSerialized). POSIX rename
+      // silently replaces an existing file, so without the
+      // lock two concurrent moves to the same target could
+      // both pass the target check and the second rename
+      // would destroy the first move's file with no error.
+      const affectedCount = await runMoveSerialized(rootReal, async (): Promise<number> => {
+        try {
+          await lstat(targetResolved.absolute);
           throw ApiError.alreadyExists();
+        } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+          if (errnoOf(error) !== 'ENOENT') {
+            throw error;
+          }
         }
-        if (code === 'ENOTDIR' || code === 'EISDIR') {
-          throw invalidMove('The move cannot be performed at the target path.');
+
+        // Revision guard: files only, and only when the caller sent
+        // one. A stale guard answers 412 (amended K-03: move is a
+        // 412 endpoint even though its guard arrives in the body)
+        // with the section 3.4 conflict payload in details. The
+        // guard is ignored for folders, whatever its value.
+        if (!isFolderMove && expectedRevision !== undefined) {
+          const content = await readFile(sourceResolved.absolute);
+          const currentRevision = buildRevision(workspaceKey, source, content);
+          if (expectedRevision !== currentRevision) {
+            const preview = buildPreview(content, isTextFilePath(source));
+            const state: ConflictState = {
+              path: source,
+              serverRevision: currentRevision,
+              serverVersion: null,
+              serverModifiedAt: sourceStats.mtime.toISOString(),
+              serverSize: content.length,
+              currentPreview: preview.currentPreview,
+              previewTruncated: preview.previewTruncated,
+              suggestedCopyPath: await suggestedCopyPath(rootReal, source),
+            };
+            throw new ApiError(412, 'revision_conflict', 'The file has changed since it was last read.', {
+              details: { detail: `path: ${source}`, ...conflictDetails(state) },
+            });
+          }
         }
-        throw error;
-      }
+
+        const counted = await countSubtree(sourceResolved.absolute, isFolderMove);
+        await ensureTargetParents(targetResolved.absolute, rootReal);
+        // Recheck the target immediately before the filesystem
+        // operation: the lock excludes other moves through this
+        // process, and this recheck covers the guard and count
+        // window against anything else that created the target.
+        try {
+          await lstat(targetResolved.absolute);
+          throw ApiError.alreadyExists();
+        } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+          if (errnoOf(error) !== 'ENOENT') {
+            throw error;
+          }
+        }
+        if (!isFolderMove) {
+          const linked = await linkThenUnlink(sourceResolved.absolute, targetResolved.absolute);
+          if (linked === 'fallback') {
+            await renameMove(sourceResolved.absolute, targetResolved.absolute);
+          }
+        } else {
+          await renameMove(sourceResolved.absolute, targetResolved.absolute);
+        }
+        return counted;
+      });
 
       // The destination revision is computed fresh from the
       // destination bytes at the DESTINATION path: a revision

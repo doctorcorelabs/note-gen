@@ -29,7 +29,7 @@
 // schema accessor, the canonical error type, drizzle-orm). It imports
 // no other handler file and no shared helper.
 
-import { and, asc, desc, eq, gt, inArray, lt, or, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
 import { knowledgeSources, type Database } from '../../db/index.js';
 
@@ -182,6 +182,33 @@ function mapRow(row: DbRow): KnowledgeSourceRow {
   };
 }
 
+// DA08-01 anchor: the exact epoch microseconds of the cursor
+// row, read in SQL. Postgres timestamps carry microseconds, but
+// a JS Date (and therefore the cursor) carries only
+// milliseconds, so the anchor must never pass through a Date.
+// Returns null when the anchor row is gone or the value is not
+// a plain decimal, in which case the caller falls back to the
+// millisecond bucket predicate.
+async function readAnchorMicros(ctx: HandlerContext, sourceKey: string): Promise<string | null> {
+  const rows = await ctx.tx
+    .select({ micros: sql`extract(epoch from ${knowledgeSources.updatedAt}) * 1000000` })
+    .from(knowledgeSources)
+    .where(and(eq(knowledgeSources.workspaceId, ctx.workspaceId), eq(knowledgeSources.sourceKey, sourceKey)))
+    .limit(1);
+  if (rows.length === 0) {
+    return null;
+  }
+  const raw: unknown = rows[0].micros;
+  if (typeof raw === 'number') {
+    return Number.isInteger(raw) ? String(raw) : null;
+  }
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const text = raw.trim();
+  return /^-?\d+(\.\d+)?$/.test(text) ? text : null;
+}
+
 export async function handle(
   ctx: HandlerContext,
   op: unknown,
@@ -197,16 +224,35 @@ export async function handle(
     conditions.push(inArray(knowledgeSources.status, op.statuses));
   }
   if (position !== null) {
-    const cursorDate = new Date(position.updatedAtMs);
-    const after = or(
-      lt(knowledgeSources.updatedAt, cursorDate),
-      and(
-        eq(knowledgeSources.updatedAt, cursorDate),
-        gt(knowledgeSources.sourceKey, position.sourceKey),
-      ),
-    );
-    if (after !== undefined) {
-      conditions.push(after);
+    // DA08-01: the cursor carries only milliseconds, but
+    // Postgres timestamps carry microseconds. Anchoring the
+    // page on the cursor row's exact epoch microseconds (read
+    // in SQL, never truncated through a JS Date) keeps rows
+    // that share the cursor millisecond from being duplicated
+    // or skipped. When the anchor row is gone, the millisecond
+    // bucket predicate below is the best available fallback.
+    const anchorMicros = await readAnchorMicros(ctx, position.sourceKey);
+    if (anchorMicros !== null) {
+        const epochMicros = sql`extract(epoch from ${knowledgeSources.updatedAt}) * 1000000`;
+        const after = or(
+          sql`${epochMicros} < ${anchorMicros}`,
+          and(sql`${epochMicros} = ${anchorMicros}`, gt(knowledgeSources.sourceKey, position.sourceKey)),
+        );
+        if (after !== undefined) {
+          conditions.push(after);
+        }
+    } else {
+      const cursorDate = new Date(position.updatedAtMs);
+      const after = or(
+        lt(knowledgeSources.updatedAt, cursorDate),
+        and(
+          eq(knowledgeSources.updatedAt, cursorDate),
+          gt(knowledgeSources.sourceKey, position.sourceKey),
+        ),
+      );
+      if (after !== undefined) {
+        conditions.push(after);
+      }
     }
   }
   const rows = await ctx.tx

@@ -566,35 +566,26 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
     }
   }
 
-  async function throwForError(
-    res: FetchResponseLike,
+  // Build the FsAdapterError for a canonical error envelope
+  // body, shared by the non-2xx path (throwForError) and the
+  // 200-with-error-envelope path in requestJson (DA28-05).
+  // `body` is the parsed JSON body, or null when unparsable.
+  function errorFromBody(
+    body: Record<string, unknown> | null,
+    status: number,
     pathForError: string,
-  ): Promise<never> {
-    let rawText = "";
-    try {
-      rawText = await res.text();
-    } catch {
-      rawText = "";
-    }
-    let parsed: unknown = null;
-    if (rawText !== "") {
-      try {
-        parsed = JSON.parse(rawText);
-      } catch {
-        parsed = null;
-      }
-    }
-    const body = isRecord(parsed) ? parsed : null;
+    retryAfterSeconds?: number,
+  ): FsAdapterError {
     // Canonical error envelope (W4-DEMO B1): code/message/requestId
     // live in the nested `error` object, and per-code fields live in
     // `error.details`. A flat body keeps working as a fallback.
     const nested = body !== null && isRecord(body.error) ? body.error : null;
     const codeSource = nested ?? body;
     const rawCode = codeSource !== null ? asString(codeSource.code) : null;
-    let code = rawCode ?? (res.status >= 500 ? "internal_error" : "unknown");
+    let code = rawCode ?? (status >= 500 ? "internal_error" : "unknown");
     const message =
       (codeSource !== null ? asString(codeSource.message) : null) ??
-      `Workspace request failed with status ${res.status}`;
+      `Workspace request failed with status ${status}`;
     const requestId =
       codeSource !== null ? (asString(codeSource.requestId) ?? undefined) : undefined;
     const detail =
@@ -616,17 +607,39 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
       detailsRecord?.diskWritten === true || body?.diskWritten === true
         ? true
         : undefined;
-    throw new FsAdapterError({
+    return new FsAdapterError({
       code,
-      status: res.status,
+      status,
       message,
       path: pathForError,
       requestId,
       detail,
       conflict,
-      retryAfterSeconds: parseRetryAfter(res.headers.get("Retry-After")),
+      retryAfterSeconds,
       diskWritten,
     });
+   }
+
+  async function throwForError(
+    res: FetchResponseLike,
+    pathForError: string,
+  ): Promise<never> {
+    let rawText = "";
+    try {
+      rawText = await res.text();
+    } catch {
+      rawText = "";
+    }
+    let parsed: unknown = null;
+    if (rawText !== "") {
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        parsed = null;
+      }
+    }
+    const body = isRecord(parsed) ? parsed : null;
+    throw errorFromBody(body, res.status, pathForError, parseRetryAfter(res.headers.get("Retry-After")));
   }
 
   async function requestJson<T>(
@@ -672,16 +685,9 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         path: pathForError,
       });
     }
+    let parsed: unknown;
     try {
-      const parsed: unknown = JSON.parse(text);
-      // Unwrap the canonical success envelope `{ ok: true, data }`
-      // (W4-DEMO B1/B5: without this, stat/list callers read the
-      // envelope itself and see no entry). Bare bodies without the
-      // envelope pass through unchanged as a fallback.
-      if (isRecord(parsed) && parsed.ok === true && "data" in parsed) {
-        return parsed.data as T;
-      }
-      return parsed as T;
+      parsed = JSON.parse(text);
     } catch {
       throw new FsAdapterError({
         code: "invalid_response",
@@ -690,6 +696,27 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         path: pathForError,
       });
     }
+    // DA28-05: an error envelope on a 200 response is an error,
+    // not a success body. Without this rejection, callers read
+    // the envelope as data: listAll reports a fake empty
+    // directory, and moveFlow claims a failed move succeeded.
+    // Apply the same envelope mapping as throwForError.
+    if (isRecord(parsed) && parsed.ok === false) {
+      throw errorFromBody(
+        parsed,
+        res.status,
+        pathForError,
+        parseRetryAfter(res.headers.get("Retry-After")),
+      );
+    }
+    // Unwrap the canonical success envelope `{ ok: true, data }`
+    // (W4-DEMO B1/B5: without this, stat/list callers read the
+    // envelope itself and see no entry). Bare bodies without the
+    // envelope pass through unchanged as a fallback.
+    if (isRecord(parsed) && parsed.ok === true && "data" in parsed) {
+      return parsed.data as T;
+    }
+    return parsed as T;
   }
 
   async function requestNoContent(
@@ -920,7 +947,25 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         entries?: unknown;
         nextCursor?: unknown;
       }>("GET", `${WORKSPACE_API}/list?${params}`, relative);
-      const entries = Array.isArray(page.entries) ? page.entries : [];
+      // DA28-05: a list page without an entries array is a
+      // malformed response, never an empty directory.
+      if (!isRecord(page)) {
+        throw new FsAdapterError({
+          code: "invalid_response",
+          status: 200,
+          message: "List response was not a JSON object",
+          path: relative,
+        });
+      }
+      if (!Array.isArray(page.entries)) {
+        throw new FsAdapterError({
+          code: "invalid_response",
+          status: 200,
+          message: "List response has no entries array",
+          path: relative,
+        });
+      }
+      const entries = page.entries;
       for (const raw of entries) {
         const entry = asWorkspaceEntry(raw);
         if (!entry || seen.has(entry.path)) {
@@ -928,6 +973,18 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         }
         seen.add(entry.path);
         out.push(entry);
+      }
+      if (
+        page.nextCursor !== undefined &&
+        page.nextCursor !== null &&
+        typeof page.nextCursor !== "string"
+      ) {
+        throw new FsAdapterError({
+          code: "invalid_response",
+          status: 200,
+          message: "List response has a nextCursor that is not a string",
+          path: relative,
+        });
       }
       cursor = asNullableString(page.nextCursor);
     } while (cursor !== null);
@@ -1052,11 +1109,33 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         path: source,
       });
     }
-    const rewrittenRaw = Array.isArray(result.rewrittenFiles)
-      ? result.rewrittenFiles
-      : [];
-    const skippedRaw = Array.isArray(result.skipped) ? result.skipped : [];
-    const pendingRaw = Array.isArray(result.pending) ? result.pending : [];
+    // DA28-05: a move result with the wrong shape is a
+    // malformed response, never a successful move with empty
+    // rewrites. The server always sends every field below;
+    // silent defaults here would fabricate success.
+    const rewrittenRaw = result.rewrittenFiles;
+    const skippedRaw = result.skipped;
+    const pendingRaw = result.pending;
+    if (
+      asString(result.source) === null ||
+      asString(result.target) === null ||
+      (result.kind !== "file" && result.kind !== "folder") ||
+      (result.rewriteStatus !== "complete" &&
+        result.rewriteStatus !== "partial" &&
+        result.rewriteStatus !== "skipped_only" &&
+        result.rewriteStatus !== "disabled") ||
+      asNumber(result.affectedCount) === null ||
+      !Array.isArray(rewrittenRaw) ||
+      !Array.isArray(skippedRaw) ||
+      !Array.isArray(pendingRaw)
+    ) {
+      throw new FsAdapterError({
+        code: "invalid_response",
+        status: 200,
+        message: "Move response has an unexpected shape",
+        path: source,
+      });
+    }
     const fileList = (raw: unknown[]): FsMoveResult["rewrittenFiles"] =>
       raw
         .map((item) => {
