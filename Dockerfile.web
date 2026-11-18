@@ -33,10 +33,13 @@
 #   (bukan server Next.js); (3) konfigurasi default nginx sudah
 #   menyajikan index.html di port 80, tanpa berkas konfigurasi tambahan
 #   yang belum teruji.
-# - Konfigurasi nginx TIDAK diubah: memakai default image. Batasan:
-#   fallback clean-URL (try_files) tidak ditambahkan karena belum
-#   terverifikasi apakah rute export membutuhkannya; smoke butir 1
-#   (front page 200) hanya butuh / -> index.html. Lihat disposisi A6.
+# - Konfigurasi nginx DIUBAH dari default image: berkas
+#   infra/nginx/default.conf disalin ke /etc/nginx/conf.d/default.conf
+#   pada stage runtime (lihat bawah). Alasan: fallback clean-URL
+#   (try_files) dibutuhkan export datar (AD-188, DA-15-01/02); urutan
+#   try_files WAJIB $uri.html sebelum $uri/ karena lima rute berbenturan
+#   dengan direktori export. Perbaikan hidup di image web, bukan di
+#   Caddy (DEP-14, DA-15-14). Status gerbang: lihat disposisi A6.
 #
 # PIN BASE IMAGE (diverifikasi 18 Nov 2026 di muse-2, arsitektur
 # amd64/linux, lewat docker buildx imagetools inspect; digest juga
@@ -93,10 +96,13 @@
 #   install): TERBUKTI. pnpm install web lulus di smoke tanpa paket
 #   apt; stage build tetap tanpa toolchain native.
 # - A6 (konfigurasi default nginx cukup): TERBUKTI UNTUK SMOKE (front
-#   page 200 lewat proksi). Perilaku rute clean-URL tanpa .html dan
-#   fallback SPA belum diverifikasi; bila smoke/deploy butuh itu,
-#   tambahkan konfigurasi nginx teruji sebagai berkas terpisah atas
-#   keputusan koordinator.
+#   page 200 lewat proksi) DAN TIDAK CUKUP UNTUK DEEP-LINK. AD-188 +
+#   DA-15-01/02 membuktikan 62 rute dalam 404 pada muat langsung dan
+#   lima rute benturan direktori 301 lalu 403 pada default stok.
+#   Cabang penahan ini menambahkan infra/nginx/default.conf sebagai
+#   berkas terpisah; perilaku clean-URL sesudah rebuild + gate ulang
+#   masih harus dibuktikan sebelum klaim lulus apa pun. Jangan mengubah
+#   konfigurasi live tanpa putusan parent yang tercatat.
 # - A7 (arsitektur image sama dengan host deploy): TERCATAT. Host
 #   deploy muse-2 adalah amd64/linux; digest di atas adalah digest
 #   manifest list; image hasil build adopsi diverifikasi di host
@@ -167,6 +173,14 @@ LABEL org.opencontainers.image.title="notegen-web" \
 
 # Static export dibakar ke dalam image (DEP-13: tanpa volume).
 COPY --from=build /app/out /usr/share/nginx/html
+
+# Konfigurasi nginx kustom menggantikan default.conf stok image
+# (AD-188, DA-15-01/02/04). Berkas disalin dari konteks build root
+# repo; .dockerignore mengizinkan infra/ (kecuali data/env), sehingga
+# berkas ini ada di konteks. Tanpa COPY ini, image kembali ke default
+# stok dan deep-link 404. Jangan memindahkan fallback ke Caddy
+# (DEP-14, DA-15-14).
+COPY infra/nginx/default.conf /etc/nginx/conf.d/default.conf
 
 # Persiapan jalan non-root: user dan grup `nginx` sudah ada di image
 # nginx:alpine. Direktori cache, log, berkas pid, dan html harus dapat
