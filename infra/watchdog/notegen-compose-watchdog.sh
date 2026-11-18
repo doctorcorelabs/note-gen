@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 # This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 # See LICENSE and FORK.md.
@@ -112,10 +113,16 @@ write_state_file() {
 }
 
 # ---------------- Validator JSON (python3 stdlib) ----------------
-# Aturan sehat IDENTIK dengan watchdog tunnel (spesifikasi seksi 1.2/2.2/3.4):
-# HTTP 200 + JSON valid + ok true + status ready + db ok + workspace ok +
-# migrations ok (bila NOTEGEN_MIGRATIONS_REQUIRED=1) + worker ok bila sudah
-# di-deploy (NOTEGEN_WORKER_DEPLOYED=1). pgvector non-blokir di Fase 1.
+# Aturan sehat (spesifikasi seksi 1.2/2.2/3.4; bacaan seksi 3.1
+# laporan pekerja W5-WATCHDOG): CHECKS yang memutuskan. Sehat
+# ditentukan oleh checks atas jawaban HTTP 200/503 + JSON valid;
+# ok/status tingkat atas TIDAK memveto. Ketidaksesuaian ok/status
+# dengan checks dicatat sebagai peringatan envelope_inconsistent,
+# bukan vonis tidak sehat. Checks memutuskan dua arah: check blokir
+# gagal atau hilang berarti tidak sehat walau ok true. pgvector
+# non-blokir di Fase 1 (seksi 3.5); migrations/worker wajib ok bila
+# flag-nya menuntut (NOTEGEN_MIGRATIONS_REQUIRED=1 /
+# NOTEGEN_WORKER_DEPLOYED=1).
 # Kedua skrip wajib menjaga validator ini tetap sama; lihat README.
 # Output: baris VALID/OK/STATUS/FAILED/WARNINGS/PARSE, nilai sudah disanitasi.
 PY_VALIDATE="$(cat <<'PYEOF'
@@ -686,9 +693,9 @@ CL_BODY=$(printf '%s' "$CL_OUT" | sed '$d' | tr -d '\n\r')
 echo "CADDY_LIVE_CODE=$CL_CODE"
 echo "CADDY_LIVE_BODY=$CL_BODY"
 if cd @@DIR_Q@@ 2>/dev/null; then
-  DR_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/ready',{signal:AbortSignal.timeout(10000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
+  DR_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/ready',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
   DR_RC=$?
-  DL_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/live',{signal:AbortSignal.timeout(10000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
+  DL_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/live',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
   DL_RC=$?
   PS_OUT=$(docker compose -f @@FILE_Q@@ ps --format '{{.Service}}|{{.State}}|{{.Health}}|{{.Name}}' 2>/dev/null)
   PS_RC=$?

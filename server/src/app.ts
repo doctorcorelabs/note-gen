@@ -17,7 +17,7 @@
 // 3. Auth hooks: the Cloudflare Access preHandler (when enabled in
 //    config) runs BEFORE the session hook, so a request without a
 //    valid Access JWT never reaches session verification
-//    (desain-auth.md section 7.3 order; AD-132). Routes under /api/
+//    (desain-auth.md section 7.3 order; AD-132; AD-133). Routes under /api/
 //    are protected by default (see middleware/auth-hook.ts). Health
 //    routes are explicitly public at the session layer; at the
 //    Access layer only the exemption predicate in
@@ -96,7 +96,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerRequestId(app);
   registerErrorHandling(app, { version: deps.version });
   // Cloudflare Access perimeter (desain-auth.md section 7; AD-132,
-  // PREDEPLOY finding F-02). When verification is enabled, the
+  // PREDEPLOY finding F-02; AD-133). When verification is enabled, the
   // preHandler is registered BEFORE the session hook, so the layer
   // order is Access, then session, then CSRF/Origin. Construction
   // throws on an enabled-but-incomplete config (missing audience or

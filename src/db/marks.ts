@@ -358,7 +358,7 @@ export async function insertMark(mark: Partial<Mark>, beforeWrite?: () => Promis
   // upstream did, so no `activity` argument is sent). The `url`
   // default follows the kind client: the kind requires a string,
   // and text captures pass no url. A caller-supplied `sourceId`
-  // is first-write-wins (D-03): an existing row answers affected
+  // is first-write-wins: an existing row answers affected
   // 0 with the existing id instead of inserting a duplicate.
   await beforeWrite?.()
   if (mark.tagId === undefined || mark.type === undefined) {
@@ -393,7 +393,7 @@ export async function insertMark(mark: Partial<Mark>, beforeWrite?: () => Promis
 
 export async function insertExternalMark(mark: Partial<Mark> & { sourceId: string }) {
   // Migrated in wave 5 (D-DEMO-3): `marks.create` is
-  // first-write-wins on `sourceId` (D-03), so the existence
+  // first-write-wins on `sourceId`, so the existence
   // pre-check and the race re-select are both replaced by one
   // insert plus a read-back. `affected` 0 means the sourceId
   // already named a row, which is returned with `duplicate: true`
