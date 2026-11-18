@@ -5,15 +5,14 @@
  * Wiring spec for the DialogService-to-host connection (N-10, V3-11).
  *
  * Verifies that each dialog method reaches the host with the right
- * payload, that path-shaped open/save reject per D-01 through the
- * wired adapter, and that throw-without-host behavior is preserved
- * when no host is installed. The honest interim semantics of the
- * wiring (message resolves once presented; confirm/ask present and
- * then reject; prompt rejects without presenting) are pinned here
- * because they follow directly from the host gaps documented in
- * `dialog-wiring.ts` (GAP-1 to GAP-3). If the host gains a
- * resolution or input seam, this spec must be updated together with
- * the wiring; do not weaken the assertions silently.
+ * payload and returns the host resolution unchanged, that path-shaped
+ * open/save reject per D-01 through the wired adapter, and that
+ * throw-without-host behavior is preserved when no host is installed.
+ * The host resolution seam (promise-based confirm/ask/message/prompt
+ * in `web-dialog.tsx`) is what makes real answers possible; the fake
+ * host below stands in for it. If the host ever loses its resolution
+ * seam, this spec must be updated together with the wiring; do not
+ * weaken the assertions silently.
  *
  * Run with node:test over an esbuild bundle (node:test cannot
  * resolve the extensionless relative imports the repo uses). From
@@ -43,18 +42,39 @@ import type { WebDialogApi } from "../../../components/web-chrome/web-dialog";
 // ---------------------------------------------------------------------------
 
 interface HostCall {
-  title: string;
-  description: string | undefined;
+  method: string;
+  message: string;
+  options: unknown;
 }
 
-function fakeHost(): { host: DialogHostPort; calls: HostCall[] } {
+interface FakeHostState {
+  host: DialogHostPort;
+  calls: HostCall[];
+  /** Answer returned by confirm/ask. Mutable so tests can flip it. */
+  answers: { confirm: boolean; ask: boolean; prompt: string | null };
+}
+
+function fakeHost(): FakeHostState {
   const calls: HostCall[] = [];
+  const answers = { confirm: true, ask: false, prompt: "typed" as string | null };
   const host: DialogHostPort = {
-    openDialog: (options: { title: string; description?: string }): void => {
-      calls.push({ title: options.title, description: options.description });
+    confirmDialog: async (message, options) => {
+      calls.push({ method: "confirm", message, options });
+      return answers.confirm;
+    },
+    askDialog: async (message, options) => {
+      calls.push({ method: "ask", message, options });
+      return answers.ask;
+    },
+    messageDialog: async (message, options) => {
+      calls.push({ method: "message", message, options });
+    },
+    promptDialog: async (message, options) => {
+      calls.push({ method: "prompt", message, options });
+      return answers.prompt;
     },
   };
-  return { host, calls };
+  return { host, calls, answers };
 }
 
 function expectCapabilityError(
@@ -144,97 +164,85 @@ describe("DialogHostPort compatibility", () => {
 // ---------------------------------------------------------------------------
 
 describe("host dialog service", () => {
-  test("message reaches the host with the string title and the message", async () => {
+  test("message reaches the host and resolves when the host resolves", async () => {
     const { host, calls } = fakeHost();
     const service = createHostDialogService(host);
     await service.message("Hello", "Greeting");
-    assert.deepEqual(calls, [{ title: "Greeting", description: "Hello" }]);
+    assert.deepEqual(calls, [
+      { method: "message", message: "Hello", options: "Greeting" },
+    ]);
   });
 
-  test("message uses the object title and falls back to the app name", async () => {
+  test("message passes options through unchanged; the host owns defaults", async () => {
     const { host, calls } = fakeHost();
     const service = createHostDialogService(host);
-    await service.message("First", { title: "Custom" });
+    const options = { title: "Custom", kind: "warning" as const, okLabel: "Understood" };
+    await service.message("Warning text", options);
     await service.message("Second");
-    await service.message("Third", { title: "" });
-    await service.message("Fourth", "");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].options, options);
+    assert.equal(calls[1].options, undefined);
+  });
+
+  test("confirm returns the host boolean and passes kind and labels through", async () => {
+    const { host, calls, answers } = fakeHost();
+    const service = createHostDialogService(host);
+    const options = { title: "Confirm", kind: "warning" as const, okLabel: "Yes", cancelLabel: "No" };
+    assert.equal(await service.confirm("Delete this file?", options), true);
+    answers.confirm = false;
+    assert.equal(await service.confirm("Delete this file?", options), false);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].options, options);
+    assert.equal(calls[1].options, options);
+  });
+
+  test("ask returns the host boolean", async () => {
+    const { host, calls, answers } = fakeHost();
+    const service = createHostDialogService(host);
+    assert.equal(await service.ask("Delete 3 entries?", "Delete"), false);
+    answers.ask = true;
+    assert.equal(await service.ask("Delete 3 entries?", "Delete"), true);
     assert.deepEqual(
-      calls.map((call) => call.title),
-      ["Custom", "NoteGen", "NoteGen", "NoteGen"],
-    );
-    assert.deepEqual(
-      calls.map((call) => call.description),
-      ["First", "Second", "Third", "Fourth"],
+      calls.map((call) => call.message),
+      ["Delete 3 entries?", "Delete 3 entries?"],
     );
   });
 
-  test("message accepts kind and okLabel without changing the host payload", async () => {
-    const { host, calls } = fakeHost();
+  test("prompt returns the host text, or null on cancel", async () => {
+    const { host, calls, answers } = fakeHost();
     const service = createHostDialogService(host);
-    await service.message("Warning text", {
-      title: "Alert",
-      kind: "warning",
-      okLabel: "Understood",
-    });
-    assert.equal(calls.length, 1);
-    assert.deepEqual(Object.keys(calls[0]).sort(), ["description", "title"]);
-    assert.equal(calls[0].title, "Alert");
-    assert.equal(calls[0].description, "Warning text");
-  });
-
-  test("confirm presents the question and then rejects as unavailable", async () => {
-    const { host, calls } = fakeHost();
-    const service = createHostDialogService(host);
-    const error = await assertRejectsCapability(
-      () => service.confirm("Delete this file?", { title: "Confirm", kind: "warning" }),
-      "unavailable",
-      "confirm",
+    assert.equal(
+      await service.prompt("Name?", { title: "Prompt", defaultValue: "x" }),
+      "typed",
     );
-    assert.deepEqual(calls, [
-      { title: "Confirm", description: "Delete this file?" },
-    ]);
-    assert.ok(error.message.includes("resolution seam"));
-  });
-
-  test("ask presents the question and then rejects as unavailable", async () => {
-    const { host, calls } = fakeHost();
-    const service = createHostDialogService(host);
-    const error = await assertRejectsCapability(
-      () => service.ask("Delete 3 entries?", "Delete"),
-      "unavailable",
-      "ask",
-    );
-    assert.deepEqual(calls, [
-      { title: "Delete", description: "Delete 3 entries?" },
-    ]);
-    assert.ok(error.message.includes("resolution seam"));
-  });
-
-  test("prompt rejects as unavailable and never presents", async () => {
-    const { host, calls } = fakeHost();
-    const service = createHostDialogService(host);
-    await assertRejectsCapability(
-      () => service.prompt("Name?", { title: "Prompt" }),
-      "unavailable",
-      "prompt",
-    );
-    await assertRejectsCapability(
-      () => service.prompt("Name?", { title: "Prompt", defaultValue: "x" }),
-      "unavailable",
-      "prompt",
-    );
-    assert.equal(calls.length, 0);
+    answers.prompt = null;
+    assert.equal(await service.prompt("Name?", { title: "Prompt" }), null);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].method, "prompt");
   });
 
   test("a host failure propagates unchanged instead of being wrapped", async () => {
     const failure = new Error("host exploded");
     const host: DialogHostPort = {
-      openDialog: (): void => {
+      confirmDialog: async () => {
+        throw failure;
+      },
+      askDialog: async () => {
+        throw failure;
+      },
+      messageDialog: async () => {
+        throw failure;
+      },
+      promptDialog: async () => {
         throw failure;
       },
     };
     const service = createHostDialogService(host);
     await assert.rejects(() => service.message("Hi"), (error: unknown) => {
+      assert.equal(error, failure);
+      return true;
+    });
+    await assert.rejects(() => service.confirm("Sure?"), (error: unknown) => {
       assert.equal(error, failure);
       return true;
     });
@@ -249,11 +257,17 @@ describe("host dialog service", () => {
       () => createHostDialogService({} as unknown as DialogHostPort),
       TypeError,
     );
+    // Each missing promise method is a TypeError, including a host
+    // that only offers the legacy fire-and-forget openDialog.
+    const partial = {
+      openDialog: () => undefined,
+    } as unknown as DialogHostPort;
+    assert.throws(() => createHostDialogService(partial), TypeError);
+    const { host } = fakeHost();
+    const missingPrompt = { ...host, promptDialog: undefined };
     assert.throws(
       () =>
-        createHostDialogService({
-          openDialog: 1,
-        } as unknown as DialogHostPort),
+        createHostDialogService(missingPrompt as unknown as DialogHostPort),
       TypeError,
     );
   });
@@ -270,7 +284,11 @@ describe("installHostDialogService", () => {
     assert.ok(installed !== undefined);
     const adapter = createWebDialogAdapter();
     await adapter.message("Installed", "Title");
-    assert.deepEqual(calls, [{ title: "Title", description: "Installed" }]);
+    assert.equal(await adapter.confirm("Sure?"), true);
+    assert.deepEqual(
+      calls.map((call) => call.method),
+      ["message", "confirm"],
+    );
   });
 
   test("installing again replaces the previous host", async () => {
@@ -306,14 +324,10 @@ describe("wired web dialog adapter", () => {
     const { host, calls } = fakeHost();
     const adapter = createWiredWebDialogAdapter(host);
     await adapter.message("Wired", "Title");
-    await assertRejectsCapability(
-      () => adapter.confirm("Proceed?", "Title"),
-      "unavailable",
-      "confirm",
-    );
+    assert.equal(await adapter.confirm("Proceed?", "Title"), true);
     assert.deepEqual(calls, [
-      { title: "Title", description: "Wired" },
-      { title: "Title", description: "Proceed?" },
+      { method: "message", message: "Wired", options: "Title" },
+      { method: "confirm", message: "Proceed?", options: "Title" },
     ]);
   });
 

@@ -30,6 +30,7 @@ import AppStatus from "@/components/app-status"
 import useMarkStore from "@/stores/mark"
 import useCanvasStore from "@/stores/canvas"
 import { PluginHostBridge } from "@/components/plugins/plugin-host-bridge"
+import { WebDialogHost, WebDialogProvider } from "@/components/web-chrome"
 
 const WritingScreen = dynamic(
   () => import('./writing/writing-screen').then(module => module.WritingScreen),
@@ -271,6 +272,7 @@ export default function RootLayout({
           <MobileViewport />
           <MobileStatusBar />
           <AppStatus />
+          <WebDialogProvider>
           <TooltipProvider>
             <div className="mobile-app-shell flex flex-col">
               <main className="mobile-app-main flex flex-1 w-full overflow-clip">
@@ -320,6 +322,8 @@ export default function RootLayout({
           <MobileUpdateChecker />
           <MemoryAutoNotifications />
           <PluginHostBridge ready={pluginsReady} locale={currentLocale} />
+          <WebDialogHost />
+          </WebDialogProvider>
         </TextSizeProvider>
       </ThemeProvider>
     </MobileModeProvider>
