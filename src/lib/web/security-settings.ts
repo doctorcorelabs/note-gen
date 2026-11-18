@@ -20,8 +20,8 @@
 //   200 with an empty envelope; GET /api/auth/me answers
 //   { totpEnabled, session: { stepUpAt, ... } }.
 // - server/src/routes/auth-stepup.ts: POST /api/auth/step-up takes
-//   { password } plus { code } when TOTP is enabled and answers
-//   { csrfToken }.
+//   { password } plus exactly one of { code } or { recoveryCode }
+//   when TOTP is enabled and answers { csrfToken } (DA-02-F04).
 // - desain-auth.md sections 1.4, 3.4, 3.5 and 4.3: step-up window
 //   15 minutes, recovery codes shown once, no token or secret in
 //   localStorage/sessionStorage/IndexedDB.
@@ -101,6 +101,11 @@ export interface RecoveryCodeSet {
 
 /** Proof for POST /api/auth/totp/disable: exactly one field. */
 export type TotpDisableProof =
+  | { kind: "code"; code: string }
+  | { kind: "recoveryCode"; recoveryCode: string };
+
+/** Proof for POST /api/auth/step-up: exactly one second factor. */
+export type StepUpProof =
   | { kind: "code"; code: string }
   | { kind: "recoveryCode"; recoveryCode: string };
 
@@ -406,7 +411,7 @@ export interface SecuritySettingsApi {
   listSessions(): Promise<AuthSessionEntry[]>;
   revokeSession(sessionId: string): Promise<void>;
   logoutAll(): Promise<void>;
-  stepUp(password: string, code?: string): Promise<void>;
+  stepUp(password: string, proof?: StepUpProof): Promise<void>;
   startTotpEnroll(): Promise<TotpEnrollStart>;
   confirmTotpEnroll(code: string): Promise<void>;
   disableTotp(proof: TotpDisableProof): Promise<void>;
@@ -463,16 +468,27 @@ export function createSecuritySettingsApi(
       await transport.post<unknown>("/api/auth/logout-all");
     },
 
-    async stepUp(password: string, code?: string): Promise<void> {
+    async stepUp(password: string, proof?: StepUpProof): Promise<void> {
       if (typeof password !== "string" || password === "") {
         throw new TypeError("A password is required for step-up.");
       }
-      if (code !== undefined && !isTotpCode(code)) {
-        throw new TypeError("A step-up code must be 6 digits.");
-      }
       const body: Record<string, string> = { password };
-      if (code !== undefined) {
-        body.code = code.trim();
+      if (proof !== undefined) {
+        if (proof.kind === "code") {
+          if (!isTotpCode(proof.code)) {
+            throw new TypeError("A step-up code must be 6 digits.");
+          }
+          body.code = proof.code.trim();
+        } else if (proof.kind === "recoveryCode") {
+          if (!isRecoveryCodeInput(proof.recoveryCode)) {
+            throw new TypeError("A recovery code must be 16 characters.");
+          }
+          body.recoveryCode = proof.recoveryCode.trim();
+        } else {
+          throw new TypeError(
+            "A step-up proof must be a TOTP code or a recovery code.",
+          );
+        }
       }
       const data = await transport.post<unknown>("/api/auth/step-up", body);
       transport.seedCsrfToken(parseCsrfToken(data));

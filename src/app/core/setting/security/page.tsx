@@ -16,6 +16,7 @@ import {
   securityErrorMessageKey,
   type SecuritySettingsApi,
   type SecurityStatus,
+  type StepUpProof,
 } from '@/lib/web/security-settings'
 import { SessionsSection } from './sessions-section'
 import { StepUpDialog } from './step-up-dialog'
@@ -116,11 +117,11 @@ export default function SecuritySettingsPage() {
     setStepUpOpen(false)
   }
 
-  async function handleStepUpSubmit(password: string, code?: string) {
+  async function handleStepUpSubmit(password: string, proof?: StepUpProof) {
     setStepUpBusy(true)
     setStepUpError(null)
     try {
-      await api.stepUp(password, code)
+      await api.stepUp(password, proof)
       pendingStepUpRef.current?.resolve(true)
       pendingStepUpRef.current = null
       setStepUpOpen(false)
@@ -175,7 +176,7 @@ export default function SecuritySettingsPage() {
             busy={stepUpBusy}
             error={stepUpError}
             onCancel={handleStepUpCancel}
-            onSubmit={(password, code) => void handleStepUpSubmit(password, code)}
+            onSubmit={(password, proof) => void handleStepUpSubmit(password, proof)}
           />
         </>
       ) : null}

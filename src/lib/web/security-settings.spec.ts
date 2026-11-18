@@ -346,11 +346,33 @@ describe("createSecuritySettingsApi", () => {
       csrfToken: "rotated-token",
     }));
     const api = createSecuritySettingsApi(transport);
-    await api.stepUp("password-value", "123456");
+    await api.stepUp("password-value", { kind: "code", code: "123456" });
     expect(calls[0]?.body).toEqual({
       password: "password-value",
       code: "123456",
     });
+  });
+
+  it("steps up with a recovery code instead of a TOTP code", async () => {
+    const { transport, calls, seeded } = createFakeTransport(() => ({
+      csrfToken: "rotated-token",
+    }));
+    const api = createSecuritySettingsApi(transport);
+    await api.stepUp("password-value", {
+      kind: "recoveryCode",
+      recoveryCode: "abcd-efgh-ijkm-npqr",
+    });
+    expect(calls).toEqual([
+      {
+        method: "post",
+        path: "/api/auth/step-up",
+        body: {
+          password: "password-value",
+          recoveryCode: "abcd-efgh-ijkm-npqr",
+        },
+      },
+    ]);
+    expect(seeded).toEqual(["rotated-token"]);
   });
 
   it("validates step-up input locally and sends nothing invalid", async () => {
@@ -359,7 +381,15 @@ describe("createSecuritySettingsApi", () => {
     }));
     const api = createSecuritySettingsApi(transport);
     await expect(api.stepUp("")).rejects.toThrow(TypeError);
-    await expect(api.stepUp("password-value", "123")).rejects.toThrow(TypeError);
+    await expect(
+      api.stepUp("password-value", { kind: "code", code: "123" }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      api.stepUp("password-value", {
+        kind: "recoveryCode",
+        recoveryCode: "short",
+      }),
+    ).rejects.toThrow(TypeError);
     expect(calls).toEqual([]);
   });
 
