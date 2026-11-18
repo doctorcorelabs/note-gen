@@ -901,16 +901,21 @@ service_state() {
 # PROCESS_DOWN, DIAG_BLOCKED, LIVE_OK, WEB_BAD, WORKER_DOWN,
 # FAIL_COUNT, VERDICT_FINGERPRINT. Putusan ini KETAT (tanpa tenggang);
 # tenggang worker diterapkan terpisah oleh apply_worker_grace.
+# ACCESS_UNGATED (DA-18-N02): 1 bila ready lewat Caddy valid tanpa token
+# (AD-133 menuntut 401), disertai WARN. VERDICT tetap "healthy" karena
+# VERDICT menggerakkan tindakan/kuota/state; pembedaannya lewat flag +
+# WARN, bukan nilai verdict baru.
 
 compute_verdict() {
-  VERDICT="unhealthy"; AUTH_FAILED=""; AUTH_SOURCE=""
+  VERDICT="unhealthy"; AUTH_FAILED=""; AUTH_SOURCE=""; ACCESS_UNGATED=0
   CADDY_SUSPECT=0; PROCESS_DOWN=0; DIAG_BLOCKED=0; LIVE_OK=0
   WEB_BAD=0; WORKER_DOWN=0; FAIL_COUNT=0; VERDICT_FINGERPRINT=""; PRIMARY_SIG=""
   local caddy_gated=0 _first="" _c="" _s="" _code=""
   if [ "$CL_OK" -eq 1 ] || [ "$DL_OK" -eq 1 ]; then LIVE_OK=1; fi
   case "$CR_CODE" in 401|403) caddy_gated=1;; esac
   if [ "$CR_VALID" = "1" ]; then
-    VERDICT="healthy"; AUTH_SOURCE="caddy"
+    VERDICT="healthy"; AUTH_SOURCE="caddy"; ACCESS_UNGATED=1
+    log "WARN penegakan Access tidak tampak: ready lewat Caddy valid tanpa token (AD-133 menuntut 401); origin sehat tetapi tidak terjaga"
   elif [ "$DR_VALID" = "1" ] && [ "$caddy_gated" -eq 1 ]; then
     VERDICT="healthy"; AUTH_SOURCE="direct"
   elif [ "$DR_VALID" = "1" ]; then
