@@ -213,10 +213,13 @@ export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthS
           const row = await unavailableOnDbError(() =>
             store.findUnusedRecoveryCode(loaded.user.id, hashToken(normalizeRecoveryCode(recoveryCode as string))),
           );
-          if (!passwordOk || row === null) {
-            await failStepUp();
-          }
-          const marked = await unavailableOnDbError(() => store.markRecoveryCodeUsed(row.id, now));
+          // The mark runs only when the code exists and the password
+          // verified; any other outcome funnels into the same
+          // generic failure below without consuming the code.
+          const marked =
+            row !== null && passwordOk
+              ? await unavailableOnDbError(() => store.markRecoveryCodeUsed(row.id, now))
+              : false;
           if (!marked) {
             await failStepUp();
           }
