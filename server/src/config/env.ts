@@ -23,7 +23,8 @@
 //   and reads secrets through its own module; this module only proves the
 //   deployment named them and that obvious misconfigurations fail closed.
 // - Fail-closed boot refusals (loadConfig throws, server.ts exits):
-//   an invalid PORT; an unrecognized REGISTRATION_MODE (section 2.1);
+//   an invalid PORT; a REGISTRATION_MODE value other than closed
+//   (AD-201 single-account enforcement; section 2.1);
 //   an unrecognized CF_ACCESS_ENABLED value (section 7.2); a
 //   Cloudflare Access deployment without its audience or team domain;
 //   a production deployment with Access verification disabled, and a
@@ -59,7 +60,10 @@ export interface ServerConfig {
   checkTimeoutMs: number;
   overallTimeoutMs: number;
   warnings: string[];
-  registrationMode: 'closed' | 'invitation' | 'open';
+  // AD-201 single-account: only 'closed' is expressible in a typed
+  // config. loadConfig refuses boot for any other REGISTRATION_MODE
+  // value, so no code path can observe a non-closed mode.
+  registrationMode: 'closed';
   publicBaseUrl: string | undefined;
   trustProxy: boolean;
   cookieSecure: boolean;
@@ -229,13 +233,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     overallTimeoutMs = DEFAULT_OVERALL_TIMEOUT_MS;
   }
 
-  let registrationMode: 'closed' | 'invitation' | 'open' = 'closed';
+  // Single-account enforcement (AD-201; DA22-07): the only accepted
+  // registration mode is 'closed'. The 'invitation' and 'open'
+  // values name flows that do not exist (no invitation endpoint,
+  // register always answers 404), so accepting them would silently
+  // mislead the operator. Refusing boot keeps the single-account
+  // invariant formal instead of accidental. Each refusal message
+  // names the variable only, never its value.
+  let registrationMode: 'closed' = 'closed';
   if (env.REGISTRATION_MODE !== undefined && nonEmpty(env.REGISTRATION_MODE) !== undefined) {
     const raw = nonEmpty(env.REGISTRATION_MODE);
-    if (raw === 'closed' || raw === 'invitation' || raw === 'open') {
+    if (raw === 'closed') {
       registrationMode = raw;
+    } else if (raw === 'invitation' || raw === 'open') {
+      throw new Error('REGISTRATION_MODE must be closed: this deployment is single-account (AD-201) and invitation/open registration is not supported.');
     } else {
-      throw new Error('REGISTRATION_MODE is not recognized: it must be closed, invitation, or open.');
+      throw new Error('REGISTRATION_MODE is not recognized: it must be closed.');
     }
   }
 

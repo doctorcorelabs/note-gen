@@ -5,8 +5,9 @@
 // API server entrypoint. This is the only file that calls listen().
 //
 // Startup order: parse and validate config (fail-closed boot refusals
-// in config/env.ts: an invalid PORT, an unrecognized REGISTRATION_MODE
-// or CF_ACCESS_ENABLED value, a Cloudflare Access deployment without
+// in config/env.ts: an invalid PORT, a REGISTRATION_MODE value other
+// than closed, an unrecognized CF_ACCESS_ENABLED value, a Cloudflare
+// Access deployment without
 // its audience or team domain, Access disabled outside local
 // development, and COOKIE_SECURE=false outside development on
 // localhost), read the version once from server/package.json and keep

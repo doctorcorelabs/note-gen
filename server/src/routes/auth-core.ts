@@ -651,11 +651,13 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
     return reply.code(200).send(successEnvelope(body));
   });
 
-  // POST /api/auth/register: 404 by design in closed mode (the MVP
-  // default). No account can ever be created through this endpoint
-  // while it answers 404, and the response advertises nothing about
-  // the deployment mode. The Origin check still applies: this is a
-  // public mutation.
+  // POST /api/auth/register: 404 by design, unconditionally. This is
+  // single-account enforcement (AD-201): no account can ever be
+  // created through this endpoint, and no configuration value can
+  // reopen it, because loadConfig refuses boot for any
+  // REGISTRATION_MODE value other than closed. The response
+  // advertises nothing about the deployment mode. The Origin check
+  // still applies: this is a public mutation.
   app.post('/api/auth/register', publicRoute(), async () => {
     throw ApiError.notFound();
   });
