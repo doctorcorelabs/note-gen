@@ -8,6 +8,7 @@ import dynamic from "next/dynamic"
 import { applyThemeColors } from "@/lib/theme-utils"
 import { applyAppFontFamily } from "@/lib/font-settings"
 import { platform } from "@/lib/platform"
+import { isTauri } from "@/lib/platform/detect"
 import dayjs from "dayjs"
 import zh from "dayjs/locale/zh-cn";
 import en from "dayjs/locale/en";
@@ -155,6 +156,22 @@ export default function RootLayout({
 
     void import('@/lib/event-report').then(({ reportAppStart }) => reportAppStart())
 
+    // Web fork (Fase 1, S-P0-06): mirror the core boot gates
+    // (core/layout.tsx, AD-11/AD-20). Self-hosted sync, auto data
+    // sync, and the wiki runtime are not part of the web MVP, and
+    // the self-hosted step throws through getDb() in web mode.
+    const webMode = !isTauri()
+
+    // One failing step must not abort the rest of mobile init:
+    // each tail step logs its own failure and init continues.
+    const runStep = async (name: string, step: () => unknown) => {
+      try {
+        await step()
+      } catch (error) {
+        console.error(`Failed to initialize mobile app step ${name}:`, error)
+      }
+    }
+
     const initializeApp = async () => {
       try {
         const [
@@ -184,29 +201,40 @@ export default function RootLayout({
         const { resumeWorkspacePathMoves } = await import('@/lib/sync/workspace-path-moves')
         resumeWorkspacePathMoves()
         setPluginsReady(true)
-        const { refreshSelfHostedSyncRuntime } = await import('@/lib/self-hosted-sync/lifecycle')
-        await refreshSelfHostedSyncRuntime()
+        if (!webMode) {
+          await runStep('self-hosted-sync', async () => {
+            const { refreshSelfHostedSyncRuntime } = await import('@/lib/self-hosted-sync/lifecycle')
+            await refreshSelfHostedSyncRuntime()
+          })
+        }
         const { runMemoryMaintenance } = await import('@/lib/memory/auto-memory')
         void runMemoryMaintenance()
         const {
           reconcileMemoryEmbeddingModel,
           reindexPendingMemories,
         } = await import('@/db/memories')
-        await reconcileMemoryEmbeddingModel()
+        await runStep('memory-reconcile', () => reconcileMemoryEmbeddingModel())
         void reindexPendingMemories()
         await initCollapsibleList()
         if (cancelled) return
-        await initAutoDataSyncRuntime()
+        if (!webMode) {
+          await runStep('auto-data-sync', () => initAutoDataSyncRuntime())
+        }
         if (cancelled) return
-        const { initWikiRuntime } = await import('@/lib/wiki/runtime')
-        const cleanupWiki = await initWikiRuntime()
+        let cleanupWiki: () => void = () => {}
+        if (!webMode) {
+          await runStep('wiki-runtime', async () => {
+            const { initWikiRuntime } = await import('@/lib/wiki/runtime')
+            cleanupWiki = await initWikiRuntime()
+          })
+        }
         if (cancelled) { cleanupWiki(); return }
         stopWiki = cleanupWiki
-        await initVectorDb()
+        await runStep('vector-db', () => initVectorDb())
         if (cancelled) return
-        await useArticleStore.getState().initVectorIndexedFiles()
+        await runStep('vector-indexed-files', () => useArticleStore.getState().initVectorIndexedFiles())
         if (cancelled) return
-        initMcp()
+        await runStep('mcp', () => initMcp())
       } catch (error) {
         console.error('Failed to initialize mobile app:', error)
       }

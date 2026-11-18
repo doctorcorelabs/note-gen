@@ -1,9 +1,10 @@
 'use client'
 
-import { FileDown, Loader2, RefreshCcw } from 'lucide-react'
+import { FileDown, Info, Loader2, RefreshCcw } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { platform } from '@/lib/platform'
+import { isTauri } from '@/lib/platform/detect'
 import { GithubSync } from '@/app/core/setting/sync/github-sync'
 import { GiteeSync } from '@/app/core/setting/sync/gitee-sync'
 import { GitlabSync } from '@/app/core/setting/sync/gitlab-sync'
@@ -45,7 +46,7 @@ function isRepoSyncPlatform(platformName: MobileSyncPlatform): platformName is S
     || platformName === 'gitea'
 }
 
-export default function SyncPage() {
+function SyncPage() {
   const t = useTranslations()
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
   const currentPlatform = platform.os.platform()
@@ -427,4 +428,31 @@ export default function SyncPage() {
       {tab !== 'local' && tab !== 'selfHosted' && autoRecordSyncEnabled ? <RecordSyncStatusBanner showWaitingProvider /> : null}
     </div>
   )
+}
+
+// Web fork (Fase 1, S-P0-07): mobile equivalent of the settings
+// dialog gate (AD-20). The mobile sync page mounted the full
+// upstream sync UI, including credential fields that can never
+// save in web mode. In web mode render only this marker with the
+// same settings.disabled.sync catalog copy; the upstream page
+// stays in the tree for later phases. Desktop and mobile-shell
+// behavior is unchanged.
+function MobileSyncDisabledNotice() {
+  const t = useTranslations('settings')
+  return (
+    <div data-disabled-setting-section="sync" className="p-4">
+      <Alert>
+        <Info />
+        <AlertTitle>{t('sync.title')}</AlertTitle>
+        <AlertDescription>{t('disabled.sync')}</AlertDescription>
+      </Alert>
+    </div>
+  )
+}
+
+export default function GatedMobileSyncPage() {
+  if (!isTauri()) {
+    return <MobileSyncDisabledNotice />
+  }
+  return <SyncPage />
 }
