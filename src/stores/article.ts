@@ -4072,7 +4072,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         inFlightArticleSaves.set(path, savePromise)
         try {
           await savePromise
-          const outcome = justPulledOutcome
+          const outcome: 'written' | 'conflict' | 'discarded' = justPulledOutcome
           if (outcome === 'written') {
             get().updateArticleSaveStatus(path, {
               status: 'saved',
@@ -4281,7 +4281,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         inFlightArticleSaves.set(path, commitPromise)
         try {
           await commitPromise
-          const outcome = commitOutcome
+          const outcome: 'written' | 'conflict' | 'discarded' = commitOutcome
           if (outcome === 'written') {
             get().updateArticleSaveStatus(path, {
               status: 'saved',
