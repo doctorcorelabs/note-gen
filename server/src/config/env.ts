@@ -24,6 +24,8 @@
 //   deployment named them and that obvious misconfigurations fail closed.
 // - Fail-closed boot refusals (loadConfig throws, server.ts exits):
 //   an invalid PORT; an unrecognized REGISTRATION_MODE (section 2.1);
+//   a REGISTRATION_MODE other than closed (single-account decision,
+//   DA-22-07: invitation and open have no implemented flow);
 //   an unrecognized CF_ACCESS_ENABLED value (section 7.2); a
 //   Cloudflare Access deployment without its audience or team domain;
 //   a production deployment with Access verification disabled, and a
@@ -59,6 +61,10 @@ export interface ServerConfig {
   checkTimeoutMs: number;
   overallTimeoutMs: number;
   warnings: string[];
+  // loadConfig only ever produces 'closed' (see the parse below):
+  // 'invitation' and 'open' stay in the type so a programmatically
+  // built context carrying them is refused loudly by the auth-core
+  // registration guard instead of silently accepted.
   registrationMode: 'closed' | 'invitation' | 'open';
   publicBaseUrl: string | undefined;
   trustProxy: boolean;
@@ -232,10 +238,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   let registrationMode: 'closed' | 'invitation' | 'open' = 'closed';
   if (env.REGISTRATION_MODE !== undefined && nonEmpty(env.REGISTRATION_MODE) !== undefined) {
     const raw = nonEmpty(env.REGISTRATION_MODE);
-    if (raw === 'closed' || raw === 'invitation' || raw === 'open') {
+    if (raw === 'closed') {
       registrationMode = raw;
+    } else if (raw === 'invitation' || raw === 'open') {
+      // Single-account decision (DA-22-07): these modes have no
+      // implemented flow. Refusing boot is the enforcement; a
+      // warning would let an operator believe registration works
+      // when it does not. The message names the variable only.
+      throw new Error(
+        'REGISTRATION_MODE must be closed: invitation and open registration are not implemented.',
+      );
     } else {
-      throw new Error('REGISTRATION_MODE is not recognized: it must be closed, invitation, or open.');
+      throw new Error('REGISTRATION_MODE is not recognized: it must be closed.');
     }
   }
 

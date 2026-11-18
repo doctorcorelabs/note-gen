@@ -175,3 +175,20 @@ export async function checkSetupBootPrerequisite(
   }
   return 'ok';
 }
+
+// Single-account boot prerequisite (DA-22-01/02/03, S-P0-13/S-P0-14/
+// S-P0-15): the file layer shares one filesystem root across
+// accounts, so a deployment that has chosen single-account must
+// refuse to serve when the database holds more than one account.
+// Returns 'ok' or 'refused'; database errors propagate so the caller
+// (server.ts) can warn and continue when migrations have not run
+// yet, the same rule as the setup prerequisite above. A count of
+// zero is 'ok': the first account is still to be created through
+// setup.
+export async function checkSingleAccountPrerequisite(store: AuthStore): Promise<'ok' | 'refused'> {
+  const userCount = await store.getUserCount();
+  if (userCount > 1) {
+    return 'refused';
+  }
+  return 'ok';
+}

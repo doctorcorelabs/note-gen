@@ -27,10 +27,12 @@ describe('registration mode', () => {
     expect(loadConfig({}).registrationMode).toBe('closed');
   });
 
-  it('accepts the three known modes', () => {
+  it('accepts closed only: invitation and open refuse boot (single-account decision)', () => {
     expect(loadConfig({ REGISTRATION_MODE: 'closed' }).registrationMode).toBe('closed');
-    expect(loadConfig({ REGISTRATION_MODE: 'invitation' }).registrationMode).toBe('invitation');
-    expect(loadConfig({ REGISTRATION_MODE: 'open' }).registrationMode).toBe('open');
+    expect(() => loadConfig({ REGISTRATION_MODE: 'invitation' })).toThrow(
+      /REGISTRATION_MODE must be closed/,
+    );
+    expect(() => loadConfig({ REGISTRATION_MODE: 'open' })).toThrow(/REGISTRATION_MODE must be closed/);
   });
 
   it('refuses boot for an unrecognized mode instead of falling back', () => {

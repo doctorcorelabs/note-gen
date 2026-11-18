@@ -14,7 +14,7 @@
 // itself. Flags only, never secret values, reach this module.
 
 import { describe, expect, it } from 'vitest';
-import { enforceSetupBootPrerequisite } from '../src/server.js';
+import { enforceSetupBootPrerequisite, enforceSingleAccountBootPrerequisite } from '../src/server.js';
 import type { SetupPrerequisiteFlags } from '../src/auth/context.js';
 import { FakeAuthStore } from './auth/fake-store.js';
 
@@ -97,6 +97,63 @@ describe('enforceSetupBootPrerequisite', () => {
     expect(outcome).toBe('proceed');
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('SETUP_TOKEN');
+    expect(warnings[0]).not.toContain('relation "users" does not exist');
+  });
+});
+
+describe('enforceSingleAccountBootPrerequisite', () => {
+  it('proceeds when no accounts exist yet (first account still to be created)', async () => {
+    const warnings: string[] = [];
+    const outcome = await enforceSingleAccountBootPrerequisite(new FakeAuthStore(), (message) => {
+      warnings.push(message);
+    });
+    expect(outcome).toBe('proceed');
+    expect(warnings).toEqual([]);
+  });
+
+  it('proceeds when exactly one account exists', async () => {
+    const store = new FakeAuthStore();
+    await seedOneUser(store);
+    expect(await store.getUserCount()).toBe(1);
+    const warnings: string[] = [];
+    const outcome = await enforceSingleAccountBootPrerequisite(store, (message) => {
+      warnings.push(message);
+    });
+    expect(outcome).toBe('proceed');
+    expect(warnings).toEqual([]);
+  });
+
+  it('refuses boot when a second account exists (for example created directly in the database)', async () => {
+    const store = new FakeAuthStore();
+    store.seedUser({ email: 'operator@example.test', passwordHash: 'not-a-real-hash' });
+    store.seedUser({ email: 'second@example.test', passwordHash: 'not-a-real-hash' });
+    expect(await store.getUserCount()).toBe(2);
+    const warnings: string[] = [];
+    const outcome = await enforceSingleAccountBootPrerequisite(store, (message) => {
+      warnings.push(message);
+    });
+    expect(outcome).toBe('refused');
+    expect(warnings).toEqual([]);
+  });
+
+  it('warns and proceeds when there is no usable database store', async () => {
+    const warnings: string[] = [];
+    const outcome = await enforceSingleAccountBootPrerequisite(null, (message) => {
+      warnings.push(message);
+    });
+    expect(outcome).toBe('proceed');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('Single-account');
+  });
+
+  it('warns and proceeds when the user-count query fails, without error detail', async () => {
+    const warnings: string[] = [];
+    const outcome = await enforceSingleAccountBootPrerequisite(new ThrowingStore(), (message) => {
+      warnings.push(message);
+    });
+    expect(outcome).toBe('proceed');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('Single-account');
     expect(warnings[0]).not.toContain('relation "users" does not exist');
   });
 });

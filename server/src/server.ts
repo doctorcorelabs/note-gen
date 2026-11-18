@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
 import {
   checkSetupBootPrerequisite,
+  checkSingleAccountPrerequisite,
   createAuthContextFromConfig,
   type SetupPrerequisiteFlags,
 } from './auth/context.js';
@@ -93,6 +94,37 @@ export async function enforceSetupBootPrerequisite(
     result = await checkSetupBootPrerequisite(store, flags);
   } catch {
     warn('SETUP_TOKEN boot prerequisite could not be checked: the database query failed.');
+    return 'proceed';
+  }
+  return result === 'refused' ? 'refused' : 'proceed';
+}
+
+export type SingleAccountBootPrerequisiteOutcome = 'proceed' | 'refused';
+
+// Enforces the single-account boot prerequisite (DA-22-01/02/03,
+// S-P0-13/S-P0-14/S-P0-15) through checkSingleAccountPrerequisite:
+// a deployment whose file layer shares one root must never serve
+// with more than one account, because the second account would read
+// and write the first account's files over plain HTTP. Returns
+// 'refused' only when the store answers and the count exceeds one.
+// A null store or a database error warns and proceeds, the same rule
+// as the setup prerequisite: an unmigrated or unreachable database
+// is reported by readiness, not by a dead server. This guard catches
+// a persistent second account at startup; it does not observe
+// accounts created while the server runs (see the R24-DEC1 brief).
+export async function enforceSingleAccountBootPrerequisite(
+  store: AuthStore | null,
+  warn: (message: string) => void,
+): Promise<SingleAccountBootPrerequisiteOutcome> {
+  if (store === null) {
+    warn('Single-account boot prerequisite could not be checked: the database is not available.');
+    return 'proceed';
+  }
+  let result: 'ok' | 'refused';
+  try {
+    result = await checkSingleAccountPrerequisite(store);
+  } catch {
+    warn('Single-account boot prerequisite could not be checked: the database query failed.');
     return 'proceed';
   }
   return result === 'refused' ? 'refused' : 'proceed';
@@ -353,6 +385,27 @@ async function main(): Promise<void> {
     // matching the safeLoadConfig refusal style above.
     console.error(
       `Failed to start: SETUP_TOKEN must be set with at least ${MIN_SECRET_LENGTH} characters when the database holds no accounts.`,
+    );
+    try {
+      await auth.close();
+    } catch {
+      // Ignore close errors during refused startup.
+    }
+    try {
+      await closePool(pool);
+    } catch {
+      // Ignore pool close errors during refused startup.
+    }
+    process.exit(1);
+  }
+  const singleAccount = await enforceSingleAccountBootPrerequisite(auth.store, (message) => {
+    console.warn(message);
+  });
+  if (singleAccount === 'refused') {
+    // Refusal message names no account data: only the violated
+    // deployment rule, so the log stays safe to share.
+    console.error(
+      'Failed to start: this deployment is single-account, but the database holds more than one account. Remove the extra account through the recorded operator procedure before starting.',
     );
     try {
       await auth.close();
