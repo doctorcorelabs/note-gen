@@ -255,6 +255,61 @@ describe('PATCH /api/settings', () => {
     expect((bodyOf(read).data as Record<string, unknown>).settings).toEqual({});
   });
 
+  it('rejects secret-pattern fields under CT-07/A-02 keys as secret_only, storing nothing (DA-20-08)', async () => {
+    await setup();
+    const response = await patchSettings(
+      {
+        mainImageHosting: { nested: { accessToken: 'MARKER-TOKEN-VALUE' } },
+        useImageRepo: { apiKey: 'MARKER-SECRET-VALUE' },
+      },
+      0,
+    );
+    expect(response.statusCode).toBe(200);
+    expect((bodyOf(response).data as Record<string, unknown>).rejected).toEqual([
+      { key: 'mainImageHosting', reason: 'secret_only' },
+      { key: 'useImageRepo', reason: 'secret_only' },
+    ]);
+    expect(response.body).not.toContain('MARKER-SECRET-VALUE');
+    expect(response.body).not.toContain('MARKER-TOKEN-VALUE');
+    const read = await app!.inject({ headers: SESSION_HEADERS, method: 'GET', url: '/api/settings' });
+    expect((bodyOf(read).data as Record<string, unknown>).settings).toEqual({});
+  });
+
+  it('rejects secret-pattern fields in arrays and colon-scoped CT-07/A-02 variants', async () => {
+    await setup();
+    const response = await patchSettings({ 'useImageRepo:scope-a': [{ password: 'MARKER-PASSWORD-VALUE' }] }, 0);
+    expect((bodyOf(response).data as Record<string, unknown>).rejected).toEqual([
+      { key: 'useImageRepo:scope-a', reason: 'secret_only' },
+    ]);
+    expect(response.body).not.toContain('MARKER-PASSWORD-VALUE');
+  });
+
+  it('applies clean CT-07/A-02 values, still deletes them with null, and leaves other S keys unscanned', async () => {
+    await setup();
+    const response = await patchSettings(
+      {
+        editorShortcuts: { token: 'not-a-secret-field-here' },
+        language: 'English',
+        mainImageHosting: { provider: 'example' },
+        useImageRepo: { enabled: true },
+      },
+      0,
+    );
+    expect((bodyOf(response).data as Record<string, unknown>).applied).toEqual([
+      'editorShortcuts',
+      'language',
+      'mainImageHosting',
+      'useImageRepo',
+    ]);
+    const deleted = await patchSettings({ mainImageHosting: null, useImageRepo: null }, 1);
+    expect((bodyOf(deleted).data as Record<string, unknown>).applied).toEqual(['mainImageHosting', 'useImageRepo']);
+    const read = await app!.inject({ headers: SESSION_HEADERS, method: 'GET', url: '/api/settings' });
+    expect((bodyOf(read).data as Record<string, unknown>).settings).toEqual({
+      editorShortcuts: { token: 'not-a-secret-field-here' },
+      language: 'English',
+    });
+  });
+
   it('stores aiModelList metadata and enriches reads with hasApiKey and updatedAt', async () => {
     await setup();
     await patchSettings({ aiModelList: [{ baseURL: 'https://example.invalid', key: 'provider-a', title: 'Provider A' }] }, 0);

@@ -17,7 +17,7 @@
 // the .spec.ts suffix instead, which Vitest also picks up by default.
 
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../src/config.js';
+import { containsPlaceholderMarker, isUsableAuthSecret, loadConfig } from '../src/config.js';
 
 const LONG_SECRET = 'a'.repeat(40);
 const SHORT_SECRET = 'too-short';
@@ -169,16 +169,15 @@ describe('Cloudflare Access', () => {
 });
 
 describe('secret presence flags', () => {
-  it('records only presence and length for AUTH_SECRET, never the value', () => {
+  it('records only presence and length for AUTH_SECRET, refuses a short value, never the value', () => {
     const configured = loadConfig({ AUTH_SECRET: LONG_SECRET });
     expect(configured.authSecretConfigured).toBe(true);
     expect(configured.authSecretLengthOk).toBe(true);
     expect(JSON.stringify(configured)).not.toContain(LONG_SECRET);
 
-    const short = loadConfig({ AUTH_SECRET: SHORT_SECRET });
-    expect(short.authSecretConfigured).toBe(true);
-    expect(short.authSecretLengthOk).toBe(false);
-    expect(short.warnings.join(' ')).toContain('AUTH_SECRET');
+    // A configured but short secret refuses boot (G11a); it is no
+    // longer a warning-only misconfiguration.
+    expect(() => loadConfig({ AUTH_SECRET: SHORT_SECRET })).toThrow(/AUTH_SECRET/);
 
     const missing = loadConfig({});
     expect(missing.authSecretConfigured).toBe(false);
@@ -208,14 +207,93 @@ describe('secret presence flags', () => {
 
   it('never puts a secret value in any warning', () => {
     const marker = 'MARKER_SECRET_9f27';
+    // AUTH_SECRET needs a long value: a short configured secret now
+    // refuses boot (G11a), so the marker alone cannot serve here.
+    const longMarker = `${marker}${'0'.repeat(32)}`;
     const config = loadConfig({
-      AUTH_SECRET: marker,
+      AUTH_SECRET: longMarker,
       SETUP_TOKEN: marker,
       ENCRYPTION_KEY: marker,
       // <user> placeholder keeps this marker-only fixture out of secret-scan's credential-DSN pattern; loadConfig treats DATABASE_URL as opaque.
       DATABASE_URL: `postgres://<user>:${marker}@localhost:5432/db`,
     });
     expect(config.warnings.join('\n')).not.toContain(marker);
+  });
+});
+
+describe('placeholder refusal (S-P0-11)', () => {
+  const placeholder = `CHANGE_ME_${'x'.repeat(32)}`;
+
+  it('refuses boot for a placeholder AUTH_SECRET', () => {
+    expect(() => loadConfig({ AUTH_SECRET: placeholder })).toThrow(/AUTH_SECRET/);
+    expect(() => loadConfig({ AUTH_SECRET: `change-me-${'y'.repeat(32)}` })).toThrow(/AUTH_SECRET/);
+  });
+
+  it('refuses boot for a placeholder SETUP_TOKEN', () => {
+    expect(() => loadConfig({ SETUP_TOKEN: placeholder })).toThrow(/SETUP_TOKEN/);
+  });
+
+  it('warns, without refusing boot, for placeholder DATABASE_URL and CF_ACCESS_AUD values', () => {
+    const config = loadConfig({ DATABASE_URL: `postgres://localhost/${placeholder}` });
+    expect(config.warnings.join(' ')).toContain('DATABASE_URL');
+    const access = loadConfig({
+      CF_ACCESS_AUD: placeholder,
+      CF_ACCESS_ENABLED: 'true',
+      CF_ACCESS_TEAM_DOMAIN: 'example.cloudflareaccess.com',
+    });
+    expect(access.warnings.join(' ')).toContain('CF_ACCESS_AUD');
+  });
+});
+
+describe('encryption key validity (DA-20-03)', () => {
+  const validKey = '0123456789abcdef'.repeat(4);
+  const otherValidKey = 'fedcba9876543210'.repeat(4);
+
+  it('reports a decodable key as valid without an invalid warning', () => {
+    const config = loadConfig({ ENCRYPTION_KEY: validKey });
+    expect(config.encryptionKeyConfigured).toBe(true);
+    expect(config.encryptionKeyValid).toBe(true);
+    expect(config.warnings.join(' ')).not.toContain('not valid');
+  });
+
+  it('reports a passphrase-shaped key as invalid with a warning naming the variable', () => {
+    const config = loadConfig({ ENCRYPTION_KEY: 'passphrase-shaped-key-value' });
+    expect(config.encryptionKeyConfigured).toBe(true);
+    expect(config.encryptionKeyValid).toBe(false);
+    expect(config.warnings.join(' ')).toContain('ENCRYPTION_KEY');
+  });
+
+  it('reports a missing key as invalid with the not-set warning', () => {
+    const config = loadConfig({});
+    expect(config.encryptionKeyConfigured).toBe(false);
+    expect(config.encryptionKeyValid).toBe(false);
+    expect(config.warnings.join(' ')).toContain('ENCRYPTION_KEY is not set');
+  });
+
+  it('reports an alias-only valid key as valid with the alias warning', () => {
+    const config = loadConfig({ SECRETS_ENCRYPTION_KEY: validKey });
+    expect(config.encryptionKeyConfigured).toBe(true);
+    expect(config.encryptionKeyValid).toBe(true);
+    expect(config.warnings.join(' ')).toContain('Only SECRETS_ENCRYPTION_KEY is set');
+  });
+
+  it('reports mismatched dual names as invalid', () => {
+    const config = loadConfig({ ENCRYPTION_KEY: validKey, SECRETS_ENCRYPTION_KEY: otherValidKey });
+    expect(config.encryptionKeyValid).toBe(false);
+  });
+});
+
+describe('auth secret usability predicate (G11a)', () => {
+  it('accepts only long, non-placeholder values', () => {
+    expect(isUsableAuthSecret(undefined)).toBe(false);
+    expect(isUsableAuthSecret('')).toBe(false);
+    expect(isUsableAuthSecret('   ')).toBe(false);
+    expect(isUsableAuthSecret(SHORT_SECRET)).toBe(false);
+    expect(isUsableAuthSecret(LONG_SECRET)).toBe(true);
+    expect(isUsableAuthSecret(`CHANGE_ME_${'x'.repeat(32)}`)).toBe(false);
+    expect(containsPlaceholderMarker('prefix-CHANGE_ME-suffix')).toBe(true);
+    expect(containsPlaceholderMarker('changeme')).toBe(true);
+    expect(containsPlaceholderMarker('ordinary-random-looking-value-0123456789')).toBe(false);
   });
 });
 

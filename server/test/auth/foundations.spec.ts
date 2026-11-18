@@ -202,14 +202,20 @@ describe('TOTP sealing', () => {
     expect(unsealTotpSecret('not-base64url!!!', key as Buffer, 1)).toBeNull();
   });
 
-  it('derives seal keys deterministically and rejects missing keys', () => {
+  it('derives seal keys from strict 32-byte encodings and rejects weak keys', () => {
     expect(deriveSealKey(undefined)).toBeNull();
     expect(deriveSealKey('')).toBeNull();
+    expect(deriveSealKey('   ')).toBeNull();
     const hex = deriveSealKey('ab'.repeat(32));
     expect(hex?.length).toBe(32);
-    const passphrase = deriveSealKey('a passphrase shaped value');
-    expect(passphrase?.length).toBe(32);
-    expect(passphrase?.equals(deriveSealKey('a passphrase shaped value') as Buffer)).toBe(true);
+    // No SHA-256 fallback: a passphrase-shaped value yields null and
+    // the caller fails closed (G11b).
+    expect(deriveSealKey('a passphrase shaped value')).toBeNull();
+    const raw = Buffer.alloc(32, 7);
+    expect(deriveSealKey(raw.toString('base64'))?.equals(raw)).toBe(true);
+    expect(deriveSealKey(raw.toString('base64url'))?.equals(raw)).toBe(true);
+    expect(deriveSealKey(raw.toString('hex'))?.equals(raw)).toBe(true);
+    expect(deriveSealKey(`  ${'ab'.repeat(32)}  `)?.length).toBe(32);
   });
 });
 

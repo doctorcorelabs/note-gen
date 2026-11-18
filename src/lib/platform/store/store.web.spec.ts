@@ -37,6 +37,10 @@ import type {
   StoreKeyClass,
   StoreOptions,
 } from "./interface";
+import {
+  assertValidKeyValue,
+  classifyKey as keySchemaClassifyKey,
+} from "./key-schema";
 import { createLazyStore } from "./lazy";
 import {
   createDefaultStoreKeyClassifier,
@@ -1655,5 +1659,57 @@ describe("web store: cross-tab broadcast", () => {
     await storeB.save();
     await storeA.close();
     await storeB.close();
+  });
+});
+
+describe("web store: injected key-value validation (DA-20-08)", () => {
+  async function openValidatedStore(
+    server: FakeSettingsServer,
+    storage: FakeStorage,
+  ) {
+    return openStore(server, storage, {
+      assertValidKeyValue,
+      classifyKey: keySchemaClassifyKey,
+    });
+  }
+
+  it("rejects secret-pattern fields under CT-07/A-02 keys before any side effect", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const { store } = await openValidatedStore(server, storage);
+    await store.set("useImageRepo", { enabled: true });
+    await assert.rejects(
+      store.set("useImageRepo", { apiKey: CANARY }),
+      /secret-pattern/,
+    );
+    await assert.rejects(
+      store.set("mainImageHosting", { nested: { token: CANARY } }),
+      /secret-pattern/,
+    );
+    assert.deepEqual(await store.get("useImageRepo"), { enabled: true });
+    assert.equal(await store.get("mainImageHosting"), undefined);
+    await store.save();
+    assert.equal(server.patchRequests().length, 1);
+    await store.close();
+  });
+
+  it("accepts clean CT-07/A-02 values with the validator injected", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const { store } = await openValidatedStore(server, storage);
+    await store.set("useImageRepo", { enabled: true });
+    await store.set("mainImageHosting", "s3");
+    await store.save();
+    assert.equal(server.patchRequests().length, 1);
+    await store.close();
+  });
+
+  it("performs no client-side value validation when no validator is injected", async () => {
+    const server = new FakeSettingsServer();
+    const storage = new FakeStorage();
+    const { store } = await openStore(server, storage);
+    await store.set("useImageRepo", { apiKey: CANARY });
+    assert.deepEqual(await store.get("useImageRepo"), { apiKey: CANARY });
+    await store.close();
   });
 });

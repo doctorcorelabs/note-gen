@@ -102,6 +102,23 @@ describe('failure buckets', () => {
       }),
     ).rejects.toMatchObject({ code: 'service_unavailable' });
   });
+
+  it('fails closed on a short or placeholder auth secret (G11a)', async () => {
+    const store = new FakeAuthStore();
+    for (const authSecret of ['short', `CHANGE_ME_${'x'.repeat(32)}`]) {
+      await expect(
+        checkFailureBucket({
+          store,
+          scope: 'login:ip',
+          rawKey: 'x',
+          authSecret,
+          limit: 1,
+          windowMs: 60_000,
+          nowMs: TEST_NOW_MS,
+        }),
+      ).rejects.toMatchObject({ code: 'service_unavailable' });
+    }
+  });
 });
 
 describe('progressive lockout', () => {
