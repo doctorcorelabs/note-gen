@@ -23,6 +23,7 @@ import { ApiError, FuzzySearchUnavailableError } from "./errors";
 import {
   buildKeywordSearchQuery,
   highlightSnippetSegments,
+  mergeKeywordSearchPages,
   normalizeSearchQuery,
   parseKeywordSearchResponse,
   recordResultTagId,
@@ -31,6 +32,7 @@ import {
   searchKeyword,
   searchResultKey,
   type FuzzyScoringRequest,
+  type KeywordSearchFileResult,
   type KeywordSearchRecordResult,
   type KeywordSearchResponse,
 } from "./search-client";
@@ -523,5 +525,100 @@ describe("highlightSnippetSegments", () => {
     assert.deepEqual(highlightSnippetSegments("", [{ start: 0, end: 1 }]), [
       { text: "", highlighted: false },
     ]);
+  });
+});
+
+describe("mergeKeywordSearchPages", () => {
+  function recordHit(id: number, title?: string): KeywordSearchRecordResult {
+    return {
+      kind: "record",
+      id,
+      title: title ?? `Record ${id}`,
+      snippet: "snippet",
+      snippetField: "content",
+      snippetMatches: [],
+      score: 1,
+      type: "text",
+      tagIds: [],
+      url: "",
+      updatedAt: 1,
+      createdAt: 1,
+    };
+  }
+
+  function fileHit(path: string): KeywordSearchFileResult {
+    return {
+      kind: "file",
+      path,
+      title: path,
+      snippet: "snippet",
+      snippetField: "content",
+      snippetMatches: [],
+      score: 1,
+      contentHash: "hash",
+      version: 1,
+      updatedAt: 1,
+    };
+  }
+
+  function pageResponse(
+    results: KeywordSearchResponse["results"],
+    nextCursor: string | null,
+    hasMore: boolean,
+    query = "alpha",
+    scope: KeywordSearchResponse["scope"] = "all",
+  ): KeywordSearchResponse {
+    return {
+      query,
+      scope,
+      results,
+      nextCursor,
+      hasMore,
+      fuzzy: {
+        available: false,
+        reason: "not_in_mvp",
+        message: "Fuzzy search is not available in this build.",
+      },
+      degraded: false,
+    };
+  }
+
+  it("appends the next page and adopts its cursor and hasMore", () => {
+    const merged = mergeKeywordSearchPages(
+      pageResponse([recordHit(1)], "c1", true),
+      pageResponse([recordHit(2), fileHit("notes/b.md")], null, false),
+    );
+    assert.deepEqual(
+      merged.results.map((result) => searchResultKey(result)),
+      ["record:1", "record:2", "file:notes/b.md"],
+    );
+    assert.equal(merged.nextCursor, null);
+    assert.equal(merged.hasMore, false);
+  });
+
+  it("drops duplicates from an overlapping page, first page wins", () => {
+    const merged = mergeKeywordSearchPages(
+      pageResponse([recordHit(1, "First")], "c1", true),
+      pageResponse([recordHit(1, "Second"), recordHit(2)], null, false),
+    );
+    assert.equal(merged.results.length, 2);
+    assert.equal(merged.results[0]?.title, "First");
+  });
+
+  it("keeps accumulated results when the next page is empty", () => {
+    const merged = mergeKeywordSearchPages(
+      pageResponse([recordHit(1)], "c1", true),
+      pageResponse([], null, false),
+    );
+    assert.equal(merged.results.length, 1);
+    assert.equal(merged.hasMore, false);
+  });
+
+  it("returns the new page unchanged when query or scope differs", () => {
+    const previous = pageResponse([recordHit(1)], "c1", true);
+    const otherQuery = pageResponse([recordHit(2)], null, false, "beta");
+    assert.equal(mergeKeywordSearchPages(previous, otherQuery), otherQuery);
+    const otherScope = pageResponse([recordHit(3)], null, false, "alpha", "records");
+    assert.equal(mergeKeywordSearchPages(previous, otherScope), otherScope);
   });
 });

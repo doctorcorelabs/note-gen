@@ -16,6 +16,8 @@ import { ExpandableTabs } from "@/components/ui/expandable-tabs"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
 import { CanvasActions, CanvasSidebar } from './canvas/canvas-sidebar'
+import { CanvasDisabledPanel } from '@/components/web-chrome/disabled-feature-panels'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { SidebarSearch } from './sidebar-search'
 import { getPluginIcon } from '@/components/plugins/plugin-icon'
 import { PluginViewSurface, PluginViewToolbar } from '@/components/plugins/plugin-view-surface'
@@ -39,6 +41,16 @@ export function LeftSidebar() {
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
   const outlineEditor = useEditorOutlineStore(state => state.active)
   const t = useTranslations()
+  // Web fork (Fase 1, DA11-03): canvas is NOT active in the web MVP
+  // (KEP-1, AD-33). Gate the canvases tab on the same mode-aware
+  // flag the canvas editor tab uses, so CanvasSidebar never mounts
+  // in web mode: its loadProjects path throws through getDb() and
+  // would render a false empty list with silently throwing
+  // actions. The build-static useFeatureFlag('canvas') flag is NOT
+  // the gate: it is false for every build including Tauri, where
+  // canvas works. In Tauri mode this flag is false and the tab
+  // renders exactly as before.
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
   const locale = useLocale()
   const pluginsInitialized = usePluginStore((state) => state.initialized)
   const displaySettings = usePluginStore(state => state.deviceSettings)
@@ -136,7 +148,7 @@ export function LeftSidebar() {
                 leftSidebarTab !== "canvases" && "pointer-events-none"
               )}
             >
-              <CanvasActions />
+              {canvasDisabled ? null : <CanvasActions />}
             </motion.div>
           </div>
         </div>
@@ -187,7 +199,13 @@ export function LeftSidebar() {
               value="canvases"
               className="absolute inset-0 m-0 overflow-hidden data-[state=inactive]:hidden"
             >
-              <CanvasSidebar />
+              {canvasDisabled ? (
+                <div className="h-full overflow-y-auto p-2">
+                  <CanvasDisabledPanel />
+                </div>
+              ) : (
+                <CanvasSidebar />
+              )}
             </TabsContent>
           </div>
         </SidebarSearch>

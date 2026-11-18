@@ -178,7 +178,7 @@ export function SidebarSearch({ activeTab, children }: { activeTab: SidebarTab; 
 
   const normalizedQuery = query.trim()
   const searching = Boolean(normalizedQuery)
-  const { status, response, searchedQuery, isCurrent, isPending, searchNow, retry } = useKeywordSearch({
+  const { status, response, searchedQuery, isCurrent, isPending, hasMore, isLoadingMore, loadMoreError, searchNow, retry, loadMore } = useKeywordSearch({
     query,
     scope: 'all',
     enabled: true,
@@ -361,6 +361,23 @@ export function SidebarSearch({ activeTab, children }: { activeTab: SidebarTab; 
                 onSelect={result => void handleSelect(result)}
               />
             ))}
+
+            {isCurrent && currentResults.length > 0 && hasMore ? (
+              <div className="flex flex-col items-center gap-2 px-3 py-3">
+                {loadMoreError ? (
+                  <div data-testid="search-load-more-error" className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                    <span>{t('article.file.search.remoteError')}</span>
+                    <Button variant="outline" size="sm" data-testid="search-load-more-retry" onClick={() => loadMore()}>
+                      {t('article.file.search.retry')}
+                    </Button>
+                  </div>
+                ) : null}
+                <Button variant="outline" size="sm" data-testid="search-load-more" disabled={isLoadingMore} onClick={() => loadMore()}>
+                  {isLoadingMore ? <Spinner /> : null}
+                  {t('record.mark.inbox.list.loadMore')}
+                </Button>
+              </div>
+            ) : null}
 
             {isPending ? (
               <div className="flex items-center justify-center gap-2 px-3 py-4 text-xs text-muted-foreground" role="status">
