@@ -30,7 +30,9 @@
 // regenerate replaces the whole batch with exactly 10 fresh codes
 // shown once and accepts only a TOTP code; every route without a
 // fresh step-up answers 403 step_up_required; every proof failure
-// shares one generic 401 invalid_verification_code; and start
+// shares one generic 401 invalid_verification_code; confirm, disable, and regenerate share
+// one proof-failure bucket (5 per 15 minutes per account) and answer 429 once it trips,
+// while the proof-free disable of an already-disabled account is never bucketed; and start
 // fails closed with 503 when no encryption key is configured.
 
 import { randomUUID } from 'node:crypto';
@@ -699,6 +701,126 @@ describe('TOTP enrollment routes', () => {
       });
       expect(noStepUp.statusCode).toBe(403);
       expect(bodyOf(noStepUp).error?.code).toBe('step_up_required');
+    });
+  });
+
+  describe('TOTP proof-failure bucket', () => {
+    it('refuses confirm guesses after 5 failures, even with the correct code', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const started = await enrollStart(app, session);
+      const headers = { ...sessionHeaders(session.cookie, session.csrfToken), ...jsonPayload({}).headers };
+      for (let i = 0; i < 5; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/totp/enroll/confirm',
+          headers,
+          payload: JSON.stringify({ code: '000000' }),
+        });
+        expect(res.statusCode).toBe(401);
+        expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+      }
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/enroll/confirm',
+        headers,
+        payload: JSON.stringify({ code: codeFor(started.secret, fixture.clock.nowMs) }),
+      });
+      expect(limited.statusCode).toBe(429);
+      expect(bodyOf(limited).error?.code).toBe('rate_limited');
+      expect(limited.headers['retry-after']).toBeDefined();
+      expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(false);
+    });
+
+    it('shares one bucket across disable and regenerate', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const enrolled = await enrollFully(app, fixture, session);
+      fixture.clock.advance(STEP_MS);
+      const stepped = await steppedUpSessionForUser(fixture, session.userId);
+      const headers = { ...sessionHeaders(stepped.cookie, stepped.csrfToken), ...jsonPayload({}).headers };
+      for (let i = 0; i < 3; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/totp/disable',
+          headers,
+          payload: JSON.stringify({ code: '000000' }),
+        });
+        expect(res.statusCode).toBe(401);
+        expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+      }
+      for (let i = 0; i < 2; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/totp/recovery-codes/regenerate',
+          headers,
+          payload: JSON.stringify({ code: '000000' }),
+        });
+        expect(res.statusCode).toBe(401);
+        expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+      }
+      // Five failures shared across two routes: even a correct
+      // disable proof is refused until the window passes.
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/disable',
+        headers,
+        payload: JSON.stringify({ code: codeFor(enrolled.secret, fixture.clock.nowMs) }),
+      });
+      expect(limited.statusCode).toBe(429);
+      expect(bodyOf(limited).error?.code).toBe('rate_limited');
+      expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(true);
+    });
+
+    it('does not count a successful confirm toward the bucket', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const started = await enrollStart(app, session);
+      const headers = { ...sessionHeaders(session.cookie, session.csrfToken), ...jsonPayload({}).headers };
+      for (let i = 0; i < 4; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/totp/enroll/confirm',
+          headers,
+          payload: JSON.stringify({ code: '000000' }),
+        });
+        expect(res.statusCode).toBe(401);
+      }
+      const ok = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/enroll/confirm',
+        headers,
+        payload: JSON.stringify({ code: codeFor(started.secret, fixture.clock.nowMs) }),
+      });
+      expect(ok.statusCode).toBe(200);
+      expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(true);
+    });
+
+    it('does not bucket the proof-free disable of an already-disabled account', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const headers = { ...sessionHeaders(session.cookie, session.csrfToken), ...jsonPayload({}).headers };
+      // Five confirms with no staged credential fill the bucket.
+      for (let i = 0; i < 5; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/totp/enroll/confirm',
+          headers,
+          payload: JSON.stringify({ code: '000000' }),
+        });
+        expect(res.statusCode).toBe(401);
+      }
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/enroll/confirm',
+        headers,
+        payload: JSON.stringify({ code: '000000' }),
+      });
+      expect(limited.statusCode).toBe(429);
+      // The idempotent disable proves nothing and is never bucketed.
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/disable',
+        headers: sessionHeaders(session.cookie, session.csrfToken),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(bodyOf(res).data).toMatchObject({ totpEnabled: false });
     });
   });
 

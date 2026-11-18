@@ -476,6 +476,125 @@ describe('auth core routes', () => {
       expect(neither.statusCode).toBe(400);
       expect(neither.headers['cache-control']).toBe('no-store');
     });
+
+    it('invalidates the previous challenge when a fresh login starts', async () => {
+      await seedTotpUser(fixture, 'a@example.invalid');
+      const first = await startTotpLogin(app, 'a@example.invalid');
+      const second = await startTotpLogin(app, 'a@example.invalid');
+      expect(await fixture.store.findChallengeByHash(hashToken(first))).toBeNull();
+      const stale = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken: first, code: totpCodeAtNow(TEST_NOW_MS) }),
+      });
+      expect(stale.statusCode).toBe(401);
+      expect(bodyOf(stale).error?.code).toBe('invalid_verification_code');
+      const ok = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken: second, code: totpCodeAtNow(TEST_NOW_MS) }),
+      });
+      expect(ok.statusCode).toBe(200);
+    });
+
+    it('answers 429 for a valid challenge while the account is locked', async () => {
+      const userId = await seedTotpUser(fixture, 'a@example.invalid');
+      const challengeToken = await startTotpLogin(app, 'a@example.invalid');
+      // Seed the lockout after the challenge exists: a locked
+      // account cannot mint a challenge through step 1.
+      await fixture.store.recordLockoutFailure(userId, {
+        consecutiveFailures: 5,
+        lockoutLevel: 1,
+        lockedUntil: new Date(TEST_NOW_MS + 15 * 60 * 1000),
+        lastFailureAt: new Date(TEST_NOW_MS),
+      });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken, code: totpCodeAtNow(TEST_NOW_MS) }),
+      });
+      expect(res.statusCode).toBe(429);
+      expect(bodyOf(res).error?.code).toBe('rate_limited');
+      expect(res.headers['retry-after']).toBeDefined();
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(fixture.store.auditEvents.map((event) => event.eventType)).toContain('login_locked');
+      // The challenge is left in place: it expires in 5 minutes
+      // while the lockout lasts 15, so it cannot outlive it.
+      expect(await fixture.store.findChallengeByHash(hashToken(challengeToken))).not.toBeNull();
+    });
+
+    it('rate-limits unknown-challenge guesses per IP: 20 guesses, then 429', async () => {
+      for (let i = 0; i < 20; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/login/totp',
+          headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+          payload: JSON.stringify({ challengeToken: 'no-such-challenge-token', code: '123456' }),
+        });
+        expect(res.statusCode).toBe(401);
+        expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+      }
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken: 'no-such-challenge-token', code: '123456' }),
+      });
+      expect(limited.statusCode).toBe(429);
+      expect(bodyOf(limited).error?.code).toBe('rate_limited');
+      expect(limited.headers['retry-after']).toBeDefined();
+    });
+
+    it('counts expired and binding-mismatch failures toward the IP bucket', async () => {
+      await seedTotpUser(fixture, 'a@example.invalid');
+      const expired = await startTotpLogin(app, 'a@example.invalid');
+      fixture.clock.advance(6 * 60 * 1000);
+      const stale = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken: expired, code: totpCodeAtNow(fixture.clock.nowMs) }),
+      });
+      expect(stale.statusCode).toBe(401);
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: { ...publicHeaders({ 'user-agent': 'agent-one' }), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ email: 'a@example.invalid', password: PASSWORD }),
+      });
+      expect(first.statusCode).toBe(202);
+      const challengeToken = (bodyOf(first).data as { challengeToken: string }).challengeToken;
+      const mismatched = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders({ 'user-agent': 'agent-two' }), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken, code: totpCodeAtNow(fixture.clock.nowMs) }),
+      });
+      expect(mismatched.statusCode).toBe(401);
+      // Two failures recorded so far (expired + binding); 18
+      // unknown guesses fill the 20-per-IP window, so the next
+      // guess is refused by the pre-check instead of answered 401.
+      for (let i = 0; i < 18; i += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/login/totp',
+          headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+          payload: JSON.stringify({ challengeToken: 'no-such-challenge-token', code: '123456' }),
+        });
+        expect(res.statusCode).toBe(401);
+      }
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login/totp',
+        headers: { ...publicHeaders(), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ challengeToken: 'no-such-challenge-token', code: '123456' }),
+      });
+      expect(limited.statusCode).toBe(429);
+      expect(bodyOf(limited).error?.code).toBe('rate_limited');
+    });
   });
 
   describe('GET /api/auth/me and GET /api/auth/csrf', () => {

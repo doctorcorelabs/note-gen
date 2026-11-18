@@ -14,10 +14,12 @@ import {
   checkGeneralApiLimit,
   checkLockout,
   checkLoginBuckets,
+  checkLoginIpBucket,
   lockoutDurationMs,
   recordFailureBucket,
   recordLoginFailureBuckets,
   recordLoginFailureLockout,
+  recordLoginIpFailureBucket,
   secondsUntilWindowEnd,
   sendRateLimited,
   windowStartMs,
@@ -86,6 +88,19 @@ describe('failure buckets', () => {
       expect((await checkAndCountSetupAttempt(input)).allowed).toBe(true);
     }
     expect((await checkAndCountSetupAttempt(input)).allowed).toBe(false);
+  });
+
+  it('pre-checks the IP-wide login bucket alone for the second login step', async () => {
+    const store = new FakeAuthStore();
+    const input = { store, ip: '203.0.113.7', authSecret: TEST_AUTH_SECRET, nowMs: TEST_NOW_MS };
+    for (let i = 0; i < 19; i += 1) {
+      await recordLoginIpFailureBucket(input);
+    }
+    expect((await checkLoginIpBucket(input)).allowed).toBe(true);
+    await recordLoginIpFailureBucket(input);
+    const denied = await checkLoginIpBucket(input);
+    expect(denied.allowed).toBe(false);
+    expect(denied.retryAfterSeconds).toBeGreaterThan(0);
   });
 
   it('fails closed without an auth secret', async () => {
@@ -160,6 +175,32 @@ describe('progressive lockout', () => {
     expect(lockoutDurationMs(3)).toBe(4 * 60 * 60 * 1000);
     expect(lockoutDurationMs(4)).toBe(24 * 60 * 60 * 1000);
     expect(lockoutDurationMs(9)).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('locks after 5 concurrent failure recordings with no lost count', async () => {
+    // Pins the caller contract the SQL upsert must match: five
+    // recordings issued together produce exactly five counted
+    // failures and one lockout. True database concurrency (two
+    // transactions racing on the row) cannot be shown against the
+    // in-memory fake and belongs to staging verification; this
+    // test pins that the atomic recording path counts every call
+    // exactly once and leaves a locked row untouched.
+    const store = new FakeAuthStore();
+    const now = new Date(TEST_NOW_MS);
+    await Promise.all(Array.from({ length: 5 }, () => recordLoginFailureLockout(store, 'u-1', now)));
+    const row = await store.getLockout('u-1');
+    expect(row?.consecutiveFailures).toBe(5);
+    expect(row?.lockoutLevel).toBe(1);
+    expect(row?.lockedUntil?.getTime()).toBe(TEST_NOW_MS + 15 * 60 * 1000);
+    expect((await checkLockout(store, 'u-1', TEST_NOW_MS)).locked).toBe(true);
+    const lastFailureAt = row?.lastFailureAt;
+    await Promise.all(
+      Array.from({ length: 5 }, () => recordLoginFailureLockout(store, 'u-1', new Date(TEST_NOW_MS + 60_000))),
+    );
+    const after = await store.getLockout('u-1');
+    expect(after?.consecutiveFailures).toBe(5);
+    expect(after?.lockedUntil?.getTime()).toBe(row?.lockedUntil?.getTime());
+    expect(after?.lastFailureAt).toEqual(lastFailureAt);
   });
 });
 
