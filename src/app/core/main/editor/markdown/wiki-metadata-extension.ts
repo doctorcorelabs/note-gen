@@ -19,9 +19,10 @@ function metadataPositions(doc: ProseMirrorNode): MetadataPosition[] {
   return nodes
 }
 
-/** Keep identity and section boundaries in the document while the normal
- * Markdown nodes between them remain fully editable. Source mode still exposes
- * the actual Markdown, including these fields, without an editor-only format.
+/** Keep identity, section boundaries, and leading frontmatter in the
+ * document while the normal Markdown nodes between them remain fully
+ * editable. Source mode still exposes the actual Markdown, including
+ * these blocks, without an editor-only format.
  */
 export const WikiMetadata = Node.create({
   name: WIKI_METADATA_NODE_NAME,

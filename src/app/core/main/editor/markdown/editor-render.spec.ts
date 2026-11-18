@@ -66,7 +66,7 @@ describe("lexer protocol v4", () => {
     expect(MARKDOWN_LEXER_VERSION).toBe(4);
   });
 
-  it("registers nine custom tokenizers in the shared list", () => {
+  it("registers ten custom tokenizers in the shared list", () => {
     const source = readEditorFile("markdown-tokenizers.ts");
     const registrations = [
       "requireTokenizer(MarkdownOrderedList)",
@@ -77,6 +77,7 @@ describe("lexer protocol v4", () => {
       "inlineMathTokenizer,",
       "blockMathTokenizer,",
       "mermaidTokenizer,",
+      "rawHtmlTokenizer,",
       "wikiMetadataTokenizer,",
     ];
     for (const registration of registrations) {

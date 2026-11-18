@@ -4,6 +4,7 @@ import { TaskList } from '@tiptap/extension-list'
 import { MarkdownOrderedList } from './markdown-ordered-list'
 import Underline from '@tiptap/extension-underline'
 import { wikiMetadataTokenizer } from './wiki-metadata-tokenizer'
+import { rawHtmlTokenizer } from './raw-html-tokenizer'
 import { Lexer, type Marked, type MarkedOptions, type Token, type TokenizerExtension } from 'marked'
 import { createCjkMarkdownLexer } from '@/lib/markdown/cjk-emphasis'
 
@@ -115,6 +116,7 @@ const markdownTokenizers: readonly MarkdownTokenizer[] = [
   inlineMathTokenizer,
   blockMathTokenizer,
   mermaidTokenizer,
+  rawHtmlTokenizer,
   wikiMetadataTokenizer,
 ]
 

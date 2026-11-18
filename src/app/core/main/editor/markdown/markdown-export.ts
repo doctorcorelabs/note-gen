@@ -6,6 +6,7 @@ import TaskItem from '@tiptap/extension-task-item'
 import TaskList from '@tiptap/extension-task-list'
 import { MarkdownManager } from '@tiptap/markdown'
 import { WikiMetadata } from './wiki-metadata-extension'
+import { RawHtml } from './raw-html-extension'
 import StarterKit from '@tiptap/starter-kit'
 import { renderMarkdownExportFragment } from '@/lib/markdown/export-document'
 import { checkIsTauri } from '@/lib/check'
@@ -260,6 +261,7 @@ function getMarkdownManager() {
         MarkdownOrderedList,
         TaskList,
         TaskItem.configure({ nested: true }),
+        RawHtml,
         WikiMetadata,
       ],
       indentation: {
