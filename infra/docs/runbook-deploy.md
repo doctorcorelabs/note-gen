@@ -14,15 +14,30 @@ Salin ke direktori rakitan (rencana: `/data/home/note-gen-web/`,
 bukan git repo) sebagai satu paket:
 
 - `infra/docker-compose.deploy.yml` sebagai `docker-compose.yml`
-  rakitan (atau jalankan dengan `-f` dari direktori infra; jalur
-  relatif di berkas mengasumsikan Caddyfile dan `postgres/` berada
-  di samping berkas compose).
+  rakitan. Jalankan compose dari direktori rakitan; jalur relatif
+  di berkas mengasumsikan Caddyfile dan `postgres/` berada di
+  samping berkas compose.
 - `infra/Caddyfile.prod` sebagai `./Caddyfile.prod`.
 - `infra/postgres/pg_hba.conf` sebagai `./postgres/pg_hba.conf`.
 - Berkas env lokal rakitan `./api.env` dan `./postgres.env`, yang
   TIDAK PERNAH di-commit. Buat dari `.env.example` yang sesuai
   dengan nilai produksi; tiap nilai secret memakai placeholder
   CHANGE_ME di berkas example dan nilai nyata hanya di rakitan.
+
+PERINGATAN (AD-182, DA-30-01): JANGAN menjalankan stack deploy
+dengan `-f` dari direktori infra. Jalur relatif `env_file:
+./api.env` di berkas compose terurai terhadap direktori proyek
+compose, sehingga `-f` dari direktori infra memuat artefak lama
+`/data/home/note-gen/infra/api.env` (1 kunci, hanya
+`CF_ACCESS_AUD`) sebagai pengganti berkas env rakitan 22 kunci
+`/data/home/note-gen-web/api.env`. Artefak lama itu TIDAK dimuat
+oleh stack live dan tidak ada tindakan atas berkas itu (AD-182
+butir 2); bahayanya adalah pemakaian ulang yang salah lewat
+`-f`. Dengan berkas 1-kunci itu, API dapat naik sebagai
+kombinasi dev-localhost tanpa Access, tanpa `DATABASE_URL`, dan
+tanpa secret aplikasi. Satu-satunya jalur yang didukung adalah
+menjalankan compose dari direktori rakitan
+`/data/home/note-gen-web/`.
 
 Kontrak variabel env (verifikasi sebelum `up` pertama):
 

@@ -205,6 +205,12 @@ jobs:
           test -f out/index.html
           test -f public/plugin-runtime.js
           test -f public/markdown-lexer.js
+      # DA-14-N01 post-build proof: the built worker bundle must not
+      # advertise the removed terminal capability. The --built form
+      # requires both built artifacts, so a stale public/ or out/
+      # bundle can never pass silently.
+      - name: Verify built worker bundle has no terminal capability
+        run: bash scripts/check-forbidden-strings.sh --built
       # AD-15 bundle proof: no gateway request URL or Config Center
       # identifier in the shipped static export. The purge predicates
       # keep the bare gateway hostname in the bundle by design; the
@@ -265,10 +271,12 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       # No dependency install: the gate is a fixed-string grep over
-      # src/ (AD-14, AD-109, W4-SEC). It fails on any occurrence of
-      # the two forbidden literals and exits 1 when src/ is missing,
-      # so it never passes vacuously on a broken checkout. Until
-      # Actions runs for this repository, the same command is
+      # src/ (AD-14, AD-109, W4-SEC), plus any built worker bundle
+      # present in the checkout (DA-14-N01). It fails on any
+      # occurrence of the two forbidden literals and exits 1 when
+      # src/ is missing, so it never passes vacuously on a broken
+      # checkout. The build job runs the --built post-build form.
+      # Until Actions runs for this repository, the same command is
       # verified locally: bash scripts/check-forbidden-strings.sh
       - name: Check for forbidden terminal literals in src/
         run: bash scripts/check-forbidden-strings.sh
