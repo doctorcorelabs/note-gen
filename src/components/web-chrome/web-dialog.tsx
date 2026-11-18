@@ -428,7 +428,7 @@ export function WebDialogHost() {
   return (
     <ResponsiveDialog
       open={request !== null}
-      onOpenChange={(next) => {
+      onOpenChange={(next: boolean) => {
         if (!next && request) dismissCurrent(request.id)
       }}
     >
