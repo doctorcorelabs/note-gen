@@ -35,6 +35,8 @@ CADDY_PORT="${NOTEGEN_CADDY_PORT:-3200}"
 API_PORT="${NOTEGEN_API_PORT:-3001}"
 PROJECT_DIR="${NOTEGEN_PROJECT_DIR:-/data/home/note-gen-web}"
 COMPOSE_FILE="${NOTEGEN_COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE_OVERRIDE_FILE="${NOTEGEN_COMPOSE_OVERRIDE_FILE:-docker-compose.override.yml}"
+ALLOW_SINGLE_FILE="${NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE:-0}"
 TUNNEL_LAUNCHER="${NOTEGEN_TUNNEL_LAUNCHER:-/data/home/notegen-tunnel/notegen-tunnel.sh}"
 LOG_DIR="${NOTEGEN_LOG_DIR:-$HOME/workspace/notegen-watchdog-logs}"
 MAINTENANCE_FILE="${NOTEGEN_MAINTENANCE_FILE:-$LOG_DIR/MAINTENANCE}"
@@ -52,6 +54,7 @@ PROBEONLY_FILE="$STATE_DIR/tunnel-probe-only"
 PREV_FILE="$STATE_DIR/tunnel-prev"
 
 if [ "$DRY_RUN" = "1" ]; then DRY_RUN=1; else DRY_RUN=0; fi
+if [ "$ALLOW_SINGLE_FILE" = "1" ]; then ALLOW_SINGLE_FILE=1; else ALLOW_SINGLE_FILE=0; fi
 if [ "$MIGRATIONS_REQUIRED" = "1" ]; then MIGRATIONS_REQUIRED=1; else MIGRATIONS_REQUIRED=0; fi
 if [ "$WORKER_DEPLOYED" = "1" ]; then WORKER_DEPLOYED=1; else WORKER_DEPLOYED=0; fi
 
@@ -374,6 +377,9 @@ case "$PROJECT_DIR" in /*) ;; *) CONFIG_BAD="NOTEGEN_PROJECT_DIR";; esac
 if path_has_bad_chars "$PROJECT_DIR"; then CONFIG_BAD="NOTEGEN_PROJECT_DIR"; fi
 if path_has_bad_chars "$COMPOSE_FILE"; then CONFIG_BAD="NOTEGEN_COMPOSE_FILE"; fi
 case "$COMPOSE_FILE" in /*) CONFIG_BAD="NOTEGEN_COMPOSE_FILE";; esac
+if path_has_bad_chars "$COMPOSE_OVERRIDE_FILE"; then CONFIG_BAD="NOTEGEN_COMPOSE_OVERRIDE_FILE"; fi
+case "$COMPOSE_OVERRIDE_FILE" in /*) CONFIG_BAD="NOTEGEN_COMPOSE_OVERRIDE_FILE";; esac
+if [ "$COMPOSE_OVERRIDE_FILE" = "$COMPOSE_FILE" ]; then CONFIG_BAD="NOTEGEN_COMPOSE_OVERRIDE_FILE"; fi
 case "$TUNNEL_LAUNCHER" in /*) ;; *) CONFIG_BAD="NOTEGEN_TUNNEL_LAUNCHER";; esac
 if path_has_bad_chars "$TUNNEL_LAUNCHER"; then CONFIG_BAD="NOTEGEN_TUNNEL_LAUNCHER"; fi
 case "$MUSE2_ID" in ''|*[!A-Za-z0-9_-]*) CONFIG_BAD="NOTEGEN_MUSE2_ID";; esac
@@ -384,7 +390,14 @@ if [ -n "$CONFIG_BAD" ]; then
 fi
 
 DIR_Q="$(printf '%q' "$PROJECT_DIR")"
-FILE_Q="$(printf '%q' "$COMPOSE_FILE")"
+BASE_Q="$(printf '%q' "$COMPOSE_FILE")"
+OVERRIDE_Q="$(printf '%q' "$COMPOSE_OVERRIDE_FILE")"
+if [ "$ALLOW_SINGLE_FILE" -eq 1 ]; then
+  FILES_Q="-f $BASE_Q"
+else
+  FILES_Q="-f $BASE_Q -f $OVERRIDE_Q"
+fi
+log "INFO compose_files base=$COMPOSE_FILE override=$COMPOSE_OVERRIDE_FILE single_file_allowed=$ALLOW_SINGLE_FILE dir=$PROJECT_DIR"
 LAUNCHER_Q="$(printf '%q' "$TUNNEL_LAUNCHER")"
 
 # ---------------- State: hitung kegagalan, mode probe-saja, keadaan lalu ----------------
@@ -675,6 +688,7 @@ parse_payload() {
   CR_CODE=""; CR_BODY=""; CL_CODE=""; CL_BODY=""
   DR_CODE=""; DR_BODY=""; DR_EXEC_RC=""; DL_CODE=""; DL_BODY=""; DL_EXEC_RC=""
   LAUNCHER_EXISTS=""; LAUNCHER_RC=""; LAUNCHER_OUT=""
+  COMPOSE_GUARD=""
   while IFS= read -r line; do
     case "$line" in
       CADDY_READY_CODE=*) CR_CODE="${line#CADDY_READY_CODE=}" ;;
@@ -690,15 +704,27 @@ parse_payload() {
       LAUNCHER_EXISTS=*) LAUNCHER_EXISTS="${line#LAUNCHER_EXISTS=}" ;;
       LAUNCHER_RC=*) LAUNCHER_RC="${line#LAUNCHER_RC=}" ;;
       LAUNCHER_OUT=*) LAUNCHER_OUT="${line#LAUNCHER_OUT=}" ;;
+      COMPOSE_GUARD=*) COMPOSE_GUARD="${line#COMPOSE_GUARD=}" ;;
       *) ;;
     esac
   done <<<"$1"
+  case "$COMPOSE_GUARD" in
+    ""|ok|missing_base|missing_override|no_project_dir) ;;
+    *) COMPOSE_GUARD="tidak_dikenal" ;;
+  esac
 }
 
 # ---------------- Perintah jarak jauh ----------------
 # Perintah dibangun dari templat heredoc (tanpa ekspansi lokal), lalu token
 # @@...@@ diganti nilai yang sudah divalidasi/diescape. Perintah jarak jauh
 # selalu berakhir exit 0 dan membawa status di dalam payload.
+# Bentuk pemanggilan compose kanonis adalah dua berkas: -f dasar
+# -f override (F-ABC-A1/AD-195: satu -f menjatuhkan pemuatan otomatis
+# override). Templat kumpul probe memeriksa keberadaan kedua berkas di
+# remote dan melaporkan COMPOSE_GUARD; override yang hilang menolak
+# diagnosis secara keras, tidak pernah dijatuhkan diam-diam. Bentuk
+# satu berkas hanya lewat NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE=1 yang
+# eksplisit dan tercatat di log.
 
 GATHER_TEMPLATE="$(cat <<'REMOTE_EOF'
 echo "NOTEGEN_WD_BEGIN"
@@ -714,14 +740,24 @@ case "$CL_CODE" in ''|*[!0-9]*) CL_CODE=000;; esac
 CL_BODY=$(printf '%s' "$CL_OUT" | sed '$d' | tr -d '\n\r')
 echo "CADDY_LIVE_CODE=$CL_CODE"
 echo "CADDY_LIVE_BODY=$CL_BODY"
+COMPOSE_GUARD=ok
 if cd @@DIR_Q@@ 2>/dev/null; then
-  DR_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/ready',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
+  if [ ! -f @@BASE_Q@@ ]; then COMPOSE_GUARD=missing_base
+  elif [ @@ALLOW_SINGLE@@ -ne 1 ] && [ ! -f @@OVERRIDE_Q@@ ]; then COMPOSE_GUARD=missing_override
+  fi
+  if [ "$COMPOSE_GUARD" = "ok" ]; then
+  DR_OUT=$(docker compose @@FILES_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/ready',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
   DR_RC=$?
-  DL_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/live',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
+  DL_OUT=$(docker compose @@FILES_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/live',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
   DL_RC=$?
+  else
+    DR_OUT=""; DR_RC=127; DL_OUT=""; DL_RC=127
+  fi
 else
+  COMPOSE_GUARD=no_project_dir
   DR_OUT=""; DR_RC=127; DL_OUT=""; DL_RC=127
 fi
+echo "COMPOSE_GUARD=$COMPOSE_GUARD"
 DR_CODE=$(printf '%s' "$DR_OUT" | sed -n 's/^NOTEGEN_CODE://p' | head -n 1)
 case "$DR_CODE" in ''|*[!0-9]*) DR_CODE=000;; esac
 DR_BODY=$(printf '%s' "$DR_OUT" | sed -n 's/^NOTEGEN_BODY://p' | head -n 1)
@@ -767,7 +803,10 @@ build_gather_cmd() {
   c="${c//@@CADDY_PORT@@/$CADDY_PORT}"
   c="${c//@@API_PORT@@/$API_PORT}"
   c="${c//@@DIR_Q@@/$DIR_Q}"
-  c="${c//@@FILE_Q@@/$FILE_Q}"
+  c="${c//@@BASE_Q@@/$BASE_Q}"
+  c="${c//@@OVERRIDE_Q@@/$OVERRIDE_Q}"
+  c="${c//@@FILES_Q@@/$FILES_Q}"
+  c="${c//@@ALLOW_SINGLE@@/$ALLOW_SINGLE_FILE}"
   printf '%s' "$c"
 }
 
@@ -877,7 +916,13 @@ validate_ready "$DR_CODE" "$DR_BODY"
 DR_VALID="$V_VALID"; DR_FAILED="$V_FAILED"; DR_PARSE="$V_PARSE"; DR_WARNINGS="$V_WARNINGS"
 validate_live "$CL_CODE" "$CL_BODY"; CL_OK="$L_OK"
 validate_live "$DL_CODE" "$DL_BODY"; DL_OK="$L_OK"
-log "INFO probe_internal caddy_ready http=$CR_CODE valid=$CR_VALID parse=$CR_PARSE gagal=[$CR_FAILED] caddy_live ok=$CL_OK direct_ready http=$DR_CODE exec_rc=$DR_EXEC_RC valid=$DR_VALID parse=$DR_PARSE gagal=[$DR_FAILED] direct_live ok=$DL_OK"
+log "INFO probe_internal caddy_ready http=$CR_CODE valid=$CR_VALID parse=$CR_PARSE gagal=[$CR_FAILED] caddy_live ok=$CL_OK direct_ready http=$DR_CODE exec_rc=$DR_EXEC_RC valid=$DR_VALID parse=$DR_PARSE gagal=[$DR_FAILED] direct_live ok=$DL_OK compose_guard=$COMPOSE_GUARD"
+if [ "${COMPOSE_GUARD:-}" != "ok" ]; then
+  log "ERROR guard compose: $COMPOSE_GUARD (berkas dasar=$COMPOSE_FILE, override=$COMPOSE_OVERRIDE_FILE, single_file_allowed=$ALLOW_SINGLE_FILE); tanpa restart"
+  note_transition "unhealthy"
+  finish_run 1 "unhealthy" "$EPISODE_FIRST" "tidak ada (guard compose: $COMPOSE_GUARD)" \
+    "GUARD COMPOSE: $COMPOSE_GUARD, tanpa restart"
+fi
 
 # Putusan internal (seksi 1.4 + AD-133 A1):
 # - ready lewat Caddy valid berarti origin sehat lewat jalur Caddy.

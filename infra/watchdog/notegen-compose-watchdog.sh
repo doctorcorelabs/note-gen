@@ -32,6 +32,8 @@ CADDY_PORT="${NOTEGEN_CADDY_PORT:-3200}"
 API_PORT="${NOTEGEN_API_PORT:-3001}"
 PROJECT_DIR="${NOTEGEN_PROJECT_DIR:-/data/home/note-gen-web}"
 COMPOSE_FILE="${NOTEGEN_COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE_OVERRIDE_FILE="${NOTEGEN_COMPOSE_OVERRIDE_FILE:-docker-compose.override.yml}"
+ALLOW_SINGLE_FILE="${NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE:-0}"
 INTERNAL_TIMEOUT="${NOTEGEN_INTERNAL_PROBE_TIMEOUT:-10}"
 LOG_DIR="${NOTEGEN_LOG_DIR:-$HOME/workspace/notegen-watchdog-logs}"
 MAINTENANCE_FILE="${NOTEGEN_MAINTENANCE_FILE:-$LOG_DIR/MAINTENANCE}"
@@ -54,6 +56,7 @@ RESUME_FILE="$STATE_DIR/compose-resume"
 UNREACHABLE_FILE="$STATE_DIR/compose-unreachable"
 
 if [ "$DRY_RUN" = "1" ]; then DRY_RUN=1; else DRY_RUN=0; fi
+if [ "$ALLOW_SINGLE_FILE" = "1" ]; then ALLOW_SINGLE_FILE=1; else ALLOW_SINGLE_FILE=0; fi
 if [ "$MIGRATIONS_REQUIRED" = "1" ]; then MIGRATIONS_REQUIRED=1; else MIGRATIONS_REQUIRED=0; fi
 if [ "$WORKER_DEPLOYED" = "1" ]; then WORKER_DEPLOYED=1; else WORKER_DEPLOYED=0; fi
 
@@ -374,6 +377,9 @@ case "$PROJECT_DIR" in /*) ;; *) CONFIG_BAD="NOTEGEN_PROJECT_DIR";; esac
 if path_has_bad_chars "$PROJECT_DIR"; then CONFIG_BAD="NOTEGEN_PROJECT_DIR"; fi
 if path_has_bad_chars "$COMPOSE_FILE"; then CONFIG_BAD="NOTEGEN_COMPOSE_FILE"; fi
 case "$COMPOSE_FILE" in /*) CONFIG_BAD="NOTEGEN_COMPOSE_FILE";; esac
+if path_has_bad_chars "$COMPOSE_OVERRIDE_FILE"; then CONFIG_BAD="NOTEGEN_COMPOSE_OVERRIDE_FILE"; fi
+case "$COMPOSE_OVERRIDE_FILE" in /*) CONFIG_BAD="NOTEGEN_COMPOSE_OVERRIDE_FILE";; esac
+if [ "$COMPOSE_OVERRIDE_FILE" = "$COMPOSE_FILE" ]; then CONFIG_BAD="NOTEGEN_COMPOSE_OVERRIDE_FILE"; fi
 case "$MUSE2_ID" in ''|*[!A-Za-z0-9_-]*) CONFIG_BAD="NOTEGEN_MUSE2_ID";; esac
 if [ -n "$CONFIG_BAD" ]; then
   log "ERROR konfigurasi tidak valid: $CONFIG_BAD; tanpa tindakan"
@@ -382,7 +388,16 @@ if [ -n "$CONFIG_BAD" ]; then
 fi
 
 DIR_Q="$(printf '%q' "$PROJECT_DIR")"
-FILE_Q="$(printf '%q' "$COMPOSE_FILE")"
+BASE_Q="$(printf '%q' "$COMPOSE_FILE")"
+OVERRIDE_Q="$(printf '%q' "$COMPOSE_OVERRIDE_FILE")"
+if [ "$ALLOW_SINGLE_FILE" -eq 1 ]; then
+  FILES_Q="-f $BASE_Q"
+  FILES_DESC="-f $COMPOSE_FILE"
+else
+  FILES_Q="-f $BASE_Q -f $OVERRIDE_Q"
+  FILES_DESC="-f $COMPOSE_FILE -f $COMPOSE_OVERRIDE_FILE"
+fi
+log "INFO compose_files base=$COMPOSE_FILE override=$COMPOSE_OVERRIDE_FILE single_file_allowed=$ALLOW_SINGLE_FILE dir=$PROJECT_DIR"
 
 # ---------------- State: keadaan lalu, resume, kuota ----------------
 
@@ -677,6 +692,16 @@ note_transition() {
 # sudah divalidasi/diescape. Semua perintah bercakupan proyek NoteGen
 # (cd ke direktori proyek + berkas compose proyek). Perintah jarak jauh
 # selalu berakhir exit 0 dan membawa status di dalam payload.
+# Bentuk pemanggilan kanonis adalah dua berkas: -f dasar -f override
+# (F-ABC-A1/AD-195: satu -f menjatuhkan pemuatan otomatis override dan
+# image terurai ke PLACEHOLDER_TAG). Setiap templat memeriksa keberadaan
+# kedua berkas di remote sebelum memanggil compose dan melaporkan
+# COMPOSE_GUARD/ACTION_GUARD; override yang hilang menolak tindakan
+# secara keras, tidak pernah dijatuhkan diam-diam. Tindakan up juga
+# ditolak bila konfigurasi terurai masih memuat PLACEHOLDER_TAG.
+# Bentuk satu berkas hanya lewat NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE=1
+# yang eksplisit dan tercatat di log; penolakan placeholder untuk up
+# tetap berlaku pada bentuk itu.
 
 GATHER_TEMPLATE="$(cat <<'REMOTE_EOF'
 echo "NOTEGEN_WD_BEGIN"
@@ -692,16 +717,26 @@ case "$CL_CODE" in ''|*[!0-9]*) CL_CODE=000;; esac
 CL_BODY=$(printf '%s' "$CL_OUT" | sed '$d' | tr -d '\n\r')
 echo "CADDY_LIVE_CODE=$CL_CODE"
 echo "CADDY_LIVE_BODY=$CL_BODY"
+COMPOSE_GUARD=ok
 if cd @@DIR_Q@@ 2>/dev/null; then
-  DR_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/ready',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
+  if [ ! -f @@BASE_Q@@ ]; then COMPOSE_GUARD=missing_base
+  elif [ @@ALLOW_SINGLE@@ -ne 1 ] && [ ! -f @@OVERRIDE_Q@@ ]; then COMPOSE_GUARD=missing_override
+  fi
+  if [ "$COMPOSE_GUARD" = "ok" ]; then
+  DR_OUT=$(docker compose @@FILES_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/ready',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
   DR_RC=$?
-  DL_OUT=$(docker compose -f @@FILE_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/live',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
+  DL_OUT=$(docker compose @@FILES_Q@@ exec -T api node -e "fetch('http://127.0.0.1:@@API_PORT@@/api/health/live',{signal:AbortSignal.timeout(@@INTERNAL_TIMEOUT@@*1000)}).then(async function(r){var t=await r.text();console.log('NOTEGEN_CODE:'+r.status);console.log('NOTEGEN_BODY:'+t.replace(/\n/g,'').replace(/\r/g,''));}).catch(function(){console.log('NOTEGEN_CODE:000');console.log('NOTEGEN_BODY:');});" 2>/dev/null)
   DL_RC=$?
-  PS_OUT=$(docker compose -f @@FILE_Q@@ ps --format '{{.Service}}|{{.State}}|{{.Health}}|{{.Name}}' 2>/dev/null)
+  PS_OUT=$(docker compose @@FILES_Q@@ ps --format '{{.Service}}|{{.State}}|{{.Health}}|{{.Name}}' 2>/dev/null)
   PS_RC=$?
+  else
+    DR_OUT=""; DR_RC=127; DL_OUT=""; DL_RC=127; PS_OUT=""; PS_RC=127
+  fi
 else
+  COMPOSE_GUARD=no_project_dir
   DR_OUT=""; DR_RC=127; DL_OUT=""; DL_RC=127; PS_OUT=""; PS_RC=127
 fi
+echo "COMPOSE_GUARD=$COMPOSE_GUARD"
 DR_CODE=$(printf '%s' "$DR_OUT" | sed -n 's/^NOTEGEN_CODE://p' | head -n 1)
 case "$DR_CODE" in ''|*[!0-9]*) DR_CODE=000;; esac
 DR_BODY=$(printf '%s' "$DR_OUT" | sed -n 's/^NOTEGEN_BODY://p' | head -n 1)
@@ -723,14 +758,24 @@ REMOTE_EOF
 
 DIAGNOSE_TEMPLATE="$(cat <<'REMOTE_EOF'
 echo "NOTEGEN_WD_BEGIN"
+COMPOSE_GUARD=ok
 if cd @@DIR_Q@@ 2>/dev/null; then
-  PG_OUT=$(docker compose -f @@FILE_Q@@ exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' 2>&1)
+  if [ ! -f @@BASE_Q@@ ]; then COMPOSE_GUARD=missing_base
+  elif [ @@ALLOW_SINGLE@@ -ne 1 ] && [ ! -f @@OVERRIDE_Q@@ ]; then COMPOSE_GUARD=missing_override
+  fi
+  if [ "$COMPOSE_GUARD" = "ok" ]; then
+  PG_OUT=$(docker compose @@FILES_Q@@ exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' 2>&1)
   PG_RC=$?
-  WS_OUT=$(docker compose -f @@FILE_Q@@ exec -T api sh -c 'd="$WORKSPACE_ROOT"; ls -ld "$d" 2>&1; test -d "$d" && echo IS_DIR=1 || echo IS_DIR=0; test -r "$d" && echo READ=1 || echo READ=0; test -w "$d" && echo WRITE=1 || echo WRITE=0' 2>&1)
+  WS_OUT=$(docker compose @@FILES_Q@@ exec -T api sh -c 'd="$WORKSPACE_ROOT"; ls -ld "$d" 2>&1; test -d "$d" && echo IS_DIR=1 || echo IS_DIR=0; test -r "$d" && echo READ=1 || echo READ=0; test -w "$d" && echo WRITE=1 || echo WRITE=0' 2>&1)
   WS_RC=$?
+  else
+    PG_OUT=""; PG_RC=127; WS_OUT=""; WS_RC=127
+  fi
 else
+  COMPOSE_GUARD=no_project_dir
   PG_OUT=""; PG_RC=127; WS_OUT=""; WS_RC=127
 fi
+echo "COMPOSE_GUARD=$COMPOSE_GUARD"
 echo "PG_RC=$PG_RC"
 echo "PG_OUT=$(printf '%s' "$PG_OUT" | tr '\n' ' ' | head -c 300)"
 echo "WS_RC=$WS_RC"
@@ -742,13 +787,31 @@ REMOTE_EOF
 
 ACTION_TEMPLATE="$(cat <<'REMOTE_EOF'
 echo "NOTEGEN_WD_BEGIN"
+ACTION_GUARD=ok
 if cd @@DIR_Q@@ 2>/dev/null; then
-  A_OUT=$(docker compose -f @@FILE_Q@@ @@ACTION_LINE@@ 2>&1)
-  A_RC=$?
+  if [ ! -f @@BASE_Q@@ ]; then ACTION_GUARD=missing_base
+  elif [ @@ALLOW_SINGLE@@ -ne 1 ] && [ ! -f @@OVERRIDE_Q@@ ]; then ACTION_GUARD=missing_override
+  elif [ @@REQUIRE_PLACEHOLDER_CHECK@@ -eq 1 ]; then
+    # Keluaran config hanya diuji polanya; tidak pernah dicatat.
+    CFG_OUT=$(docker compose @@FILES_Q@@ config 2>/dev/null); CFG_RC=$?
+    if [ "$CFG_RC" -ne 0 ]; then ACTION_GUARD=config_unresolved
+    elif printf '%s' "$CFG_OUT" | grep -q 'PLACEHOLDER_TAG'; then ACTION_GUARD=placeholder_image
+    fi
+    CFG_OUT=""
+  fi
+  if [ "$ACTION_GUARD" = "ok" ]; then
+    A_OUT=$(docker compose @@FILES_Q@@ @@ACTION_LINE@@ 2>&1)
+    A_RC=$?
+  else
+    A_OUT="tindakan ditolak guard compose"
+    A_RC=124
+  fi
 else
+  ACTION_GUARD=no_project_dir
   A_OUT="direktori proyek tidak ada"
   A_RC=127
 fi
+echo "ACTION_GUARD=$ACTION_GUARD"
 echo "ACTION_RC=$A_RC"
 echo "ACTION_OUT=$(printf '%s' "$A_OUT" | tr '\n' ' ' | head -c 500)"
 echo "NOTEGEN_WD_END"
@@ -762,22 +825,34 @@ build_gather_cmd() {
   c="${c//@@CADDY_PORT@@/$CADDY_PORT}"
   c="${c//@@API_PORT@@/$API_PORT}"
   c="${c//@@DIR_Q@@/$DIR_Q}"
-  c="${c//@@FILE_Q@@/$FILE_Q}"
+  c="${c//@@BASE_Q@@/$BASE_Q}"
+  c="${c//@@OVERRIDE_Q@@/$OVERRIDE_Q}"
+  c="${c//@@FILES_Q@@/$FILES_Q}"
+  c="${c//@@ALLOW_SINGLE@@/$ALLOW_SINGLE_FILE}"
   printf '%s' "$c"
 }
 
 build_diagnose_cmd() {
   local c="$DIAGNOSE_TEMPLATE"
   c="${c//@@DIR_Q@@/$DIR_Q}"
-  c="${c//@@FILE_Q@@/$FILE_Q}"
+  c="${c//@@BASE_Q@@/$BASE_Q}"
+  c="${c//@@OVERRIDE_Q@@/$OVERRIDE_Q}"
+  c="${c//@@FILES_Q@@/$FILES_Q}"
+  c="${c//@@ALLOW_SINGLE@@/$ALLOW_SINGLE_FILE}"
   printf '%s' "$c"
 }
 
 # $1 baris aksi allowlist (mis. "restart api", "up -d", "up -d api").
 build_action_cmd() {
   local c="$ACTION_TEMPLATE"
+  local require_check=0
+  case "$1" in up*) require_check=1;; *) require_check=0;; esac
   c="${c//@@DIR_Q@@/$DIR_Q}"
-  c="${c//@@FILE_Q@@/$FILE_Q}"
+  c="${c//@@BASE_Q@@/$BASE_Q}"
+  c="${c//@@OVERRIDE_Q@@/$OVERRIDE_Q}"
+  c="${c//@@FILES_Q@@/$FILES_Q}"
+  c="${c//@@ALLOW_SINGLE@@/$ALLOW_SINGLE_FILE}"
+  c="${c//@@REQUIRE_PLACEHOLDER_CHECK@@/$require_check}"
   c="${c//@@ACTION_LINE@@/$1}"
   printf '%s' "$c"
 }
@@ -790,6 +865,7 @@ parse_payload() {
   PS_RC=""; PS_LINES=""
   PG_RC=""; PG_OUT=""; WS_RC=""; WS_OUT=""
   ACTION_RC=""; ACTION_OUT=""
+  COMPOSE_GUARD=""
   while IFS= read -r line; do
     case "$line" in
       CADDY_READY_CODE=*) CR_CODE="${line#CADDY_READY_CODE=}" ;;
@@ -811,9 +887,14 @@ ${line#PS_SVC=}" ;;
       WS_OUT=*) WS_OUT="${line#WS_OUT=}" ;;
       ACTION_RC=*) ACTION_RC="${line#ACTION_RC=}" ;;
       ACTION_OUT=*) ACTION_OUT="${line#ACTION_OUT=}" ;;
+      COMPOSE_GUARD=*) COMPOSE_GUARD="${line#COMPOSE_GUARD=}" ;;
       *) ;;
     esac
   done <<<"$1"
+  case "$COMPOSE_GUARD" in
+    ok|missing_base|missing_override|no_project_dir) ;;
+    *) COMPOSE_GUARD="tidak_dikenal" ;;
+  esac
 }
 
 # Keadaan service: ST_caddy/ST_web/ST_api/ST_postgres/ST_worker,
@@ -1045,26 +1126,38 @@ mark_unreachable() {
 
 parse_diagnose_payload() {
   PG_RC=""; PG_OUT=""; WS_RC=""; WS_OUT=""
+  COMPOSE_GUARD=""
   while IFS= read -r line; do
     case "$line" in
       PG_RC=*) PG_RC="${line#PG_RC=}" ;;
       PG_OUT=*) PG_OUT="${line#PG_OUT=}" ;;
       WS_RC=*) WS_RC="${line#WS_RC=}" ;;
       WS_OUT=*) WS_OUT="${line#WS_OUT=}" ;;
+      COMPOSE_GUARD=*) COMPOSE_GUARD="${line#COMPOSE_GUARD=}" ;;
       *) ;;
     esac
   done <<<"$1"
+  case "$COMPOSE_GUARD" in
+    ok|missing_base|missing_override|no_project_dir) ;;
+    *) COMPOSE_GUARD="tidak_dikenal" ;;
+  esac
 }
 
 parse_action_payload() {
   ACTION_RC=""; ACTION_OUT=""
+  ACTION_GUARD=""
   while IFS= read -r line; do
     case "$line" in
       ACTION_RC=*) ACTION_RC="${line#ACTION_RC=}" ;;
       ACTION_OUT=*) ACTION_OUT="${line#ACTION_OUT=}" ;;
+      ACTION_GUARD=*) ACTION_GUARD="${line#ACTION_GUARD=}" ;;
       *) ;;
     esac
   done <<<"$1"
+  case "$ACTION_GUARD" in
+    ok|missing_base|missing_override|no_project_dir|placeholder_image|config_unresolved) ;;
+    *) ACTION_GUARD="tidak_dikenal" ;;
+  esac
 }
 
 # ---------------- Kumpul probe + diagnosis ----------------
@@ -1091,7 +1184,7 @@ run_gather() {
 }
 
 log_gather() {
-  log "INFO probe_internal[$1] caddy_ready http=$CR_CODE valid=$CR_VALID gagal=[$CR_FAILED] caddy_live ok=$CL_OK direct_ready http=$DR_CODE exec_rc=$DR_EXEC_RC valid=$DR_VALID gagal=[$DR_FAILED] direct_live ok=$DL_OK verdict=$VERDICT sumber=${AUTH_SOURCE:-tidak_ada} ps_ok=$PS_OK exited=[$EXITED_LIST]"
+  log "INFO probe_internal[$1] caddy_ready http=$CR_CODE valid=$CR_VALID gagal=[$CR_FAILED] caddy_live ok=$CL_OK direct_ready http=$DR_CODE exec_rc=$DR_EXEC_RC valid=$DR_VALID gagal=[$DR_FAILED] direct_live ok=$DL_OK verdict=$VERDICT sumber=${AUTH_SOURCE:-tidak_ada} ps_ok=$PS_OK exited=[$EXITED_LIST] compose_guard=$COMPOSE_GUARD"
   if [ -n "$CR_WARNINGS" ] || [ -n "$DR_WARNINGS" ]; then
     log "WARN peringatan non-blokir: caddy=[$CR_WARNINGS] direct=[$DR_WARNINGS]"
   fi
@@ -1101,6 +1194,7 @@ log_gather() {
 run_diagnose() {
   local cmd=""
   PG_RC="unknown"; PG_OUT=""; WS_RC="unknown"; WS_OUT=""
+  COMPOSE_GUARD=""
   cmd="$(build_diagnose_cmd)"
   if ! remote_exec 60 "$cmd"; then return 1; fi
   if [ "$REMOTE_PAYLOAD_OK" -ne 1 ]; then return 0; fi
@@ -1418,6 +1512,12 @@ if [ -f "$UNREACHABLE_FILE" ]; then
 fi
 update_grace_flags
 log_gather "awal"
+if [ "${COMPOSE_GUARD:-}" != "ok" ]; then
+  log "ERROR guard compose: $COMPOSE_GUARD (berkas dasar=$COMPOSE_FILE, override=$COMPOSE_OVERRIDE_FILE, single_file_allowed=$ALLOW_SINGLE_FILE); tanpa tindakan"
+  note_transition "unhealthy"
+  finish_run 1 "unhealthy" "$EPISODE_FIRST" "tidak ada (guard compose: $COMPOSE_GUARD)" "$PREV_FINGERPRINT" "$PREV_EXITED_COUNT" "$PREV_FAIL_COUNT" \
+    "GUARD COMPOSE: $COMPOSE_GUARD, tanpa tindakan"
+fi
 
 # 3. Masa tenggang umum: polling tanpa tindakan sampai tenggang habis.
 if [ "$VERDICT" = "unhealthy" ] && [ "$GRACE_GENERAL_ACTIVE" -eq 1 ]; then
@@ -1471,7 +1571,10 @@ if [ "$NEEDS_DIAGNOSE" -eq 1 ]; then
       log "WARN diagnosis gagal ($EXEC_CLASS); lanjut dengan pg_isready/workspace tidak diketahui"
     fi
   else
-    log "INFO diagnosis pg_rc=$PG_RC pg_out=[$(safe_line "$PG_OUT")] ws_rc=$WS_RC ws_out=[$(safe_line "$WS_OUT")]"
+    log "INFO diagnosis pg_rc=$PG_RC pg_out=[$(safe_line "$PG_OUT")] ws_rc=$WS_RC ws_out=[$(safe_line "$WS_OUT")] compose_guard=$COMPOSE_GUARD"
+    if [ "${COMPOSE_GUARD:-}" != "ok" ]; then
+      log "ERROR guard compose pada diagnosis: $COMPOSE_GUARD; hasil diagnosis tidak dapat dipakai"
+    fi
   fi
 fi
 
@@ -1503,7 +1606,7 @@ if [ "$ALLOW" -ne 1 ]; then
     "TIDAK SEHAT, tindakan diblokir: jatah/aturan ketat"
 fi
 if [ "$DRY_RUN" -eq 1 ]; then
-  log "INFO DRY_RUN: akan menjalankan: docker compose -f $COMPOSE_FILE $ACTION_CMD_LINE (di $PROJECT_DIR); pemicu: $ACTION_TRIGGER; tidak dieksekusi, jatah tidak dipakai"
+  log "INFO DRY_RUN: akan menjalankan: docker compose $FILES_DESC $ACTION_CMD_LINE (di $PROJECT_DIR); pemicu: $ACTION_TRIGGER; tidak dieksekusi, jatah tidak dipakai"
   note_transition "unhealthy"
   finish_run 1 "unhealthy" "$EPISODE_FIRST" "DRY_RUN: akan $ACTION_CMD_LINE" "$PRE_FP" "$PRE_EXITED" "$PRE_FAIL" \
     "DRY_RUN: akan $ACTION_CMD_LINE (tidak dieksekusi)"
@@ -1537,6 +1640,12 @@ fi
 parse_action_payload "$REMOTE_PAYLOAD"
 ACTION_OUT_SAFE="$(safe_line "$ACTION_OUT")"
 log "INFO tindakan: $ACTION_CMD_LINE pemicu=$ACTION_TRIGGER rc=$ACTION_RC out=[$ACTION_OUT_SAFE]"
+if [ "${ACTION_GUARD:-}" != "ok" ]; then
+  log "ERROR tindakan ditolak guard compose: $ACTION_GUARD (rc=$ACTION_RC); jatah tidak dipakai, tanpa polling"
+  note_transition "unhealthy"
+  finish_run 1 "unhealthy" "$EPISODE_FIRST" "ditolak guard compose ($ACTION_GUARD): $ACTION_CMD_LINE" "$PRE_FP" "$PRE_EXITED" "$PRE_FAIL" \
+    "GUARD COMPOSE: tindakan ditolak ($ACTION_GUARD), tanpa polling"
+fi
 quota_record "$Q_SERVICE" "$Q_SIGNATURE" "$PRE_FP" "$(date +%s)"
 SAVE_SIG="$Q_SIGNATURE"
 if [ "$ACTION_KIND" = "up" ] && [ -n "$RESUME_AT" ]; then

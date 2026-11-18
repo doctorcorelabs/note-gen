@@ -80,7 +80,9 @@ Bersama:
 | `NOTEGEN_CADDY_PORT` | `3200` | port host Caddy (kandidat K-05) |
 | `NOTEGEN_API_PORT` | `3001` | port API di dalam container |
 | `NOTEGEN_PROJECT_DIR` | `/data/home/note-gen-web` | direktori rakitan compose di muse-2 |
-| `NOTEGEN_COMPOSE_FILE` | `docker-compose.yml` | berkas compose di direktori rakitan |
+| `NOTEGEN_COMPOSE_FILE` | `docker-compose.yml` | berkas dasar compose di direktori rakitan |
+| `NOTEGEN_COMPOSE_OVERRIDE_FILE` | `docker-compose.override.yml` | berkas override compose di direktori rakitan; selalu dipakai bersama berkas dasar (lihat seksi bentuk pemanggilan) |
+| `NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE` | `0` | `1` = izinkan bentuk satu berkas secara eksplisit; tercatat di log tiap run |
 | `NOTEGEN_INTERNAL_PROBE_TIMEOUT` | `10` | timeout detik probe internal |
 | `NOTEGEN_LOG_DIR` | `~/workspace/notegen-watchdog-logs` | direktori log + state (D-W6) |
 | `NOTEGEN_MAINTENANCE_FILE` | `$NOTEGEN_LOG_DIR/MAINTENANCE` | sinyal pemeliharaan (D-W3) |
@@ -102,6 +104,40 @@ Khusus compose: `NOTEGEN_COMPOSE_POLL_INTERVAL` (default 15),
 `NOTEGEN_QUOTA_WINDOW_SECONDS` (default 3600),
 `NOTEGEN_RESUME_GRACE_WORKER_SECONDS` (default 360),
 `NOTEGEN_RESUME_GRACE_GENERAL_SECONDS` (default 180).
+
+## Bentuk pemanggilan compose (dua berkas)
+
+Bentuk kanonis semua pemanggilan compose watchdog adalah dua berkas:
+`docker compose -f docker-compose.yml -f docker-compose.override.yml ...`.
+Satu `-f` menjatuhkan pemuatan otomatis `docker-compose.override.yml`
+oleh Compose, sehingga image terurai ke `PLACEHOLDER_TAG` di berkas
+dasar dan registry menolak pull (F-ABC-A1, AD-195/AD-196: API mati
+15 menit 42 detik pada Uji A). Bentuk satu berkas tidak pernah dipakai
+secara diam-diam oleh skrip mana pun.
+
+Setiap templat perintah jarak jauh memeriksa keberadaan kedua berkas
+di muse-2 sebelum memanggil compose dan melaporkan hasilnya sebagai
+`COMPOSE_GUARD` (kumpul probe, diagnosis) atau `ACTION_GUARD`
+(tindakan). Nilai guard: `ok`, `missing_base`, `missing_override`,
+`no_project_dir`, dan khusus tindakan `placeholder_image` serta
+`config_unresolved`. Guard kumpul probe atau tindakan yang bukan `ok` berarti run berakhir
+exit 1 tanpa tindakan (compose: tanpa pemakaian jatah dan tanpa
+polling; tunnel: tanpa restart), dengan baris `ERROR` di log. Guard
+diagnosis yang bukan `ok` dicatat sebagai `ERROR` dan hasil diagnosis
+tidak dipakai; tindakan sesudahnya tetap ditolak guard tindakan.
+Bentuk berkas yang dipakai tiap run tercatat pada baris log
+`compose_files` dan pada baris `probe_internal`/`diagnosis`.
+
+Tindakan `up` (stack maupun per-service atas container hilang)
+ditolak tambahan bila `docker compose config` atas bentuk dua
+berkas masih memuat `PLACEHOLDER_TAG`, atau bila konfigurasi tidak
+dapat diurai. Keluaran `config` hanya diuji polanya dan tidak pernah
+dicatat. Tindakan `restart` tidak memakai uji placeholder (restart
+tidak mengurai image) tetapi tetap tunduk pada guard keberadaan
+berkas. Bentuk satu berkas hanya lewat
+`NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE=1` yang eksplisit; penolakan
+placeholder untuk `up` tetap berlaku pada bentuk itu. Baris log
+`DRY_RUN` menampilkan bentuk berkas yang persis akan dipakai.
 
 ## Berkas token (milik Q1A, bukan skrip ini)
 
@@ -136,14 +172,21 @@ Hanya subcommand `ib.py` `exec` dan `get` yang dipakai (selalu `--id`).
 Perintah remote yang dijalankan:
 
 - Kumpul probe (baca saja): `curl` loopback ke Caddy (ready + live),
-  `docker compose exec api` (ready + live langsung), `docker compose ps`
-  (compose saja). Semua di dalam direktori proyek + berkas compose proyek.
+  `docker compose -f <dasar> -f <override> exec api` (ready + live
+  langsung), `docker compose -f <dasar> -f <override> ps` (compose
+  saja). Semua di dalam direktori proyek + kedua berkas compose,
+  sesudah guard keberadaan berkas lulus (lihat seksi bentuk
+  pemanggilan).
 - Diagnosis compose (baca saja): `pg_isready` di container postgres,
-  stat direktori workspace dari container api (tanpa mengubah apa pun).
-- Tindakan compose: `docker compose restart <service>` (allowlist:
-  caddy/web/api/postgres/worker), `docker compose up -d <service>` bila
-  container service hilang, atau `docker compose up -d` seluruh stack
-  hanya untuk kondisi seksi 2.4. Tanpa flag build/recreate paksa.
+  stat direktori workspace dari container api (tanpa mengubah apa pun),
+  keduanya lewat bentuk dua berkas + guard yang sama.
+- Tindakan compose: `docker compose -f <dasar> -f <override> restart
+  <service>` (allowlist: caddy/web/api/postgres/worker),
+  `docker compose -f <dasar> -f <override> up -d <service>` bila
+  container service hilang, atau `... up -d` seluruh stack hanya
+  untuk kondisi seksi 2.4; tindakan `up` ditolak guard bila
+  konfigurasi terurai memuat `PLACEHOLDER_TAG`. Tanpa flag
+  build/recreate paksa.
 - Tindakan tunnel: menjalankan launcher di atas, tidak ada yang lain.
 
 Skrip tidak menjalankan perintah penghapus data/volume, pembersihan image
@@ -224,6 +267,9 @@ jalan manual sehat per skrip dari path itu.
   infra) dan path launcher mengikuti slot rakitan/Q1A; default di sini
   adalah nilai harapan yang wajib dikonfirmasi saat setup dan dicatat di
   runbook. Watchdog gagal aman (tanpa tindakan) bila artefaknya tidak ada.
+  Berkas override wajib ada secara default; bentuk satu berkas hanya
+  lewat `NOTEGEN_COMPOSE_ALLOW_SINGLE_FILE=1` (lihat seksi bentuk
+  pemanggilan).
 - Compose deploy di trunk tidak memiliki service `worker` (G2/K-13):
   watchdog tidak pernah me-restart service yang tidak ada; kegagalan
   worker tanpa service worker berarti eskalasi. Set
