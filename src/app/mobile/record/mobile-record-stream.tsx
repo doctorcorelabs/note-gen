@@ -391,7 +391,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
   }
 
   async function handleMove(mark: Mark, targetTagId: number) {
-    await updateMarkTag(mark.id, targetTagId)
+    await updateMarkTag(mark.id, targetTagId, mark.version)
     await refreshRecords()
   }
 
@@ -424,7 +424,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
   async function handleMoveSelected(targetTagId: number) {
     const targets = filteredRecords.filter((item: Mark) => selectedIds.has(item.id))
     for (const item of targets) {
-      await updateMarkTag(item.id, targetTagId)
+      await updateMarkTag(item.id, targetTagId, item.version)
     }
     setSelectedIds(new Set())
     setMoveSelectedOpen(false)

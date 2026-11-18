@@ -63,6 +63,7 @@ import {
   applyRevisionConflictChoice,
   deriveCopyPath,
   extractConflictPayload,
+  isAlreadyExistsLike,
   isRevisionConflictLike,
   toRevisionConflictInfo,
   type RevisionConflictChoice,
@@ -3256,12 +3257,15 @@ const useArticleStore = create<NoteState>((set, get) => ({
     const pathOptions = await getFilePathOptions(fullPath)
     
     // 写入空文件
+    // DA-12-11: createNew (If-None-Match: *) so a colliding name
+    // fails instead of blanking an existing file. Desktop adapters
+    // ignore the option; the web adapter enforces it.
     if (await writeSelfHostedWorkspaceText(fullPath, '')) {
       // Rust journal already persisted the synchronized file.
     } else if (workspace.isCustom) {
-      await platform.fs.writeTextFile(pathOptions.path, '')
+      await platform.fs.writeTextFile(pathOptions.path, '', { createNew: true })
     } else {
-      await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+      await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir, createNew: true })
     }
 
     // 更新树
@@ -3696,16 +3700,34 @@ const useArticleStore = create<NoteState>((set, get) => ({
           if (await writeSelfHostedWorkspaceText(actualPath, '')) {
             // Rust journal already persisted the file.
           } else if (!pathOptions.baseDir) {
-            await platform.fs.writeTextFile(pathOptions.path, '')
+            // DA-12-11: createNew, as in newFileOnFolder: a file
+            // created between the stat and this write must never be
+            // blanked. A collision falls into the catch below, which
+            // reads the existing file instead.
+            await platform.fs.writeTextFile(pathOptions.path, '', { createNew: true })
           } else {
-            await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+            await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir, createNew: true })
           }
           await refreshLoadedArticleRevision(actualPath, pathOptions)
           if (isCurrentArticleRead()) {
             set({ currentArticle: '', loading: false })
           }
-        } catch {
-          if (isCurrentArticleRead()) {
+        } catch (error) {
+          if (isAlreadyExistsLike(error) && isCurrentArticleRead()) {
+            try {
+              const existing = !pathOptions.baseDir
+                ? await platform.fs.readTextFileDetailed(pathOptions.path)
+                : await platform.fs.readTextFileDetailed(pathOptions.path, { baseDir: pathOptions.baseDir })
+              setLoadedArticleRevision(actualPath, existing.revision)
+              if (isCurrentArticleRead()) {
+                set({ currentArticle: existing.content, loading: false })
+              }
+            } catch {
+              if (isCurrentArticleRead()) {
+                get().setLoading(false)
+              }
+            }
+          } else if (isCurrentArticleRead()) {
             get().setLoading(false)
           }
         }

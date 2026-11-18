@@ -675,9 +675,17 @@ export class KindRecordsApi implements RecordsApiPort {
       ...(body.desc !== undefined ? { desc: body.desc } : {}),
       ...(body.url !== undefined ? { url: body.url } : {}),
     };
-    if (body.force === true || body.expectedVersion === undefined) {
+    if (body.force === true) {
       await this.call(() =>
         this.sql.execute({ kind: "marks.update", id: markId, patch }),
+      );
+    } else if (body.expectedVersion === undefined) {
+      // DA-11-10: fail closed like updateRecordTags. A missing
+      // guard used to mean an unguarded write, the same as force;
+      // callers that forget expectedVersion must hear about it
+      // instead of overwriting silently.
+      throw new Error(
+        "updateRecord needs expectedVersion unless force is true.",
       );
     } else {
       await this.call(() =>

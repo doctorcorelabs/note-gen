@@ -14,6 +14,7 @@ import { getFileCommits as getGiteeFileCommits, getFiles as getGiteeFiles, decod
 import { getFileCommits as getGitlabFileCommits, getFileContent as getGitlabFileContent } from '@/lib/sync/gitlab'
 import { getFileCommits as getGiteaFileCommits, getFileContentFromCommit as getGiteaFileContentFromCommit, getGiteaApiBaseUrl } from '@/lib/sync/gitea'
 import { saveLocalFile } from '@/lib/sync/auto-sync'
+import { isRevisionConflictError } from '@/lib/platform/fs/errors'
 import { updateFileSyncTime, updateFileRestoreTime } from '@/lib/sync/conflict-resolution'
 import { toast } from '@/hooks/use-toast'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -256,9 +257,14 @@ export function HistorySheet({ editor, prepareExternalAction, onMarkdownChange }
       }
     } catch (error) {
       console.error('Failed to restore version:', error)
+      // DA-12-11: a revision conflict means the guarded restore was
+      // refused and the current file is untouched. Say so, like the
+      // editor conflict dialog does, instead of a generic failure.
       toast({
         title: 'Restore failed',
-        description: 'Unable to restore the file from a previous version',
+        description: isRevisionConflictError(error)
+          ? 'The file changed since this version was loaded. Nothing was overwritten; reload the file and try again.'
+          : 'Unable to restore the file from a previous version',
         variant: 'destructive'
       })
     } finally {

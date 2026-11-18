@@ -4845,6 +4845,8 @@
           "deleteSelected": "将所选移入废纸篓",
           "restoreSelected": "恢复所选",
           "deleteForeverSelected": "永久删除所选",
+          "deleteForeverSelectedConfirmTitle": "永久删除选中的 {count} 条记录？",
+          "deleteForeverSelectedConfirmDescription": "此操作无法撤销，选中的 {count} 条记录及其附件将被永久删除。",
           "clearSelection": "清除选择",
           "movePartial": "部分记录未能更新，请刷新列表后重试。",
           "errorLoading": "记录加载失败，请重试。",

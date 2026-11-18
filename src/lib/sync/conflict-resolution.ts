@@ -242,26 +242,41 @@ export async function resolveConflict(
 
 /**
  * 提示用户选择冲突解决方案
+ *
+ * DA-12-11: in web mode the confirm dialog delegates to the
+ * DialogService, whose mounting is follow-up work (AD-124 P-6);
+ * until it exists, confirm throws a capability error. A missing
+ * dialog must resolve to manual handling (no write, user decides),
+ * never to a guessed side and never to a silent sync failure.
  */
 async function promptUserForResolution(
   filePath: string,
   localContent: string,
   remoteContent: string
 ): Promise<ConflictResolution> {
-  const choice = await platform.dialog.confirm(
-    `File ${filePath} has a conflict\n\n` +
-    `Local version: ${localContent.length} characters\n` +
-    `Remote version: ${remoteContent.length} characters\n\n` +
-    `Choose how to handle it:\n` +
-    `• Confirm: keep the local version\n` +
-    `• Cancel: keep the remote version`,
-    { 
-      title: 'Sync conflict',
-      okLabel: 'Keep local',
-      cancelLabel: 'Keep remote'
+  let choice: boolean
+  try {
+    choice = await platform.dialog.confirm(
+      `File ${filePath} has a conflict\n\n` +
+      `Local version: ${localContent.length} characters\n` +
+      `Remote version: ${remoteContent.length} characters\n\n` +
+      `Choose how to handle it:\n` +
+      `• Confirm: keep the local version\n` +
+      `• Cancel: keep the remote version`,
+      {
+        title: 'Sync conflict',
+        okLabel: 'Keep local',
+        cancelLabel: 'Keep remote'
+      }
+    )
+  } catch (error) {
+    console.error('Sync conflict dialog could not be shown:', error)
+    return {
+      action: 'manual',
+      reason: 'The conflict dialog could not be shown, so no version was chosen automatically.'
     }
-  )
-  
+  }
+
   return {
     action: choice ? 'keep_local' : 'keep_remote',
     reason: choice ? 'The user chose to keep the local version' : 'The user chose to keep the remote version'

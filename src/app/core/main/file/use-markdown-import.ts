@@ -36,6 +36,27 @@ async function getAvailableMarkdownPath(targetDir: string, fileName: string) {
   return candidate
 }
 
+// DA-12-11: folder import must not overwrite an existing workspace
+// file through copyFile without a dialog. The document import above
+// already avoids overwrites with getAvailableMarkdownPath; folder
+// import gets the same treatment, preserving the exact file name
+// and extension. A colliding name lands on a suffixed copy, so an
+// import can never blank an existing file.
+async function getAvailableCopyPath(targetDir: string, fileName: string) {
+  let candidate = await platform.path.join(targetDir, fileName)
+  let suffix = 1
+  const dot = fileName.lastIndexOf('.')
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName
+  const ext = dot > 0 ? fileName.slice(dot) : ''
+
+  while (await platform.fs.exists(candidate)) {
+    candidate = await platform.path.join(targetDir, `${stem} (${suffix})${ext}`)
+    suffix += 1
+  }
+
+  return candidate
+}
+
 async function copyMarkdownFilesRecursively(
   sourceDir: string,
   targetDir: string,
@@ -51,7 +72,6 @@ async function copyMarkdownFilesRecursively(
 
     const sourcePath = await platform.path.join(sourceDir, entry.name)
     const nextRelativePath = relativePath ? await platform.path.join(relativePath, entry.name) : entry.name
-    const targetPath = await platform.path.join(targetDir, nextRelativePath)
 
     if (entry.isDirectory) {
       copiedCount += await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath)
@@ -73,7 +93,8 @@ async function copyMarkdownFilesRecursively(
       await platform.fs.mkdir(targetDirectory, { recursive: true })
     }
 
-    await platform.fs.copyFile(sourcePath, targetPath)
+    const availableTarget = await getAvailableCopyPath(targetDirectory, entry.name)
+    await platform.fs.copyFile(sourcePath, availableTarget)
     copiedCount++
   }
 

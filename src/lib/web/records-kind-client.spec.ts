@@ -692,6 +692,20 @@ describe("KindRecordsApi guards", () => {
     expect(forced.content).toBe("forced");
   });
 
+  it("fails closed when updateRecord has no expectedVersion and no force", async () => {
+    const { api } = makeApi();
+    const record = await api.createRecord(buildTextCreateBody("v1", { tagIds: [1] }));
+    await expect(
+      api.updateRecord(record.id, { content: "unguarded", desc: "unguarded" }),
+    ).rejects.toThrow(/expectedVersion/);
+    const forced = await api.updateRecord(record.id, {
+      content: "forced",
+      desc: "forced",
+      force: true,
+    });
+    expect(forced.content).toBe("forced");
+  });
+
   it("guards tag sets and converts a version-only guard", async () => {
     const { api } = makeApi();
     const record = await api.createRecord(buildTextCreateBody("x", { tagIds: [1] }));

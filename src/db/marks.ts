@@ -30,6 +30,10 @@ export interface Mark {
   /** The primary tag remains tagId for compatibility with chats and save targets. */
   tagIds?: number[]
   tagUpdatedAt?: number
+  /** Row version from the kind row. Present on every record read through
+   *  this module; required by updateMark/updateMarkTag/updateMarks as the
+   *  optimistic guard (DA-11-08). Absent only on rows built by hand. */
+  version?: number
   type: 'scan' | 'text' | 'image' | 'link' | 'file' | 'recording' | 'todo'
   content?: string
   desc?: string
@@ -211,6 +215,7 @@ function toMark(row: SqlMarkRow): Mark {
     tagId: row.tagId,
     tagIds: recordTagIds({ tagId: row.tagId, tagIds: row.tagIds }),
     tagUpdatedAt: row.tagUpdatedAt,
+    version: row.version,
     type: row.type,
     content: row.content,
     desc: row.desc,
@@ -337,12 +342,28 @@ export async function getMarkById(id: number) {
   return row === null ? undefined : toMark(row)
 }
 
-export async function updateMarkTag(id: number, tagId: number) {
+// DA-11-08: every marks.update from this module carries the version
+// the caller loaded, exactly like the web detail's expectedVersion.
+// A missing version fails closed instead of overwriting silently;
+// callers must read the record first. The fresh row read inside
+// updateMark exists only for the asset comparison and is never used
+// as the guard: guarding on a just-read version would be vacuous
+// (the DA-11-09 pattern) and would hide concurrent edits.
+function requireMarkVersion(version: number | undefined, id: number): number {
+  if (typeof version !== 'number' || !Number.isFinite(version)) {
+    throw new Error(`updateMark needs mark.version for record ${id} (read the record first); refusing an unguarded overwrite.`)
+  }
+  return version
+}
+
+export async function updateMarkTag(id: number, tagId: number, expectedVersion?: number) {
   // Migrated to kind `marks.update` in wave 5 (D-DEMO-3). Moving
   // the primary tag keeps the additional tags, per design 1.3
   // rule 3; the handler answers 400 when the new primary names no
-  // tag in the workspace.
-  const result = await getSqlAdapter().execute({ kind: 'marks.update', id, patch: { tagId } })
+  // tag in the workspace. Guarded (DA-11-08): the caller passes
+  // the version it loaded; a missing version fails closed.
+  const version = requireMarkVersion(expectedVersion, id)
+  const result = await getSqlAdapter().execute({ kind: 'marks.update', id, patch: { tagId }, expected: { version } })
   enqueueRecordsAutoSync('mark:update-tag')
   await invalidateMarkKnowledgeIndex(id)
   enqueueMarkKnowledgeIndex(id)
@@ -418,9 +439,13 @@ export async function updateMark(mark: Mark) {
   // Migrated to kind `marks.update` in wave 5 (D-DEMO-3). The
   // previous row is read back for the asset comparison, as
   // upstream; a missing or soft-deleted row answers 404 from the
-  // handler instead of writing zero rows silently.
+  // handler instead of writing zero rows silently. Guarded
+  // (DA-11-08): the write carries mark.version, the version the
+  // editing surface loaded, and a 409 surfaces to the caller
+  // instead of overwriting a concurrent edit.
+  const version = requireMarkVersion(mark.version, mark.id)
   const previous = await getMarkById(mark.id)
-  const result = await getSqlAdapter().execute({ kind: 'marks.update', id: mark.id, patch: toMarkPatch(mark) })
+  const result = await getSqlAdapter().execute({ kind: 'marks.update', id: mark.id, patch: toMarkPatch(mark), expected: { version } })
   if (
     previous &&
     JSON.stringify(getMarkLocalAssetPaths(previous).sort())
@@ -552,10 +577,13 @@ export async function clearTrash() {
 export async function updateMarks(marks: Mark[]) {
   // Migrated to kind `marks.update` in wave 5 (D-DEMO-3), one call
   // per row in order, as the upstream loop. `createdAt` is no
-  // longer rewritten per row.
+  // longer rewritten per row. Guarded (DA-11-08): every row must
+  // carry the version its caller loaded; a row without one fails
+  // the whole call before any write, like updateMark.
+  const guarded = marks.map(mark => ({ mark, version: requireMarkVersion(mark.version, mark.id) }))
   try {
-    for (const mark of marks) {
-      await getSqlAdapter().execute({ kind: 'marks.update', id: mark.id, patch: toMarkPatch(mark) })
+    for (const { mark, version } of guarded) {
+      await getSqlAdapter().execute({ kind: 'marks.update', id: mark.id, patch: toMarkPatch(mark), expected: { version } })
     }
     enqueueRecordsAutoSync('mark:bulk-update')
     for (const mark of marks) await invalidateMarkKnowledgeIndex(mark.id)
@@ -601,12 +629,12 @@ export async function restoreMarks(ids: number[]) {
 /** Compare the complete old row in SQL so a plugin cannot overwrite concurrent edits. */
 export async function updatePluginTextRecord(previous: Mark, next: Mark, beforeWrite: () => Promise<void>) {
   // NOT migrated in wave 5 (D-DEMO-3): the guard compares the
-  // complete old row, and `Mark` carries no version for the kind
-  // `expected` guard, so no kind call expresses this compare
-  // without a read-then-write race. Its only caller is the plugin
-  // records module, whose own read path is still unmigrated. It
-  // still fails loudly through `getDb` until that module migrates
-  // with a version-carrying read.
+  // complete old row. `Mark` now optionally carries a version
+  // (DA-11-08), but this function's callers read through the
+  // unmigrated plugin path, so no version reaches it here and no
+  // kind call expresses this compare without a read-then-write
+  // race. It still fails loudly through `getDb` until that module
+  // migrates with a version-carrying read.
   const db = await getDb()
   await beforeWrite()
   const result = await db.execute(

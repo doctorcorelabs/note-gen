@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -86,19 +86,45 @@ export function WebRecordDetail({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmPermanent, setConfirmPermanent] = useState(false);
+  // DA-11-12: the parent hands this dialog a new record object on
+  // every change (tag save, conflict reload). Resetting the edit
+  // draft on object identity discarded in-progress edits, so the
+  // full reset runs only when a different record arrives or the
+  // dialog opens fresh; same-record updates refresh the
+  // guard-bearing snapshot and leave drafts, notices, and the
+  // confirm dialog alone.
+  const lastDetailRecordIdRef = useRef<number | null>(null);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    setCurrent(record);
-    setEditing(false);
-    setNotice(null);
-    setConfirmPermanent(false);
+    const opened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    const recordId = record ? record.id : null;
+    const switched = recordId !== lastDetailRecordIdRef.current;
+    lastDetailRecordIdRef.current = recordId;
+    if (opened || switched) {
+      setCurrent(record);
+      setEditing(false);
+      setNotice(null);
+      setConfirmPermanent(false);
+      if (record) {
+        setEditText(record.content);
+        setSelectedTagIds(record.tagIds);
+        const todo = parseTodoContent(record.content, record.desc);
+        setTodoTitle(todo.title);
+        setTodoDescription(todo.description);
+        setTodoPriority(todo.priority);
+      }
+      return;
+    }
     if (record) {
-      setEditText(record.content);
-      setSelectedTagIds(record.tagIds);
-      const todo = parseTodoContent(record.content, record.desc);
-      setTodoTitle(todo.title);
-      setTodoDescription(todo.description);
-      setTodoPriority(todo.priority);
+      // Same record, new identity: adopt the fresher snapshot so
+      // the next save guards on the current version, but never
+      // downgrade to an older snapshot the parent still holds.
+      setCurrent((prev) => {
+        if (!prev || prev.id !== record.id) return record;
+        return record.version >= prev.version ? record : prev;
+      });
     }
   }, [record, open]);
 
@@ -110,13 +136,26 @@ export function WebRecordDetail({
   const showNoContent = hasNoExtractedContent(current);
   const todo = parseTodoContent(current.content, current.desc);
 
-  async function reload() {
+  async function reload(syncTags = false) {
     try {
       const fresh = await api.getRecord(current!.id);
       setCurrent(fresh);
       onRecordChanged(fresh);
-      setSelectedTagIds(fresh.tagIds);
-      setEditText(fresh.content);
+      // DA-11-12: a post-conflict reload must not discard drafts.
+      // Tag selection syncs only after a tag conflict (syncTags)
+      // or when the user has no unsaved tag change; the text and
+      // todo drafts survive whenever the user is editing, and the
+      // next save guards on the fresh version above.
+      if (syncTags || !tagsChanged) {
+        setSelectedTagIds(fresh.tagIds);
+      }
+      if (!editing) {
+        setEditText(fresh.content);
+        const todo = parseTodoContent(fresh.content, fresh.desc);
+        setTodoTitle(todo.title);
+        setTodoDescription(todo.description);
+        setTodoPriority(todo.priority);
+      }
       return fresh;
     } catch {
       setNotice(t("notFound"));
@@ -197,7 +236,7 @@ export function WebRecordDetail({
     } catch (error) {
       if (apiErrorWireCode(error) === "record_tags_changed") {
         setNotice(t("tagsConflict"));
-        await reload();
+        await reload(true);
       } else {
         setNotice(tList("errorGeneric"));
       }

@@ -10,6 +10,16 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -72,6 +82,11 @@ export function WebInboxList({
 }: WebInboxListProps) {
   const t = useTranslations("record.mark.inbox.list");
   const [moveTarget, setMoveTarget] = useState<string>("");
+  // DA-11-16: bulk permanent delete needs the same explicit
+  // confirmation as the single-record dialog in the detail view;
+  // a stray click on a large selection must never delete forever.
+  const [confirmPermanentSelected, setConfirmPermanentSelected] =
+    useState(false);
 
   if (loading && records.length === 0) {
     return <p className="p-4 text-sm text-zinc-500">{t("loading")}</p>;
@@ -102,6 +117,7 @@ export function WebInboxList({
   const selectedSet = new Set(selectedIds);
 
   return (
+    <>
     <div className="flex min-h-0 flex-1 flex-col">
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b p-2">
@@ -156,7 +172,7 @@ export function WebInboxList({
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => onSelectionAction("permanent", selectedIds)}
+                onClick={() => setConfirmPermanentSelected(true)}
               >
                 {t("deleteForeverSelected")}
               </Button>
@@ -228,5 +244,37 @@ export function WebInboxList({
         </div>
       )}
     </div>
+
+      <AlertDialog
+        open={confirmPermanentSelected}
+        onOpenChange={setConfirmPermanentSelected}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("deleteForeverSelectedConfirmTitle", {
+                count: selectedIds.length,
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("deleteForeverSelectedConfirmDescription", {
+                count: selectedIds.length,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmPermanentSelected(false);
+                onSelectionAction("permanent", selectedIds);
+              }}
+            >
+              {t("confirmAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
