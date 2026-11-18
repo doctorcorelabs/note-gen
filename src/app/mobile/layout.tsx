@@ -30,6 +30,7 @@ import AppStatus from "@/components/app-status"
 import useMarkStore from "@/stores/mark"
 import useCanvasStore from "@/stores/canvas"
 import { PluginHostBridge } from "@/components/plugins/plugin-host-bridge"
+import { SessionGuard } from "@/components/web-chrome"
 
 const WritingScreen = dynamic(
   () => import('./writing/writing-screen').then(module => module.WritingScreen),
@@ -259,7 +260,14 @@ export default function RootLayout({
     || (isRecordDetailRoute && cachedMarkId !== null)
     || (isCanvasEditorRoute && Boolean(cachedCanvasId))
 
+  // Web fork (DA-01-F01): the session guard is the second seam after
+  // the boot guard in src/app/page.tsx, exactly as in
+  // src/app/core/layout.tsx. It probes the session before the mobile
+  // shell renders, blocks deep links without a proven session, and
+  // redirects to the login page on expiry. In the native shell it
+  // renders children unchanged.
   return (
+    <SessionGuard>
     <MobileModeProvider mobile>
       <ThemeProvider
         attribute="class"
@@ -323,5 +331,6 @@ export default function RootLayout({
         </TextSizeProvider>
       </ThemeProvider>
     </MobileModeProvider>
+    </SessionGuard>
   );
 }

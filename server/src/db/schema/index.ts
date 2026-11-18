@@ -45,6 +45,7 @@ import {
   rateLimitBuckets,
   recoveryCodes,
   totpCredentials,
+  totpEnrollmentStages,
 } from './m8-auth.js';
 import { activityEvents, markTags, marks, notes, tags } from './m2-records.js';
 import { chatMessages, conversationCompactions, conversations } from './m3-conversations.js';
@@ -67,6 +68,7 @@ export const schema = {
   idempotencyKeys,
   agentTokens,
   totpCredentials,
+  totpEnrollmentStages,
   recoveryCodes,
   loginChallenges,
   accountActionTokens,

@@ -18,14 +18,19 @@
 // inclusive boundary, session rotation that preserves the absolute
 // expiry and createdAt, one generic 401 invalid_credentials for
 // every verification failure (wrong password, missing/wrong/
-// replayed TOTP code, missing credential), a current TOTP code
-// required for TOTP accounts, an own per-account failure bucket (5
-// per 15 minutes) that never touches the login lockout, and
-// step_up_required never answered by the step-up endpoint itself.
+// replayed TOTP code, missing credential, missing/used/wrong
+// recovery code, both or neither second factor), a current TOTP
+// code or one unused recovery code required for TOTP accounts
+// (exactly one of the two), a recovery code consumed once and
+// audited as recovery_code_used when it steps up, an own
+// per-account failure bucket (5 per 15 minutes) that never
+// touches the login lockout, and step_up_required never answered
+// by the step-up endpoint itself.
 
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { deriveSealKey, sealTotpSecret } from '../src/auth/totp-seal.js';
+import { recoveryCodeHash } from '../src/services/auth/totp-enroll.js';
 import { currentTotpCounter, decodeBase32, totpCodeAt } from '../src/auth/totp-verify.js';
 import { STEP_UP_WINDOW_MS } from '../src/auth/values.js';
 import { isStepUpFreshForRow, requireFreshStepUp } from '../src/services/auth/step-up.js';
@@ -52,6 +57,11 @@ const TOTP_PASSWORD = 'fixture-stepup-totp-password-1';
 // RFC 6238 test-vector style Base32 secret, fixture only.
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
 const MINUTE_MS = 60_000;
+// Recovery codes for the step-up tests. Alphabet-valid per
+// desain-auth.md section 1.4 (no l, o, 0, or 1); the server only
+// ever sees their hashes.
+const RECOVERY_CODE = 'abcd-efgh-ijkm-npqr';
+const SECOND_RECOVERY_CODE = 'stuv-wxyz-2345-6789';
 
 const apps: FastifyInstance[] = [];
 
@@ -545,5 +555,91 @@ describe('POST /api/auth/step-up with TOTP', () => {
     const res = await stepUp(app, totp, { password: TOTP_PASSWORD, code: currentCode(fixture.clock.nowMs) });
     expect(res.statusCode).toBe(401);
     expect(bodyOf(res).error?.code).toBe('invalid_credentials');
+  });
+});
+
+describe('POST /api/auth/step-up with a recovery code (DA-02-F04)', () => {
+  it('succeeds with the password plus one unused recovery code, consumes it once, and audits prominently', async () => {
+    const { fixture, app } = await setup();
+    const { userId } = await seedTotpUser(fixture);
+    fixture.store.seedRecoveryCode(userId, recoveryCodeHash(RECOVERY_CODE));
+    const totp = await loginTotpUser(app, fixture);
+    fixture.clock.advance(31_000);
+    const res = await stepUp(app, totp, { password: TOTP_PASSWORD, recoveryCode: RECOVERY_CODE });
+    expect(res.statusCode).toBe(200);
+    expect(await fixture.store.countUnusedRecoveryCodes(userId)).toBe(0);
+    expect(fixture.store.auditEvents.map((event) => event.eventType)).toContain('recovery_code_used');
+    const succeeded = fixture.store.auditEvents.find((event) => event.eventType === 'step_up_succeeded');
+    expect(succeeded?.metadata).toMatchObject({ recoveryCodeUsed: true });
+    // The fresh step-up unlocks a sensitive action, which is the
+    // seam TOTP management checks: the recovery dead end is gone.
+    const creds: Creds = {
+      cookie: cookieFromResponse(res) as string,
+      csrfToken: (bodyOf(res).data as { csrfToken: string }).csrfToken,
+      userId,
+    };
+    const all = await app.inject({
+      method: 'POST',
+      url: '/api/auth/logout-all',
+      headers: sessionHeaders(creds.cookie, creds.csrfToken, { 'content-type': 'application/json' }),
+      payload: {},
+    });
+    expect(all.statusCode).toBe(200);
+    expect(fixture.store.sessions.size).toBe(0);
+  });
+
+  it('a valid recovery code is not consumed when the password is wrong', async () => {
+    const { fixture, app } = await setup();
+    const { userId } = await seedTotpUser(fixture);
+    fixture.store.seedRecoveryCode(userId, recoveryCodeHash(RECOVERY_CODE));
+    const totp = await loginTotpUser(app, fixture);
+    fixture.clock.advance(31_000);
+    const failed = await stepUp(app, totp, { password: WRONG_PASSWORD, recoveryCode: RECOVERY_CODE });
+    expect(failed.statusCode).toBe(401);
+    expect(bodyOf(failed).error?.code).toBe('invalid_credentials');
+    expect(await fixture.store.countUnusedRecoveryCodes(userId)).toBe(1);
+    const ok = await stepUp(app, totp, { password: TOTP_PASSWORD, recoveryCode: RECOVERY_CODE });
+    expect(ok.statusCode).toBe(200);
+    expect(await fixture.store.countUnusedRecoveryCodes(userId)).toBe(0);
+  });
+
+  it('a used recovery code, both factors, and neither factor answer the generic 401 identically', async () => {
+    const { fixture, app } = await setup();
+    const plain = await seedLoggedInUser(fixture, app, { email: USER_EMAIL, password: USER_PASSWORD });
+    const wrongPassword = await stepUp(app, plain, { password: WRONG_PASSWORD });
+    const { userId } = await seedTotpUser(fixture);
+    const used = fixture.store.seedRecoveryCode(userId, recoveryCodeHash(RECOVERY_CODE));
+    expect(await fixture.store.markRecoveryCodeUsed(used.id, new Date(fixture.clock.nowMs))).toBe(true);
+    const totp = await loginTotpUser(app, fixture);
+    fixture.clock.advance(31_000);
+    const usedCode = await stepUp(app, totp, { password: TOTP_PASSWORD, recoveryCode: RECOVERY_CODE });
+    const both = await stepUp(app, totp, {
+      password: TOTP_PASSWORD,
+      code: currentCode(fixture.clock.nowMs),
+      recoveryCode: SECOND_RECOVERY_CODE,
+    });
+    const neither = await stepUp(app, totp, { password: TOTP_PASSWORD });
+    const wrongRecovery = await stepUp(app, totp, { password: TOTP_PASSWORD, recoveryCode: SECOND_RECOVERY_CODE });
+    expect(usedCode.statusCode).toBe(401);
+    expect(both.statusCode).toBe(401);
+    expect(neither.statusCode).toBe(401);
+    expect(wrongRecovery.statusCode).toBe(401);
+    expect(normalizedBody(usedCode)).toBe(normalizedBody(wrongPassword));
+    expect(normalizedBody(both)).toBe(normalizedBody(wrongPassword));
+    expect(normalizedBody(neither)).toBe(normalizedBody(wrongPassword));
+    expect(normalizedBody(wrongRecovery)).toBe(normalizedBody(wrongPassword));
+    expect(usedCode.body).not.toContain('verification');
+    expect(both.body).not.toContain('verification');
+  });
+
+  it('a recoveryCode field is ignored for accounts without TOTP', async () => {
+    const { fixture, app } = await setup();
+    const creds = await seedLoggedInUser(fixture, app, { email: USER_EMAIL, password: USER_PASSWORD });
+    const stray = fixture.store.seedRecoveryCode(creds.userId, recoveryCodeHash(RECOVERY_CODE));
+    const res = await stepUp(app, creds, { password: USER_PASSWORD, recoveryCode: RECOVERY_CODE });
+    expect(res.statusCode).toBe(200);
+    // Password-only step-up neither needs nor consumes the code.
+    expect(await fixture.store.countUnusedRecoveryCodes(creds.userId)).toBe(1);
+    expect(stray.usedAt).toBeNull();
   });
 });

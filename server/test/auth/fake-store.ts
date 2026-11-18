@@ -26,6 +26,7 @@ import {
   type RecoveryCodeRow,
   type TotpCredentialRow,
 } from '../../src/auth/store.js';
+import type { TotpEnrollmentStageRow } from '../../src/services/auth/totp-enroll.js';
 
 export class FakeAuthStore implements AuthStore {
   users = new Map<string, AuthUserRow>();
@@ -37,6 +38,10 @@ export class FakeAuthStore implements AuthStore {
   challenges = new Map<string, LoginChallengeRow>();
   challengesByHash = new Map<string, LoginChallengeRow>();
   totp = new Map<string, TotpCredentialRow>();
+  // Pending enrollment stages, mirroring totp_enrollment_stages.
+  // The enrollment fake owns stage writes; the credential map above
+  // holds live credentials only, exactly as in production.
+  stages = new Map<string, TotpEnrollmentStageRow>();
   recovery: RecoveryCodeRow[] = [];
   lockouts = new Map<string, AccountLockoutRow>();
   buckets = new Map<string, number>();
