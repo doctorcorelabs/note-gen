@@ -25,7 +25,7 @@ TAG="tunnel"
 # ---------------- Konfigurasi ----------------
 
 PUBLIC_URL="${NOTEGEN_PUBLIC_URL:-https://notegen.synapxs.my.id/api/health/ready}"
-TOKEN_FILE="${NOTEGEN_TOKEN_FILE:-$HOME/.config/notegen/service-token}"
+TOKEN_FILE="${NOTEGEN_TOKEN_FILE:-$HOME/.config/notegen-tunnel/service-token}"
 PROBE_TIMEOUT="${NOTEGEN_PROBE_TIMEOUT:-25}"
 INTERNAL_TIMEOUT="${NOTEGEN_INTERNAL_PROBE_TIMEOUT:-10}"
 IB_PY="${NOTEGEN_IB_PY:-$HOME/workspace/custom-connectors/custom.instabox-muse2/bin/ib.py}"
@@ -554,8 +554,19 @@ log_exec_failure() {
 CID=""
 SEC=""
 
+# $1: satu baris berkas token. Return 0 bila baris DITOLAK (kosong, atau
+# memuat spasi/tab/kutip/backslash, atau berprefix Bearer), 1 bila diterima.
+# Nilai baris tidak pernah dicatat.
+token_line_rejected() {
+  case "$1" in
+    ''|*' '*|*$'\t'*|*"'"*|*'"'*|Bearer*) return 0 ;;
+  esac
+  case "$1" in *$'\\'*) return 0 ;; esac
+  return 1
+}
+
 load_token() {
-  local perm="" line=""
+  local perm="" line="" line1="" line2="" n=0 bad=0
   if [ ! -f "$TOKEN_FILE" ]; then
     log "ERROR berkas token tidak ada: $TOKEN_FILE; gagal bersih exit 2 tanpa probe"
     return 2
@@ -564,18 +575,32 @@ load_token() {
   if [ "$perm" != "600" ]; then
     log "WARN berkas token bukan 0600 (mode=$perm): $TOKEN_FILE"
   fi
-  line="$(head -n 1 "$TOKEN_FILE" 2>/dev/null)"
-  line="${line%$'\r'}"
-  CID="${line%%:*}"
-  SEC="${line#*:}"
-  case "$line" in *' '*|*$'\t'*) CID=""; SEC="";;
-  esac
-  if [ -z "$CID" ] || [ -z "$SEC" ] || [ "$CID" = "$line" ]; then
+  CID=""
+  SEC=""
+  # Baca tepat 2 baris bernilai: baris 1 client id, baris 2 client secret.
+  # CR akhir baris di-strip (CRLF ditoleransi). Baris kosong akhir berkas
+  # dan newline final diterima; baris bernilai apa pun sesudah baris 2
+  # ditolak. Baris tanpa newline akhir tetap dibaca.
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"
+    if [ "$n" -eq 1 ]; then
+      line1="$line"
+    elif [ "$n" -eq 2 ]; then
+      line2="$line"
+    elif [ -n "$line" ]; then
+      bad=1
+    fi
+  done < "$TOKEN_FILE" 2>/dev/null
+  if [ "$bad" -ne 0 ] || [ "$n" -lt 2 ] \
+      || token_line_rejected "$line1" || token_line_rejected "$line2"; then
     CID=""
     SEC=""
-    log "ERROR format berkas token salah (harus satu baris id:secret); gagal bersih exit 2"
+    log "ERROR format berkas token salah (harus tepat 2 baris: baris 1 client id, baris 2 client secret); gagal bersih exit 2"
     return 2
   fi
+  CID="$line1"
+  SEC="$line2"
   return 0
 }
 
