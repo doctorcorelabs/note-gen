@@ -182,8 +182,11 @@ describe("raw HTML preservation (DA10-F02)", () => {
   });
 
   it("finds block HTML at a later line via start", () => {
-    expect(rawHtmlTokenizer.start("# Title\n\n<!-- note -->\n") ?? -1).toBeGreaterThan(0);
-    expect(rawHtmlTokenizer.start("<div>\n")).toBe(0);
-    expect(rawHtmlTokenizer.start("plain text\n")).toBe(-1);
+    const start = rawHtmlTokenizer.start;
+    expect(typeof start).toBe("function");
+    if (typeof start !== "function") return;
+    expect(start("# Title\n\n<!-- note -->\n")).toBeGreaterThan(0);
+    expect(start("<div>\n")).toBe(0);
+    expect(start("plain text\n")).toBe(-1);
   });
 });
