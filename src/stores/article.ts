@@ -4037,11 +4037,14 @@ const useArticleStore = create<NoteState>((set, get) => ({
           void pendingSave.commit().catch(() => undefined)
         }
         const previousSave = inFlightArticleSaves.get(path)
-        const savePromise = (async (): Promise<'written' | 'conflict' | 'discarded'> => {
+        // The outcome rides in an outer variable so the in-flight entry
+        // stays a plain Promise<void> for the shared queue map.
+        let justPulledOutcome: 'written' | 'conflict' | 'discarded' = 'discarded'
+        const savePromise = (async () => {
           // A failed earlier save must not poison this one: wait for
           // it to settle, then attempt the newer content regardless.
           if (previousSave) await previousSave.catch(() => undefined)
-          if (isFileDeletionPending(path)) return 'discarded'
+          if (isFileDeletionPending(path)) return
           // 只保存本地文件，不触发同步推送
           const pathOptions = await getFilePathOptions(path)
           if (await writeSelfHostedWorkspaceText(path, content)) {
@@ -4056,18 +4059,20 @@ const useArticleStore = create<NoteState>((set, get) => ({
               // Never overwrite and never drop the editor content. The
               // conflict dialog owns the next step.
               get().recordRevisionConflict(path, content, outcome.conflict)
-              return 'conflict'
+              justPulledOutcome = 'conflict'
+              return
             }
             await refreshLoadedArticleRevision(path, pathOptions)
           }
           if (get().activeFilePath === path) {
             set({ currentArticle: content })
           }
-          return 'written'
+          justPulledOutcome = 'written'
         })()
         inFlightArticleSaves.set(path, savePromise)
         try {
-          const outcome = await savePromise
+          await savePromise
+          const outcome = justPulledOutcome
           if (outcome === 'written') {
             get().updateArticleSaveStatus(path, {
               status: 'saved',
@@ -4132,11 +4137,14 @@ const useArticleStore = create<NoteState>((set, get) => ({
         })
 
         const previousSave = inFlightArticleSaves.get(path)
-        const commitPromise = (async (): Promise<'written' | 'conflict' | 'discarded'> => {
+        // The outcome rides in an outer variable so the in-flight entry
+        // stays a plain Promise<void> for the shared queue map.
+        let commitOutcome: 'written' | 'conflict' | 'discarded' = 'discarded'
+        const commitPromise = (async () => {
           // A failed earlier save must not poison this one: wait for
           // it to settle, then attempt the newer content regardless.
           if (previousSave) await previousSave.catch(() => undefined)
-          if (isFileDeletionPending(path)) return 'discarded'
+          if (isFileDeletionPending(path)) return
 
           // 执行实际保存操作
           const savePath = path
@@ -4185,7 +4193,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
               // (dirty mark, vector schedule, article-saved) are skipped
               // because nothing was saved.
               get().recordRevisionConflict(savePath, saveContent, outcome.conflict)
-              return 'conflict'
+              commitOutcome = 'conflict'
+              return
             }
             await refreshLoadedArticleRevision(savePath, pathOptions)
           }
@@ -4266,12 +4275,13 @@ const useArticleStore = create<NoteState>((set, get) => ({
           if (!shouldSkipSync && !isAbsoluteFsPath(savePath)) {
             emitter.emit('article-saved', { path: savePath, content: saveContent })
           }
-          return 'written'
+          commitOutcome = 'written'
         })()
 
         inFlightArticleSaves.set(path, commitPromise)
         try {
-          const outcome = await commitPromise
+          await commitPromise
+          const outcome = commitOutcome
           if (outcome === 'written') {
             get().updateArticleSaveStatus(path, {
               status: 'saved',
