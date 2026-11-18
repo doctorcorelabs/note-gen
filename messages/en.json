@@ -7090,7 +7090,8 @@
     "emptyAudioData": "Audio data is empty",
     "fileSelectFailed": "File selection failed",
     "fileProcessFailed": "File processing failed",
-    "speechRecognitionUnsupported": "The current browser does not support speech recognition. Please use Chrome, Edge, or Safari."
+    "speechRecognitionUnsupported": "The current browser does not support speech recognition. Please use Chrome, Edge, or Safari.",
+    "webUnavailable": "Voice recording is not available in the web version. Microphone access is disabled by policy."
   },
   "quickRecord": {
     "description": "Click to select a recording tool and quickly create records"

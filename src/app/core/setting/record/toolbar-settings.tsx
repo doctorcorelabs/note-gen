@@ -39,6 +39,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { SettingSection } from '../components/setting-base'
+import { isTauri } from '@/lib/platform'
 
 // 工具配置：图标和描述键
 const TOOL_CONFIGS = {
@@ -85,9 +86,10 @@ interface SortableItemProps {
   config: typeof TOOL_CONFIGS[keyof typeof TOOL_CONFIGS]
   onToggle: (id: string) => void
   t: (key: string) => string
+  disabled?: boolean
 }
 
-function SortableItem({ item, config, onToggle, t }: SortableItemProps) {
+function SortableItem({ item, config, onToggle, t, disabled = false }: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -122,11 +124,12 @@ function SortableItem({ item, config, onToggle, t }: SortableItemProps) {
         </ItemMedia>
         <ItemContent>
           <ItemTitle>{config ? t(config.titleKey) : item.id}</ItemTitle>
-          <ItemDescription className="line-clamp-1">{config ? t(config.descKey) : ''}</ItemDescription>
+          <ItemDescription className={disabled ? undefined : "line-clamp-1"}>{disabled ? t('recording.webUnavailable') : (config ? t(config.descKey) : '')}</ItemDescription>
         </ItemContent>
         <ItemActions className="mobile-setting-inline-action" onClick={(e) => e.stopPropagation()}>
           <Switch
             checked={item.enabled}
+            disabled={disabled}
             onCheckedChange={() => onToggle(item.id)}
           />
         </ItemActions>
@@ -138,6 +141,10 @@ function SortableItem({ item, config, onToggle, t }: SortableItemProps) {
 export function ToolbarSettings() {
   const t = useTranslations()
   const { recordToolbarConfig, setRecordToolbarConfig } = useSettingStore()
+  // DA19-02, AD-201 butir 4: di web, sakelar perekaman dinonaktifkan dengan
+  // keterangan jujur, bukan disembunyikan. Nilai konfigurasi
+  // dipertahankan (tidak dipaksa mati) agar pilihan desktop utuh.
+  const webRecordingDisabled = !isTauri()
 
   // 拖拽传感器配置
   const sensors = useSensors(
@@ -198,6 +205,7 @@ export function ToolbarSettings() {
                 config={TOOL_CONFIGS[item.id as keyof typeof TOOL_CONFIGS]}
                 onToggle={handleToggle}
                 t={t}
+                disabled={webRecordingDisabled && item.id === 'recording'}
               />
             ))}
           </ItemGroup>

@@ -7090,7 +7090,8 @@
     "emptyAudioData": "音频数据为空",
     "fileSelectFailed": "文件选择失败",
     "fileProcessFailed": "文件处理失败",
-    "speechRecognitionUnsupported": "当前浏览器不支持语音识别功能，请使用 Chrome、Edge 或 Safari"
+    "speechRecognitionUnsupported": "当前浏览器不支持语音识别功能，请使用 Chrome、Edge 或 Safari",
+    "webUnavailable": "Voice recording is not available in the web version. Microphone access is disabled by policy."
   },
   "quickRecord": {
     "description": "点击选择记录工具，快速创建记录"

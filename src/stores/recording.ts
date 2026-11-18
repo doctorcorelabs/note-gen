@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isTauri } from '@/lib/platform'
 
 interface RecordingState {
   // 录音状态
@@ -35,6 +36,14 @@ const useRecordingStore = create<RecordingState>((set, get) => ({
   setRecordingDuration: (duration) => set({ recordingDuration: duration }),
 
   startRecording: async () => {
+    // DA19-02, AD-201 butir 4 (defense in depth): jangan memanggil getUserMedia
+    // di web, karena Permissions-Policy microphone=() selalu menolaknya.
+    // Penjaga ini berdiri sebelum blok try agar pesan jujur di bawah
+    // sampai ke toast pemanggil tanpa diterjemahkan ulang menjadi
+    // galat perangkat generik. Gerbang utama tetap di komponen UI.
+    if (!isTauri()) {
+      throw new Error('Voice recording is not available in the web version; microphone access is disabled by policy')
+    }
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('The current environment does not support microphone recording; check the Android WebView or app permission configuration')

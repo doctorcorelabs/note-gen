@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import { transcribeRecording } from '@/lib/audio'
-import { platform, BaseDirectory } from '@/lib/platform'
+import { platform, BaseDirectory, isTauri } from '@/lib/platform'
 import { useRef } from 'react'
 import { isMobileDevice } from '@/lib/check'
 import { convertToWav } from '@/lib/audio-converter'
@@ -40,6 +40,9 @@ export function ControlRecording() {
   
   // 监听快捷键
   useEffect(() => {
+    if (!isTauri()) {
+      return
+    }
     const handleToggleRecording = () => {
       if (useRecordingStore.getState().isRecording) {
         void handleStop()
@@ -53,6 +56,15 @@ export function ControlRecording() {
       emitter.off('toolbar-shortcut-recording', handleToggleRecording)
     }
   })
+
+  // DA19-02, AD-201 butir 4 (4B): perekaman di-gate di MVP web.
+  // Permissions-Policy memakai microphone=(), sehingga getUserMedia
+  // selalu ditolak dan tombol yang tampil pasti gagal. Komponen ini
+  // me-render null di web agar tidak ada tombol mati; konfigurasi
+  // toolbar tidak diubah, sehingga desktop tidak terpengaruh.
+  if (!isTauri()) {
+    return null
+  }
 
   // 格式化录音时长
   const formatDuration = (seconds: number) => {
