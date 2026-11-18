@@ -23,6 +23,7 @@ import {
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js'
 import { toPng, toSvg } from 'html-to-image'
 import { platform, BaseDirectory } from '@/lib/platform'
+import { checkIsTauri } from '@/lib/check'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -1207,6 +1208,18 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
         if (!file) return
         imageName = file.name
         imageData = new Uint8Array(await file.arrayBuffer())
+      } else if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped picker
+        // returns the picked File directly. Path-shaped open()
+        // rejects here.
+        const picked = await platform.dialog.openFiles({
+          multiple: false,
+          filters: [{ name: t('nodes.image'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }],
+        })
+        const firstPicked = Array.isArray(picked) ? picked[0] : picked
+        if (!firstPicked) return
+        imageName = firstPicked.name
+        imageData = new Uint8Array(await firstPicked.file.arrayBuffer())
       } else {
         const sourcePath = await platform.dialog.open({
           multiple: false,
@@ -1926,12 +1939,27 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       const safeTitle = projectTitle.replace(/[\\/:*?"<>|]/g, '-').trim() || 'NoteGen-Canvas'
       const extension = format
 
-      const path = await platform.dialog.save({
-        filters: [{ name: format.toUpperCase(), extensions: [extension] }],
-        defaultPath: `${safeTitle}.${extension}`,
-      })
-      if (!path) return
-      await platform.fs.writeFile(path, bytes)
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: saveBlob picks a save target
+        // and writes the content in one step (anchor download when
+        // the File System Access API is unavailable). Path-shaped
+        // save() rejects here.
+        const saved = await platform.dialog.saveBlob(
+          {
+            filters: [{ name: format.toUpperCase(), extensions: [extension] }],
+            defaultPath: `${safeTitle}.${extension}`,
+          },
+          new Blob([bytes], { type: format === 'svg' ? 'image/svg+xml' : 'image/png' }),
+        )
+        if (!saved) return
+      } else {
+        const path = await platform.dialog.save({
+          filters: [{ name: format.toUpperCase(), extensions: [extension] }],
+          defaultPath: `${safeTitle}.${extension}`,
+        })
+        if (!path) return
+        await platform.fs.writeFile(path, bytes)
+      }
       toast.success(t('exportSuccess'))
     } catch (error) {
       console.error('Failed to export canvas:', error)
@@ -1994,16 +2022,30 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       const project = projects.find(item => item.id === canvasId)
       const title = project?.title || t('untitled')
       const safeTitle = title.replace(/[\\/:*?"<>|]/g, '-').trim() || 'NoteGen-Canvas'
-      const path = await platform.dialog.save({
-        defaultPath: `${safeTitle}.${format === 'canvas' ? 'canvas.json' : 'mmd'}`,
-        filters: [{ name: format === 'canvas' ? 'NoteGen Canvas' : 'Mermaid', extensions: format === 'canvas' ? ['json'] : ['mmd'] }],
-      })
-      if (!path) return
       const currentDocument = getCurrentDocument()
       const content = format === 'canvas'
         ? serializeCanvasProject({ title, canvasType: project?.canvasType || 'blank', document: currentDocument })
         : canvasDocumentToMermaid(currentDocument)
-      await platform.fs.writeTextFile(path, content)
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: saveBlob picks a save target
+        // and writes the content in one step. Path-shaped save()
+        // rejects here.
+        const saved = await platform.dialog.saveBlob(
+          {
+            defaultPath: `${safeTitle}.${format === 'canvas' ? 'canvas.json' : 'mmd'}`,
+            filters: [{ name: format === 'canvas' ? 'NoteGen Canvas' : 'Mermaid', extensions: format === 'canvas' ? ['json'] : ['mmd'] }],
+          },
+          new Blob([content], { type: format === 'canvas' ? 'application/json' : 'text/plain' }),
+        )
+        if (!saved) return
+      } else {
+        const path = await platform.dialog.save({
+          defaultPath: `${safeTitle}.${format === 'canvas' ? 'canvas.json' : 'mmd'}`,
+          filters: [{ name: format === 'canvas' ? 'NoteGen Canvas' : 'Mermaid', extensions: format === 'canvas' ? ['json'] : ['mmd'] }],
+        })
+        if (!path) return
+        await platform.fs.writeTextFile(path, content)
+      }
       toast.success(t('exportSuccess'))
     } catch (error) {
       console.error('Failed to export canvas source:', error)
@@ -2026,12 +2068,25 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
 
   const importCanvasFile = useCallback(async () => {
     try {
-      const path = await platform.dialog.open({
-        multiple: false,
-        filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
-      })
-      if (!path || Array.isArray(path)) return
-      applyImportedContent(await platform.fs.readTextFile(path))
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped picker
+        // returns the picked File directly. Path-shaped open()
+        // rejects here.
+        const picked = await platform.dialog.openFiles({
+          multiple: false,
+          filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
+        })
+        const firstPicked = Array.isArray(picked) ? picked[0] : picked
+        if (!firstPicked) return
+        applyImportedContent(await firstPicked.file.text())
+      } else {
+        const path = await platform.dialog.open({
+          multiple: false,
+          filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
+        })
+        if (!path || Array.isArray(path)) return
+        applyImportedContent(await platform.fs.readTextFile(path))
+      }
     } catch (error) {
       console.error('Failed to import canvas:', error)
       toast.error(t('import.error'))

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { platform } from '@/lib/platform'
+import { checkIsTauri } from '@/lib/check'
 import { Check, ClipboardCopy, Download, Eye, ScrollText, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -103,12 +104,26 @@ export function DeveloperDiagnostics() {
 
   async function exportPreview() {
     try {
-      const destination = await platform.dialog.save({
-        defaultPath: `notegen-redacted-diagnostics-${Date.now()}.json`,
-        filters: [{ name: 'JSON', extensions: [android ? 'application/json' : 'json'] }],
-      })
-      if (!destination) return
-      await platform.fs.writeTextFile(destination, preview)
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: saveBlob picks a save target
+        // and writes the content in one step. Path-shaped save()
+        // rejects here.
+        const saved = await platform.dialog.saveBlob(
+          {
+            defaultPath: `notegen-redacted-diagnostics-${Date.now()}.json`,
+            filters: [{ name: 'JSON', extensions: [android ? 'application/json' : 'json'] }],
+          },
+          new Blob([preview], { type: 'application/json' }),
+        )
+        if (!saved) return
+      } else {
+        const destination = await platform.dialog.save({
+          defaultPath: `notegen-redacted-diagnostics-${Date.now()}.json`,
+          filters: [{ name: 'JSON', extensions: [android ? 'application/json' : 'json'] }],
+        })
+        if (!destination) return
+        await platform.fs.writeTextFile(destination, preview)
+      }
       toast({ title: t('exported') })
     } catch (error) {
       toast({

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { platform } from '@/lib/platform'
+import { checkIsTauri } from '@/lib/check'
 import { ArrowDownAZ, ArrowLeft, BrainCircuit, CalendarDays, CloudAlert, CloudCheck, CloudUpload, Columns3, CopyPlus, DownloadCloud, EllipsisVertical, FileInput, FilePlus2, Grid2X2, LayoutGrid, List, Loader2, Palette, Pencil, Pin, PinOff, RefreshCw, RotateCcw, ShieldQuestion, Timer, Trash2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
@@ -177,14 +178,31 @@ export function CanvasActions() {
   const handleImport = async () => {
     if (canvasDisabled) { showCanvasDisabledNotice(); return }
     try {
-      const path = await platform.dialog.open({
-        multiple: false,
-        filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
-      })
-      if (!path || Array.isArray(path)) return
-      const source = await platform.fs.readTextFile(path)
-      const fileName = path.split(/[\\/]/).pop()?.replace(/\.(canvas\.)?json$|\.(mmd|mermaid)$/i, '') || t('import.defaultTitle')
-      const imported = /\.(mmd|mermaid)$/i.test(path)
+      let source: string
+      let pickedName: string
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped picker
+        // returns the picked File directly. Path-shaped open()
+        // rejects here.
+        const picked = await platform.dialog.openFiles({
+          multiple: false,
+          filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
+        })
+        const firstPicked = Array.isArray(picked) ? picked[0] : picked
+        if (!firstPicked) return
+        source = await firstPicked.file.text()
+        pickedName = firstPicked.name
+      } else {
+        const path = await platform.dialog.open({
+          multiple: false,
+          filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
+        })
+        if (!path || Array.isArray(path)) return
+        source = await platform.fs.readTextFile(path)
+        pickedName = path.split(/[\\/]/).pop() ?? path
+      }
+      const fileName = pickedName.replace(/\.(canvas\.)?json$|\.(mmd|mermaid)$/i, '') || t('import.defaultTitle')
+      const imported = /\.(mmd|mermaid)$/i.test(pickedName)
         ? { title: fileName, canvasType: 'flowchart' as const, document: mermaidToCanvasDocument(source) }
         : parseCanvasProjectFile(source)
       const project = await createProjectFromDocument(imported.document, imported.title, imported.canvasType)
@@ -422,14 +440,31 @@ export function CanvasSidebar() {
   const handleImport = async () => {
     if (canvasDisabled) { showCanvasDisabledNotice(); return }
     try {
-      const path = await platform.dialog.open({
-        multiple: false,
-        filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
-      })
-      if (!path || Array.isArray(path)) return
-      const source = await platform.fs.readTextFile(path)
-      const fileName = path.split(/[\\/]/).pop()?.replace(/\.(canvas\.)?json$|\.(mmd|mermaid)$/i, '') || t('import.defaultTitle')
-      const imported = /\.(mmd|mermaid)$/i.test(path)
+      let source: string
+      let pickedName: string
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped picker
+        // returns the picked File directly. Path-shaped open()
+        // rejects here.
+        const picked = await platform.dialog.openFiles({
+          multiple: false,
+          filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
+        })
+        const firstPicked = Array.isArray(picked) ? picked[0] : picked
+        if (!firstPicked) return
+        source = await firstPicked.file.text()
+        pickedName = firstPicked.name
+      } else {
+        const path = await platform.dialog.open({
+          multiple: false,
+          filters: [{ name: t('import.fileType'), extensions: ['json', 'canvas', 'mmd', 'mermaid'] }],
+        })
+        if (!path || Array.isArray(path)) return
+        source = await platform.fs.readTextFile(path)
+        pickedName = path.split(/[\\/]/).pop() ?? path
+      }
+      const fileName = pickedName.replace(/\.(canvas\.)?json$|\.(mmd|mermaid)$/i, '') || t('import.defaultTitle')
+      const imported = /\.(mmd|mermaid)$/i.test(pickedName)
         ? { title: fileName, canvasType: 'flowchart' as const, document: mermaidToCanvasDocument(source) }
         : parseCanvasProjectFile(source)
       const project = await createProjectFromDocument(imported.document, imported.title, imported.canvasType)

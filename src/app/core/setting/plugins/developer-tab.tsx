@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { platform } from '@/lib/platform'
+import { checkIsTauri } from '@/lib/check'
 import { useLocale, useTranslations } from 'next-intl'
 import { Code2, Download, FileCode2, FolderOpen, Terminal, Trash2, TriangleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -77,9 +78,7 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
   async function exportDiagnostics() {
     setError(null)
     try {
-      const path = await platform.dialog.save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
-      if (!path) return
-      await platform.fs.writeTextFile(path, JSON.stringify({
+      const payload = JSON.stringify({
         appVersion: useSettingStore.getState().version,
         createdAt: new Date().toISOString(),
         plugins: installed.filter(plugin => filter === '@all' || plugin.manifest.id === filter).map(plugin => ({
@@ -87,7 +86,21 @@ export function DeveloperTab({ onImported }: { onImported?: (pluginId: string) =
           runtime: usePluginStore.getState().runtimeStates[plugin.manifest.id] ?? 'inactive',
         })),
         logs: filteredLogs,
-      }, null, 2))
+      }, null, 2)
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: saveBlob picks a save target
+        // and writes the content in one step. Path-shaped save()
+        // rejects here.
+        const saved = await platform.dialog.saveBlob(
+          { defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] },
+          new Blob([payload], { type: 'application/json' }),
+        )
+        if (!saved) return
+      } else {
+        const path = await platform.dialog.save({ defaultPath: 'notegen-plugin-diagnostics.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
+        if (!path) return
+        await platform.fs.writeTextFile(path, payload)
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }
 
