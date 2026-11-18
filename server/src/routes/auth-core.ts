@@ -50,6 +50,7 @@ import {
   checkAndCountSetupAttempt,
   checkLockout,
   checkLoginBuckets,
+  checkLoginIpBucket,
   recordLoginFailureBuckets,
   recordLoginFailureLockout,
   recordLoginIpFailureBucket,
@@ -392,6 +393,17 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
     const now = new Date(nowMs);
     const ip = requestIp(request, auth);
     const userAgent = requestUserAgent(request);
+    // Section 6.3 covers this step with the same three mechanisms
+    // as step 1. No account is identified yet, so only the IP-wide
+    // bucket can be pre-checked here; the lockout is checked once
+    // the challenge identifies the account, below. Without this
+    // pre-check, random challenge guesses were recorded but never
+    // refused on this path.
+    const ipBucket = await checkLoginIpBucket({ store, ip, authSecret: auth.authSecret, nowMs });
+    if (!ipBucket.allowed) {
+      sendRateLimited(reply, request.id, ipBucket.retryAfterSeconds);
+      return reply;
+    }
     const challenge = await unavailableOnDbError(() => store.findChallengeByHash(hashToken(challengeToken as string)));
     if (challenge === null) {
       await recordLoginIpFailureBucket({ store, ip, authSecret: auth.authSecret, nowMs });
@@ -399,15 +411,41 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
     }
     if (challenge.expiresAt.getTime() <= nowMs || challenge.attempts >= LOGIN_CHALLENGE_MAX_ATTEMPTS) {
       await unavailableOnDbError(() => store.deleteChallengeById(challenge.id));
+      await recordLoginIpFailureBucket({ store, ip, authSecret: auth.authSecret, nowMs });
       throw ApiError.invalidVerificationCode();
     }
     const user = await unavailableOnDbError(() => store.findUserById(challenge.userId));
     if (user === null || user.status !== 'active' || !user.totpEnabled) {
       await unavailableOnDbError(() => store.deleteChallengeById(challenge.id));
+      await recordLoginIpFailureBucket({ store, ip, authSecret: auth.authSecret, nowMs });
       throw ApiError.invalidVerificationCode();
+    }
+    // A challenge obtained before the lockout must not keep
+    // spending guesses while the account is locked: refuse with
+    // 429 without verifying the code, exactly like step 1. The
+    // challenge is left in place; it expires in 5 minutes while
+    // the shortest lockout lasts 15, so it cannot outlive the
+    // lockout and become usable again.
+    const lockout = await checkLockout(store, user.id, nowMs);
+    if (lockout.locked) {
+      await recordAudit(
+        store,
+        {
+          userId: user.id,
+          actorUserId: null,
+          eventType: 'login_locked',
+          ip: ip ?? null,
+          userAgent: truncateUserAgent(userAgent),
+          metadata: { lockoutLevel: lockout.lockoutLevel, lockoutDurationMs: lockout.lockoutDurationMs },
+        },
+        auditFailed(request, 'login_locked'),
+      );
+      sendRateLimited(reply, request.id, lockout.retryAfterSeconds);
+      return reply;
     }
     const bindingFailed = async (): Promise<never> => {
       await unavailableOnDbError(() => store.deleteChallengeById(challenge.id));
+      await recordLoginIpFailureBucket({ store, ip, authSecret: auth.authSecret, nowMs });
       await recordAudit(
         store,
         {

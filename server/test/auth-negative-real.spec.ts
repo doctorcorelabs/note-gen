@@ -491,6 +491,14 @@ class FakeAuthStore {
     userAgentHash: string | null;
     expiresAt: Date;
   }): Promise<FakeChallengeRow> {
+    // One active challenge per account, mirroring DrizzleAuthStore:
+    // a fresh login invalidates every earlier challenge of the
+    // same account before the new row is stored.
+    for (const [id, row] of this.challenges) {
+      if (row.userId === input.userId) {
+        this.challenges.delete(id);
+      }
+    }
     const row: FakeChallengeRow = {
       id: randomUUID(),
       userId: input.userId,
@@ -588,6 +596,47 @@ class FakeAuthStore {
     },
   ): Promise<void> {
     this.lockouts.set(userId, { userId, ...input });
+  }
+
+  async recordLockoutFailureAtomic(
+    userId: string,
+    input: {
+      now: Date;
+      threshold: number;
+      lockedUntilByNextLevel: readonly [Date, Date, Date, Date];
+    },
+  ): Promise<void> {
+    // Sequential in-memory mirror of the single-statement upsert:
+    // the same transition, applied to the current row without an
+    // interleaving read.
+    const previous = this.lockouts.get(userId) ?? null;
+    const nowMs = input.now.getTime();
+    if (previous !== null && previous.lockedUntil !== null && previous.lockedUntil.getTime() > nowMs) {
+      return;
+    }
+    const expired = previous !== null && previous.lockedUntil !== null && previous.lockedUntil.getTime() <= nowMs;
+    const baseFailures = expired || previous === null ? 0 : previous.consecutiveFailures;
+    const level = previous?.lockoutLevel ?? 0;
+    const failures = baseFailures + 1;
+    if (failures >= input.threshold) {
+      const nextLevel = level + 1;
+      const candidate = input.lockedUntilByNextLevel[Math.min(Math.max(nextLevel, 1), 4) - 1] as Date;
+      this.lockouts.set(userId, {
+        userId,
+        consecutiveFailures: failures,
+        lockoutLevel: nextLevel,
+        lockedUntil: candidate,
+        lastFailureAt: input.now,
+      });
+      return;
+    }
+    this.lockouts.set(userId, {
+      userId,
+      consecutiveFailures: failures,
+      lockoutLevel: level,
+      lockedUntil: null,
+      lastFailureAt: input.now,
+    });
   }
 
   async clearLockout(userId: string): Promise<void> {

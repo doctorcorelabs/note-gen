@@ -15,7 +15,12 @@
 // under perfectly concurrent failures and admit one or two extra
 // attempts; that is accepted (the lockout, mechanism C, is the hard
 // backstop) and is why the setup scope, which counts every attempt,
-// uses a single atomic increment-and-check instead.
+// uses a single atomic increment-and-check instead. The lockout
+// itself is NOT read-then-write: recordLoginFailureLockout runs one
+// atomic upsert statement in the store
+// (recordLockoutFailureAtomic), so concurrent failures cannot lose
+// counts or delay the lockout, and the accepted bucket race above
+// stays bounded by a backstop that cannot race.
 //
 // The general API limits (240/min per account, 60/min per IP,
 // section 6.5) are exposed here as checkGeneralApiLimit for the
@@ -47,6 +52,7 @@ export const LOGIN_IP_SCOPE = 'login:ip';
 export const SETUP_IP_SCOPE = 'setup:ip';
 export const STEP_UP_ACCOUNT_SCOPE = 'stepup:account';
 export const PASSWORD_CHANGE_ACCOUNT_SCOPE = 'password_change:account';
+export const TOTP_ACCOUNT_SCOPE = 'totp:account';
 export const API_ACCOUNT_SCOPE = 'api:account';
 export const API_IP_SCOPE = 'api:ip';
 
@@ -149,6 +155,28 @@ export async function checkLoginBuckets(input: {
     store: input.store,
     scope: LOGIN_IP_SCOPE,
     rawKey: ipKey,
+    authSecret: input.authSecret,
+    limit: LOGIN_IP_FAILURE_LIMIT,
+    windowMs: LOGIN_FAILURE_WINDOW_MS,
+    nowMs: input.nowMs,
+  });
+}
+
+// Login IP-wide bucket alone (section 6.3, mechanism B), for the
+// second login step: no account is identified before the challenge
+// is looked up, so only the IP bucket can be pre-checked there.
+// The account bucket and the lockout are checked once the challenge
+// identifies the account.
+export async function checkLoginIpBucket(input: {
+  store: AuthStore;
+  ip: string | undefined;
+  authSecret: string | undefined;
+  nowMs: number;
+}): Promise<RateLimitDecision> {
+  return checkFailureBucket({
+    store: input.store,
+    scope: LOGIN_IP_SCOPE,
+    rawKey: input.ip ?? 'unknown',
     authSecret: input.authSecret,
     limit: LOGIN_IP_FAILURE_LIMIT,
     windowMs: LOGIN_FAILURE_WINDOW_MS,
@@ -334,41 +362,32 @@ export async function checkLockout(store: AuthStore, userId: string, nowMs: numb
   };
 }
 
-// Records one login failure against the progressive lockout. Attempts
-// made while already locked are a no-op (an attacker must not be able
-// to extend a lockout forever). After a lockout expires, the failure
-// count restarts at zero but the level is kept, so the next series
-// climbs one rung. A successful login clears the row entirely
-// (store.clearLockout). TOTP failures count here too (section 3.1,
-// step 3 of the second step).
+// Records one login failure against the progressive lockout. The
+// counting is a single atomic upsert statement in the store
+// (recordLockoutFailureAtomic): concurrent failures serialize on
+// the lockout row and no count is lost, which the previous
+// read-then-write form could not guarantee. Semantics are
+// unchanged: attempts made while already locked are a no-op (an
+// attacker must not be able to extend a lockout forever); after a
+// lockout expires, the failure count restarts at zero but the
+// level is kept, so the next series climbs one rung; a successful
+// login clears the row entirely (store.clearLockout). TOTP
+// failures count here too (section 3.1, step 3 of the second
+// step). The locked-until candidates carry the ladder durations so
+// the store needs no policy of its own: index 0 is rung 1, index 3
+// is rung 4 and above (the ladder caps at rung 4).
 export async function recordLoginFailureLockout(store: AuthStore, userId: string, now: Date): Promise<void> {
   const nowMs = now.getTime();
-  const previous = await unavailableOnDbError(() => store.getLockout(userId));
-  if (previous !== null && previous.lockedUntil !== null && previous.lockedUntil.getTime() > nowMs) {
-    return;
-  }
-  const expired = previous !== null && previous.lockedUntil !== null && previous.lockedUntil.getTime() <= nowMs;
-  const baseFailures = expired || previous === null ? 0 : previous.consecutiveFailures;
-  const level = previous?.lockoutLevel ?? 0;
-  const failures = baseFailures + 1;
-  if (failures >= LOCKOUT_FAILURE_THRESHOLD) {
-    const nextLevel = level + 1;
-    await unavailableOnDbError(() =>
-      store.recordLockoutFailure(userId, {
-        consecutiveFailures: failures,
-        lockoutLevel: nextLevel,
-        lockedUntil: new Date(nowMs + lockoutDurationMs(nextLevel)),
-        lastFailureAt: now,
-      }),
-    );
-    return;
-  }
   await unavailableOnDbError(() =>
-    store.recordLockoutFailure(userId, {
-      consecutiveFailures: failures,
-      lockoutLevel: level,
-      lockedUntil: null,
-      lastFailureAt: now,
+    store.recordLockoutFailureAtomic(userId, {
+      now,
+      threshold: LOCKOUT_FAILURE_THRESHOLD,
+      lockedUntilByNextLevel: [
+        new Date(nowMs + lockoutDurationMs(1)),
+        new Date(nowMs + lockoutDurationMs(2)),
+        new Date(nowMs + lockoutDurationMs(3)),
+        new Date(nowMs + lockoutDurationMs(4)),
+      ],
     }),
   );
 }

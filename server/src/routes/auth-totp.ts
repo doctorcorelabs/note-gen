@@ -54,14 +54,28 @@
 // AuthStore has no such write methods and this overlap batch must
 // not edit existing auth files (AD-57). The integrator wires the
 // Drizzle implementation into buildApp alongside the auth block;
-// until then this module is registered only by tests. Rate
-// limiting uses the general API bucket, whose global wiring
-// belongs to the integrator (see middleware/rate-limit.ts); no
-// per-route limiter is invented here.
+// until then this module is registered only by tests.
+//
+// Rate limiting: confirm, disable, and regenerate share one
+// per-account proof-failure bucket (5 failures per 15 minutes, the
+// step-up pattern from desain-auth.md section 6.4), checked before
+// any proof verification and recorded on every proof failure, so
+// code guesses are bounded inside the step-up window instead of
+// unlimited. The bucket is shared across the three routes: guesses
+// must not multiply by rotating routes. enroll/start verifies no
+// proof, so it is not counted; the general API bucket (whose
+// global wiring belongs to the integrator, see
+// middleware/rate-limit.ts) remains the backstop for request volume.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getPrincipal } from '../middleware/auth-hook.js';
 import { csrfTokenForSession } from '../middleware/csrf.js';
+import {
+  TOTP_ACCOUNT_SCOPE,
+  checkAccountFailureBucket,
+  recordAccountFailureBucket,
+  sendRateLimited,
+} from '../middleware/rate-limit.js';
 import { loadSessionAndUser, type LoadedSession } from '../middleware/session.js';
 import { ApiError, successEnvelope } from '../plugins/envelope.js';
 import { requireStore, type AuthContext } from '../auth/context.js';
@@ -94,6 +108,7 @@ import {
   verifyTotpProof,
   type TotpEnrollmentStore,
 } from '../services/auth/totp-enroll.js';
+import { TOTP_PROOF_FAILURE_LIMIT, TOTP_PROOF_FAILURE_WINDOW_MS } from '../auth/values.js';
 
 export interface AuthTotpRouteDeps {
   auth: AuthContext;
@@ -149,6 +164,47 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
       throw ApiError.serviceUnavailable('Encryption is not configured.');
     }
     return key;
+  };
+
+  // Shared proof-attempt bucket for confirm, disable, and
+  // regenerate. The check sends the 429 itself and returns false;
+  // callers return the reply unchanged in that case. Failures are
+  // recorded on every proof failure, including a missing staged
+  // credential, an expired stage, and a replayed (unclaimable)
+  // step: each is one spent guess.
+  const totpProofAllowed = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    userId: string,
+    nowMs: number,
+  ): Promise<boolean> => {
+    const store = requireStore(auth);
+    const bucket = await checkAccountFailureBucket({
+      store,
+      scope: TOTP_ACCOUNT_SCOPE,
+      userId,
+      authSecret: auth.authSecret,
+      limit: TOTP_PROOF_FAILURE_LIMIT,
+      windowMs: TOTP_PROOF_FAILURE_WINDOW_MS,
+      nowMs,
+    });
+    if (!bucket.allowed) {
+      sendRateLimited(reply, request.id, bucket.retryAfterSeconds);
+      return false;
+    }
+    return true;
+  };
+
+  const recordTotpProofFailure = async (userId: string, nowMs: number): Promise<void> => {
+    const store = requireStore(auth);
+    await recordAccountFailureBucket({
+      store,
+      scope: TOTP_ACCOUNT_SCOPE,
+      userId,
+      authSecret: auth.authSecret,
+      windowMs: TOTP_PROOF_FAILURE_WINDOW_MS,
+      nowMs,
+    });
   };
 
   // Rotates the current session (step-up and absolute expiry
@@ -240,20 +296,27 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
     const store = requireStore(auth);
     const nowMs = auth.clock();
     const now = new Date(nowMs);
+    if (!(await totpProofAllowed(request, reply, loaded.user.id, nowMs))) {
+      return reply;
+    }
     const credential = await unavailableOnDbError(() => store.findTotpCredential(loaded.user.id));
     if (credential === null) {
+      await recordTotpProofFailure(loaded.user.id, nowMs);
       throw ApiError.invalidVerificationCode();
     }
     if (isStageExpired(credential, loaded.user.totpEnabled, nowMs)) {
       await unavailableOnDbError(() => enrollment.deleteCredential(loaded.user.id));
+      await recordTotpProofFailure(loaded.user.id, nowMs);
       throw ApiError.invalidVerificationCode();
     }
     const proof = verifyTotpProof({ credential, sealKey: key, code: code as string, nowMs });
     if (!proof.valid) {
+      await recordTotpProofFailure(loaded.user.id, nowMs);
       throw ApiError.invalidVerificationCode();
     }
     const claimed = await unavailableOnDbError(() => store.claimTotpStep(loaded.user.id, proof.step, now));
     if (!claimed) {
+      await recordTotpProofFailure(loaded.user.id, nowMs);
       throw ApiError.invalidVerificationCode();
     }
     const batch = newRecoveryCodeBatch(now);
@@ -301,6 +364,11 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
       issues.push({ field: 'code', issue: 'code or recoveryCode is required' });
     }
     throwIfIssues(issues);
+    // Proof path only: the TOTP-off idempotent return above proves
+    // nothing and is never bucketed.
+    if (!(await totpProofAllowed(request, reply, loaded.user.id, nowMs))) {
+      return reply;
+    }
     let proven = false;
     if (code !== undefined) {
       const key = sealKeyOr503();
@@ -320,6 +388,7 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
       proven = row !== null;
     }
     if (!proven) {
+      await recordTotpProofFailure(loaded.user.id, nowMs);
       throw ApiError.invalidVerificationCode();
     }
     await unavailableOnDbError(() => enrollment.disableTotp(loaded.user.id, now));
@@ -346,16 +415,21 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
       const store = requireStore(auth);
       const nowMs = auth.clock();
       const now = new Date(nowMs);
+      if (!(await totpProofAllowed(request, reply, loaded.user.id, nowMs))) {
+        return reply;
+      }
       const credential = await unavailableOnDbError(() => store.findTotpCredential(loaded.user.id));
       const proof =
         loaded.user.totpEnabled && credential !== null
           ? verifyTotpProof({ credential, sealKey: key, code: code as string, nowMs })
           : { valid: false as const };
       if (!proof.valid) {
+        await recordTotpProofFailure(loaded.user.id, nowMs);
         throw ApiError.invalidVerificationCode();
       }
       const claimed = await unavailableOnDbError(() => store.claimTotpStep(loaded.user.id, proof.step, now));
       if (!claimed) {
+        await recordTotpProofFailure(loaded.user.id, nowMs);
         throw ApiError.invalidVerificationCode();
       }
       const batch = newRecoveryCodeBatch(now);

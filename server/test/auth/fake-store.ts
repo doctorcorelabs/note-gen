@@ -21,6 +21,7 @@ import {
   type AuthWorkspaceRow,
   type CreateLoginChallengeInput,
   type CreateSessionInput,
+  type LockoutFailureAtomicInput,
   type LockoutFailureInput,
   type LoginChallengeRow,
   type RecoveryCodeRow,
@@ -238,6 +239,15 @@ export class FakeAuthStore implements AuthStore {
   }
 
   async createLoginChallenge(input: CreateLoginChallengeInput): Promise<LoginChallengeRow> {
+    // One active challenge per account, mirroring DrizzleAuthStore:
+    // a fresh login invalidates every earlier challenge of the
+    // same account before the new row is stored.
+    for (const row of [...this.challenges.values()]) {
+      if (row.userId === input.userId) {
+        this.challenges.delete(row.id);
+        this.challengesByHash.delete(row.challengeHash);
+      }
+    }
     const row: LoginChallengeRow = {
       id: randomUUID(),
       userId: input.userId,
@@ -316,6 +326,43 @@ export class FakeAuthStore implements AuthStore {
 
   async recordLockoutFailure(userId: string, input: LockoutFailureInput): Promise<void> {
     this.lockouts.set(userId, { userId, ...input, updatedAt: new Date() });
+  }
+
+  async recordLockoutFailureAtomic(userId: string, input: LockoutFailureAtomicInput): Promise<void> {
+    // Sequential in-memory mirror of the single-statement upsert:
+    // the same transition, applied to the current row without an
+    // interleaving read. No concurrency exists inside this fake,
+    // so the sequential form is the faithful mirror.
+    const previous = this.lockouts.get(userId) ?? null;
+    const nowMs = input.now.getTime();
+    if (previous !== null && previous.lockedUntil !== null && previous.lockedUntil.getTime() > nowMs) {
+      return;
+    }
+    const expired = previous !== null && previous.lockedUntil !== null && previous.lockedUntil.getTime() <= nowMs;
+    const baseFailures = expired || previous === null ? 0 : previous.consecutiveFailures;
+    const level = previous?.lockoutLevel ?? 0;
+    const failures = baseFailures + 1;
+    if (failures >= input.threshold) {
+      const nextLevel = level + 1;
+      const candidate = input.lockedUntilByNextLevel[Math.min(Math.max(nextLevel, 1), 4) - 1] as Date;
+      this.lockouts.set(userId, {
+        userId,
+        consecutiveFailures: failures,
+        lockoutLevel: nextLevel,
+        lockedUntil: candidate,
+        lastFailureAt: input.now,
+        updatedAt: new Date(),
+      });
+      return;
+    }
+    this.lockouts.set(userId, {
+      userId,
+      consecutiveFailures: failures,
+      lockoutLevel: level,
+      lockedUntil: null,
+      lastFailureAt: input.now,
+      updatedAt: new Date(),
+    });
   }
 
   async clearLockout(userId: string): Promise<void> {

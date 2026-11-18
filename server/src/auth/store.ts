@@ -98,6 +98,17 @@ export interface LockoutFailureInput {
   lastFailureAt: Date;
 }
 
+export interface LockoutFailureAtomicInput {
+  now: Date;
+  threshold: number;
+  // Locked-until candidates for the rung a threshold crossing would
+  // land on: index 0 is rung 1, index 3 is rung 4 and above (the
+  // ladder caps at rung 4). Computed by the caller from the ladder
+  // durations, so the lockout policy stays in middleware/rate-limit.ts
+  // and the store only executes the transition atomically.
+  lockedUntilByNextLevel: readonly [Date, Date, Date, Date];
+}
+
 export interface AuthStore {
   getUserCount(): Promise<number>;
   isInstallationCompleted(): Promise<boolean>;
@@ -135,7 +146,19 @@ export interface AuthStore {
   countUnusedRecoveryCodes(userId: string): Promise<number>;
 
   getLockout(userId: string): Promise<AccountLockoutRow | null>;
+  // Absolute-value write, retained for test seeding of a lockout
+  // row. Production failure recording must use
+  // recordLockoutFailureAtomic: writing a value computed from a
+  // stale read loses counts under concurrency.
   recordLockoutFailure(userId: string, input: LockoutFailureInput): Promise<void>;
+  // One atomic lockout transition for a single login failure:
+  // increment the consecutive count (reset to 1 when a previous
+  // lockout has expired), climb one ladder rung and set lockedUntil
+  // when the threshold is reached, keep the level otherwise, and
+  // leave the row untouched while already locked. The Drizzle
+  // implementation runs this as one upsert statement; concurrent
+  // failures serialize on the row and no count is lost.
+  recordLockoutFailureAtomic(userId: string, input: LockoutFailureAtomicInput): Promise<void>;
   clearLockout(userId: string): Promise<void>;
 
   readBucketHits(scope: string, rateKey: string, windowStart: Date): Promise<number>;
@@ -346,12 +369,21 @@ export class DrizzleAuthStore implements AuthStore {
   }
 
   async createLoginChallenge(input: CreateLoginChallengeInput): Promise<LoginChallengeRow> {
-    const rows = await this.db.insert(loginChallenges).values(input).returning();
-    const row = rows[0];
-    if (row === undefined) {
-      throw new Error('Login challenge insert returned no row.');
-    }
-    return row;
+    // One active challenge per account: a fresh login invalidates
+    // every earlier challenge of the same account in the same
+    // transaction, so TOTP guesses cannot be spread across many
+    // challenges to defeat the per-challenge attempt cap (each
+    // challenge allows 5 attempts; without this, N challenges
+    // allow 5*N guesses per account).
+    return this.db.transaction(async (tx) => {
+      await tx.delete(loginChallenges).where(eq(loginChallenges.userId, input.userId));
+      const rows = await tx.insert(loginChallenges).values(input).returning();
+      const row = rows[0];
+      if (row === undefined) {
+        throw new Error('Login challenge insert returned no row.');
+      }
+      return row;
+    });
   }
 
   async findChallengeByHash(challengeHash: string): Promise<LoginChallengeRow | null> {
@@ -429,6 +461,43 @@ export class DrizzleAuthStore implements AuthStore {
       .onConflictDoUpdate({
         target: accountLockouts.userId,
         set: { ...input },
+      });
+  }
+
+  async recordLockoutFailureAtomic(userId: string, input: LockoutFailureAtomicInput): Promise<void> {
+    // Single-statement upsert (desain-auth.md section 6.1: atomic
+    // counting through one upsert statement, no read-then-write
+    // that can race). Every branch below reads the row version the
+    // upsert conflicts with, so concurrent failures serialize on
+    // the row and each one counts. While locked, the update writes
+    // the existing values back unchanged: the lockout is neither
+    // extended nor re-counted.
+    const table = accountLockouts;
+    const now = input.now;
+    const [first, second, third, fourth] = input.lockedUntilByNextLevel;
+    const isLocked = sql`${table.lockedUntil} IS NOT NULL AND ${table.lockedUntil} > ${now}`;
+    const isExpired = sql`${table.lockedUntil} IS NOT NULL AND ${table.lockedUntil} <= ${now}`;
+    const nextFailures = sql`CASE WHEN ${isLocked} THEN ${table.consecutiveFailures} WHEN ${isExpired} THEN 1 ELSE ${table.consecutiveFailures} + 1 END`;
+    const crossesThreshold = sql`${nextFailures} >= ${input.threshold}`;
+    const nextLockedUntil = sql`CASE WHEN ${isLocked} THEN ${table.lockedUntil} WHEN ${crossesThreshold} THEN CASE ${table.lockoutLevel} + 1 WHEN 1 THEN ${first} WHEN 2 THEN ${second} WHEN 3 THEN ${third} ELSE ${fourth} END ELSE NULL END`;
+    const locksOnFirstFailure = input.threshold <= 1;
+    await this.db
+      .insert(table)
+      .values({
+        userId,
+        consecutiveFailures: 1,
+        lockoutLevel: locksOnFirstFailure ? 1 : 0,
+        lockedUntil: locksOnFirstFailure ? first : null,
+        lastFailureAt: now,
+      })
+      .onConflictDoUpdate({
+        target: table.userId,
+        set: {
+          consecutiveFailures: nextFailures,
+          lockoutLevel: sql`CASE WHEN ${isLocked} THEN ${table.lockoutLevel} WHEN ${crossesThreshold} THEN ${table.lockoutLevel} + 1 ELSE ${table.lockoutLevel} END`,
+          lockedUntil: nextLockedUntil,
+          lastFailureAt: sql`CASE WHEN ${isLocked} THEN ${table.lastFailureAt} ELSE ${now} END`,
+        },
       });
   }
 
