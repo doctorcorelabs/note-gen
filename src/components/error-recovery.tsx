@@ -15,7 +15,7 @@ import {
   RotateCcwIcon,
   Trash2Icon,
 } from 'lucide-react'
-import { platform, platform as platformAdapters } from '@/lib/platform'
+import { isTauri, platform, platform as platformAdapters } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -91,6 +91,7 @@ const LAYOUT_STORAGE_KEYS = [
 ] as const
 const LAYOUT_STORAGE_PREFIX = 'react-resizable-panels:main-layout:'
 const DATABASE_RESET_PHRASE = 'DELETE DATABASE'
+const SETTINGS_RESET_PHRASE = 'RESET SETTINGS'
 const GITHUB_BUG_REPORT_URL = 'https://github.com/codexu/note-gen/issues/new'
 
 function getCanvasIdFromTab(tab?: StoredTab) {
@@ -135,6 +136,16 @@ export function ErrorRecovery({
   const [databaseResetOpen, setDatabaseResetOpen] = useState(false)
   const [databaseResetAcknowledged, setDatabaseResetAcknowledged] = useState(false)
   const [databaseResetPhrase, setDatabaseResetPhrase] = useState('')
+  const [settingsResetOpen, setSettingsResetOpen] = useState(false)
+  const [settingsResetAcknowledged, setSettingsResetAcknowledged] = useState(false)
+  const [settingsResetPhrase, setSettingsResetPhrase] = useState('')
+
+  // Web variant (DA28-14): in the browser there is no local
+  // database file, no file manager, and no desktop save dialog.
+  // Desktop-only actions are hidden, destructive server-side
+  // actions need typed confirmation, and copy must say what the
+  // action really deletes on the server.
+  const isWeb = !isTauri()
 
   useEffect(() => {
     console.error('应用错误:', error)
@@ -208,11 +219,17 @@ export function ErrorRecovery({
 
   function clearTemporaryData() {
     void runRecovery('clear-cache', async () => {
-      const dataDirectory = await platform.path.appDataDir()
-      for (const directory of TEMPORARY_DIRECTORIES) {
-        const path = await platform.path.join(dataDirectory, directory)
-        if (await platform.fs.exists(path)) {
-          await platform.fs.remove(path, { recursive: true })
+      // In web mode the data directory paths are virtual prefixes
+      // with no files behind them, so only the browser-saved
+      // layout state below is cleared. Desktop keeps the file
+      // cleanup.
+      if (!isWeb) {
+        const dataDirectory = await platform.path.appDataDir()
+        for (const directory of TEMPORARY_DIRECTORIES) {
+          const path = await platform.path.join(dataDirectory, directory)
+          if (await platform.fs.exists(path)) {
+            await platform.fs.remove(path, { recursive: true })
+          }
         }
       }
       for (const key of LAYOUT_STORAGE_KEYS) {
@@ -224,12 +241,20 @@ export function ErrorRecovery({
           window.localStorage.removeItem(key)
         }
       }
-      setActionMessage('Temporary cache and interface layout have been cleared. You can reload or return to the app.')
+      setActionMessage(isWeb
+        ? 'Interface layout saved in this browser has been cleared. You can reload or return to the app.'
+        : 'Temporary cache and interface layout have been cleared. You can reload or return to the app.')
       setActiveAction(null)
     })
   }
 
   function openDataDirectory() {
+    // Structural guard: the button is hidden in web mode, and the
+    // web opener always rejects this call. Never reach it.
+    if (isWeb) {
+      setActionError('The data directory cannot be opened from a browser. This action is only available in the desktop app.')
+      return
+    }
     void runRecovery('open-data', async () => {
       const configDirectory = await platform.path.appConfigDir()
       const databasePath = await platform.path.join(configDirectory, 'note.db')
@@ -272,6 +297,12 @@ export function ErrorRecovery({
   }
 
   function resetSettings() {
+    // In web mode store.clear() queues deletion of every server
+    // settings key, including the aiModelList cascade that
+    // removes saved AI provider secrets, so one click from a
+    // crash screen must never delete them. Require the same
+    // typed-phrase protection the database reset has.
+    if (isWeb && (!settingsResetAcknowledged || settingsResetPhrase !== SETTINGS_RESET_PHRASE)) return
     void runRecovery('reset-settings', async () => {
       const store = await platform.store.load('store.json')
       await store.clear()
@@ -282,6 +313,13 @@ export function ErrorRecovery({
   }
 
   function resetLocalDatabase() {
+    // Structural guard: Level 4 is hidden in web mode, and the
+    // delete_local_database command is rejected as desktop-only
+    // by the web invoke router. Never reach the confirmation.
+    if (isWeb) {
+      setActionError('Deleting the database is not available in the browser. This action is only available in the desktop app.')
+      return
+    }
     if (!databaseResetAcknowledged || databaseResetPhrase !== DATABASE_RESET_PHRASE) return
     void runRecovery('reset-database', async () => {
       try {
@@ -303,6 +341,13 @@ export function ErrorRecovery({
   }
 
   function exportFullBackup() {
+    // Structural guard: Level 4 is hidden in web mode, and the
+    // path-shaped save dialog always rejects in the browser.
+    // Never reach it.
+    if (isWeb) {
+      setActionError('Exporting a full backup is not available in the browser. This action is only available in the desktop app.')
+      return
+    }
     void runRecovery('export-backup', async () => {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       const outputPath = await platform.dialog.save({
@@ -330,6 +375,14 @@ export function ErrorRecovery({
     if (!open) {
       setDatabaseResetAcknowledged(false)
       setDatabaseResetPhrase('')
+    }
+  }
+
+  function handleSettingsResetOpenChange(open: boolean) {
+    setSettingsResetOpen(open)
+    if (!open) {
+      setSettingsResetAcknowledged(false)
+      setSettingsResetPhrase('')
     }
   }
 
@@ -484,7 +537,9 @@ export function ErrorRecovery({
                       <BrushCleaningIcon />
                       <AlertTitle>What this level clears</AlertTitle>
                       <AlertDescription>
-                        Clears canvas thumbnails, temporary screenshots, and interface layout caches such as left/right sidebars, panel widths, and canvas list views. These can be regenerated.
+                        {isWeb
+                          ? 'Clears interface layout saved in this browser, such as left/right sidebars, panel widths, and canvas list views. These can be regenerated. Thumbnails and temporary files live on the server and are not touched.'
+                          : 'Clears canvas thumbnails, temporary screenshots, and interface layout caches such as left/right sidebars, panel widths, and canvas list views. These can be regenerated.'}
                       </AlertDescription>
                     </Alert>
                     <Alert>
@@ -501,7 +556,7 @@ export function ErrorRecovery({
                           : <BrushCleaningIcon data-icon="inline-start" />}
                         Clear cache and layout
                       </Button>
-                      {!mobile ? (
+                      {!mobile && !isWeb ? (
                         <Button variant="ghost" onClick={openDataDirectory} disabled={busy}>
                           {activeAction === 'open-data'
                             ? <Spinner data-icon="inline-start" />
@@ -533,16 +588,20 @@ export function ErrorRecovery({
                     ) : null}
                     <Alert>
                       <DatabaseIcon />
-                      <AlertTitle>All local canvases</AlertTitle>
+                      <AlertTitle>{isWeb ? 'All canvases' : 'All local canvases'}</AlertTitle>
                       <AlertDescription>
-                        Permanently clears all local canvas items and thumbnails; it will not delete Markdown notes, records, chats, settings, or other database content.
+                        {isWeb
+                          ? 'Permanently clears all canvas items and thumbnails stored in the server database; it will not delete Markdown notes, records, chats, settings, or other database content.'
+                          : 'Permanently clears all local canvas items and thumbnails; it will not delete Markdown notes, records, chats, settings, or other database content.'}
                       </AlertDescription>
                     </Alert>
                     <Alert>
                       <RotateCcwIcon />
                       <AlertTitle>App settings</AlertTitle>
                       <AlertDescription>
-                        Clears interface, model, sync, workspace, and startup settings; it will not delete note files, record files, or the canvas database.
+                        {isWeb
+                          ? 'Clears interface, model, sync, workspace, and startup settings stored on the server, including saved AI provider keys; it will not delete note files, record files, or canvas data.'
+                          : 'Clears interface, model, sync, workspace, and startup settings; it will not delete note files, record files, or the canvas database.'}
                       </AlertDescription>
                     </Alert>
                     <div className="flex flex-wrap gap-2">
@@ -581,14 +640,16 @@ export function ErrorRecovery({
                             {activeAction === 'clear-canvases'
                               ? <Spinner data-icon="inline-start" />
                               : <DatabaseIcon data-icon="inline-start" />}
-                            Clear all local canvases
+                            {isWeb ? 'Clear all canvases' : 'Clear all local canvases'}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Clear all local canvases?</AlertDialogTitle>
+                            <AlertDialogTitle>{isWeb ? 'Clear all canvases?' : 'Clear all local canvases?'}</AlertDialogTitle>
                             <AlertDialogDescription>
-                              All local canvases and thumbnails will be permanently deleted; notes and records are unaffected. This cannot be undone.
+                              {isWeb
+                                ? 'All canvases and thumbnails stored on the server will be permanently deleted; notes and records are unaffected. This cannot be undone.'
+                                : 'All local canvases and thumbnails will be permanently deleted; notes and records are unaffected. This cannot be undone.'}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -600,7 +661,7 @@ export function ErrorRecovery({
                         </AlertDialogContent>
                       </AlertDialog>
 
-                      <AlertDialog>
+                      <AlertDialog open={settingsResetOpen} onOpenChange={handleSettingsResetOpenChange}>
                         <AlertDialogTrigger asChild>
                           <Button variant="outline" disabled={busy}>
                             {activeAction === 'reset-settings'
@@ -611,14 +672,60 @@ export function ErrorRecovery({
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Reset app settings?</AlertDialogTitle>
+                            <AlertDialogTitle>{isWeb ? 'Reset server settings?' : 'Reset app settings?'}</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This will clear interface, model, sync, and workspace settings, but will not delete local notes, records, or the canvas database.
+                              {isWeb
+                                ? 'This will clear interface, model, sync, and workspace settings stored on the server, including saved AI provider keys. Notes, records, and canvases are not deleted. This cannot be undone.'
+                                : 'This will clear interface, model, sync, and workspace settings, but will not delete local notes, records, or the canvas database.'}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
+
+                          {isWeb ? (
+                            <>
+                              <Alert variant="destructive">
+                                <CircleAlertIcon />
+                                <AlertTitle>Will be permanently deleted</AlertTitle>
+                                <AlertDescription>
+                                  Server settings, including saved AI provider keys. A transient server failure does not require this reset; try reloading first.
+                                </AlertDescription>
+                              </Alert>
+
+                              <Field orientation="horizontal">
+                                <Checkbox
+                                  id="settings-reset-acknowledgement"
+                                  checked={settingsResetAcknowledged}
+                                  onCheckedChange={checked => setSettingsResetAcknowledged(checked === true)}
+                                />
+                                <FieldLabel htmlFor="settings-reset-acknowledgement">
+                                  I confirm that my server settings do not need to be kept
+                                </FieldLabel>
+                              </Field>
+
+                              <Field>
+                                <FieldLabel htmlFor="settings-reset-phrase">
+                                  Type “{SETTINGS_RESET_PHRASE}” to confirm
+                                </FieldLabel>
+                                <Input
+                                  id="settings-reset-phrase"
+                                  value={settingsResetPhrase}
+                                  onChange={event => setSettingsResetPhrase(event.target.value)}
+                                  autoComplete="off"
+                                  placeholder={SETTINGS_RESET_PHRASE}
+                                />
+                                <FieldDescription>
+                                  You must check the confirmation above and type the exact same text.
+                                </FieldDescription>
+                              </Field>
+                            </>
+                          ) : null}
+
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction variant="destructive" onClick={resetSettings}>
+                            <AlertDialogAction
+                              variant="destructive"
+                              disabled={isWeb && (!settingsResetAcknowledged || settingsResetPhrase !== SETTINGS_RESET_PHRASE)}
+                              onClick={resetSettings}
+                            >
                               Confirm reset
                             </AlertDialogAction>
                           </AlertDialogFooter>
@@ -628,7 +735,7 @@ export function ErrorRecovery({
                   </AccordionContent>
                 </AccordionItem>
 
-                {!mobile ? (
+                {!mobile && !isWeb ? (
                   <AccordionItem value="level-4">
                     <AccordionTrigger>
                       <span className="flex items-center gap-2">
@@ -730,6 +837,16 @@ export function ErrorRecovery({
               </Accordion>
             </CardContent>
           </Card>
+
+          {isWeb ? (
+            <Alert>
+              <InfoIcon />
+              <AlertTitle>Desktop-only actions are not available here</AlertTitle>
+              <AlertDescription>
+                Opening the data directory, exporting a full backup, and deleting the database need the desktop app, so they are hidden in the browser. If the app keeps failing after a reload, copy the error info below and report the issue.
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </CardContent>
 
         <CardFooter className="flex flex-wrap justify-between gap-2">

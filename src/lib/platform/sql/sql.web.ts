@@ -148,6 +148,19 @@ import {
 export const SQL_WEB_MAX_OPERATIONS_PER_REQUEST = 50;
 
 /**
+ * Per-request timeout in milliseconds for every port call
+ * (DA28-01 / S-P0-17). Matches the ApiClient production budget
+ * and DB_CLIENT_DEFAULT_TIMEOUT_MS in db-client.ts; the value is
+ * restated here rather than imported because this module never
+ * imports the port implementation file (see the PORT SEAM note in
+ * the module header). The adapter passes it on every
+ * executeBatch/executeTransaction call so a stalled server
+ * surfaces a retryable TIMEOUT error instead of hanging the
+ * caller. Keep the two constants equal when either changes.
+ */
+export const SQL_PORT_TIMEOUT_MS = 15000;
+
+/**
  * Field names that must never appear on an operation object
  * (kontrak 1.3 and 1.5, V1-03 4.3 rule 2). Mirrors
  * `FORBIDDEN_OPERATION_FIELDS` in server/src/services/db/kinds.ts
@@ -282,7 +295,7 @@ export function isSqlDbPortError(error: unknown): error is SqlDbPortError {
   );
 }
 
-/** Port options for one transaction call: the idempotency key only. */
+/** Port options for one transaction call: the idempotency key and the timeout. */
 export interface SqlTransactionPortOptions {
   /**
    * Idempotency key for the call. When absent, the port generates
@@ -290,6 +303,22 @@ export interface SqlTransactionPortOptions {
    * The adapter passes the caller's key through verbatim.
    */
   idempotencyKey?: string | null;
+  /**
+   * Per-request timeout in milliseconds. The adapter always
+   * passes SQL_PORT_TIMEOUT_MS; the port races the request
+   * against it and surfaces a TIMEOUT error on expiry.
+   */
+  timeoutMs?: number;
+}
+
+/** Port options for one batch call: the timeout only. */
+export interface SqlBatchPortOptions {
+  /**
+   * Per-request timeout in milliseconds. The adapter always
+   * passes SQL_PORT_TIMEOUT_MS; the port races the request
+   * against it and surfaces a TIMEOUT error on expiry.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -308,6 +337,7 @@ export interface SqlDbPort {
   ): Promise<SqlTransactionResult>;
   executeBatch(
     operations: readonly DbReadOperation[],
+    options?: SqlBatchPortOptions,
   ): Promise<SqlBatchResult>;
 }
 
@@ -879,7 +909,10 @@ export class WebSqlAdapter implements SqlAdapter {
       }
     }
     try {
-      await callPort(() => this.port.executeBatch([]), SINGLE_CALL_CONTEXT);
+      await callPort(
+        () => this.port.executeBatch([], { timeoutMs: SQL_PORT_TIMEOUT_MS }),
+        SINGLE_CALL_CONTEXT,
+      );
       return { ok: true, mode: "web", migrationsCurrent: false };
     } catch {
       return { ok: false, mode: "web", migrationsCurrent: false };
@@ -897,7 +930,7 @@ export class WebSqlAdapter implements SqlAdapter {
   ): Promise<SqlReadRow<K>[]> {
     validateOperations([op], "read");
     const result = await callPort(
-      () => this.port.executeBatch([op]),
+      () => this.port.executeBatch([op], { timeoutMs: SQL_PORT_TIMEOUT_MS }),
       SINGLE_CALL_CONTEXT,
     );
     const entries = validateBatchChunkResult(result, [op.kind]);
@@ -913,7 +946,7 @@ export class WebSqlAdapter implements SqlAdapter {
   ): Promise<SqlReadRow<K> | null> {
     validateOperations([op], "read");
     const result = await callPort(
-      () => this.port.executeBatch([op]),
+      () => this.port.executeBatch([op], { timeoutMs: SQL_PORT_TIMEOUT_MS }),
       SINGLE_CALL_CONTEXT,
     );
     const entries = validateBatchChunkResult(result, [op.kind]);
@@ -942,7 +975,7 @@ export class WebSqlAdapter implements SqlAdapter {
     let completedOperations = 0;
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
       const chunk = chunks[chunkIndex];
-      const result = await callPort(() => this.port.executeBatch(chunk), {
+      const result = await callPort(() => this.port.executeBatch(chunk, { timeoutMs: SQL_PORT_TIMEOUT_MS }), {
         chunkOffset: completedOperations,
         chunkIndex,
         chunkCount: chunks.length,
@@ -972,7 +1005,7 @@ export class WebSqlAdapter implements SqlAdapter {
   ): Promise<SqlWriteResultFor<K>> {
     validateOperations([op], "write");
     const result = await callPort(
-      () => this.port.executeTransaction([op], { idempotencyKey: undefined }),
+      () => this.port.executeTransaction([op], { idempotencyKey: undefined, timeoutMs: SQL_PORT_TIMEOUT_MS }),
       SINGLE_CALL_CONTEXT,
     );
     const entries = validateTransactionResult(result, [op.kind]);
@@ -1024,6 +1057,7 @@ export class WebSqlAdapter implements SqlAdapter {
       () =>
         this.port.executeTransaction(ops, {
           idempotencyKey: opts?.idempotencyKey,
+          timeoutMs: SQL_PORT_TIMEOUT_MS,
         }),
       SINGLE_CALL_CONTEXT,
     );

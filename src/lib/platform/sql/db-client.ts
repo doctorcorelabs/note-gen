@@ -700,6 +700,19 @@ export function deriveChunkIdempotencyKey(
 export const DB_CLIENT_DEFAULT_RETRY_DELAY_MS = 500;
 
 /**
+ * Default per-request timeout in milliseconds (DA28-01 / S-P0-17).
+ * Matches the ApiClient production budget (15 seconds). Every chunk
+ * request is raced against this budget unless the caller supplies
+ * its own timeoutMs or the client was built with a different
+ * defaultTimeoutMs, so a stalled API, tunnel, or database surfaces
+ * a retryable TIMEOUT error instead of hanging the caller forever.
+ * A timeout on the first attempt still gets the single retry this
+ * client allows for a rejected fetch, exactly like any other
+ * transport failure; a timeout on the retry surfaces TIMEOUT.
+ */
+export const DB_CLIENT_DEFAULT_TIMEOUT_MS = 15000;
+
+/**
  * Cap for a server-sent `Retry-After` delay, in milliseconds. A
  * `Retry-After` beyond this cap waits the cap, never longer: an
  * unbounded wait would hang the caller on a transient failure.
@@ -1024,6 +1037,13 @@ export interface SqlDbClientDeps {
    * so specs can observe the delay without waiting in real time.
    */
   delayImpl?: SqlDbDelayLike;
+  /**
+   * Default per-request timeout in milliseconds. A call may
+   * override it with options.timeoutMs. Defaults to
+   * DB_CLIENT_DEFAULT_TIMEOUT_MS. Must be a finite number above
+   * zero when set; anything else throws at construction.
+   */
+  defaultTimeoutMs?: number;
 }
 
 export interface SqlTransactionCallOptions {
@@ -1040,11 +1060,25 @@ export interface SqlTransactionCallOptions {
   idempotencyKey?: string | null;
   /** Caller abort signal, passed through to fetch. Aborting is never retried. */
   signal?: AbortSignal;
+  /**
+   * Per-request timeout in milliseconds; overrides the client
+   * defaultTimeoutMs. Must be a finite number above zero when
+   * set. A timeout rejects the fetch race and follows the normal
+   * retry policy for a rejected fetch.
+   */
+  timeoutMs?: number;
 }
 
 export interface SqlBatchCallOptions {
   /** Caller abort signal, passed through to fetch. Aborting is never retried. */
   signal?: AbortSignal;
+  /**
+   * Per-request timeout in milliseconds; overrides the client
+   * defaultTimeoutMs. Must be a finite number above zero when
+   * set. A timeout rejects the fetch race and follows the normal
+   * retry policy for a rejected fetch.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -1076,6 +1110,13 @@ export interface SqlBatchCallOptions {
  * retryable 429/503 response; the retry reuses the same body and
  * the same idempotency key. See the module header for the rule and
  * its contract citations.
+ *
+ * Timeout: each chunk request is raced against a timeout budget
+ * (DB_CLIENT_DEFAULT_TIMEOUT_MS unless overridden per call or per
+ * client), so a stalled server surfaces a retryable TIMEOUT error
+ * instead of hanging the caller (DA28-01). A timeout on the first
+ * attempt follows the same single-retry rule as any other
+ * transport failure.
  */
 export interface SqlDbClient {
   /**
@@ -1117,6 +1158,21 @@ function createAbortError(): Error {
   return error;
 }
 
+function createTimeoutError(): Error {
+  const error = new Error("The operation timed out.");
+  error.name = "TimeoutError";
+  return error;
+}
+
+function validateTimeoutMs(timeoutMs: number | undefined, owner: string): void {
+  if (timeoutMs === undefined) {
+    return;
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError(`${owner} must be a finite number above zero`);
+  }
+}
+
 function defaultDelay(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted === true) {
     return Promise.reject(createAbortError());
@@ -1137,6 +1193,8 @@ function defaultDelay(ms: number, signal?: AbortSignal): Promise<void> {
 export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
   const generateKey = deps.generateIdempotencyKey ?? createIdempotencyKey;
   const delayImpl = deps.delayImpl ?? defaultDelay;
+  validateTimeoutMs(deps.defaultTimeoutMs, "SqlDbClientDeps.defaultTimeoutMs");
+  const defaultTimeoutMs = deps.defaultTimeoutMs ?? DB_CLIENT_DEFAULT_TIMEOUT_MS;
 
   function resolveFetch(): SqlDbFetchLike {
     if (deps.fetchImpl !== undefined) {
@@ -1166,6 +1224,77 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
   }
 
   /**
+   * Run one POST fetch with the timeout budget and the caller's
+   * abort signal. The fetch is raced against explicit timeout and
+   * abort promises on top of the AbortSignal, mirroring
+   * ApiClient.fetchWithBudget, so the call can never hang on a
+   * fetch implementation that ignores the signal. A timeout
+   * rejects with a TimeoutError-named error, which postWithRetry
+   * maps to a retryable TIMEOUT on the final attempt; an outer
+   * abort rejects with an AbortError-named error, which is never
+   * retried. Only the fetch itself is raced; reading the response
+   * body happens in postAttempt after the fetch resolves.
+   */
+  async function fetchWithBudget(
+    path: string,
+    headers: Record<string, string>,
+    body: string,
+    outerSignal: AbortSignal | undefined,
+    timeoutMs: number,
+    fetchImpl: SqlDbFetchLike,
+  ): Promise<SqlDbFetchResponseLike> {
+    const controller = new AbortController();
+    let timedOut = false;
+    let rejectOnTimeout: ((error: Error) => void) | undefined;
+    let rejectOnAbort: ((error: Error) => void) | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      rejectOnTimeout = reject;
+    });
+    const abortPromise = new Promise<never>((_resolve, reject) => {
+      rejectOnAbort = reject;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      rejectOnTimeout?.(createTimeoutError());
+    }, timeoutMs);
+    const onOuterAbort = (): void => {
+      controller.abort();
+      rejectOnAbort?.(createAbortError());
+    };
+    if (outerSignal) {
+      if (outerSignal.aborted) {
+        clearTimeout(timer);
+        throw createAbortError();
+      }
+      outerSignal.addEventListener("abort", onOuterAbort, { once: true });
+    }
+    try {
+      return await Promise.race([
+        fetchImpl(path, {
+          method: "POST",
+          headers,
+          body,
+          credentials: "same-origin",
+          signal: controller.signal,
+        }),
+        timeoutPromise,
+        abortPromise,
+      ]);
+    } catch (error) {
+      if (timedOut) {
+        throw createTimeoutError();
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      if (outerSignal) {
+        outerSignal.removeEventListener("abort", onOuterAbort);
+      }
+    }
+  }
+
+  /**
    * One POST attempt: fetch, read the body as text, parse the
    * envelope. A response always becomes a result value, never a
    * throw, so the retry wrapper can read the error and the
@@ -1183,14 +1312,16 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
     headers: Record<string, string>,
     signal: AbortSignal | undefined,
     fetchImpl: SqlDbFetchLike,
+    timeoutMs: number,
   ): Promise<PostAttemptResult> {
-    const response = await fetchImpl(path, {
-      method: "POST",
+    const response = await fetchWithBudget(
+      path,
       headers,
       body,
-      credentials: "same-origin",
       signal,
-    });
+      timeoutMs,
+      fetchImpl,
+    );
     const bodyText = await response.text();
     const headerRequestId = response.headers.get("x-request-id");
     const retryAfter = response.headers.get("retry-after");
@@ -1269,7 +1400,9 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
    * `rebuildHeaders` so the retry carries the fresh token). The
    * three triggers share one retry budget. Every other response
    * (409, 400/401/403/404, and the rest) throws on the first
-   * attempt. A caller abort is never retried.
+   * attempt. A caller abort is never retried. A timeout rejects
+   * the fetch race like any other transport failure: it consumes
+   * the one retry, then surfaces as a retryable TIMEOUT.
    */
   async function postWithRetry(
     path: string,
@@ -1278,13 +1411,21 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
     signal: AbortSignal | undefined,
     fetchImpl: SqlDbFetchLike,
     rebuildHeaders: () => Promise<Record<string, string>>,
+    timeoutMs: number,
   ): Promise<{ status: number; data: unknown }> {
     let attemptedRetry = false;
     let attemptHeaders = headers;
     for (;;) {
       let result: PostAttemptResult;
       try {
-        result = await postAttempt(path, body, attemptHeaders, signal, fetchImpl);
+        result = await postAttempt(
+          path,
+          body,
+          attemptHeaders,
+          signal,
+          fetchImpl,
+          timeoutMs,
+        );
       } catch (error) {
         if (signal?.aborted === true || errorNameOf(error) === "AbortError") {
           throwAborted();
@@ -1394,6 +1535,8 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
     if (options.signal?.aborted === true) {
       throwAborted();
     }
+    validateTimeoutMs(options.timeoutMs, "SqlTransactionCallOptions.timeoutMs");
+    const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
     const fetchImpl = resolveFetch();
     const baseKey =
       options.idempotencyKey === undefined
@@ -1427,6 +1570,7 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
           options.signal,
           fetchImpl,
           () => buildHeaders(chunkKey),
+          timeoutMs,
         ));
       } catch (error) {
         if (error instanceof SqlDbClientError) {
@@ -1453,6 +1597,8 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
     if (options.signal?.aborted === true) {
       throwAborted();
     }
+    validateTimeoutMs(options.timeoutMs, "SqlBatchCallOptions.timeoutMs");
+    const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
     const fetchImpl = resolveFetch();
     // Reads carry no idempotency key (kontrak 3.4: batch has no key
     // semantics). An empty call still sends one request, matching
@@ -1476,6 +1622,7 @@ export function createSqlDbClient(deps: SqlDbClientDeps = {}): SqlDbClient {
           options.signal,
           fetchImpl,
           () => buildHeaders(null),
+          timeoutMs,
         ));
       } catch (error) {
         if (error instanceof SqlDbClientError) {

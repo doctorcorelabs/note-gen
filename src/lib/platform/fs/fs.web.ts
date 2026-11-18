@@ -137,6 +137,21 @@ const MAX_PATH_SEGMENTS = 50;
 const TEXT_EXTENSIONS = [".md", ".txt"];
 const STANDARD_CONFLICT_ACTIONS = ["reload", "saveAsCopy", "forceOverwrite"];
 
+/**
+ * Default per-request timeout for workspace HTTP calls (DA28-01 /
+ * S-P0-17). Matches the ApiClient production budget (15 seconds).
+ * Every request through doFetch is raced against this budget, so a
+ * stalled API, tunnel, or database surfaces a `timeout`
+ * FsAdapterError instead of hanging the caller forever. The race
+ * bounds time-to-response-headers; reading a response body that
+ * already started is not cut off by it. Override per adapter
+ * through WebFsAdapterDeps.defaultTimeoutMs.
+ */
+export const DEFAULT_FS_REQUEST_TIMEOUT_MS = 15000;
+
+/** Rejection sentinel for the doFetch timeout race. Never surfaces to callers. */
+const FETCH_TIMEOUT_SENTINEL: unique symbol = Symbol("fs-fetch-timeout");
+
 /** Minimal fetch surface, so tests can inject a fake without DOM types. */
 export interface FetchResponseLike {
   readonly ok: boolean;
@@ -152,6 +167,13 @@ export interface FetchInitLike {
   headers?: Record<string, string>;
   body?: string | Uint8Array;
   credentials?: string;
+  /**
+   * Abort signal for the request. doFetch always supplies its own
+   * timeout controller signal, so a fetch implementation that
+   * honors signals aborts promptly; the timeout race bounds the
+   * call even for implementations that ignore the signal.
+   */
+  signal?: AbortSignal;
 }
 
 export type FetchLike = (
@@ -188,6 +210,14 @@ export interface WebFsAdapterDeps {
   watchPollIntervalMs?: number;
   /** Polling interval while the tab is hidden. Default 30000 ms. */
   watchPollIntervalHiddenMs?: number;
+  /**
+   * Per-request timeout in milliseconds for workspace HTTP calls.
+   * Defaults to DEFAULT_FS_REQUEST_TIMEOUT_MS. Must be a finite
+   * number above zero when set; anything else throws at
+   * construction. There is no unbounded mode: a stalled request
+   * must always surface as a `timeout` error (DA28-01).
+   */
+  defaultTimeoutMs?: number;
 }
 
 interface WorkspaceEntryWire {
@@ -537,6 +567,12 @@ function defaultFetchImpl(): FetchLike {
 
 export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
   const fetchImpl: FetchLike = deps.fetchImpl ?? defaultFetchImpl();
+  const timeoutMs = deps.defaultTimeoutMs ?? DEFAULT_FS_REQUEST_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError(
+      "WebFsAdapterDeps.defaultTimeoutMs must be a finite number above zero",
+    );
+  }
 
   async function csrfHeader(mutating: boolean): Promise<Record<string, string>> {
     if (!mutating || !deps.getCsrfToken) {
@@ -552,9 +588,42 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
     mutating: boolean,
   ): Promise<FetchResponseLike> {
     const headers = { ...(init.headers ?? {}), ...(await csrfHeader(mutating)) };
+    // Timeout race (DA28-01): the fetch is raced against an
+    // explicit timer on top of the AbortSignal, mirroring
+    // ApiClient.fetchWithBudget, so the call can never hang on a
+    // fetch implementation that ignores the signal. A timeout
+    // surfaces as a `timeout` FsAdapterError, never as a hang and
+    // never with the request URL in the message.
+    const controller = new AbortController();
+    let timedOut = false;
+    let rejectOnTimeout: ((reason: unknown) => void) | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      rejectOnTimeout = reject;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      rejectOnTimeout?.(FETCH_TIMEOUT_SENTINEL);
+    }, timeoutMs);
     try {
-      return await fetchImpl(url, { ...init, headers, credentials: "same-origin" });
+      return await Promise.race([
+        fetchImpl(url, {
+          ...init,
+          headers,
+          credentials: "same-origin",
+          signal: controller.signal,
+        }),
+        timeoutPromise,
+      ]);
     } catch (err) {
+      if (err === FETCH_TIMEOUT_SENTINEL || timedOut) {
+        throw new FsAdapterError({
+          code: "timeout",
+          status: 0,
+          message:
+            "Workspace request timed out: the server did not respond in time. Try again.",
+        });
+      }
       if (err instanceof FsAdapterError) {
         throw err;
       }
@@ -563,6 +632,8 @@ export function createWebFsAdapter(deps: WebFsAdapterDeps = {}): FsAdapter {
         status: 0,
         message: `Workspace request failed: ${messageOf(err)}`,
       });
+    } finally {
+      clearTimeout(timer);
     }
   }
 
