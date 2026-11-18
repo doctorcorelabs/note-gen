@@ -356,8 +356,13 @@ export function CanvasSidebar() {
   }, [])
 
   useEffect(() => {
+    // Web fork (Fase 1, DA-11-03): never load canvas projects while
+    // canvas is disabled; getDb() rejects in web mode, and the
+    // unguarded load left `loading` stuck and the list falsely
+    // empty. LeftSidebar also gates this component off entirely.
+    if (canvasDisabled) return
     void loadProjects()
-  }, [loadProjects])
+  }, [canvasDisabled, loadProjects])
 
   const visibleProjects = useMemo(() => {
     const source = trashMode ? deletedProjects : projects

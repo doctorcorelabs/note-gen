@@ -16,6 +16,8 @@ import { ExpandableTabs } from "@/components/ui/expandable-tabs"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
 import { CanvasActions, CanvasSidebar } from './canvas/canvas-sidebar'
+import { CanvasDisabledPanel } from '@/components/web-chrome/disabled-feature-panels'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { SidebarSearch } from './sidebar-search'
 import { getPluginIcon } from '@/components/plugins/plugin-icon'
 import { PluginViewSurface, PluginViewToolbar } from '@/components/plugins/plugin-view-surface'
@@ -40,6 +42,14 @@ export function LeftSidebar() {
   const outlineEditor = useEditorOutlineStore(state => state.active)
   const t = useTranslations()
   const locale = useLocale()
+  // Web fork (Fase 1, DA-11-03): canvas is NOT active in the web MVP
+  // (AD-33 KEP-1). Gate on the same predicate as the desktop editor
+  // gate in editor-layout.tsx and the mobile editor gate (S-P0-04):
+  // while disabled, the canvases tab renders the disabled panel and
+  // CanvasSidebar never mounts, so its loader cannot fail silently
+  // into a false empty list and its actions cannot throw without
+  // feedback. Desktop (Tauri) behavior is unchanged.
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
   const pluginsInitialized = usePluginStore((state) => state.initialized)
   const displaySettings = usePluginStore(state => state.deviceSettings)
   const installed = usePluginStore((state) => state.installed)
@@ -136,7 +146,7 @@ export function LeftSidebar() {
                 leftSidebarTab !== "canvases" && "pointer-events-none"
               )}
             >
-              <CanvasActions />
+              {canvasDisabled ? null : <CanvasActions />}
             </motion.div>
           </div>
         </div>
@@ -187,7 +197,11 @@ export function LeftSidebar() {
               value="canvases"
               className="absolute inset-0 m-0 overflow-hidden data-[state=inactive]:hidden"
             >
-              <CanvasSidebar />
+              {canvasDisabled ? (
+                <CanvasDisabledPanel className="h-full overflow-y-auto" />
+              ) : (
+                <CanvasSidebar />
+              )}
             </TabsContent>
           </div>
         </SidebarSearch>

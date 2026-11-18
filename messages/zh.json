@@ -5798,6 +5798,8 @@
   "search": {
     "placeholder": "搜索笔记、记录和画布...",
     "results": "{count} 个搜索结果",
+    "loadMore": "加载更多结果",
+    "loadingMore": "正在加载更多结果...",
     "exactMatches": "精确结果",
     "relatedContent": "相关内容",
     "searchingRelated": "正在查找语义相关内容…",

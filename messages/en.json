@@ -5798,6 +5798,8 @@
   "search": {
     "placeholder": "Search notes, records, and canvases...",
     "results": "{count} search results",
+    "loadMore": "Load more results",
+    "loadingMore": "Loading more results...",
     "exactMatches": "Exact results",
     "relatedContent": "Related content",
     "searchingRelated": "Finding semantically related content…",

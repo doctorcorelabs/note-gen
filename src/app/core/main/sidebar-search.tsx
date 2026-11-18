@@ -178,13 +178,13 @@ export function SidebarSearch({ activeTab, children }: { activeTab: SidebarTab; 
 
   const normalizedQuery = query.trim()
   const searching = Boolean(normalizedQuery)
-  const { status, response, searchedQuery, isCurrent, isPending, searchNow, retry } = useKeywordSearch({
+  const { status, response, results, hasMore, isLoadingMore, loadMoreError, searchedQuery, isCurrent, isPending, searchNow, retry, loadMore } = useKeywordSearch({
     query,
     scope: 'all',
     enabled: true,
   })
   const showError = searching && status === 'error' && searchedQuery === normalizedQuery
-  const currentResults = isCurrent && response ? response.results : []
+  const currentResults = isCurrent ? results : []
   const fuzzyStatus = isCurrent && response && !response.fuzzy.available ? response.fuzzy.message : null
 
   useEffect(() => {
@@ -361,6 +361,26 @@ export function SidebarSearch({ activeTab, children }: { activeTab: SidebarTab; 
                 onSelect={result => void handleSelect(result)}
               />
             ))}
+
+            {!showError && isCurrent && currentResults.length > 0 && hasMore ? (
+              <div className="flex flex-col items-center gap-2 px-3 py-3">
+                {loadMoreError ? (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {t('article.file.search.remoteError')}
+                  </p>
+                ) : null}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  data-testid="search-load-more"
+                  onClick={() => loadMore()}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? t('search.loadingMore') : loadMoreError ? t('article.file.search.retry') : t('search.loadMore')}
+                </Button>
+              </div>
+            ) : null}
 
             {isPending ? (
               <div className="flex items-center justify-center gap-2 px-3 py-4 text-xs text-muted-foreground" role="status">

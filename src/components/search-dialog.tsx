@@ -62,12 +62,12 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const trimmedQuery = searchValue.trim()
-  const { status, response, searchedQuery, isCurrent, isPending, searchNow, retry } = useKeywordSearch({
+  const { status, response, results, hasMore, isLoadingMore, loadMoreError, searchedQuery, isCurrent, isPending, searchNow, retry, loadMore } = useKeywordSearch({
     query: searchValue,
     scope: scopeForSearchFilter(searchFilter),
     enabled: open,
   })
-  const searchResult = isCurrent && response ? response.results : []
+  const searchResult = isCurrent ? results : []
   const showError = Boolean(trimmedQuery) && status === 'error' && searchedQuery === trimmedQuery
   const fuzzyStatus = isCurrent && response && !response.fuzzy.available ? response.fuzzy.message : null
 
@@ -422,6 +422,25 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
             })}
             </div>
           </CommandGroup>
+        )}
+        {isCurrent && searchResult.length > 0 && hasMore && (
+          <div className="flex flex-col items-center gap-2 px-5 py-4">
+            {loadMoreError ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                {t('article.file.search.remoteError')}
+              </p>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              data-testid="search-dialog-load-more"
+              onClick={() => loadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? t('search.loadingMore') : loadMoreError ? t('article.file.search.retry') : t('search.loadMore')}
+            </Button>
+          </div>
         )}
       </CommandList>
     </>

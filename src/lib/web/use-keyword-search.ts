@@ -18,6 +18,16 @@
 // debounce. A superseded request is aborted and its outcome is
 // ignored by run id, so a slow earlier query can never overwrite a
 // newer result or empty state.
+//
+// Pagination (S-P0-05 / DA11-02): the server answers cursor pages
+// of 50 by default and the client already speaks cursors
+// (KeywordSearchParams.cursor, response nextCursor / hasMore). This
+// hook accumulates pages into `results` and exposes `loadMore`,
+// which replays the last page cursor only while the response still
+// matches the current query and scope, so a cursor is never carried
+// to a different query. A failed page load keeps the results
+// already shown and surfaces loadMoreError; only the first page can
+// put the hook into the error state.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -27,6 +37,7 @@ import {
   normalizeSearchQuery,
   searchKeyword,
   type KeywordSearchResponse,
+  type KeywordSearchResult,
   type SearchScope,
 } from "./search-client";
 
@@ -46,8 +57,21 @@ export interface UseKeywordSearchOptions {
 
 export interface UseKeywordSearchResult {
   status: KeywordSearchStatus;
-  /** Last completed response; check isCurrent before rendering it. */
+  /** Last completed page; check isCurrent before rendering it. */
   response: KeywordSearchResponse | null;
+  /**
+   * Accumulated results of every page fetched for the run behind
+   * `response`, in server order. Pages are disjoint by cursor
+   * construction, so no de-duplication is applied. Check isCurrent
+   * before rendering, exactly as for `response`.
+   */
+  results: KeywordSearchResult[];
+  /** True when the current response reports further pages. */
+  hasMore: boolean;
+  /** True while an additional page is being fetched. */
+  isLoadingMore: boolean;
+  /** Last page-load failure; results already shown are kept. */
+  loadMoreError: ApiError | null;
   /** Last failure; meaningful only when status is "error". */
   error: ApiError | null;
   /** Query of the last started run (completed, failed, or in flight). */
@@ -60,6 +84,12 @@ export interface UseKeywordSearchResult {
   searchNow: () => void;
   /** Re-run the current query immediately (error-state retry). */
   retry: () => void;
+  /**
+   * Fetch the next page for the current query and scope and append
+   * it to `results`. No-op unless the response is current, reports
+   * more pages, and no page load is already in flight.
+   */
+  loadMore: () => void;
 }
 
 export const KEYWORD_SEARCH_DEBOUNCE_MS = 300;
@@ -74,6 +104,9 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
   const [response, setResponse] = useState<KeywordSearchResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [searchedQuery, setSearchedQuery] = useState("");
+  const [results, setResults] = useState<KeywordSearchResult[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<ApiError | null>(null);
   const runRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,6 +120,9 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
       setStatus("loading");
       setError(null);
       setSearchedQuery(queryToSearch);
+      setResults([]);
+      setIsLoadingMore(false);
+      setLoadMoreError(null);
       try {
         const page = await searchKeyword(
           client,
@@ -97,6 +133,7 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
           return;
         }
         setResponse(page);
+        setResults(page.results);
         setStatus("loaded");
       } catch (caught) {
         if (runId !== runRef.current) {
@@ -109,6 +146,48 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
     [client],
   );
 
+  const loadMore = useCallback(() => {
+    if (status !== "loaded" || isLoadingMore || response === null) {
+      return;
+    }
+    if (response.query !== normalized || response.scope !== scope) {
+      return;
+    }
+    const cursor = response.nextCursor;
+    if (!response.hasMore || cursor === null) {
+      return;
+    }
+    const pageQuery = response.query;
+    const pageScope = response.scope;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const runId = ++runRef.current;
+    setIsLoadingMore(true);
+    setLoadMoreError(null);
+    void searchKeyword(
+      client,
+      { query: pageQuery, scope: pageScope, cursor },
+      { signal: controller.signal },
+    ).then(
+      (page) => {
+        if (runId !== runRef.current) {
+          return;
+        }
+        setResponse(page);
+        setResults((previous) => [...previous, ...page.results]);
+        setIsLoadingMore(false);
+      },
+      (caught) => {
+        if (runId !== runRef.current) {
+          return;
+        }
+        setLoadMoreError(caught as ApiError);
+        setIsLoadingMore(false);
+      },
+    );
+  }, [client, isLoadingMore, normalized, response, scope, status]);
+
   useEffect(() => {
     if (!enabled || normalized === null) {
       if (timerRef.current !== null) {
@@ -120,6 +199,9 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
       controllerRef.current = null;
       setStatus("idle");
       setResponse(null);
+      setResults([]);
+      setIsLoadingMore(false);
+      setLoadMoreError(null);
       setError(null);
       setSearchedQuery("");
       return;
@@ -167,6 +249,7 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
     response !== null &&
     response.query === normalized &&
     response.scope === scope;
+  const hasMore = isCurrent && response !== null && response.hasMore;
   const isPending =
     enabled &&
     normalized !== null &&
@@ -176,11 +259,16 @@ export function useKeywordSearch(options: UseKeywordSearchOptions): UseKeywordSe
   return {
     status,
     response,
+    results,
+    hasMore,
+    isLoadingMore,
+    loadMoreError,
     error,
     searchedQuery,
     isCurrent,
     isPending,
     searchNow,
     retry: searchNow,
+    loadMore,
   };
 }
