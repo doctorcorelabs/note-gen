@@ -4072,7 +4072,10 @@ const useArticleStore = create<NoteState>((set, get) => ({
         inFlightArticleSaves.set(path, savePromise)
         try {
           await savePromise
-          const outcome: 'written' | 'conflict' | 'discarded' = justPulledOutcome
+          // The closure assignments above are invisible to control-flow
+          // analysis, which narrows the outer variable to its
+          // initializer; widen back to the declared union at the read.
+          const outcome = justPulledOutcome as 'written' | 'conflict' | 'discarded'
           if (outcome === 'written') {
             get().updateArticleSaveStatus(path, {
               status: 'saved',
@@ -4281,7 +4284,10 @@ const useArticleStore = create<NoteState>((set, get) => ({
         inFlightArticleSaves.set(path, commitPromise)
         try {
           await commitPromise
-          const outcome: 'written' | 'conflict' | 'discarded' = commitOutcome
+          // The closure assignments above are invisible to control-flow
+          // analysis, which narrows the outer variable to its
+          // initializer; widen back to the declared union at the read.
+          const outcome = commitOutcome as 'written' | 'conflict' | 'discarded'
           if (outcome === 'written') {
             get().updateArticleSaveStatus(path, {
               status: 'saved',
