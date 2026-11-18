@@ -6,6 +6,9 @@ import { convertImageByWorkspace } from './utils'
 import { toMarkdownImagePath } from './markdown-image-path'
 import { getWritingAssetsDirName } from './writing-assets-path'
 import useArticleStore from '@/stores/article'
+import useSettingStore from '@/stores/setting'
+import { toast } from '@/hooks/use-toast'
+import { isEditorFeatureDisabled } from './editor-disabled'
 import {
   captureStaticAssetSyncSource,
   enqueueStaticAssetSync,
@@ -53,6 +56,26 @@ export async function saveImageToWorkspace(
   }
 }
 
+// DA-10-F08: in the web MVP image hosting is OFF (AD-20), so the
+// editor always saves images locally. Tell the user once, and only
+// when hosting was enabled, that the image went to the workspace
+// instead of the provider. The notice is best effort: it must never
+// break the save itself.
+let imageHostingDisabledNoticeShown = false
+function notifyImageHostingDisabledOnce(): void {
+  if (imageHostingDisabledNoticeShown) return
+  if (!useSettingStore.getState().useImageRepo) return
+  imageHostingDisabledNoticeShown = true
+  try {
+    toast({
+      title: 'Image hosting is not available yet',
+      description: 'Image hosting is not available yet in the web version. Images are saved to your workspace instead.',
+    })
+  } catch {
+    // The save below still runs; the notice is informational only.
+  }
+}
+
 /**
  * 处理图片文件：上传到图床或保存到本地
  * @param file 图片文件
@@ -63,8 +86,16 @@ export async function handleImageUpload(
   file: File,
   activeFilePath?: string
 ): Promise<ImageUploadResult> {
+  // DA-10-F08: gate on the disabled-feature flag, never on a local
+  // copy of the list. In web mode the provider branch is skipped
+  // entirely and the image is always saved locally below.
+  const imageHostingDisabled = isEditorFeatureDisabled('imageHosting')
+  if (imageHostingDisabled) {
+    notifyImageHostingDisabledOnce()
+  }
+
   // 检查是否配置了图床
-  const isConfigured = await isImageHostingConfigured()
+  const isConfigured = imageHostingDisabled ? false : await isImageHostingConfigured()
 
   // 1. 如果配置了图床，尝试上传
   if (isConfigured) {
