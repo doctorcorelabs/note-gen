@@ -51,24 +51,25 @@ ke `web:80` (halaman HTML/statis). Respons `/api/*` dan
 Header: `Content-Security-Policy-Report-Only`
 
 ```
-default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests; report-uri /api/csp-reports; report-to csp-endpoint
+default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests; report-uri /api/csp-reports
 ```
 
 Header pendamping pada cakupan yang sama:
 
-- `Reporting-Endpoints: csp-endpoint="/api/csp-reports"` (wajib,
-  agar direktif `report-to` berfungsi; tanpa header ini hanya
-  `report-uri` yang bekerja).
+- TIDAK ADA header `Reporting-Endpoints` (DIHAPUS per AD-140
+  butir 5: `report-to` + `Reporting-Endpoints` menekan seluruh
+  pengiriman laporan di Chrome 159; pelaporan memakai
+  `report-uri` saja).
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Cross-Origin-Opener-Policy: same-origin`
 - `Cross-Origin-Resource-Policy: same-origin` (pengecualian hanya
   bila uji membuktikan worker/runtime plugin rusak, K-12g)
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
-  (USULAN, butuh konfirmasi gelombang 5)
-- `Strict-Transport-Security: max-age=31536000` (USULAN, butuh
-  konfirmasi gelombang 5; tanpa includeSubDomains dan tanpa
-  preload; hanya efektif lewat HTTPS)
+  (DITERIMA AD-140 untuk MVP)
+- `Strict-Transport-Security: max-age=31536000` (DITERIMA AD-140;
+  tanpa includeSubDomains dan tanpa preload; hanya efektif lewat
+  HTTPS; verifikasi efek pada deploy HTTPS pertama)
 
 Tidak ada `X-Frame-Options` terpisah (`frame-ancestors` sudah ada).
 Tidak ada `<meta>` CSP untuk halaman utama. `upgrade-insecure-requests`
@@ -249,12 +250,15 @@ konfigurasi SCRAM deploy ke compose dev secara diam-diam.
 
 ## 5. Keputusan terbuka (pemilik: gelombang 5 / koordinator)
 
-- K-12: nilai CSP penegakan final, dari bukti Report-Only.
+- K-12: DIPUTUSKAN AD-140 (tetap Report-Only untuk deploy Fase 1;
+  penegakan ditunda ke slot khusus; nilai penegakan final dari
+  bukti Report-Only + V3 injeksi).
 - K-15: image GHCR web/api (stack deploy belum dapat di-up).
 - K-03: pgvector atas `postgres:17-alpine` (jangan diam-diam
   ganti image; bukti G4 langkah 1 wajib jalan dulu).
-- Konfirmasi nilai `Strict-Transport-Security` dan daftar
-  `Permissions-Policy` (keduanya USULAN di berkas ini).
+- Nilai `Strict-Transport-Security` dan daftar
+  `Permissions-Policy` DIPUTUSKAN AD-140 (lihat seksi 2.1);
+  verifikasi efek HSTS pada deploy HTTPS pertama masih terbuka.
 - Konfirmasi wiring `trustProxy` sebelum menafsirkan log laporan
   CSP (seksi 2.3).
 - Ratifikasi pengecualian K-09/K-18 untuk perilaku buang-field
