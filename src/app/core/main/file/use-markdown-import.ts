@@ -102,10 +102,12 @@ async function copyPickedMarkdownFiles(
       continue
     }
 
-    const fileName = parts[parts.length - 1]
-    if (fileName.startsWith('.')) {
+    // Hidden files and hidden directories are skipped, matching the
+    // desktop recursive copy.
+    if (parts.some(part => part.startsWith('.'))) {
       continue
     }
+    const fileName = parts[parts.length - 1]
     const isMarkdown = fileName.endsWith('.md')
     const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(fileName)
     if (!isMarkdown && !isImage) {
