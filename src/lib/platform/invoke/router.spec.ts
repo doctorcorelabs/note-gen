@@ -228,6 +228,16 @@ test("backend routes without a handler reject with an explicit 501", async () =>
   );
 });
 
+test("backup create and list are not phase 1 routes; export is", () => {
+  // Only the export endpoint exists (R24-DEC2E, AD-201 item 2A).
+  // Create and list have no server endpoint and must not carry a
+  // phase 1 label; restore stays phase 2 as before.
+  assert.equal(getBackendRoute("create_managed_backup")?.phase, "2");
+  assert.equal(getBackendRoute("list_managed_backups")?.phase, "2");
+  assert.equal(getBackendRoute("export_app_data")?.phase, "1");
+  assert.equal(getBackendRoute("restore_managed_backup")?.phase, "2");
+});
+
 test("route table holds 56 dedicated endpoints and no generic path", () => {
   assert.equal(BACKEND_ROUTES.length, 56);
   const commands = BACKEND_ROUTES.map((route) => route.command);

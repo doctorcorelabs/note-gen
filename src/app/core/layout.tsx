@@ -436,7 +436,16 @@ export default function RootLayout({
         }
         if (cancelled) { cleanupWiki(); return }
         stopWiki = cleanupWiki
-        stopManagedBackup = initManagedBackupRuntime()
+        // Web fork (Fase 1, R24-DEC2E): the scheduled backup runtime is
+        // skipped explicitly in web mode. There is no server endpoint
+        // for scheduled or managed backups in this version (DA-12-03,
+        // DA-09-N04); the one export endpoint (AD-201 item 2A) does
+        // not feed this runtime. Running it would retry a failing
+        // backup every 30 minutes and record lastError with no
+        // visible signal. Desktop behavior is unchanged.
+        if (!webMode) {
+          stopManagedBackup = initManagedBackupRuntime()
+        }
 
         void initShortcut().catch((error) => console.error('Failed to initialize global shortcuts:', error))
         initEditorShortcuts()

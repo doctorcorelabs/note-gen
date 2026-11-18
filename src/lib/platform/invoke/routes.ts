@@ -53,9 +53,18 @@ export const BACKEND_ROUTES: readonly BackendRoute[] = Object.freeze([
     phase: "2",
   },
 
-  // Backup and restore (phase 1 for create, list, and export).
-  { command: "create_managed_backup", method: "POST", path: "/api/backups", group: "backups", phase: "1" },
-  { command: "list_managed_backups", method: "GET", path: "/api/backups", group: "backups", phase: "1" },
+  // Backup and restore. Only the export endpoint exists (R24-DEC2E,
+  // AD-201 item 2A): POST /api/backups/export answers 200 with a JSON
+  // workspace export. Create and list have no server endpoint, so
+  // they carry phase "2" and reject locally as unbuilt, like
+  // restore. The export entry keeps phase "1" because its endpoint
+  // exists, but phase alone does not make invoke callable: dispatch
+  // still needs a registered handler, and none is registered in the
+  // MVP, so a direct invoke of export_app_data rejects with an
+  // explicit 501 by design. The supported web caller is the API
+  // client download in the error recovery screen, not invoke.
+  { command: "create_managed_backup", method: "POST", path: "/api/backups", group: "backups", phase: "2" },
+  { command: "list_managed_backups", method: "GET", path: "/api/backups", group: "backups", phase: "2" },
   { command: "export_app_data", method: "POST", path: "/api/backups/export", group: "backups", phase: "1" },
   { command: "restore_managed_backup", method: "POST", path: "/api/backups/restore", group: "backups", phase: "2" },
   { command: "import_app_data_from_file", method: "POST", path: "/api/backups/restore", group: "backups", phase: "2" },

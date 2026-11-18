@@ -48,6 +48,9 @@ import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { isMobileDevice } from '@/lib/check'
+import { isTauri } from '@/lib/platform/detect'
+import { createApiClient } from '@/lib/web/api-client'
+import { createWebApiAuthSeam, handleUnauthorizedError } from '@/lib/web/csrf'
 
 type RecoveryAction =
   | 'exit'
@@ -304,6 +307,36 @@ export function ErrorRecovery({
 
   function exportFullBackup() {
     void runRecovery('export-backup', async () => {
+      // Web fork (Fase 1, R24-DEC2E, AD-201 item 2A): in web mode the
+      // desktop path below cannot run (dialog.save throws, and no
+      // invoke handler is registered for export_app_data), so the
+      // export is fetched from POST /api/backups/export through the
+      // API client and saved with the content-shaped dialog. The
+      // download is an unencrypted JSON copy of the workspace text
+      // files, not a restorable backup archive.
+      if (!isTauri()) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const fileName = `notegen-export-${timestamp}.json`
+        const seam = createWebApiAuthSeam()
+        const client = createApiClient({
+          csrfTokenProvider: () => seam.csrf.getToken(),
+          onUnauthorized: (error) => {
+            handleUnauthorizedError(seam, error)
+          },
+        })
+        const result = await client.requestBytes('/api/backups/export', {
+          method: 'POST',
+          jsonBody: {},
+        })
+        await platform.dialog.saveBlob(
+          { title: 'Export workspace data', defaultPath: fileName },
+          new Blob([result.bytes], { type: 'application/json' }),
+        )
+        setActionMessage(`Workspace export downloaded: ${fileName}`)
+        setActiveAction(null)
+        return
+      }
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       const outputPath = await platform.dialog.save({
         title: 'Export full NoteGen data backup',
@@ -358,6 +391,7 @@ export function ErrorRecovery({
 
   const busy = activeAction !== null
   const mobile = isMobileDevice()
+  const desktop = isTauri()
 
   function reportGitHubIssue() {
     void runRecovery('report-issue', async () => {
@@ -652,12 +686,21 @@ export function ErrorRecovery({
                           It will not delete Markdown files, the attachments directory, or the recordings directory.
                         </AlertDescription>
                       </Alert>
+                      {!desktop ? (
+                        <Alert>
+                          <InfoIcon />
+                          <AlertTitle>What the web export contains</AlertTitle>
+                          <AlertDescription>
+                            The export downloads an unencrypted JSON copy of your workspace notes. Media and other non-text files are listed by name only; their contents are not included. This export cannot be restored yet.
+                          </AlertDescription>
+                        </Alert>
+                      ) : null}
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={exportFullBackup} disabled={busy}>
                           {activeAction === 'export-backup'
                             ? <Spinner data-icon="inline-start" />
                             : <ArchiveIcon data-icon="inline-start" />}
-                          Export full data backup
+                          {desktop ? 'Export full data backup' : 'Export workspace data (JSON)'}
                         </Button>
                         <AlertDialog open={databaseResetOpen} onOpenChange={handleDatabaseResetOpenChange}>
                           <AlertDialogTrigger asChild>

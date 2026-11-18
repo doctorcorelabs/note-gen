@@ -7,8 +7,10 @@
 // excepted routes must stay absent, and a wrong method on a
 // newly wired path must answer 405 (W4-FAILCLOSED semantics),
 // not 404. The expected set grows with each W4-WIRE increment;
-// the final set is the 32 HTTP routes outside the exceptions
-// (AD-114: backup-7 + admin-4 stay excepted, never registered).
+// the final set is the 33 HTTP routes outside the exceptions
+// (AD-114: backup-6 + admin-4 stay excepted, never registered;
+// POST /api/backups/export left the exception set when R24-DEC2E
+// registered the AD-201 minimal export endpoint).
 //
 // Presence is probed behaviorally, not by introspection: every
 // route in this slot requires a session, so a request with no
@@ -67,18 +69,21 @@ const EXPECTED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['GET', '/api/tags/123'],
   ['PATCH', '/api/tags/123'],
   ['DELETE', '/api/tags/123'],
+  // R24-DEC2E (AD-201 item 2A): the one minimal export route. The
+  // remaining backup routes stay in EXCEPTED_ROUTES below.
+  ['POST', '/api/backups/export'],
 ];
 
-// Excepted routes (AD-114, kontrak 3.10/3.13): backup CRUD (7)
+// Excepted routes (AD-114, kontrak 3.10/3.13): backup CRUD (6)
 // and admin (4) must NOT be registered by this slot. The backup
 // restore stub is a separate contract row and is not in this
-// list.
+// list. POST /api/backups/export is NOT excepted: it is registered
+// by the backups adapter (AD-201 item 2A) and probed above.
 const EXCEPTED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['POST', '/api/backups'],
   ['GET', '/api/backups'],
   ['GET', '/api/backups/abc'],
   ['GET', '/api/backups/abc/download'],
-  ['POST', '/api/backups/export'],
   ['GET', '/api/backups/downloads/token-1'],
   ['GET', '/api/backups/jobs/job-1'],
   ['GET', '/api/admin/users'],
@@ -108,7 +113,7 @@ describe('W4-WIRE route census', () => {
     return app;
   }
 
-  it('registers every increment-1 to increment-4 route (unauthenticated probe answers 401, not 404)', async () => {
+  it('registers every increment-1 to increment-4 route plus the AD-201 export route (unauthenticated probe answers 401, not 404)', async () => {
     const built = await censusApp();
     for (const [method, url] of EXPECTED_ROUTES) {
       const res = await built.inject({ method, url });

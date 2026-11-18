@@ -4293,7 +4293,7 @@
     "disabled": {
       "canvas": "Canvas is available in Phase 2. This section is disabled in this version.",
       "sync": "Sync is available in a later phase. The server is the single source of truth in this version. No sync credentials can be entered here.",
-      "backup": "Backups are managed by the server. Local backup folders are not used in the web version.",
+      "backup": "Backup settings are not available in the web version. Local backup folders and backup schedules are not used in the web version.",
       "imageHosting": "Image hosting is available in Phase 2. Assets in this version are handled through the workspace media and record asset endpoints. No image hosting credentials can be entered here.",
       "ai": "AI providers and models are available in Phase 2. No API keys can be entered here.",
       "webSearch": "Web search is available in Phase 2, as part of AI providers. No API keys can be entered here.",
