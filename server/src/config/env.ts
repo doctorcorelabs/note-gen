@@ -31,12 +31,27 @@
 //   canonical origin (section 7.6); and an insecure cookie flag outside
 //   development on localhost (section 4.2). Each refusal message names
 //   the variable only, never its value.
+// - A configured AUTH_SECRET that is shorter than MIN_SECRET_LENGTH
+//   or carries a known placeholder marker also refuses boot, as does
+//   a SETUP_TOKEN carrying a placeholder marker (S-P0-11, G11a).
+//   An unset AUTH_SECRET still only warns: authentication fails
+//   closed per request until it is set, and health endpoints keep
+//   reporting. A short SETUP_TOKEN still only warns here; the
+//   zero-account boot prerequisite owns that refusal (section 2.2).
+// - ENCRYPTION_KEY validity is probed with the same key-ring loader
+//   the settings cipher uses, without storing the value: the
+//   encryptionKeyValid flag reports whether a key ring loads, and a
+//   configured-but-invalid key warns by variable name (DA-20-03).
+//   Validity never refuses boot: secret writes fail closed with 503
+//   while status reads keep working.
 // - SETUP_TOKEN is presence-and-length only here on purpose. Whether a
 //   missing or short setup token must refuse boot depends on database
 //   state (section 2.2: only when no account exists yet), which this
 //   module cannot see. The auth worker enforces that boot prerequisite
 //   after the database is reachable; this module only records the flags
 //   it needs.
+
+import { loadKeyRingFromEnv } from '../lib/crypto/key-ring.js';
 
 export interface ServerConfig {
   host: string;
@@ -72,6 +87,12 @@ export interface ServerConfig {
   authSecretConfigured: boolean;
   authSecretLengthOk: boolean;
   encryptionKeyConfigured: boolean;
+  // True when a key ring loads from the configured encryption key
+  // variables (DA-20-03). Optional so existing config literals keep
+  // compiling (same precedent as assetRoot/trashRoot); loadConfig
+  // always sets it. Undefined on hand-built literals means unknown,
+  // never valid.
+  encryptionKeyValid?: boolean;
   setupTokenConfigured: boolean;
   setupTokenLengthOk: boolean;
   maxBodyBytes: number;
@@ -85,6 +106,34 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1048576;
 export const MAX_BODY_LIMIT_BYTES = 104857600;
 export const DEFAULT_JWKS_CACHE_TTL_SECONDS = 3600;
 export const MIN_SECRET_LENGTH = 32;
+
+// Known placeholder markers in secret values (S-P0-11). A value
+// whose alphanumeric skeleton contains CHANGEME is placeholder
+// shaped: this covers CHANGE_ME, CHANGE-ME, CHANGE ME, and CHANGEME
+// spellings in any case. Real random secrets never carry this
+// marker. The check names the variable only; it never logs or
+// stores the value.
+export function containsPlaceholderMarker(value: string): boolean {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .includes('CHANGEME');
+}
+
+// Whether an AUTH_SECRET value may be used as an HMAC key (G11a).
+// One shared predicate for boot validation and for every use site
+// (session creation, CSRF derivation, rate-limit keying): undefined,
+// blank, short, and placeholder values are all unusable, and every
+// use site fails closed on them. Length is enforced here as well as
+// at boot so contexts built without loadConfig cannot silently run
+// on a weak secret.
+export function isUsableAuthSecret(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+  const trimmed = value.trim();
+  return trimmed.length >= MIN_SECRET_LENGTH && !containsPlaceholderMarker(trimmed);
+}
 
 const LOG_LEVELS = new Set(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
 
@@ -174,6 +223,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const databaseUrl = nonEmpty(env.DATABASE_URL);
   if (databaseUrl === undefined) {
     warnings.push('DATABASE_URL is not set; readiness will fail until it is set.');
+  } else if (containsPlaceholderMarker(databaseUrl)) {
+    warnings.push('DATABASE_URL looks like a placeholder value; readiness will fail until it is set to a real database URL.');
   }
 
   const workspaceRoot = nonEmpty(env.WORKSPACE_ROOT);
@@ -316,6 +367,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       'CF_ACCESS_ENABLED must be true when PUBLIC_BASE_URL is not localhost.',
     );
   }
+  if (cfAccessAud !== undefined && containsPlaceholderMarker(cfAccessAud)) {
+    warnings.push('CF_ACCESS_AUD looks like a placeholder value; Access verification will fail closed until it is set to the real audience.');
+  }
 
   let cfAccessJwksCacheTtlSeconds = DEFAULT_JWKS_CACHE_TTL_SECONDS;
   if (env.CF_ACCESS_JWKS_CACHE_TTL_SECONDS !== undefined && nonEmpty(env.CF_ACCESS_JWKS_CACHE_TTL_SECONDS) !== undefined) {
@@ -335,7 +389,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (!authSecretConfigured) {
     warnings.push('AUTH_SECRET is not set; authentication will fail closed until it is set.');
   } else if (!authSecretLengthOk) {
-    warnings.push('AUTH_SECRET is shorter than the required minimum length.');
+    throw new Error(
+      `AUTH_SECRET is shorter than the required minimum length of ${MIN_SECRET_LENGTH} characters.`,
+    );
+  } else if (containsPlaceholderMarker((authSecretRaw as string).trim())) {
+    throw new Error('AUTH_SECRET must not be a placeholder value.');
   }
 
   // Canonical name is ENCRYPTION_KEY (desain-auth.md section 1.4).
@@ -345,8 +403,25 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   // presence flag is recorded, never the value.
   const encryptionKeyConfigured =
     nonEmpty(env.ENCRYPTION_KEY) !== undefined || nonEmpty(env.SECRETS_ENCRYPTION_KEY) !== undefined;
+  // Validity probe (DA-20-03): the same loader the settings cipher
+  // factory uses, run once, discarding the ring. A configured key
+  // that cannot load warns by variable name instead of booting
+  // silently with an unavailable cipher.
+  let encryptionKeyValid = false;
+  if (encryptionKeyConfigured) {
+    try {
+      loadKeyRingFromEnv(env);
+      encryptionKeyValid = true;
+    } catch {
+      encryptionKeyValid = false;
+    }
+  }
   if (!encryptionKeyConfigured) {
     warnings.push('ENCRYPTION_KEY is not set; sealed secrets cannot be handled until it is set.');
+  } else if (!encryptionKeyValid) {
+    warnings.push(
+      'ENCRYPTION_KEY is set but the encryption key configuration is not valid; sealed secrets cannot be handled until it is fixed.',
+    );
   } else if (nonEmpty(env.ENCRYPTION_KEY) === undefined) {
     warnings.push('Only SECRETS_ENCRYPTION_KEY is set; the canonical name is ENCRYPTION_KEY.');
   }
@@ -356,6 +431,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const setupTokenLengthOk = setupTokenConfigured && (setupTokenRaw as string).trim().length >= MIN_SECRET_LENGTH;
   if (!setupTokenConfigured) {
     warnings.push('SETUP_TOKEN is not set; first-account setup cannot run until it is set.');
+  } else if (containsPlaceholderMarker((setupTokenRaw as string).trim())) {
+    throw new Error('SETUP_TOKEN must not be a placeholder value.');
   } else if (!setupTokenLengthOk) {
     warnings.push('SETUP_TOKEN is shorter than the required minimum length.');
   }
@@ -395,6 +472,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     authSecretConfigured,
     authSecretLengthOk,
     encryptionKeyConfigured,
+    encryptionKeyValid,
     setupTokenConfigured,
     setupTokenLengthOk,
     maxBodyBytes,

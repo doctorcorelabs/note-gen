@@ -18,9 +18,16 @@
 //   the current server state (kontrak K-03, retryable false). Keys
 //   are classified one by one: S keys apply, L keys are rejected
 //   local_only, R keys secret_only, unknown keys unknown_key, bad
-//   values invalid_value. Rejected keys never fail the whole request
-//   (kontrak 3.2); applied keys commit atomically with the revision
-//   bump. A PATCH that applies nothing does not raise the revision.
+//   values invalid_value. Two S keys, useImageRepo and
+//   mainImageHosting, are S only while their values carry no
+//   secret-pattern field (CT-07/A-02): a value carrying one is
+//   rejected secret_only, whole key, so secret-shaped fields can
+//   never be stored plaintext under an S key and read back verbatim
+//   by GET. The scan mirrors the client validator in key-schema.ts;
+//   the server is the enforcement point. Rejected keys never fail
+//   the whole request (kontrak 3.2); applied keys commit atomically
+//   with the revision bump. A PATCH that applies nothing does not
+//   raise the revision.
 //   A null value deletes a key; deleting an absent key still counts
 //   as applied (idempotent).
 // - aiModelList is split (desain-store-adapter.md section 2.7):
@@ -88,6 +95,7 @@ import {
   isJsonValue,
   isPlainObject,
   validationError,
+  valueHasSecretPatternField,
   type FieldIssue,
   type PatchSettingsBody,
   type PutAiProviderEntry,
@@ -100,6 +108,24 @@ export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const SETTINGS_PATH = '/api/settings';
 const SECRETS_PUT_PATH = '/api/settings/secrets/ai-providers';
 const MAX_AI_MODEL_LIST_ENTRIES = 100;
+
+// S keys whose S verdict is conditional on the value carrying no
+// secret-pattern field (V1-02 CT-07/A-02). Colon-scoped variants
+// inherit the condition from their basis key, mirroring the client
+// validator (key-schema.ts validatorForKey) and server key
+// classification.
+const SECRET_PATTERN_CONDITIONED_KEYS: ReadonlySet<string> = new Set([
+  'useImageRepo',
+  'mainImageHosting',
+]);
+
+function isSecretPatternConditionedKey(key: string): boolean {
+  if (SECRET_PATTERN_CONDITIONED_KEYS.has(key)) {
+    return true;
+  }
+  const colon = key.indexOf(':');
+  return colon > 0 && SECRET_PATTERN_CONDITIONED_KEYS.has(key.slice(0, colon));
+}
 
 export interface SettingsServiceDeps {
   store: SettingsStore;
@@ -385,6 +411,10 @@ export async function patchSettings(
       }
       if (!isJsonValue(value)) {
         rejected.push({ key, reason: 'invalid_value' });
+        continue;
+      }
+      if (isSecretPatternConditionedKey(key) && valueHasSecretPatternField(value)) {
+        rejected.push({ key, reason: 'secret_only' });
         continue;
       }
       sets.push([key, value]);

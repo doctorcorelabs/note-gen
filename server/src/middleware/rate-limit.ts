@@ -28,6 +28,7 @@
 import type { FastifyReply } from 'fastify';
 import { ApiError, errorEnvelope } from '../plugins/envelope.js';
 import { rateLimitKey } from '../auth/crypto.js';
+import { isUsableAuthSecret } from '../config/env.js';
 import type { AuthStore } from '../auth/store.js';
 import { unavailableOnDbError } from '../auth/service.js';
 import {
@@ -69,12 +70,13 @@ export interface RateLimitDecision {
 }
 
 function requireAuthSecret(authSecret: string | undefined): string {
-  if (authSecret === undefined || authSecret === '') {
-    // Bucket keys cannot be keyed without AUTH_SECRET; fail closed
-    // rather than keying on a raw identifier.
+  if (!isUsableAuthSecret(authSecret)) {
+    // Bucket keys cannot be keyed without a usable AUTH_SECRET;
+    // fail closed rather than keying on a raw identifier or on a
+    // weak or placeholder secret (G11a).
     throw ApiError.serviceUnavailable('Authentication is not configured.');
   }
-  return authSecret;
+  return authSecret as string;
 }
 
 // Reads the failure count for one bucket. Allowed while hits are

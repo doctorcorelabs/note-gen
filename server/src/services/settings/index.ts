@@ -26,16 +26,27 @@ import type { SettingsServiceDeps } from './settings-service.js';
 // fail-closed placeholder (secret writes 503, status reads still
 // work) instead of starting a server that pretends to seal secrets.
 // The config layer already warns at boot when ENCRYPTION_KEY is
-// unset (config/env.ts). Wired by the V3-10b integrator (W7/W8,
-// AD-53); see the adapter note in crypto-seam.ts. This factory adds
-// no AppDeps field (AD-40: AppDeps changes need a recorded
-// amendment).
+// unset or invalid (config/env.ts); this factory additionally logs
+// once, naming the variable only, when it falls back to the
+// placeholder, so a cipher that never became available leaves a
+// diagnosis signal at wiring time too (DA-20-03). Wired by the
+// V3-10b integrator (W7/W8, AD-53); see the adapter note in
+// crypto-seam.ts. This factory adds no AppDeps field (AD-40:
+// AppDeps changes need a recorded amendment).
+let cipherUnavailableLogged = false;
+
 export function createProductionSettingsDeps(): SettingsServiceDeps {
   let cipher: SecretCipher;
   try {
     cipher = createSecretCipherFromEnv(process.env);
   } catch {
     cipher = unavailableSecretCipher;
+    if (!cipherUnavailableLogged) {
+      cipherUnavailableLogged = true;
+      console.warn(
+        'ENCRYPTION_KEY is not set or not valid; secret writes will fail closed until it is set to a valid 32-byte key.',
+      );
+    }
   }
   return {
     cipher,

@@ -38,6 +38,16 @@
  *   task v3b-11b) so L keys route to localStorage and UNKNOWN writes
  *   throw. The adapter already enforces all five classes; only the
  *   data is injected.
+ * - Value validation arrives through `assertValidKeyValue`, the
+ *   throwing form of the key-schema value validator. set() calls it
+ *   on the normalized value before any cache, queue, or listener
+ *   side effect, so a value the server would reject (for example a
+ *   secret-pattern field under useImageRepo or mainImageHosting,
+ *   CT-07/A-02) fails fast in the client instead of travelling to
+ *   PATCH and back. Production wiring MUST inject the
+ *   assertValidKeyValue from key-schema.ts alongside the classifier;
+ *   when absent, no client-side value validation runs and the
+ *   server remains the enforcement point (DA-20-08).
  * - Transport arrives through `fetchImpl`, a minimal fetch surface.
  *   The default uses the global fetch with same-origin credentials
  *   and attaches X-CSRF-Token from the injected `getCsrfToken`
@@ -180,6 +190,15 @@ export const WEB_AI_MODEL_LIST_SECRET_FIELDS: readonly string[] = [
  * the production implementation; the default below is a stand-in.
  */
 export type StoreKeyClassifier = (key: string) => StoreKeyClass;
+
+/**
+ * Throwing key-value validator, matching key-schema.ts
+ * assertValidKeyValue: throws a PlatformCapabilityError with code
+ * invalid_argument when the value is not acceptable for the key,
+ * never echoing the value. Injected like the classifier; see the
+ * module header.
+ */
+export type StoreKeyValueValidator = (key: string, value: unknown) => void;
 
 /**
  * Default classifier: fail-closed on secrets, S for everything else.
@@ -348,6 +367,13 @@ export interface WebStoreAdapterDeps {
   refreshCsrfToken?: () => Promise<unknown>;
   /** Key classifier. Defaults to createDefaultStoreKeyClassifier(). */
   classifyKey?: StoreKeyClassifier;
+  /**
+   * Throwing key-value validator. Defaults to none: without it,
+   * set() performs no client-side value validation and the server
+   * is the only enforcement point. Production wiring injects the
+   * assertValidKeyValue from key-schema.ts.
+   */
+  assertValidKeyValue?: StoreKeyValueValidator;
   /**
    * L-document storage. Defaults to globalThis.localStorage when
    * present, else an in-memory document. Pass null to force the
@@ -658,6 +684,7 @@ interface Transport {
 class WebStoreHandleImpl implements WebStoreHandle {
   readonly path: string;
   private readonly classify: StoreKeyClassifier;
+  private readonly assertValidKeyValue: StoreKeyValueValidator | undefined;
   private readonly transport: Transport;
   private readonly storage: StoreWebStorage;
   private readonly storageKey: string;
@@ -695,6 +722,7 @@ class WebStoreHandleImpl implements WebStoreHandle {
     path: string,
     options: {
       classify: StoreKeyClassifier;
+      assertValidKeyValue?: StoreKeyValueValidator;
       transport: Transport;
       storage: StoreWebStorage;
       broadcastCtor: StoreWebBroadcastChannelCtor | null;
@@ -707,6 +735,7 @@ class WebStoreHandleImpl implements WebStoreHandle {
   ) {
     this.path = path;
     this.classify = options.classify;
+    this.assertValidKeyValue = options.assertValidKeyValue;
     this.transport = options.transport;
     this.storage = options.storage;
     this.storageKey = `${WEB_LOCAL_STORAGE_PREFIX}${path}`;
@@ -1279,6 +1308,11 @@ class WebStoreHandleImpl implements WebStoreHandle {
     // the JSON wire form once, here, so the cache, the queue, the
     // listeners, PATCH, and the L document all see the same value.
     const normalized = normalizeNestedUndefined(value);
+    // Client-side value validation (D-07 site 2, DA-20-08): runs on
+    // the normalized value, before any flush, cache, queue, or
+    // listener side effect, so a rejected value leaves the key
+    // unchanged. Absent when no validator was injected.
+    this.assertValidKeyValue?.(key, normalized);
     if (this.queueSize() >= MAX_QUEUE_ENTRIES && !this.pending.has(key)) {
       // Queue bound (V1-02 5.2.9): flush before accepting more.
       await this.enqueueFlush();
@@ -1528,6 +1562,7 @@ function batchSettings(
 class WebStoreAdapter implements StoreAdapter {
   private readonly handles = new Map<string, WebStoreHandleImpl>();
   private readonly classify: StoreKeyClassifier;
+  private readonly assertValidKeyValue: StoreKeyValueValidator | undefined;
   private readonly transport: Transport;
   private readonly storage: StoreWebStorage;
   private readonly broadcastCtor: StoreWebBroadcastChannelCtor | null;
@@ -1537,6 +1572,7 @@ class WebStoreAdapter implements StoreAdapter {
 
   constructor(options: {
     classify: StoreKeyClassifier;
+    assertValidKeyValue?: StoreKeyValueValidator;
     transport: Transport;
     storage: StoreWebStorage;
     broadcastCtor: StoreWebBroadcastChannelCtor | null;
@@ -1545,6 +1581,7 @@ class WebStoreAdapter implements StoreAdapter {
     createIdempotencyKey: () => string;
   }) {
     this.classify = options.classify;
+    this.assertValidKeyValue = options.assertValidKeyValue;
     this.transport = options.transport;
     this.storage = options.storage;
     this.broadcastCtor = options.broadcastCtor;
@@ -1591,6 +1628,7 @@ class WebStoreAdapter implements StoreAdapter {
         : this.coalesceMs;
     const handle = new WebStoreHandleImpl(path, {
       classify: this.classify,
+      assertValidKeyValue: this.assertValidKeyValue,
       transport: this.transport,
       storage: this.storage,
       broadcastCtor: this.broadcastCtor,
@@ -1635,8 +1673,9 @@ class WebStoreAdapter implements StoreAdapter {
 
 /**
  * Creates a web StoreAdapter. See the module header for the injected
- * ports and the seams wiring must inject (key-schema classifier,
- * CSRF provider plus refresher from the shared seam owned by boot).
+ * ports and the seams wiring must inject (key-schema classifier and
+ * value validator, CSRF provider plus refresher from the shared seam
+ * owned by boot).
  */
 export function createWebStoreAdapter(
   deps: WebStoreAdapterDeps = {},
@@ -1887,6 +1926,7 @@ export function createWebStoreAdapter(
 
   return new WebStoreAdapter({
     classify,
+    assertValidKeyValue: deps.assertValidKeyValue,
     transport,
     storage,
     broadcastCtor,

@@ -10,14 +10,24 @@
 // ENCRYPTION_KEY value, or verification here cannot unseal what
 // enrollment stored. Key version 1 denotes exactly this derivation.
 //
-// Key value precedence (documented, deterministic): a base64 value
-// that decodes to 32 bytes wins; else a 64-hex-character value wins;
-// else SHA-256 of the raw string is used. Operators should set a
-// base64 or hex 32-byte key; the SHA-256 fallback exists so a
-// passphrase-shaped value fails closed into a defined key instead of
-// crashing the server at an unpredictable point.
+// The seal key is the 32-byte key decoded from ENCRYPTION_KEY by
+// the one shared decoder (decodeEncryptionKey in lib/crypto/
+// key-ring.ts), the same decoder the settings key ring uses: hex
+// (64 characters), base64, or base64url. Any other value, including
+// a passphrase-shaped value and a whitespace-only value, yields
+// null and the caller fails closed (G11b). There is deliberately no
+// SHA-256 fallback: hashing an arbitrary string into a key let weak
+// or publicly known values seal TOTP secrets with a key guessable
+// offline, and let the TOTP path silently disagree with the strict
+// settings path over the same variable. For a valid 32-byte key the
+// derived bytes are unchanged, so seals written before this change
+// still open. Domain separation between the TOTP seal key and the
+// envelope key, and versioned TOTP key rotation, remain open work
+// (DA-02-K02): changing the derived bytes would orphan existing
+// seals and needs a re-seal migration first.
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { decodeEncryptionKey } from '../lib/crypto/key-ring.js';
 
 export const TOTP_SEAL_KEY_VERSION = 1;
 const IV_LENGTH = 12;
@@ -27,15 +37,11 @@ export function deriveSealKey(encryptionKeyValue: string | undefined): Buffer | 
   if (encryptionKeyValue === undefined || encryptionKeyValue === '') {
     return null;
   }
-  const trimmed = encryptionKeyValue.trim();
-  const base64Candidate = Buffer.from(trimmed, 'base64');
-  if (base64Candidate.length === 32 && base64Candidate.toString('base64').replace(/=+$/, '') === trimmed.replace(/=+$/, '')) {
-    return base64Candidate;
+  try {
+    return decodeEncryptionKey(encryptionKeyValue);
+  } catch {
+    return null;
   }
-  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-    return Buffer.from(trimmed, 'hex');
-  }
-  return createHash('sha256').update(trimmed, 'utf8').digest();
 }
 
 export class TotpSealError extends Error {

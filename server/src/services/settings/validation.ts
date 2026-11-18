@@ -23,6 +23,7 @@
 
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../plugins/envelope.js';
+import { matchesSecretNamePattern } from './classification.js';
 import { SECRET_BUNDLE_FIELDS, type SecretBundleField } from './crypto-seam.js';
 
 export interface FieldIssue {
@@ -107,6 +108,31 @@ export function isJsonValue(value: unknown, depth = 0): boolean {
   }
   if (isPlainObject(value)) {
     return Object.values(value).every((item) => isJsonValue(item, depth + 1));
+  }
+  return false;
+}
+
+// True when a JSON value carries any field whose name matches a
+// secret-name pattern, at any depth (CT-07/A-02, DA-20-08). This
+// mirrors the client scan in src/lib/platform/store/key-schema.ts
+// (hasSecretPatternField over the same pattern list): the server is
+// the enforcement point and must never import client store code, so
+// the two scans are kept in step by review, like the key lists.
+// Callers run isJsonValue first, so the input is an acyclic JSON
+// value of depth at most 32; the depth cap here is defense only.
+export function valueHasSecretPatternField(value: unknown, depth = 0): boolean {
+  if (depth > 32) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => valueHasSecretPatternField(item, depth + 1));
+  }
+  if (isPlainObject(value)) {
+    for (const [field, item] of Object.entries(value)) {
+      if (matchesSecretNamePattern(field) || valueHasSecretPatternField(item, depth + 1)) {
+        return true;
+      }
+    }
   }
   return false;
 }

@@ -19,6 +19,7 @@
 import type { FastifyRequest } from 'fastify';
 import { ApiError } from '../plugins/envelope.js';
 import type { AuthContext } from './context.js';
+import { isUsableAuthSecret } from '../config/env.js';
 import {
   clientIp,
   deriveCsrfToken,
@@ -141,14 +142,15 @@ export interface CreatedSession {
 function newSessionSecrets(
   authSecret: string | undefined,
 ): { sessionId: string; sessionHash: string; csrfToken: string; csrfTokenHash: string } {
-  if (authSecret === undefined || authSecret === '') {
+  if (!isUsableAuthSecret(authSecret)) {
     // CSRF tokens are derived from AUTH_SECRET (see crypto.ts). Without
-    // it no session can be created honestly, so fail closed.
+    // a usable secret no session can be created honestly, so fail
+    // closed; a short or placeholder secret fails here too (G11a).
     throw ApiError.serviceUnavailable('Authentication is not configured.');
   }
   const sessionId = newOpaqueToken();
   const sessionHash = hashToken(sessionId);
-  const csrfToken = deriveCsrfToken(sessionHash, authSecret);
+  const csrfToken = deriveCsrfToken(sessionHash, authSecret as string);
   return { sessionId, sessionHash, csrfToken, csrfTokenHash: hashToken(csrfToken) };
 }
 

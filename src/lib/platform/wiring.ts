@@ -107,7 +107,7 @@ import {
   createWebSqlAdapter,
   type SqlHealthProbeResult,
 } from "./sql/sql.web";
-import { classifyKey } from "./store/key-schema";
+import { assertValidKeyValue, classifyKey } from "./store/key-schema";
 import {
   createWebStoreAdapter,
   type WebStoreAdapterDeps,
@@ -265,7 +265,8 @@ async function probeSqlHealth(): Promise<SqlHealthProbeResult> {
  * calling it after the freeze throws (registry semantics), and
  * calling it twice before the freeze replaces the registered
  * instances. Production boot calls initializeWebPlatform instead.
- * The store adapter is built with the key-schema classifier; the
+ * The store adapter is built with the key-schema classifier and
+ * value validator; the
  * CSRF providers and refreshers arrive through options (see the
  * module header). The sql adapter is built with a db-client port
  * plus the health probe; its CSRF provider and refresher arrive
@@ -315,6 +316,7 @@ export function registerWebAdapters(
     "store",
     createWebStoreAdapter({
       classifyKey,
+      assertValidKeyValue,
       getCsrfToken: options.getStoreCsrfToken,
       refreshCsrfToken: options.refreshStoreCsrfToken,
     }),

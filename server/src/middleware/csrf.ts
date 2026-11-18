@@ -17,11 +17,13 @@
 // recovered from its stored hash for GET /api/auth/csrf without
 // mutating state in a GET). csrfTokenForSession is the single place
 // that derivation is exposed to handlers; it returns null when no
-// secret is configured, and handlers fail closed with 503.
+// usable secret is configured (missing, short, or placeholder),
+// and handlers fail closed with 503.
 
 import type { FastifyRequest } from 'fastify';
 import type { AuthContext } from '../auth/context.js';
 import { deriveCsrfToken, hashToken, safeEqual } from '../auth/crypto.js';
+import { isUsableAuthSecret } from '../config/env.js';
 import { readCsrfTokenHeader, type SessionPrincipal, type VerifyCsrfTokenFn } from './auth-hook.js';
 
 export function createCsrfVerifier(context: AuthContext): VerifyCsrfTokenFn {
@@ -51,8 +53,8 @@ export function createCsrfVerifier(context: AuthContext): VerifyCsrfTokenFn {
 }
 
 export function csrfTokenForSession(sessionHash: string, authSecret: string | undefined): string | null {
-  if (authSecret === undefined || authSecret === '') {
+  if (!isUsableAuthSecret(authSecret)) {
     return null;
   }
-  return deriveCsrfToken(sessionHash, authSecret);
+  return deriveCsrfToken(sessionHash, authSecret as string);
 }

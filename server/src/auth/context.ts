@@ -94,9 +94,16 @@ export interface SetupPrerequisiteFlags {
 // SETUP_TOKEN, ENCRYPTION_KEY (canonical; SECRETS_ENCRYPTION_KEY is
 // accepted as an alias, matching loadConfig behavior; whether the
 // alias is removed is an open integrator decision, recorded in the
-// V3-01b report). The database handle is isolated per application
-// (createDb, not the process singleton) so buildApp stays safe to
-// call repeatedly in tests; close() ends the handle.
+// V3-01b report). A blank or whitespace-only encryption key value
+// counts as absent, matching key-ring present() semantics (G11b):
+// without this, a whitespace-only canonical value would shadow a
+// valid alias and reach the seal path as if configured. The database
+// handle is isolated per application (createDb, not the process
+// singleton) so buildApp stays safe to call repeatedly in tests;
+// close() ends the handle.
+function presentEnvValue(raw: string | undefined): string | undefined {
+  return raw === undefined || raw.trim() === '' ? undefined : raw;
+}
 export function createAuthContextFromConfig(
   config: ServerConfig,
   overrides: AuthContextOverrides = {},
@@ -114,11 +121,15 @@ export function createAuthContextFromConfig(
       store = null;
     }
   }
+  // A defined override wins exactly as before (a blank override
+  // means absent, without falling through to the environment);
+  // only the environment lookup treats blank as absent per name.
   const encryptionKey =
-    overrides.encryptionKey ??
-    process.env.ENCRYPTION_KEY ??
-    process.env.SECRETS_ENCRYPTION_KEY ??
-    undefined;
+    overrides.encryptionKey !== undefined
+      ? presentEnvValue(overrides.encryptionKey)
+      : (presentEnvValue(process.env.ENCRYPTION_KEY) ??
+        presentEnvValue(process.env.SECRETS_ENCRYPTION_KEY) ??
+        undefined);
   const base = createAuthContext({
     store,
     authSecret: overrides.authSecret ?? process.env.AUTH_SECRET ?? undefined,
