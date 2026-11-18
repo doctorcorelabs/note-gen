@@ -1,8 +1,8 @@
 'use client'
 // Modified for the web fork on 2026-11-16; see FORK.md.
 
-import useArticleStore from '@/stores/article'
-import { useEffect, useState, useCallback, useRef, RefObject } from 'react'
+import useArticleStore, { hasUnsavedArticleChanges } from '@/stores/article'
+import { useEffect, useState, useCallback, useRef, useId, RefObject } from 'react'
 import { TipTapEditor } from './tiptap-editor'
 import { Outline } from './outline'
 import { Loader2, Download } from 'lucide-react'
@@ -17,6 +17,7 @@ import {
 import { platform } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import { RevisionConflictDialog } from './revision-conflict-dialog'
+import { ArticleSaveStatus } from './article-save-status'
 import { isAlreadyExistsLike, type RevisionConflictChoice } from './revision-conflict'
 import { useShallow } from 'zustand/react/shallow'
 import useSettingStore, { useSettingsHydrationStore } from '@/stores/setting'
@@ -24,10 +25,16 @@ import { useSidebarStore } from '@/stores/sidebar'
 import {
   editorPathsReferToSameFile,
   getCurrentEditorWorkspaceRoot,
+  prepareActiveEditorDeactivation,
   prepareActiveEditorDeactivationDurably,
   workspaceRootsReferToSameLocation,
 } from '@/lib/editor-deactivation'
 import { writeSelfHostedWorkspaceText } from '@/lib/self-hosted-sync/files'
+import {
+  installUnsavedChangesUnloadGuard,
+  registerUnsavedChangesFlush,
+  registerUnsavedChangesProbe,
+} from '@/lib/web/unsaved-changes-guard'
 
 interface MdEditorProps {
   tabContentsRef: RefObject<Record<string, string>>
@@ -114,6 +121,48 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
   // AI streaming state
   const [aiStreaming, setAiStreaming] = useState(false)
   const terminateRef = useRef<(() => void) | undefined>(undefined)
+  const guardScopeId = useId()
+  // Dirty flag for the editor-side 500 ms debounce window (G28):
+  // TipTap holds keystrokes locally before onChange reaches the
+  // article store, so the store probe alone cannot see them. Set by
+  // onContentDirty, cleared when the change reaches the store queue.
+  const editorDirtyRef = useRef(false)
+
+  // Register this tab with the tab-close guard (G28): the probes
+  // cover the editor debounce window and the article store queue
+  // (including retained failed saves), and the flush callbacks push
+  // a pending editor change into the article store queue before the
+  // store flush runs (registration order: editor first, then store,
+  // within this effect, so the active tab always drains in order).
+  // The unload guard itself is installed once per page and never
+  // uninstalled: it protects the whole page, not one tab.
+  useEffect(() => {
+    installUnsavedChangesUnloadGuard()
+    const unregisterProbe = registerUnsavedChangesProbe(
+      `editor-dirty:${guardScopeId}`,
+      () => editorDirtyRef.current,
+    )
+    const unregisterArticleProbe = registerUnsavedChangesProbe(
+      `article-pending:${guardScopeId}`,
+      () => hasUnsavedArticleChanges(),
+    )
+    const unregisterFlush = registerUnsavedChangesFlush(
+      `editor-flush:${guardScopeId}`,
+      () => {
+        if (isActive) prepareActiveEditorDeactivation()
+      },
+    )
+    const unregisterArticleFlush = registerUnsavedChangesFlush(
+      `article-flush:${guardScopeId}`,
+      () => useArticleStore.getState().flushAllPendingArticleSaves(),
+    )
+    return () => {
+      unregisterProbe()
+      unregisterArticleProbe()
+      unregisterFlush()
+      unregisterArticleFlush()
+    }
+  }, [guardScopeId, filePath, isActive])
 
   // Bug fix: Listen for file close events to clean up loaded state
   useEffect(() => {
@@ -491,6 +540,9 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
   // document before the global active-file transition has finished, so always
   // use the explicit path override instead of relying on the singleton state.
   const handleContentChange = useCallback((content: string) => {
+    // The editor-side change has reached the store queue (or was an
+    // echo); the store probe owns it from here.
+    editorDirtyRef.current = false
     // Ignore only the initial empty update; clearing an initialized document must still save.
     if (content.length === 0 && !contentInitializedRef.current) {
       return
@@ -697,6 +749,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
         placeholder={tEditor('placeholder')}
         activeFilePath={filePath}
         onEditorReady={handleEditorReady}
+        onContentDirty={() => { editorDirtyRef.current = true }}
         outlineOpen={settingsReady && (outlinePlacement === 'sidebar' ? sidebarOutlineOpen : outlineOpen)}
         outlinePosition={outlinePosition}
         outlineWidth={outlineWidth}
@@ -720,6 +773,8 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
 
       {showOutline && outlinePosition === 'right' ? renderOutline() : null}
       </div>
+
+      <ArticleSaveStatus filePath={filePath} />
 
       {conflictEntry ? (
         <RevisionConflictDialog

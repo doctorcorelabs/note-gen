@@ -113,6 +113,7 @@ const VITEST_SPECS = [
   "src/lib/web/records-kind-client.spec.ts",
   "src/lib/web/security-settings.spec.ts",
   "src/lib/web/tag-inputs.spec.ts",
+  "src/lib/web/unsaved-changes-guard.spec.ts",
   "src/lib/web/watcher-client.spec.ts",
 ];
 

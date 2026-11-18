@@ -83,11 +83,59 @@ let storeInstance: StoreHandle | null = null
 type PendingArticleSave = {
   timer: ReturnType<typeof setTimeout> | null
   content: string
+  attempts: number
   commit: () => Promise<void>
+}
+
+// Honest save status per path (S-P0-18 / DA-28-02). A failed commit
+// keeps its content in `pendingArticleSaves` (timer cleared, awaiting
+// retry or a newer edit) and records a `failed` entry here, so the
+// editor indicator and the unload guard never claim a failed save
+// succeeded. A revision conflict clears the entry: the conflict
+// dialog owns that surface and the content is not dropped.
+export type ArticleSaveStatusKind = 'pending' | 'saving' | 'saved' | 'failed'
+
+export type ArticleSaveStatusEntry = {
+  status: ArticleSaveStatusKind
+  attempts: number
+  updatedAt: number
+  errorMessage?: string
+  errorCode?: string
 }
 
 const pendingArticleSaves = new Map<string, PendingArticleSave>()
 const inFlightArticleSaves = new Map<string, Promise<void>>()
+
+// True while a save for any path is queued (including a retained
+// failed save awaiting retry) or in flight. The unload guard probes
+// this so `beforeunload` only prompts while work is unconfirmed.
+export function hasUnsavedArticleChanges(): boolean {
+  return pendingArticleSaves.size > 0 || inFlightArticleSaves.size > 0
+}
+
+// Snapshot of queued (unsaved) contents by path, for callers that
+// must preserve drafts across a shell transition (DA-28-04). The
+// snapshot copies the map; mutating it never affects the queue.
+export function getUnsavedArticleContents(): Array<{ path: string; content: string }> {
+  return [...pendingArticleSaves.entries()].map(([path, pendingSave]) => ({
+    path,
+    content: pendingSave.content,
+  }))
+}
+
+function articleSaveErrorDetails(error: unknown): { message: string; code?: string } {
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code
+    return {
+      message: error.message || 'Unknown save error',
+      ...(typeof code === 'string' && code ? { code } : {}),
+    }
+  }
+  if (typeof error === 'string' && error) {
+    return { message: error }
+  }
+  return { message: 'Unknown save error' }
+}
 
 // Revision guard state (V1-09 section 3.9, AD-17). The revision seen by
 // the latest successful read or save per workspace-relative path. It is
@@ -190,10 +238,20 @@ function discardQueuedArticleSaves(
   workspaceRoot?: string,
   includeDescendants = true,
 ): void {
+  const discardedPaths: string[] = []
   for (const [savePath, pendingSave] of pendingArticleSaves) {
     if (!pathMatchesMutation(savePath, path, workspaceRoot, includeDescendants)) continue
     if (pendingSave.timer) clearTimeout(pendingSave.timer)
     pendingArticleSaves.delete(savePath)
+    discardedPaths.push(savePath)
+  }
+  // A discarded queue entry has no save left to report; clear its
+  // status so a stale failure never outlives the deleted/moved file.
+  if (discardedPaths.length > 0) {
+    const updateStatus = useArticleStore.getState().updateArticleSaveStatus
+    for (const discardedPath of discardedPaths) {
+      updateStatus(discardedPath, null)
+    }
   }
 }
 
@@ -1232,6 +1290,11 @@ interface NoteState {
   resolveRevisionConflict: (path: string, choice: RevisionConflictChoice, copyPath?: string) => Promise<RevisionConflictResolution | null>
   dismissRevisionConflict: (path: string) => void
   reopenRevisionConflict: (path: string) => void
+  // Honest per-path save status (S-P0-18). One entry per path while a
+  // save is queued, in flight, confirmed, or retained after failure.
+  articleSaveStatus: Record<string, ArticleSaveStatusEntry>
+  updateArticleSaveStatus: (path: string, entry: ArticleSaveStatusEntry | null) => void
+  retryArticleSave: (path: string) => Promise<void>
   saveCurrentArticle: (content: string, pathOverride?: string) => Promise<void>
   flushPendingArticleSave: (path: string) => Promise<void>
   flushPendingArticleSavesForPaths: (
@@ -2345,6 +2408,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
       if (nextSavePath === savePath) continue
       if (pendingSave.timer) clearTimeout(pendingSave.timer)
       pendingArticleSaves.delete(savePath)
+      // The re-queued save under the new path sets its own status.
+      get().updateArticleSaveStatus(savePath, null)
       queuedSavesToRebase.push({ path: nextSavePath, content: pendingSave.content })
     }
 
@@ -3497,6 +3562,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
   aiGeneratingFilePath: null, // 标记当前正在 AI 生成的文件路径
   aiTerminateFn: null, // AI 生成的终止函数
   revisionConflicts: {},
+  articleSaveStatus: {},
 
   setReadFilePath: (path: string) => {
     set({ readFilePath: path })
@@ -3922,6 +3988,37 @@ const useArticleStore = create<NoteState>((set, get) => ({
     }
   },
 
+  updateArticleSaveStatus: (path: string, entry: ArticleSaveStatusEntry | null) => {
+    const nextStatus = { ...get().articleSaveStatus }
+    if (entry) {
+      nextStatus[path] = entry
+    } else {
+      delete nextStatus[path]
+    }
+    set({ articleSaveStatus: nextStatus })
+  },
+
+  // Retry a retained failed save (or flush a still-queued one) without
+  // re-entering the debounce queue: the retained entry commits
+  // directly, so its attempt count keeps growing and a repeated
+  // failure re-records the failed status instead of looping. When
+  // nothing is queued or in flight, a newer save already replaced the
+  // failed one, so the stale failure entry is cleared. Failures are
+  // reported through the status entry, never thrown.
+  retryArticleSave: async (path: string) => {
+    if (!path) return
+    if (!pendingArticleSaves.has(path) && !inFlightArticleSaves.has(path)) {
+      get().updateArticleSaveStatus(path, null)
+      return
+    }
+    try {
+      await get().flushPendingArticleSave(path)
+    } catch {
+      // The commit already re-recorded the failed status and retained
+      // the content; the indicator keeps showing the failure.
+    }
+  },
+
   saveCurrentArticle: async (content: string, pathOverride?: string) => {
     const path = pathOverride ?? get().activeFilePath
     if (isFileDeletionPending(path)) return
@@ -3940,9 +4037,11 @@ const useArticleStore = create<NoteState>((set, get) => ({
           void pendingSave.commit().catch(() => undefined)
         }
         const previousSave = inFlightArticleSaves.get(path)
-        const savePromise = (async () => {
-          if (previousSave) await previousSave
-          if (isFileDeletionPending(path)) return
+        const savePromise = (async (): Promise<'written' | 'conflict' | 'discarded'> => {
+          // A failed earlier save must not poison this one: wait for
+          // it to settle, then attempt the newer content regardless.
+          if (previousSave) await previousSave.catch(() => undefined)
+          if (isFileDeletionPending(path)) return 'discarded'
           // 只保存本地文件，不触发同步推送
           const pathOptions = await getFilePathOptions(path)
           if (await writeSelfHostedWorkspaceText(path, content)) {
@@ -3957,17 +4056,43 @@ const useArticleStore = create<NoteState>((set, get) => ({
               // Never overwrite and never drop the editor content. The
               // conflict dialog owns the next step.
               get().recordRevisionConflict(path, content, outcome.conflict)
-              return
+              return 'conflict'
             }
             await refreshLoadedArticleRevision(path, pathOptions)
           }
           if (get().activeFilePath === path) {
             set({ currentArticle: content })
           }
+          return 'written'
         })()
         inFlightArticleSaves.set(path, savePromise)
         try {
-          await savePromise
+          const outcome = await savePromise
+          if (outcome === 'written') {
+            get().updateArticleSaveStatus(path, {
+              status: 'saved',
+              attempts: 1,
+              updatedAt: Date.now(),
+            })
+          } else {
+            // Conflict: the dialog owns the surface. Discarded: the
+            // file is being deleted, so no save status applies.
+            get().updateArticleSaveStatus(path, null)
+          }
+        } catch (error) {
+          // Never drop the content on a failed just-pulled save: record
+          // the failure, then re-queue through the debounce path (the
+          // just-pulled flag is already cleared, so this cannot loop).
+          // A failure there retains the content with a failed status.
+          const details = articleSaveErrorDetails(error)
+          get().updateArticleSaveStatus(path, {
+            status: 'failed',
+            attempts: 1,
+            updatedAt: Date.now(),
+            errorMessage: details.message,
+            ...(details.code ? { errorCode: details.code } : {}),
+          })
+          void get().saveCurrentArticle(content, path).catch(() => undefined)
         } finally {
           if (inFlightArticleSaves.get(path) === savePromise) {
             inFlightArticleSaves.delete(path)
@@ -3987,6 +4112,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
       const pendingSave: PendingArticleSave = {
         content,
         timer: null as ReturnType<typeof setTimeout> | null,
+        attempts: 0,
         commit: async () => {},
       }
       pendingSave.commit = async () => {
@@ -3998,11 +4124,19 @@ const useArticleStore = create<NoteState>((set, get) => ({
           pendingSave.timer = null
         }
         pendingArticleSaves.delete(path)
+        pendingSave.attempts += 1
+        get().updateArticleSaveStatus(path, {
+          status: 'saving',
+          attempts: pendingSave.attempts,
+          updatedAt: Date.now(),
+        })
 
         const previousSave = inFlightArticleSaves.get(path)
-        const commitPromise = (async () => {
-          if (previousSave) await previousSave
-          if (isFileDeletionPending(path)) return
+        const commitPromise = (async (): Promise<'written' | 'conflict' | 'discarded'> => {
+          // A failed earlier save must not poison this one: wait for
+          // it to settle, then attempt the newer content regardless.
+          if (previousSave) await previousSave.catch(() => undefined)
+          if (isFileDeletionPending(path)) return 'discarded'
 
           // 执行实际保存操作
           const savePath = path
@@ -4051,7 +4185,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
               // (dirty mark, vector schedule, article-saved) are skipped
               // because nothing was saved.
               get().recordRevisionConflict(savePath, saveContent, outcome.conflict)
-              return
+              return 'conflict'
             }
             await refreshLoadedArticleRevision(savePath, pathOptions)
           }
@@ -4132,11 +4266,44 @@ const useArticleStore = create<NoteState>((set, get) => ({
           if (!shouldSkipSync && !isAbsoluteFsPath(savePath)) {
             emitter.emit('article-saved', { path: savePath, content: saveContent })
           }
+          return 'written'
         })()
 
         inFlightArticleSaves.set(path, commitPromise)
         try {
-          await commitPromise
+          const outcome = await commitPromise
+          if (outcome === 'written') {
+            get().updateArticleSaveStatus(path, {
+              status: 'saved',
+              attempts: pendingSave.attempts,
+              updatedAt: Date.now(),
+            })
+          } else {
+            // Conflict: the dialog owns the surface. Discarded: the
+            // file is being deleted, so no save status applies.
+            get().updateArticleSaveStatus(path, null)
+          }
+        } catch (error) {
+          // S-P0-18: a failed commit must never silently drop its
+          // content. Retain the entry in the queue (no timer: no blind
+          // automatic retry) and record the failure, unless a newer
+          // save already replaced this entry or the file is being
+          // deleted. The error still propagates so flush callers
+          // observe the failure; the status entry is the UI surface.
+          const superseded = pendingArticleSaves.has(path)
+          if (!superseded && !isFileDeletionPending(path)) {
+            pendingSave.timer = null
+            pendingArticleSaves.set(path, pendingSave)
+            const details = articleSaveErrorDetails(error)
+            get().updateArticleSaveStatus(path, {
+              status: 'failed',
+              attempts: pendingSave.attempts,
+              updatedAt: Date.now(),
+              errorMessage: details.message,
+              ...(details.code ? { errorCode: details.code } : {}),
+            })
+          }
+          throw error
         } finally {
           if (inFlightArticleSaves.get(path) === commitPromise) {
             inFlightArticleSaves.delete(path)
@@ -4149,6 +4316,13 @@ const useArticleStore = create<NoteState>((set, get) => ({
         })
       }, 500)
       pendingArticleSaves.set(path, pendingSave)
+      // A newer edit replaces any retained failure: the queued save
+      // owns the status from here until its commit settles.
+      get().updateArticleSaveStatus(path, {
+        status: 'pending',
+        attempts: 0,
+        updatedAt: Date.now(),
+      })
     }
   },
 
