@@ -86,7 +86,7 @@ function toAbsoluteUrl(value: string, baseUrl: string) {
   }
 }
 
-function normalizeCanonicalUrl(value: string, finalUrl: string) {
+export function normalizeCanonicalUrl(value: string, finalUrl: string) {
   const absoluteUrl = toAbsoluteUrl(value, finalUrl)
   if (!absoluteUrl) return undefined
 

@@ -53,6 +53,7 @@ import {
   TagChecklist,
   formatRecordDate,
 } from "./web-inbox-shared";
+import { isHttpUrl } from "@/lib/utils";
 
 export interface WebRecordDetailProps {
   api: RecordsApiPort;
@@ -281,14 +282,21 @@ export function WebRecordDetail({
 
           {current.type === "link" && (
             <p className="break-all text-sm">
-              <a
-                href={current.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 underline"
-              >
-                {t("openLink")}: {current.url}
-              </a>
+              {/* A stored non-http(s) url renders as inert text, never an anchor. */}
+              {isHttpUrl(current.url) ? (
+                <a
+                  href={current.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 underline"
+                >
+                  {t("openLink")}: {current.url}
+                </a>
+              ) : (
+                <span>
+                  {t("openLink")}: {current.url}
+                </span>
+              )}
             </p>
           )}
 

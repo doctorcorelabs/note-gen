@@ -565,7 +565,8 @@ export const MarkWrapper = React.memo(({mark, variant = 'list', interactive = tr
               interactive={interactive}
             />
           ) : null}
-          {!isImageCard && mark.type === 'link' && mark.url ? interactive ? (
+          {/* A stored non-http(s) url renders as inert text, never an anchor. */}
+          {!isImageCard && mark.type === 'link' && mark.url ? interactive && isHttpUrl(mark.url) ? (
             <a
               href={mark.url}
               target="_blank"
@@ -637,7 +638,8 @@ export const MarkWrapper = React.memo(({mark, variant = 'list', interactive = tr
           </div>
           {renderListTextBlock(itemContent.title || mark.desc || t(mark.type), mark.content || itemContent.preview)}
           <div className="mt-1 min-w-0 max-w-full overflow-hidden">
-            {interactive ? (
+            {/* A stored non-http(s) url renders as inert text, never an anchor. */}
+            {interactive && isHttpUrl(mark.url) ? (
               <a
                 href={mark.url}
                 target="_blank"

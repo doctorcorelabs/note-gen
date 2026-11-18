@@ -15,6 +15,44 @@ function getCurrentTagId(tagId?: number): number {
   return useTagStore.getState().currentTagId
 }
 
+const ASSET_MARK_TYPES = ['image', 'file', 'recording', 'scan']
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+// Per-type url shape, mirroring the server kinds validation and
+// the records kind client: link requires a valid http/https URL,
+// text/todo require an empty url, asset types require a non-empty
+// url (an asset key). The protocol check runs on the parsed URL,
+// so control-character obfuscation cannot smuggle a javascript:
+// URL past it. Unknown types and absent urls are left to the
+// server, which owns the stored row; this fails fast with a clear
+// message for the model instead of a late server rejection.
+function assertMarkUrlShape(type: unknown, url: unknown): void {
+  if (typeof type !== 'string' || typeof url !== 'string') return
+  if (type === 'link') {
+    if (url === '' || !isValidHttpUrl(url)) {
+      throw new Error('Link records need a valid http or https URL.')
+    }
+    return
+  }
+  if (type === 'text' || type === 'todo') {
+    if (url !== '') {
+      throw new Error('Text and todo records must not carry a URL.')
+    }
+    return
+  }
+  if (ASSET_MARK_TYPES.includes(type) && url === '') {
+    throw new Error('Image, file, scan, and recording records need an asset key URL.')
+  }
+}
+
 export const readMarksTool: Tool = {
   name: 'read_marks',
   description: 'Read all records under a known, specific tag only when the user explicitly requests that complete tag or a record-management operation needs it. Never use this tool to discover saved knowledge or answer a knowledge question; use knowledge_search instead. Uses the current selected tag if tagId is omitted.',
@@ -86,6 +124,7 @@ export const createMarkTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     try {
+      assertMarkUrlShape(params.type, params.url || '')
       const mark: Partial<Mark> = {
         tagId: params.tagId,
         type: params.type as 'scan' | 'text' | 'image' | 'link' | 'file' | 'recording',
@@ -398,6 +437,10 @@ export const createMarksBatchTool: Tool = {
         deleted: 0,
       }))
 
+      for (const mark of marksToInsert) {
+        assertMarkUrlShape(mark.type, mark.url ?? '')
+      }
+
       await insertMarks(marksToInsert)
       
       return {
@@ -446,6 +489,10 @@ export const updateMarksBatchTool: Tool = {
         deleted: mark.deleted ?? 0,
         createdAt: mark.createdAt || Date.now(),
       }))
+
+      for (const mark of marksToUpdate) {
+        assertMarkUrlShape(mark.type, mark.url)
+      }
 
       await updateMarks(marksToUpdate)
       

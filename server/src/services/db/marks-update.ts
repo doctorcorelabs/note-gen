@@ -74,6 +74,45 @@ function validationIssue(field: string, issue: string): ApiError {
   return ApiError.validation('Request validation failed.', { fields: [{ field, issue }] });
 }
 
+const ASSET_MARK_TYPES: readonly string[] = ['image', 'file', 'recording', 'scan'];
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// URL shape rules per type, mirroring the REST records validation
+// (services/records/validation.ts, V1-14 3.2): link requires a valid
+// http/https URL, text/todo require an empty url, asset types
+// require a non-empty url (an asset key). The protocol check runs
+// on the parsed URL, so control-character obfuscation cannot
+// smuggle a javascript: URL past it: the WHATWG parser strips a
+// leading C0 byte before the protocol is read. This runs in
+// handle() against the effective (type, url) pair, because a patch
+// may change either field alone; validate() only checks the patch
+// shape and stays unaware of the stored row.
+function validateMarkUrlShape(type: string, url: string): void {
+  if (type === 'link') {
+    if (url === '' || !isValidHttpUrl(url)) {
+      throw validationIssue('patch.url', 'must be a valid http or https URL');
+    }
+    return;
+  }
+  if (type === 'text' || type === 'todo') {
+    if (url !== '') {
+      throw validationIssue('patch.url', 'must be empty for this record type');
+    }
+    return;
+  }
+  if (ASSET_MARK_TYPES.includes(type) && url === '') {
+    throw validationIssue('patch.url', 'must be an asset key for this record type');
+  }
+}
+
 function validatePatch(value: unknown): asserts value is MarkPatch {
   if (!isRecord(value)) {
     throw validationIssue('patch', 'must be an object');
@@ -150,6 +189,9 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<WriteRes
     throw ApiError.revisionConflict({ currentVersion: current.version });
   }
   const patch = op.patch;
+  if (patch.url !== undefined || patch.type !== undefined) {
+    validateMarkUrlShape(patch.type ?? current.type, patch.url ?? current.url ?? '');
+  }
   const movesPrimary = patch.tagId !== undefined && patch.tagId !== current.tagId;
   if (movesPrimary) {
     const owned = await ctx.tx

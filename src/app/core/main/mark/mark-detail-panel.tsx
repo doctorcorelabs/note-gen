@@ -970,14 +970,19 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
       ) : null}
       {mark.type === 'link' && mark.url ? (
         <SectionBlock title={t('record.mark.type.link')}>
-          <a
-            href={mark.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block max-w-full break-all text-primary underline-offset-4 hover:underline"
-          >
-            {mark.url}
-          </a>
+          {/* A stored non-http(s) url renders as inert text, never an anchor. */}
+          {isHttpUrl(mark.url) ? (
+            <a
+              href={mark.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block max-w-full break-all text-primary underline-offset-4 hover:underline"
+            >
+              {mark.url}
+            </a>
+          ) : (
+            <span className="block max-w-full break-all text-primary">{mark.url}</span>
+          )}
         </SectionBlock>
       ) : null}
       <SectionBlock className="px-0 py-0" contentClassName="overflow-visible">

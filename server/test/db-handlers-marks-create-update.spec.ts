@@ -167,6 +167,36 @@ describe('marks create/update markers and validation (no database)', () => {
     );
   });
 
+  it('rejects mark urls that violate the per-type shape rules', () => {
+    const create = (mark: Record<string, unknown>) =>
+      marksCreate.validate({ kind: 'marks.create', mark: { tagId: 1, ...mark } });
+    // Link marks require a valid http/https URL: script schemes and
+    // control-character obfuscation are rejected, exactly as the
+    // REST records validation rejects them.
+    expectValidationError(() => create({ type: 'link', url: 'javascript:alert(1)' }));
+    expectValidationError(() => create({ type: 'link', url: '\u0001javascript:alert(1)' }));
+    expectValidationError(() => create({ type: 'link', url: '\u0000javascript:alert(1)' }));
+    expectValidationError(() => create({ type: 'link', url: '\u000ejava\tscript:alert(1)' }));
+    expectValidationError(() => create({ type: 'link', url: 'java\tscript:alert(1)' }));
+    expectValidationError(() => create({ type: 'link', url: 'data:text/html,<script>alert(1)</script>' }));
+    expectValidationError(() => create({ type: 'link', url: '' }));
+    expectValidationError(() => create({ type: 'link', url: 'example.invalid/no-scheme' }));
+    // Text and todo marks must not carry a url.
+    expectValidationError(() => create({ type: 'text', url: 'https://example.invalid' }));
+    expectValidationError(() => create({ type: 'todo', url: 'https://example.invalid' }));
+    // Asset types require a non-empty url (an asset key).
+    expectValidationError(() => create({ type: 'image', url: '' }));
+    expectValidationError(() => create({ type: 'file', url: '' }));
+    expectValidationError(() => create({ type: 'recording', url: '' }));
+    expectValidationError(() => create({ type: 'scan', url: '' }));
+    // Valid shapes pass.
+    expect(() => create({ type: 'link', url: 'https://example.invalid/x' })).not.toThrow();
+    expect(() => create({ type: 'link', url: 'http://example.invalid/x' })).not.toThrow();
+    expect(() => create({ type: 'text', url: '' })).not.toThrow();
+    expect(() => create({ type: 'todo', url: '' })).not.toThrow();
+    expect(() => create({ type: 'image', url: 'assets/1/photo.png' })).not.toThrow();
+  });
+
   it('validates the marks.update shape', () => {
     expect(() =>
       marksUpdate.validate({ kind: 'marks.update', id: 1, patch: { content: 'hi' } }),
@@ -462,6 +492,27 @@ describe.skipIf(TEST_DATABASE_URL === undefined)('marks create/update over Postg
         'tag_not_found',
       );
     });
+
+    it('rejects a javascript: link url and writes nothing', async () => {
+      const primary = await seedTag(workspaceId, 'Idea');
+      await expectApiErrorAsync(
+        run(marksCreate.handle, {
+          kind: 'marks.create',
+          mark: { tagId: primary, type: 'link', url: 'javascript:alert(1)' },
+        }),
+        400,
+        'validation_failed',
+      );
+      await expectApiErrorAsync(
+        run(marksCreate.handle, {
+          kind: 'marks.create',
+          mark: { tagId: primary, type: 'link', url: '\u0001javascript:alert(1)' },
+        }),
+        400,
+        'validation_failed',
+      );
+      expect(await readActivityEvents(workspaceId)).toHaveLength(0);
+    });
   });
 
   describe('marks.update', () => {
@@ -491,6 +542,73 @@ describe.skipIf(TEST_DATABASE_URL === undefined)('marks create/update over Postg
       const after = await readMark(id);
       expect(after.content).toBeNull();
       expect(after.desc).toBeNull();
+    });
+
+    it('rejects a url patch to a non-http scheme and writes nothing', async () => {
+      const primary = await seedTag(workspaceId, 'Idea');
+      const created = await run(marksCreate.handle, {
+        kind: 'marks.create',
+        mark: { tagId: primary, type: 'link', url: 'https://example.invalid/before' },
+      });
+      const id = created.id as number;
+      const before = await readMark(id);
+      await expectApiErrorAsync(
+        run(marksUpdate.handle, { kind: 'marks.update', id, patch: { url: 'javascript:alert(1)' } }),
+        400,
+        'validation_failed',
+      );
+      await expectApiErrorAsync(
+        run(marksUpdate.handle, {
+          kind: 'marks.update',
+          id,
+          patch: { url: '\u0001javascript:alert(1)' },
+        }),
+        400,
+        'validation_failed',
+      );
+      const after = await readMark(id);
+      expect(after.url).toBe('https://example.invalid/before');
+      expect(after.version).toBe(before.version);
+    });
+
+    it('rejects a type change whose effective url shape is invalid', async () => {
+      const primary = await seedTag(workspaceId, 'Idea');
+      const textId = await seedMark(workspaceId, primary, false);
+      await expectApiErrorAsync(
+        run(marksUpdate.handle, { kind: 'marks.update', id: textId, patch: { type: 'link' } }),
+        400,
+        'validation_failed',
+      );
+      const created = await run(marksCreate.handle, {
+        kind: 'marks.create',
+        mark: { tagId: primary, type: 'link', url: 'https://example.invalid/kept' },
+      });
+      const linkId = created.id as number;
+      await expectApiErrorAsync(
+        run(marksUpdate.handle, { kind: 'marks.update', id: linkId, patch: { type: 'text' } }),
+        400,
+        'validation_failed',
+      );
+      expect((await readMark(linkId)).type).toBe('link');
+      expect((await readMark(linkId)).url).toBe('https://example.invalid/kept');
+    });
+
+    it('accepts a url-only patch to a valid http url on a link mark', async () => {
+      const primary = await seedTag(workspaceId, 'Idea');
+      const created = await run(marksCreate.handle, {
+        kind: 'marks.create',
+        mark: { tagId: primary, type: 'link', url: 'https://example.invalid/before' },
+      });
+      const id = created.id as number;
+      const before = await readMark(id);
+      const result = await run(marksUpdate.handle, {
+        kind: 'marks.update',
+        id,
+        patch: { url: 'https://example.invalid/after' },
+        expected: { version: before.version },
+      });
+      expect(result).toEqual({ affected: 1, id, version: before.version + 1 });
+      expect((await readMark(id)).url).toBe('https://example.invalid/after');
     });
 
     it('answers 409 on a stale guard and writes nothing', async () => {
