@@ -21,13 +21,15 @@ export default function NotFound() {
     await store.save()
   }
 
+  // Client navigation only (DA-15-03). A full reload to the fallback
+  // deep route 404s on the static nginx deploy while try_files is
+  // absent, and error_page alone would re-run this 2-second countdown
+  // forever. This fix must land in one package with the nginx
+  // try_files fix (DL1, DA-15-02/04, AD-188): try_files must try
+  // $uri.html before $uri/, plus error_page 404 /404.html. Never land
+  // error_page without try_files.
   async function returnToFallback() {
     await resetRouteStore()
-
-    if (typeof window !== 'undefined') {
-      window.location.replace(fallbackPath)
-      return
-    }
 
     router.replace(fallbackPath)
   }
