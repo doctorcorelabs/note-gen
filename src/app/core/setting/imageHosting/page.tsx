@@ -36,6 +36,7 @@ import {
 import { S3ImageHosting } from './s3'
 import SMMSImageHosting from './smms'
 import { SettingType } from '../components/setting-base'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
 import { ResponsiveSelect } from '@/components/responsive-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -62,6 +63,7 @@ import {
   type ImageHostingType,
 } from '@/lib/image-hosting-config'
 import { SyncStateEnum } from '@/lib/sync/github.types'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import useImageStore from '@/stores/imageHosting'
 import useSettingStore, { useSettingsHydrationStore } from '@/stores/setting'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
@@ -85,6 +87,10 @@ const IMAGE_HOSTING_ICONS: Record<ImageHostingType, LucideIcon> = {
 
 export default function ImageHostingPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations()
+  // DA-10-F08: image hosting is OFF in the web MVP (AD-20). The page
+  // below returns the honest marker instead of the provider forms,
+  // so no provider credential can be entered from the browser.
+  const imageHostingDisabled = isEditorFeatureDisabled('imageHosting')
   const pathname = usePathname()
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
   const hostingInitialized = useImageStore(state => state.initialized)
@@ -117,10 +123,12 @@ export default function ImageHostingPage({ mobile = false }: { mobile?: boolean 
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
+    if (imageHostingDisabled) return
     if (normalizedImageHosting.shouldPersist) {
       void setMainImageHosting(normalizedImageHosting.value)
     }
   }, [
+    imageHostingDisabled,
     normalizedImageHosting.shouldPersist,
     normalizedImageHosting.value,
     setMainImageHosting,
@@ -129,6 +137,24 @@ export default function ImageHostingPage({ mobile = false }: { mobile?: boolean 
   useEffect(() => {
     setSelection({ section: activeSection, activeSection })
   }, [activeSection])
+
+  // DA-10-F08: gate the whole settings surface in web mode, following
+  // the canvas pattern. Provider panels are never mounted here, so
+  // their connection checks and credential fields cannot run. The
+  // stored preference is left untouched for desktop. This return
+  // sits after every hook, so hook order never changes.
+  if (imageHostingDisabled) {
+    return (
+      <SettingType
+        id="imageHosting"
+        icon={<ImageUp />}
+        title={t('settings.imageHosting.title')}
+        desc={t('settings.imageHosting.desc')}
+      >
+        <EditorDisabledNotice feature="imageHosting" />
+      </SettingType>
+    )
+  }
 
   const provider = section === 'local' ? normalizedImageHosting.value : section
   const currentState = getProviderState(provider, {

@@ -38,6 +38,7 @@ import { toast } from '@/hooks/use-toast'
 import { getWorkspacePath, isAbsoluteFsPath } from '@/lib/workspace'
 import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { pickImagesFromPhotoLibrary } from '@/lib/image-picker'
+import { createUploadPlaceholder } from '../async-editor-operations'
 
 export interface SlashCommandItem {
   id?: string
@@ -590,15 +591,16 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       command: async ({ editor, range }: { editor: Editor; range: Range }) => {
         const rangeStart = range.from
 
-        // Insert "Uploading..." text as placeholder
-        editor.chain().focus().deleteRange(range).insertContentAt(rangeStart, {
-          type: 'text',
-          text: 'Uploading... ',
-        }).run()
+        editor.chain().focus().deleteRange(range).run()
 
-        // Get the position range of the placeholder
-        const placeholderStart = rangeStart
-        const placeholderEnd = rangeStart + 'Uploading... '.length
+        // DA-10-F10: the placeholder is a view decoration, never
+        // document text. Its position is mapped through later
+        // transactions, so edits during the picker/upload cannot
+        // shift a fixed delete range onto user text, and no
+        // placeholder text can ever be saved. This matches the
+        // paste/drop/toolbar path in tiptap-editor.tsx.
+        const placeholderPos = Math.max(0, Math.min(rangeStart, editor.state.doc.content.size))
+        const placeholder = createUploadPlaceholder(editor, placeholderPos)
 
         try {
           let fileObj: File | null = null
@@ -642,19 +644,21 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
           }
 
           if (!fileObj) {
-            // User cancelled, remove placeholder
-            editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
+            // User cancelled: the decoration is removed in finally,
+            // and no document text was ever inserted.
             return
           }
 
           const activeFilePath = useArticleStore.getState().activeFilePath
           const result = await handleImageUpload(fileObj, activeFilePath)
 
-          // Delete the placeholder text
-          editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
-
-          // Insert the actual image
-          editor.chain().focus().insertContentAt(placeholderStart, {
+          // Insert at the mapped decoration position. Undefined means
+          // the editor was destroyed or the placeholder is gone; in
+          // that case nothing is inserted and no text is touched.
+          const position = placeholder.position()
+          if (position === undefined) return
+          placeholder.remove()
+          editor.chain().focus().insertContentAt(position, {
             type: 'image',
             attrs: {
               src: result.src,
@@ -663,14 +667,13 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
             },
           }).run()
         } catch (error) {
-          // Remove the placeholder on error
-          editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
-
           toast({
             title: tr.imageUpload.failed,
             description: error instanceof Error ? error.message : 'Unknown error',
             variant: 'destructive',
           })
+        } finally {
+          placeholder.remove()
         }
       },
     },

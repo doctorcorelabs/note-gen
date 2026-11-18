@@ -5,6 +5,7 @@ import { uploadImageByS3 } from "./s3";
 import type { StoreHandle } from "@/lib/platform";
 import { platform } from "@/lib/platform";
 import { getNormalizedImageHosting } from "../image-hosting-config";
+import { isEditorFeatureDisabled } from "../editor-disabled";
 import {
   isCloudinaryConfigComplete,
   isCustomHttpImageConfigComplete,
@@ -91,6 +92,11 @@ async function hasCompleteImageHostingConfig(
 }
 
 export async function isImageHostingReady(): Promise<boolean> {
+  // DA-10-F08: image hosting is OFF in the web MVP (AD-20). It is
+  // never ready in web mode, whatever the stored preference says, so
+  // callers always fall back to local workspace storage and no
+  // provider credential is read here.
+  if (isEditorFeatureDisabled('imageHosting')) return false
   const store = await platform.store.load('store.json')
   if (!await store.get<boolean>('useImageRepo')) return false
 
@@ -103,6 +109,11 @@ export async function isImageHostingReady(): Promise<boolean> {
 }
 
 export async function uploadImage(file: File) {
+  // DA-10-F08: image hosting is OFF in the web MVP (AD-20). Never
+  // call a provider directly from the browser: return undefined, the
+  // same answer as "hosting not enabled", so every caller keeps its
+  // local fallback. No credential is read and nothing is persisted.
+  if (isEditorFeatureDisabled('imageHosting')) return undefined
   const store = await platform.store.load('store.json');
 
   // 检查是否启用了图床功能
