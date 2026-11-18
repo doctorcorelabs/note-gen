@@ -6,7 +6,7 @@
 //
 // One transaction: the mark row, its mark_tags rows, and one record
 // activity event, replacing upstream insertMark plus saveMarkTagIds
-// plus insertActivityEvent (design section 4.2, D-03). tagIds is
+// plus insertActivityEvent (design section 4.2). tagIds is
 // optional: when absent the effective set is the primary tag alone.
 // The primary tag is always present in mark_tags (design 1.3 rule
 // 2). activity is optional: when absent the server derives the event
@@ -15,7 +15,7 @@
 // event source, dedupeKey, and createdAt are server-derived and are
 // rejected as unknown fields when sent inside activity.
 //
-// sourceId is first-write-wins (D-03, insertExternalMark): a sent
+// sourceId is first-write-wins (insertExternalMark): a sent
 // sourceId that already names a mark in this workspace returns that
 // mark with affected 0 and changes nothing; when omitted the server
 // mints a UUID. A race between the existence check and the insert is

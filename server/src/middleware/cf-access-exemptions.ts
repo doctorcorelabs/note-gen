@@ -3,7 +3,7 @@
 // See LICENSE and FORK.md.
 
 // Cloudflare Access exemption predicate (desain-auth.md section 7.5;
-// AD-132, PREDEPLOY finding F-02). This is the isExempt predicate the
+// AD-132, PREDEPLOY finding F-02; AD-133). This is the isExempt predicate the
 // verifier module (middleware/cf-access.ts) leaves to the integrator:
 // it decides which requests skip origin JWT verification, and it is
 // the ONLY exemption policy in the wired application. Anything this
@@ -30,18 +30,17 @@
 //    127.0.0.1 directly (design 10, section 9.4). A probe that
 //    arrives from any other peer address, including another compose
 //    container or Caddy forwarding a public request, must carry a
-//    valid JWT. The infra owner must confirm the watchdog call path
-//    (direct loopback to the API, or via Caddy with a service token);
-//    until then, loopback-only is the applied reading, and the
-//    ambiguity is recorded in the W5-ACCESS report for the
-//    coordinator. This predicate never inspects headers: a forged
-//    X-Forwarded-For cannot manufacture an exemption.
+//    valid JWT. AD-133(1) confirms the watchdog call path: direct
+//    loopback to the API, or via Caddy with a valid service token.
+//    Loopback-only is the confirmed reading, and no separate
+//    internal listener is adopted in Fase 1. This predicate
+//    never inspects headers: a forged X-Forwarded-For cannot
+//    manufacture an exemption.
 // 3. GET /api/health, the alias that runs the exact same ready
 //    handler (routes/health.ts), is treated exactly like ready.
 //    Section 7.5 does not name the alias; treating it as live-exempt
 //    would open the ready check without a token, so the conservative
-//    reading applies and the alias decision is recorded in the
-//    W5-ACCESS report for the coordinator.
+//    reading applies, confirmed by AD-133(2).
 //
 // What is NOT exempt: every other method and path, including POST to
 // a health path (the exemptions are GET-only), every session-public
@@ -52,7 +51,7 @@
 // 404 as before). Static files are out of scope here: the API serves
 // no static routes, so the section 7.5 static-files paragraph does
 // not apply to this service; the web service is a separate
-// deployment question, recorded in the W5-ACCESS report.
+// deployment question (AD-133(4)).
 
 import type { FastifyRequest } from 'fastify';
 import { HEALTH_ALIAS_PATH, HEALTH_LIVE_PATH, HEALTH_READY_PATH } from '../routes/health.js';

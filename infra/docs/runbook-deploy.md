@@ -293,3 +293,35 @@ Yang berlaku adalah larangan spesifikasi-watchdog seksi 6
   tidak ada gangguan pada layanan lain yang masih hidup.
   Ketidakhadiran Edge/9Router bukan kegagalan, bukan temuan, dan
   bukan pemicu tindakan apa pun.
+
+## 7. Probe health watchdog: jalur AD-133 A1
+
+Aturan pengecualian Access untuk probe health diputus AD-133
+butir 1 (A1) dan diklarifikasi AD-148 butir 5-6. Panduan lengkap
+arsitektur probe ada di `infra/watchdog/README.md` seksi "Jalur
+probe (AD-133 A1)"; seksi ini hanya merangkum jalur yang sah
+untuk operator runbook.
+
+- `GET /api/health/ready` dan alias `GET /api/health`
+  dikecualikan dari verifikasi Access HANYA untuk peer loopback
+  (`127.0.0.1`, `::1`, `::ffff:127.0.0.1`), dibaca dari soket
+  saja, tanpa header. Probe yang tiba lewat Caddy (peer = IP
+  container Caddy) wajib membawa JWT valid.
+- Jalur pemanggilan watchdog yang sah hanya dua: (a) panggil API
+  langsung di loopback, tanpa token; atau (b) lewat Caddy dengan
+  service token valid. Tidak ada listener internal terpisah di
+  Fase 1.
+- `GET /api/health/live` dikecualikan untuk semua peer; itulah
+  sebabnya curl live lewat Caddy di seksi 2.2 bekerja tanpa
+  token. Live tidak membawa data pengguna.
+- Probe Caddy-internal tanpa token yang mengharapkan 401 adalah
+  PEMBANDING DIAGNOSTIK di samping probe otoritatif loopback
+  langsung, bukan jalur pemanggilan ketiga. Jawaban 401/403 pada
+  probe pembanding berarti jalur Caddy dijaga Access sebagaimana
+  dirancang (masalah kredensial tepi, carve-out AD-133 butir 6),
+  bukan kegagalan origin; jangan me-restart atas jawaban itu.
+- Berkas service token dan formatnya diatur runbook Q1A dan
+  `infra/watchdog/README.md` seksi "Berkas token"; runbook ini
+  tidak menduplikasi aturan itu. Bila berkas token tidak ada
+  atau formatnya salah, watchdog tunnel gagal bersih tanpa
+  probe; itu masalah kredensial, bukan masalah tunnel.

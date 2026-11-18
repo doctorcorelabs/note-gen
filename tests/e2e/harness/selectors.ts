@@ -31,19 +31,24 @@
 // laporan-3e-w4-flows-r12.md):
 //
 // DEBT (6) RECOUNT (W4-FLOWS, tips 77f1576d/86ce4d03, 17-18 Nov
-// 2026): 28 of the 70 exported selector functions were called in
-// a passing live run (Tier A): fileTree, fileTreeItemByName,
-// searchResult, settingsDialog, settingsOpenerButton,
+// 2026; updated for W5-DEMOCODE, trunk cc8e2576, 18 Nov 2026):
+// 27 of the 71 exported selector functions were called in
+// a passing live run (Tier A; R17-6 correction applied:
+// the FLOWS list named 27 functions, not 28, and searchResult
+// has no execution path, so it leaves Tier A): fileTree,
+// fileTreeItemByName, settingsDialog, settingsOpenerButton,
 // newFileMenuItem, renameInput, viewModeToggleToSource,
-// viewModeToggleToVisual, editorLinkByName (resolution only;
-// navigation is blocked by product defect D-LINK), webInbox,
+// viewModeToggleToVisual, editorLinkByName, webInbox,
 // webInboxRecordButton, recordDetailDialog,
 // recordDetailTagCheckbox, recordDetailSaveTagsButton,
 // visibleVisualEditor, visibleSourceEditor, errorBoundaryText,
 // loginTitleText, loginEmailInput, loginPasswordInput,
 // loginSubmitButton, loginErrorByTestId, searchInputByTestId,
 // searchResultsByTestId, searchEmptyStateByTestId,
-// searchFuzzyStatusByTestId. Baseline at V3-41 was 2/43.
+// searchFuzzyStatusByTestId, sidebarTabButton (called via
+// AppPage.switchToRecordsTab / switchToFilesTab in the passing
+// E2E-S3 and E2E-RELOAD @smoke runs on trunk cc8e2576).
+// Baseline at V3-41 was 2/43.
 // Three more selector PATTERNS were observed live through
 // equivalent raw locators in probes while the functions
 // themselves were never called (Tier B): refreshButton (probe10A
@@ -55,11 +60,11 @@
 // recount time (href rendered empty) and functions again since
 // W4-FIXLINK, because the href now renders (AD-125 item 4).
 // Its Tier A reclassification awaits a live run at the next
-// recount. All
-// other functions rest on source evidence only; several are
-// referenced only by uncalled AppPage helpers (openFileByPath,
-// createNewNote, searchGlobally, expectNoSearchResults) or by
-// flows with no live spec yet (TOTP, recovery, setup).
+// recount. All other functions rest on source evidence only;
+// several are referenced only by uncalled AppPage helpers
+// (openFileByPath, openSearchResult, createNewNote,
+// searchGlobally, expectNoSearchResults) or by flows with no
+// live spec yet (TOTP, recovery, setup).
 // - Test ids now exist on the search UI (V3-28), the login/setup
 //   pages (W4-FLOWS), the Settings opener (W4-FLOWS, top-app-bar),
 //   and the rename input (W4-FLOWS, file-item). The reference repo
