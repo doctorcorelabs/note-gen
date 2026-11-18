@@ -87,7 +87,7 @@ Bersama:
 | `NOTEGEN_WORKER_DEPLOYED` | `0` | `1` = check worker wajib ok (set saat worker di-deploy) |
 
 Khusus tunnel: `NOTEGEN_PUBLIC_URL` (default URL publik ready),
-`NOTEGEN_TOKEN_FILE` (default `~/.config/notegen/service-token`),
+`NOTEGEN_TOKEN_FILE` (default `~/.config/notegen-tunnel/service-token`),
 `NOTEGEN_PROBE_TIMEOUT` (default 25),
 `NOTEGEN_TUNNEL_LAUNCHER` (default
 `/data/home/notegen-tunnel/notegen-tunnel.sh`),
@@ -104,12 +104,17 @@ Khusus compose: `NOTEGEN_COMPOSE_POLL_INTERVAL` (default 15),
 ## Berkas token (milik Q1A, bukan skrip ini)
 
 Watchdog tunnel membaca service token Access dari berkas 0600 khusus
-`~/.config/notegen/service-token` di VM operator. Format: satu baris
-`id:secret` (baris pertama berkas; konvensi yang sama dengan watchdog
-tunnel lain di VM ini). Token diterbitkan Q1A; pekerja watchdog tidak
-membuat, mengubah, atau menampilkan nilainya. Bila berkas tidak ada atau
-formatnya salah, skrip gagal bersih exit 2 tanpa probe. Peringatan dicatat
-bila mode berkas bukan 0600. Nilai token tidak pernah masuk log/stdout.
+`~/.config/notegen-tunnel/service-token` di VM operator. Format kanonis
+(AD-145; runbook Q1A seksi 3.7): tepat 2 baris bernilai, baris 1 client
+id dan baris 2 client secret, tanpa spasi, tanpa tab, tanpa tanda kutip,
+tanpa backslash, dan tanpa prefix `Bearer` di kedua baris. Tidak ada
+baris ketiga bernilai; baris kosong akhir berkas dan newline final
+diterima, dan CR akhir baris di-strip. Format satu baris `id:secret`
+DITOLAK; tidak ada dukungan format ganda. Token diterbitkan Q1A; pekerja
+watchdog tidak membuat, mengubah, atau menampilkan nilainya. Bila berkas
+tidak ada atau formatnya salah, skrip gagal bersih exit 2 tanpa probe.
+Peringatan dicatat bila mode berkas bukan 0600. Nilai token tidak pernah
+masuk log/stdout.
 
 ## Kontrak launcher tunnel (milik Q1A)
 
@@ -195,6 +200,13 @@ sesudah 1 jam.
 bash infra/watchdog/notegen-tunnel-watchdog.sh
 bash infra/watchdog/notegen-compose-watchdog.sh
 NOTEGEN_DRY_RUN=1 bash infra/watchdog/notegen-compose-watchdog.sh
+```
+
+Uji format berkas token (tanpa muse-2, tanpa jaringan luar; server mock
+lokal + stub `ib.py` di direktori temporer):
+
+```sh
+bash infra/watchdog/test-token-format.sh
 ```
 
 Jalan manual sehat per skrip adalah bukti aktivasi pada penerimaan fase
