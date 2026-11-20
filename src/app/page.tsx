@@ -43,7 +43,10 @@ import {
   type BootGuardFailure,
   type BootStep,
 } from '@/lib/web/boot-guard'
-import { getSharedAuthSessionClient } from '@/lib/web/auth-client'
+import {
+  SESSION_EXPIRED_LOGIN_PATH,
+  getSharedAuthSessionClient,
+} from '@/lib/web/auth-client'
 import { ensureWebPlatformInitialized } from '@/lib/web/platform-boot'
 
 type PageState =
@@ -158,6 +161,13 @@ export default function Home() {
           // into the next sign-in. Other failures keep the token:
           // an inconclusive probe must not destroy a live session.
           getSharedAuthSessionClient().clearCsrfToken()
+          // An unauthenticated visitor belongs on the login page,
+          // exactly like a /core deep link (session-guard). The
+          // login page only navigates away after a proven session,
+          // so this cannot loop. Other failures keep the visible
+          // error screen with retry.
+          beginNavigation(SESSION_EXPIRED_LOGIN_PATH)
+          return
         }
         setState({ kind: 'error', failure: outcome.failure })
       }

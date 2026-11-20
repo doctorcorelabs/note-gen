@@ -29,13 +29,21 @@ export default function NotFound() {
   // $uri.html before $uri/, plus error_page 404 /404.html. Never land
   // error_page without try_files.
   async function returnToFallback() {
-    await resetRouteStore()
+    // Best effort with a bound: the web store load needs a session
+    // (GET /api/settings), so for an unauthenticated visitor it
+    // rejects or stalls up to the store request timeout. Navigation
+    // must never wait on it, or the countdown and the button both
+    // dead-end on this page.
+    await Promise.race([
+      resetRouteStore().catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ])
 
     router.replace(fallbackPath)
   }
 
   useEffect(() => {
-    void resetRouteStore()
+    void resetRouteStore().catch(() => {})
   }, [fallbackPath])
 
   useEffect(() => {
