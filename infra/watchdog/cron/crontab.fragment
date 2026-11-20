@@ -1,0 +1,26 @@
+# FRAGMEN crontab watchdog NoteGen (TERKOREKSI) - BUKAN crontab utuh
+#
+# Berkas ini HANYA fragmen. JANGAN memasangnya langsung dengan
+# perintah crontab apa pun. Gabungkan dengan crontab lama lewat
+# prosedur di infra/watchdog/cron/README.md seksi 4 memakai
+# merge-check.sh, tinjau pratinjau gabungan, dan hanya sesudah
+# seluruh gerbang aktivasi terpenuhi (AD-201 butir 6 + P-3 + F-ABC-A1
+# + DA18-N01 + DA18-N07). Aktivasi kini DILARANG.
+#
+# Aturan jadwal: interval 5 menit; watchdog compose di-offset 2 menit
+# dari tunnel agar keduanya tidak memprobe dan bertindak bersamaan.
+# ID/nama cron wajib menyebut `notegen`. Skrip memakai flock sendiri;
+# cron tidak perlu membungkus flock lagi.
+#
+# Jalur memakai direktori instalasi stabil AD-138/AD-184:
+# skrip di $HOME/workspace/notegen-watchdog/, log di
+# $HOME/workspace/notegen-watchdog-logs/. Berkas env TIDAK BOLEH
+# berisi nilai secret; token hanya dirujuk lewat jalur berkasnya.
+# Baris cron TIDAK BOLEH berisi nilai secret.
+#
+# Watchdog tunnel: menit 0, 5, 10, ..., 55. Host pelaksana mengikuti
+# putusan P-3; baris ini berasumsi eksekusi pada host yang diputus.
+SHELL=/bin/bash
+*/5 * * * * set -a; . "$HOME/workspace/notegen-watchdog/watchdog.env"; set +a; exec "$HOME/workspace/notegen-watchdog/notegen-tunnel-watchdog.sh" >>"$HOME/workspace/notegen-watchdog-logs/cron-tunnel.log" 2>&1
+# Watchdog compose: menit 2, 7, 12, ..., 57 (offset 2 menit).
+2-57/5 * * * * set -a; . "$HOME/workspace/notegen-watchdog/watchdog.env"; set +a; exec "$HOME/workspace/notegen-watchdog/notegen-compose-watchdog.sh" >>"$HOME/workspace/notegen-watchdog-logs/cron-compose.log" 2>&1
