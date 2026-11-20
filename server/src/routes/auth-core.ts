@@ -5,7 +5,7 @@
 // Core auth routes (kontrak-api-kanonis.md section 3.12; V3-01).
 // Ten routes: first-account setup, two-step login, logout and
 // logout-all, session list and revoke, CSRF token, me, and register
-// (404 by design in closed mode). Step-up, password change and
+// (404 by design). Step-up, password change and
 // reset, TOTP enrollment, and admin routes belong to V3-02 and live
 // in their own route modules; this file must not grow them.
 //
@@ -116,6 +116,19 @@ function requestUserAgent(request: FastifyRequest): string | undefined {
 
 export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCoreRouteDeps): Promise<void> {
   const auth = deps.auth;
+  // Single-account enforcement (DA-22-07, S-P0-13/S-P0-14/S-P0-15):
+  // the register handler below answers 404 in every mode, but a
+  // non-closed mode must never reach route registration silently.
+  // loadConfig already refuses non-closed values at boot; this guard
+  // covers programmatically built contexts (tests, embeds) so a
+  // misconfigured context fails fast here instead of booting an
+  // installation that advertises a registration flow it does not
+  // have. The message names the variable only, never its value.
+  if (auth.registrationMode !== 'closed') {
+    throw new Error(
+      'REGISTRATION_MODE must be closed: invitation and open registration are not implemented.',
+    );
+  }
   const originCheck = createOriginPreHandler(auth.canonicalOrigin);
   // Factories, not shared objects: Fastify keeps route options, so
   // each registration gets a fresh options object.
@@ -651,11 +664,13 @@ export async function registerAuthCoreRoutes(app: FastifyInstance, deps: AuthCor
     return reply.code(200).send(successEnvelope(body));
   });
 
-  // POST /api/auth/register: 404 by design in closed mode (the MVP
-  // default). No account can ever be created through this endpoint
-  // while it answers 404, and the response advertises nothing about
-  // the deployment mode. The Origin check still applies: this is a
-  // public mutation.
+  // POST /api/auth/register: 404 by design, in every mode. No account
+  // can ever be created through this endpoint while it answers 404,
+  // and the response advertises nothing about the deployment mode.
+  // Registration flows (invitation, open) do not exist; adding one
+  // requires the multi-account filesystem isolation of S-P0-13,
+  // S-P0-14, and S-P0-15 plus a recorded decision. The Origin check
+  // still applies: this is a public mutation.
   app.post('/api/auth/register', publicRoute(), async () => {
     throw ApiError.notFound();
   });
