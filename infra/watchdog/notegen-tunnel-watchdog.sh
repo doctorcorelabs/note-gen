@@ -6,6 +6,9 @@
 # Watchdog tunnel NoteGen (Fase 1, gelombang 5, spesifikasi-watchdog.md seksi 1).
 # Jalan dari VM operator (bukan dari muse-2). Membuktikan jalur publik hidup
 # ujung-ke-ujung lewat GET /api/health/ready dengan service token Access.
+# Mode lokal (NOTEGEN_LOCAL_MODE=1, Opsi P-3 A): jalan DI muse-2; diagnosis
+# internal + launcher dijalankan lokal tanpa ib.py. Default (0) tidak
+# berubah: jalan dari VM operator lewat ib.py.
 # Diagnosis mengikuti seksi 1.4: probe internal pembeda SEBELUM restart tunnel.
 # Skrip ini TIDAK PERNAH me-restart service compose dan TIDAK PERNAH menyentuh
 # layanan lain. Satu-satunya tindakan jarak jauhnya adalah menjalankan launcher
@@ -35,7 +38,7 @@ CADDY_PORT="${NOTEGEN_CADDY_PORT:-3200}"
 API_PORT="${NOTEGEN_API_PORT:-3001}"
 PROJECT_DIR="${NOTEGEN_PROJECT_DIR:-/data/home/note-gen-web}"
 COMPOSE_FILE="${NOTEGEN_COMPOSE_FILE:-docker-compose.yml}"
-TUNNEL_LAUNCHER="${NOTEGEN_TUNNEL_LAUNCHER:-/data/home/notegen-tunnel/notegen-tunnel.sh}"
+TUNNEL_LAUNCHER="${NOTEGEN_TUNNEL_LAUNCHER:-/data/home/notegen-tunnel/start-tunnel.sh}"
 LOG_DIR="${NOTEGEN_LOG_DIR:-$HOME/workspace/notegen-watchdog-logs}"
 MAINTENANCE_FILE="${NOTEGEN_MAINTENANCE_FILE:-$LOG_DIR/MAINTENANCE}"
 DRY_RUN="${NOTEGEN_DRY_RUN:-0}"
@@ -43,6 +46,7 @@ REPROBE_WAIT="${NOTEGEN_TUNNEL_REPROBE_WAIT:-15}"
 PROBEONLY_AFTER="${NOTEGEN_TUNNEL_PROBEONLY_AFTER:-3}"
 MIGRATIONS_REQUIRED="${NOTEGEN_MIGRATIONS_REQUIRED:-1}"
 WORKER_DEPLOYED="${NOTEGEN_WORKER_DEPLOYED:-0}"
+LOCAL_MODE="${NOTEGEN_LOCAL_MODE:-0}"
 
 STATE_DIR="$LOG_DIR/state"
 LOCK_FILE="$LOG_DIR/notegen-tunnel-watchdog.lock"
@@ -54,6 +58,7 @@ PREV_FILE="$STATE_DIR/tunnel-prev"
 if [ "$DRY_RUN" = "1" ]; then DRY_RUN=1; else DRY_RUN=0; fi
 if [ "$MIGRATIONS_REQUIRED" = "1" ]; then MIGRATIONS_REQUIRED=1; else MIGRATIONS_REQUIRED=0; fi
 if [ "$WORKER_DEPLOYED" = "1" ]; then WORKER_DEPLOYED=1; else WORKER_DEPLOYED=0; fi
+if [ "$LOCAL_MODE" = "1" ]; then LOCAL_MODE=1; else LOCAL_MODE=0; fi
 
 RUN_START_EPOCH="$(date +%s)"
 RUN_START_WIB="$(TZ=Asia/Jakarta date '+%Y-%m-%dT%H:%M:%S%z')"
@@ -357,7 +362,7 @@ find "$LOG_DIR" -maxdepth 1 -name "$LOG_PREFIX-*.log" -mtime +30 -delete 2>/dev/
 MAINTENANCE=0
 if [ -e "$MAINTENANCE_FILE" ]; then MAINTENANCE=1; fi
 
-log "INFO run_start utc=$RUN_START_UTC wib=$RUN_START_WIB dry_run=$DRY_RUN maintenance=$MAINTENANCE"
+log "INFO run_start utc=$RUN_START_UTC wib=$RUN_START_WIB dry_run=$DRY_RUN maintenance=$MAINTENANCE local_mode=$LOCAL_MODE"
 
 # ---------------- Validasi konfigurasi pra-mulai ----------------
 # Kegagalan konfigurasi lokal dipetakan ke exit 1 (run gagal, tanpa tindakan).
@@ -547,12 +552,75 @@ remote_exec() {
   return 0
 }
 
+# ---------------- Eksekusi lokal (mode lokal) ----------------
+# Hanya dipakai bila LOCAL_MODE=1 (skrip berjalan DI muse-2). Menjalankan
+# perintah target yang sama (templat GATHER/LAUNCH) langsung di host ini
+# lewat bash, dan mengisi variabel yang sama dengan remote_exec
+# (REMOTE_PAYLOAD, REMOTE_PAYLOAD_OK, EXEC_CLASS, EXEC_EXIT, REMOTE_STDERR) sehingga alur
+# utama tidak berubah. Tidak memakai ib.py dan tidak menanyakan keadaan
+# mesin. Kegagalan lokal dipetakan ke exit 1 (fail closed, tanpa tindakan
+# atas diagnosis yang tidak terbukti), sejajar jalur transient remote.
+
+local_exec() {
+  # $1 timeout detik, $2 perintah. Mengisi REMOTE_* + EXEC_*.
+  local timeout_s="$1" cmd="$2" out="" rc=0
+  REMOTE_STDOUT=""
+  REMOTE_STDERR=""
+  REMOTE_RC=0
+  REMOTE_PAYLOAD=""
+  REMOTE_PAYLOAD_OK=0
+  EXEC_CLASS=""
+  EXEC_EXIT=1
+  err_tmp="$STATE_DIR/.last-local-stderr.$$"
+  if command -v timeout >/dev/null 2>&1; then
+    out="$(timeout "$timeout_s" bash -c "$cmd" 2>"$err_tmp")"
+    rc=$?
+    if [ "$rc" -eq 124 ]; then
+      log "WARN eksekusi lokal melewati batas $timeout_s detik; tanpa tindakan"
+    fi
+  else
+    log "WARN perintah timeout tidak tersedia; eksekusi lokal berjalan tanpa batas luar (batas dalam perintah tetap berlaku)"
+    out="$(bash -c "$cmd" 2>"$err_tmp")"
+    rc=$?
+  fi
+  if [ -f "$err_tmp" ]; then
+    REMOTE_STDERR="$(cat "$err_tmp" 2>/dev/null | head -c 1000)"
+    rm -f "$err_tmp" 2>/dev/null || true
+  fi
+  REMOTE_STDOUT="$out"
+  REMOTE_RC="$rc"
+  if [ "$rc" -ne 0 ]; then
+    log "ERROR eksekusi lokal gagal (rc=$rc); tanpa tindakan"
+    EXEC_CLASS="local_exec"
+    EXEC_EXIT=1
+    return 1
+  fi
+  REMOTE_PAYLOAD="$(printf '%s' "$REMOTE_STDOUT" | python3 -c "$PY_EXTRACT" 2>/dev/null)"
+  if [ $? -eq 0 ] && [ -n "$REMOTE_PAYLOAD" ]; then
+    REMOTE_PAYLOAD_OK=1
+  else
+    REMOTE_PAYLOAD=""
+    REMOTE_PAYLOAD_OK=0
+  fi
+  return 0
+}
+
+exec_target() {
+  # $1 timeout detik, $2 perintah target. Dispatcher mode eksekusi.
+  if [ "$LOCAL_MODE" -eq 1 ]; then
+    local_exec "$1" "$2"
+  else
+    remote_exec "$1" "$2"
+  fi
+}
+
 log_exec_failure() {
   # $1 konteks. Mencatat klasifikasi + baris error pertama yang sudah diredaksi.
-  local first=""
+  local first="" medium="jarak jauh"
+  if [ "${LOCAL_MODE:-0}" -eq 1 ]; then medium="lokal"; fi
   first="$(printf '%s' "$REMOTE_STDERR" | head -n 1)"
   first="$(scrub_token_values "$(safe_line "$first")")"
-  log "ERROR eksekusi jarak jauh gagal ($1): klasifikasi=$EXEC_CLASS exit=$EXEC_EXIT detail=$first"
+  log "ERROR eksekusi $medium gagal ($1): klasifikasi=$EXEC_CLASS exit=$EXEC_EXIT detail=$first"
 }
 
 # ---------------- Probe publik ----------------
@@ -848,7 +916,7 @@ esac
 # 4. Gejala kegagalan tunnel ATAU origin: urutan diagnosis seksi 1.4.
 #    Langkah pembeda: probe internal SEBELUM keputusan restart apa pun.
 GATHER_CMD="$(build_gather_cmd)"
-if ! remote_exec 60 "$GATHER_CMD"; then
+if ! exec_target 60 "$GATHER_CMD"; then
   log_exec_failure "probe internal pembeda"
   if [ "$EXEC_EXIT" -eq 3 ]; then
     note_transition "unreachable"
@@ -951,7 +1019,7 @@ fi
 # 6. Satu upaya restart tunnel (seksi 1.5), lalu tunggu 15 detik dan
 #    probe luar ulang satu kali. Tanpa loop restart di dalam run ini.
 LAUNCH_CMD="$(build_launch_cmd)"
-if ! remote_exec 120 "$LAUNCH_CMD"; then
+if ! exec_target 120 "$LAUNCH_CMD"; then
   log_exec_failure "launcher tunnel"
   if [ "$EXEC_EXIT" -eq 3 ]; then
     note_transition "unreachable"
