@@ -272,11 +272,19 @@ export default function SetupPage() {
               </Button>
             </div>
           </form>
+          {/* DA-15-05: client navigation, not a raw anchor. A raw link
+              to /login forces a full reload, which 404s on the static
+              deploy while nginx try_files is absent. Same router.push
+              pattern as the two sign-in buttons above. */}
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Already set up?{' '}
-            <a href="/login" className="underline underline-offset-4 hover:text-foreground">
+            <button
+              type="button"
+              onClick={() => router.push('/login')}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
               Sign in
-            </a>
+            </button>
           </p>
         </CardContent>
       </Card>
