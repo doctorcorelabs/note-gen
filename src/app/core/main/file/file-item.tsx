@@ -59,7 +59,8 @@ function buildFileRenamePlan({
   currentPath: string
   enteredName: string
 }) {
-  const needsMarkdownSuffix = originalName === '' && !enteredName.endsWith('.md')
+  const needsMarkdownSuffix =
+    !enteredName.endsWith('.md') && (originalName === '' || originalName.endsWith('.md'))
   const displayName = needsMarkdownSuffix ? `${enteredName}.md` : enteredName
   const parentPath = currentPath.split('/').slice(0, -1).join('/')
   const targetRelativePath = parentPath ? `${parentPath}/${displayName}` : displayName

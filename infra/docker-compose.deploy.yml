@@ -137,11 +137,12 @@ services:
       - ./api.env
     environment:
       # Nilai bukan secret; environment menang atas env_file sehingga stack
-      # benar tanpa bergantung pada isi api.env untuk ketiga nilai ini
+      # benar tanpa bergantung pada isi api.env untuk keempat nilai ini
       # (preseden dev V1-07 bagian 4.3).
       HOST: "0.0.0.0"
       PORT: "3001"
       WORKSPACE_ROOT: "/workspace"
+      ASSET_ROOT: "/assets"
     volumes:
       # Bind mount kandidat F10 bagian 4.2. Keputusan bind mount vs named
       # volume untuk workspace produksi adalah K-06 (belum diputuskan);
@@ -149,6 +150,7 @@ services:
       # Bila service worker ditambahkan (gelombang 5), worker WAJIB
       # me-mount path host yang sama ke /workspace (rencana bagian 3.3).
       - /data/home/note-gen-web/data/workspace:/workspace
+      - /data/home/note-gen-web/data/assets:/assets
     depends_on:
       postgres:
         condition: service_healthy

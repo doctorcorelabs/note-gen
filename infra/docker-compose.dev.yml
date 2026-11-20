@@ -102,10 +102,12 @@ services:
       HOST: "0.0.0.0"
       PORT: "3001"
       WORKSPACE_ROOT: "/workspace"
+      ASSET_ROOT: "/assets"
     volumes:
       - ../server:/app
       - /app/node_modules
       - workspace:/workspace
+      - assets:/assets
     depends_on:
       postgres:
         condition: service_healthy
@@ -188,3 +190,5 @@ volumes:
     name: notegen_dev_pgdata
   workspace:
     name: notegen_dev_workspace
+  assets:
+    name: notegen_dev_assets
