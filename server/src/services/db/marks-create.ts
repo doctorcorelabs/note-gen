@@ -95,6 +95,43 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
+const ASSET_MARK_TYPES: readonly string[] = ['image', 'file', 'recording', 'scan'];
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// URL shape rules per type, mirroring the REST records validation
+// (services/records/validation.ts, V1-14 3.2): link requires a valid
+// http/https URL, text/todo require an empty url, asset types
+// require a non-empty url (an asset key; existence is checked by
+// the repository on the REST path). The protocol check runs on the
+// parsed URL, so control-character obfuscation cannot smuggle a
+// javascript: URL past it: the WHATWG parser strips a leading C0
+// byte before the protocol is read.
+function validateMarkUrlShape(type: string, url: string): void {
+  if (type === 'link') {
+    if (url === '' || !isValidHttpUrl(url)) {
+      throw validationIssue('mark.url', 'must be a valid http or https URL');
+    }
+    return;
+  }
+  if (type === 'text' || type === 'todo') {
+    if (url !== '') {
+      throw validationIssue('mark.url', 'must be empty for this record type');
+    }
+    return;
+  }
+  if (ASSET_MARK_TYPES.includes(type) && url === '') {
+    throw validationIssue('mark.url', 'must be an asset key for this record type');
+  }
+}
+
 function validateMark(value: unknown): asserts value is NewMarkInput {
   if (!isRecord(value)) {
     throw validationIssue('mark', 'must be an object');
@@ -122,6 +159,7 @@ function validateMark(value: unknown): asserts value is NewMarkInput {
   if (value.sourceId !== undefined && (typeof value.sourceId !== 'string' || value.sourceId === '')) {
     throw validationIssue('mark.sourceId', 'must be a non-empty string');
   }
+  validateMarkUrlShape(value.type, value.url);
 }
 
 function validateActivity(value: unknown): asserts value is MarkCreateActivityInput | undefined {

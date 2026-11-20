@@ -2878,14 +2878,17 @@ export function TipTapEditor({
         // relative references, so the rendered anchor got an empty
         // href and the link could never be opened by clicking
         // (D-LINK). Allow only scheme-less references here: strip
-        // whitespace first so an obfuscated scheme such as
-        // "java\tscript:" still fails the scheme test, and keep
-        // protocol-relative URLs on the default path. Every URL
-        // with a scheme still goes through defaultValidate, so
-        // javascript:/data: links stay rejected exactly as before.
+        // whitespace and C0 control characters first so an
+        // obfuscated scheme such as "java\tscript:" or a leading
+        // C0 byte before "javascript:" still fails the scheme test
+        // (the WHATWG URL parser strips those characters before
+        // reading the scheme), and keep protocol-relative URLs on
+        // the default path. Every URL with a scheme still goes
+        // through defaultValidate, so javascript:/data: links stay
+        // rejected exactly as before.
         isAllowedUri: (url, { defaultValidate }) => {
           if (defaultValidate(url)) return true
-          const compacted = url.trim().replace(/\s/g, '')
+          const compacted = url.replace(/[\x00-\x1F\x7F\s]/g, '')
           return !compacted.startsWith('//') && !/^[a-z][a-z0-9+.-]*:/i.test(compacted)
         },
       }),

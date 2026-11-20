@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { platform } from '@/lib/platform'
+import { platform, type DialogPickedFile } from '@/lib/platform'
+import { checkIsTauri } from '@/lib/check'
 import { useTranslations } from 'next-intl'
 import { toast } from '@/hooks/use-toast'
 import { getWorkspacePath } from '@/lib/workspace'
@@ -101,6 +102,57 @@ async function copyMarkdownFilesRecursively(
   return copiedCount
 }
 
+async function copyPickedMarkdownFiles(
+  picked: DialogPickedFile[],
+  targetDir: string,
+): Promise<number> {
+  let copiedCount = 0
+
+  for (const entry of picked) {
+    // Directory picks report paths relative to the picked directory
+    // through the File System Access API, but the hidden-input
+    // fallback reports webkitRelativePath, which prefixes the picked
+    // directory name. Handles only exist on the first shape, so a
+    // handle-less relative path loses its first segment.
+    const reported = entry.relativePath.replace(/\\/g, '/')
+    const relativePath = entry.handle
+      ? reported
+      : reported.split('/').slice(1).join('/') || entry.name
+    const parts = relativePath.split('/').filter(part => part !== '' && part !== '.')
+    if (parts.length === 0 || parts.some(part => part === '..')) {
+      continue
+    }
+
+    // Hidden files and hidden directories are skipped, matching the
+    // desktop recursive copy.
+    if (parts.some(part => part.startsWith('.'))) {
+      continue
+    }
+    const fileName = parts[parts.length - 1]
+    const isMarkdown = fileName.endsWith('.md')
+    const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(fileName)
+    if (!isMarkdown && !isImage) {
+      continue
+    }
+
+    const targetDirectory = parts.length > 1
+      ? await platform.path.join(targetDir, ...parts.slice(0, -1))
+      : targetDir
+    if (!await platform.fs.exists(targetDirectory)) {
+      await platform.fs.mkdir(targetDirectory, { recursive: true })
+    }
+
+    // DA-12-11 reconciliation (R24-OVLP3): the web picked-files
+    // path gets the same no-overwrite treatment as the desktop
+    // recursive copy; a colliding name lands on a suffixed copy.
+    const targetPath = await getAvailableCopyPath(targetDirectory, fileName)
+    await platform.fs.writeFile(targetPath, new Uint8Array(await entry.file.arrayBuffer()))
+    copiedCount++
+  }
+
+  return copiedCount
+}
+
 export function useMarkdownImport() {
   const [isImporting, setIsImporting] = useState(false)
   const loadFileTree = useArticleStore(state => state.loadFileTree)
@@ -113,21 +165,38 @@ export function useMarkdownImport() {
 
     setIsImporting(true)
     try {
-      const selectedPath = await platform.dialog.open({
-        directory: true,
-        multiple: false,
-        title: t('importMarkdown'),
-      })
-
-      if (!selectedPath || Array.isArray(selectedPath)) {
-        return
-      }
-
       const workspace = await getWorkspacePath()
       const targetDir = workspace.isCustom
         ? workspace.path
         : await platform.path.join(await platform.path.appDataDir(), 'article')
-      const copiedCount = await copyMarkdownFilesRecursively(selectedPath, targetDir)
+      let copiedCount: number
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped directory
+        // pick returns the picked files with their content.
+        // Path-shaped open() rejects here.
+        const picked = await platform.dialog.openFiles({
+          directory: true,
+          multiple: false,
+          title: t('importMarkdown'),
+        })
+        if (!picked) {
+          return
+        }
+        const pickedFiles = Array.isArray(picked) ? picked : [picked]
+        copiedCount = await copyPickedMarkdownFiles(pickedFiles, targetDir)
+      } else {
+        const selectedPath = await platform.dialog.open({
+          directory: true,
+          multiple: false,
+          title: t('importMarkdown'),
+        })
+
+        if (!selectedPath || Array.isArray(selectedPath)) {
+          return
+        }
+
+        copiedCount = await copyMarkdownFilesRecursively(selectedPath, targetDir)
+      }
 
       await loadFileTree()
       toast({

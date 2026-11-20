@@ -57,6 +57,8 @@ function setFileHeaders(
   }
   reply.header('Last-Modified', options.modifiedAt.toUTCString());
   reply.header('Cache-Control', 'private, no-cache');
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('Content-Security-Policy', 'sandbox');
 }
 
 export async function registerWorkspaceReadRoutes(

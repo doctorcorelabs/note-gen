@@ -16,11 +16,19 @@
  * `registerPlatformAdapter` and never touches `registry.ts`.
  *
  * The host is reached through the structural `DialogHostPort`, the
- * subset of `WebDialogApi` this wiring needs. `WebDialogApi` satisfies
- * the port without this module importing any React or UI code, which
- * keeps the platform-to-UI dependency direction intact (see
- * `desain-registry-shim.md` section 2.3). The wiring spec pins the
- * assignability at compile time with a type-only import.
+ * promise-based subset of `WebDialogApi` this wiring needs.
+ * `WebDialogApi` satisfies the port without this module importing any
+ * React or UI code, which keeps the platform-to-UI dependency
+ * direction intact (see `desain-registry-shim.md` section 2.3). The
+ * wiring spec pins the assignability at compile time with a type-only
+ * import.
+ *
+ * The service delegates every method to the host and returns exactly
+ * what the host resolves: confirm/ask resolve true only when the user
+ * presses the confirm button, message resolves on dismissal, and
+ * prompt resolves the entered text or null on cancel. Option objects
+ * pass through unchanged; the host owns title defaulting and button
+ * labels. The service never invents an answer.
  *
  * Path-shaped open/save (D-01): this wiring does not reimplement the
  * rejection. The wired adapter delegates to `createWebDialogAdapter`,
@@ -36,56 +44,28 @@
  * PlatformCapabilityError from the adapter, never a silent native
  * popup (see the throw-without-host cases in the wiring spec).
  *
- * INTEGRATOR NOTE: exact host gaps. The current host
- * (`web-dialog.tsx`) offers only a fire-and-forget `openDialog` plus a
- * single Close button. It has no promise, no answer, no input, and no
- * dismissal signal. The service below is honest about that boundary
- * instead of fabricating answers. Do not "fix" these gaps inside this
- * module by inventing return values; each gap needs a host change
- * under its own decision (the merge plan records that WebDialogHost
- * behavior must not change without a decision).
+ * History: the host gaps GAP-1 to GAP-4 documented here before
+ * (fire-and-forget host with no promise, no answer, no input, and no
+ * React glue) are closed by the host resolution seam in
+ * `web-dialog.tsx` plus the install-on-mount glue in `WebDialogHost`
+ * (r24-dialog1b). The honest interim semantics that the wiring used
+ * to pin (message resolves once presented; confirm/ask present and
+ * then reject; prompt rejects without presenting) no longer apply:
+ * the spec now pins real resolution through the host. If the host
+ * ever loses its resolution seam, this wiring and its spec must be
+ * updated together; do not weaken the assertions silently.
  *
- * GAP-1 (message resolution): `message` resolves once the host has
- * been asked to present the dialog, not when the user dismisses it.
- * The host exposes no dismissal callback or subscription, and the
- * `WebDialogApi` snapshot handed to this wiring never updates, so
- * awaiting dismissal is impossible without a host change. Callers
- * awaiting `message` proceed while the dialog may still be visible.
- *
- * GAP-2 (confirm/ask resolution, kind, labels): the host renders no
- * confirm/cancel buttons and returns no answer, so `confirm` and
- * `ask` cannot produce the boolean the interface promises. They
- * present the question through the host and then reject with an
- * `unavailable` PlatformCapabilityError naming the missing seam.
- * Returning a fixed true or false would fabricate the user's answer
- * and is forbidden. Likewise `kind`, `okLabel`, and `cancelLabel`
- * are accepted per the interface but not rendered: the host has no
- * field for them, and this wiring does not rewrite the caller's
- * title or message to encode them.
- *
- * GAP-3 (prompt input): the host renders no text input, so `prompt`
- * cannot collect text. It rejects with an `unavailable`
- * PlatformCapabilityError without presenting anything: showing an
- * unanswerable question would mislead the user.
- *
- * GAP-4 (React glue and timing): the host API only exists inside
+ * Glue and timing: the host API only exists inside
  * `WebDialogProvider`, via the `useWebDialog` hook, after React
- * renders. Nothing in this module can obtain it at boot time, and
- * this module adds no React glue. The integrator still needs a small
- * client component inside the provider that calls
- * `installHostDialogService(api)` on mount (or passes the API to
- * the registry wiring). Late installation works for adapters
- * created without an explicit service because `dialog.web.ts`
- * reads the module default at call time, not at factory time.
- * Until that glue lands, dialog methods keep throwing exactly as
- * they do today, which is the documented behavior, not a bug.
- *
- * Until GAP-2 and GAP-3 close, E2E dialog tests must encode the
- * behavior pinned here (present-then-reject for confirm/ask,
- * reject for prompt), not expect booleans or typed text.
+ * renders. `WebDialogHost` installs the service on mount, so the
+ * service is present once either shell (core or mobile) mounts its
+ * host. Late installation works for adapters created without an
+ * explicit service because `dialog.web.ts` reads the module default
+ * at call time, not at factory time. Dialog calls made before any
+ * host mounts (routes outside the core and mobile shells, boot code)
+ * keep throwing the documented unavailable error, exactly as before.
  */
 
-import { capabilityError } from "../errors";
 import {
   createWebDialogAdapter,
   setDefaultDialogService,
@@ -98,40 +78,43 @@ import type {
   PromptDialogOptions,
 } from "./interface";
 
-/** Fallback dialog title when the caller supplies none (the app name). */
-const DEFAULT_DIALOG_TITLE = "NoteGen";
-
 /**
- * Minimal host-facing port: the subset of the web dialog host API
- * this wiring calls. `WebDialogApi` (from `web-dialog.tsx`) satisfies
- * this shape structurally; see the wiring spec for the compile-time
- * proof. Only `openDialog` is needed: the host owns rendering,
- * dismissal, and the Close button.
+ * Minimal host-facing port: the promise-based subset of the web dialog
+ * host API this wiring calls. `WebDialogApi` (from `web-dialog.tsx`)
+ * satisfies this shape structurally; see the wiring spec for the
+ * compile-time proof. Only the four promise methods are needed: the
+ * host owns rendering, queuing, dismissal, and the buttons.
  */
 export interface DialogHostPort {
-  openDialog(options: { title: string; description?: string }): void;
-}
-
-function resolveTitle(
-  options: string | { title?: string } | undefined,
-): string {
-  if (typeof options === "string") {
-    return options.trim() !== "" ? options : DEFAULT_DIALOG_TITLE;
-  }
-  const title = options?.title;
-  return title !== undefined && title.trim() !== ""
-    ? title
-    : DEFAULT_DIALOG_TITLE;
+  confirmDialog(
+    message: string,
+    options?: string | ConfirmDialogOptions,
+  ): Promise<boolean>;
+  askDialog(
+    message: string,
+    options?: string | ConfirmDialogOptions,
+  ): Promise<boolean>;
+  messageDialog(
+    message: string,
+    options?: string | MessageDialogOptions,
+  ): Promise<void>;
+  promptDialog(
+    message: string,
+    options?: string | PromptDialogOptions,
+  ): Promise<string | null>;
 }
 
 function requireHostPort(host: DialogHostPort): DialogHostPort {
   if (
     host === null ||
     host === undefined ||
-    typeof (host as DialogHostPort).openDialog !== "function"
+    typeof (host as DialogHostPort).confirmDialog !== "function" ||
+    typeof (host as DialogHostPort).askDialog !== "function" ||
+    typeof (host as DialogHostPort).messageDialog !== "function" ||
+    typeof (host as DialogHostPort).promptDialog !== "function"
   ) {
     throw new TypeError(
-      "createHostDialogService requires a dialog host with an openDialog function.",
+      "createHostDialogService requires a dialog host with confirmDialog, askDialog, messageDialog, and promptDialog functions.",
     );
   }
   return host;
@@ -140,12 +123,9 @@ function requireHostPort(host: DialogHostPort): DialogHostPort {
 /**
  * Build a DialogService that presents through the given host.
  *
- * `message` presents and resolves once presented (GAP-1).
- * `confirm` and `ask` present and then reject with an `unavailable`
- * PlatformCapabilityError (GAP-2): the host cannot answer.
- * `prompt` rejects with an `unavailable` PlatformCapabilityError
- * without presenting (GAP-3): the host has no text input.
- * Errors thrown by the host itself propagate unchanged.
+ * Every method delegates to the matching host promise method and
+ * returns the host resolution unchanged. Errors thrown by the host
+ * itself propagate unchanged.
  */
 export function createHostDialogService(
   host: DialogHostPort,
@@ -156,59 +136,28 @@ export function createHostDialogService(
       message: string,
       options?: string | ConfirmDialogOptions,
     ): Promise<boolean> {
-      port.openDialog({
-        title: resolveTitle(options),
-        description: message,
-      });
-      throw capabilityError(
-        "unavailable",
-        "dialog",
-        "confirm",
-        "web",
-        "WebDialogHost has no confirm/cancel resolution seam: it renders a single Close button and returns no answer. The question was presented; the boolean cannot be produced without a host change (dialog-wiring.ts GAP-2).",
-      );
+      return port.confirmDialog(message, options);
     },
 
     async ask(
       message: string,
       options?: string | ConfirmDialogOptions,
     ): Promise<boolean> {
-      port.openDialog({
-        title: resolveTitle(options),
-        description: message,
-      });
-      throw capabilityError(
-        "unavailable",
-        "dialog",
-        "ask",
-        "web",
-        "WebDialogHost has no confirm/cancel resolution seam: it renders a single Close button and returns no answer. The question was presented; the boolean cannot be produced without a host change (dialog-wiring.ts GAP-2).",
-      );
+      return port.askDialog(message, options);
     },
 
     async message(
       message: string,
       options?: string | MessageDialogOptions,
     ): Promise<void> {
-      port.openDialog({
-        title: resolveTitle(options),
-        description: message,
-      });
+      await port.messageDialog(message, options);
     },
 
     async prompt(
       message: string,
       options?: string | PromptDialogOptions,
     ): Promise<string | null> {
-      void message;
-      void options;
-      throw capabilityError(
-        "unavailable",
-        "dialog",
-        "prompt",
-        "web",
-        "WebDialogHost has no text-input seam: it renders no input field, so prompt cannot collect text. Nothing was presented (dialog-wiring.ts GAP-3).",
-      );
+      return port.promptDialog(message, options);
     },
   };
 }
@@ -217,9 +166,9 @@ export function createHostDialogService(
  * Install the host-backed service as the module default read by
  * adapters created without an explicit service (see `dialog.web.ts`).
  * Returns the installed service. Passing `undefined` clears the
- * default, restoring the throw-without-host behavior. The registry
- * wiring or the React glue (GAP-4) calls this once; it is safe to
- * call again with a new host, which replaces the previous service.
+ * default, restoring the throw-without-host behavior. `WebDialogHost`
+ * calls this once on mount; it is safe to call again with a new host,
+ * which replaces the previous service.
  */
 export function installHostDialogService(
   host: DialogHostPort | undefined,

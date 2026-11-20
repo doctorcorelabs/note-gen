@@ -6,13 +6,20 @@
 // section 3.5; V3-02 part 1).
 //
 // POST /api/auth/step-up re-authenticates the current session: the
-// password, plus the current TOTP code when TOTP is enabled on the
-// account. On success the session is rotated (new session id, new
-// CSRF token, absolute expiry and createdAt preserved) and the new
-// row carries stepUpAt = now, which unlocks sensitive actions for 15
-// minutes. The response body is { csrfToken } and the rotated
-// session id travels in the Set-Cookie header, exactly like the
-// login success shape minus the account fields.
+// password, plus exactly one second factor when TOTP is enabled on
+// the account: the current TOTP code or one unused recovery code
+// (desain-auth.md section 1.4; DA-02-F04). The recovery-code
+// alternative is the way back into TOTP management for a user who
+// lost the authenticator; without it, a recovery-code login could
+// never step up and the account counted down to lockout. A recovery
+// code used here is consumed once and audited prominently, exactly
+// as a recovery-code login is. On success the session is rotated
+// (new session id, new CSRF token, absolute expiry and createdAt
+// preserved) and the new row carries stepUpAt = now, which unlocks
+// sensitive actions for 15 minutes. The response body is
+// { csrfToken } and the rotated session id travels in the
+// Set-Cookie header, exactly like the login success shape minus the
+// account fields.
 //
 // Enforcement layers, in order: the frozen global hook enforces
 // session (401), then Origin (403 origin_rejected), then CSRF (403
@@ -21,13 +28,14 @@
 //
 // Anti-enumeration: every authentication failure answers one generic
 // 401 invalid_credentials with one message, whether the password was
-// wrong, the TOTP code was missing, wrong, or replayed, or the
-// account holds no TOTP credential at all. The step-up endpoint
-// never answers step_up_required (contract section 3.12): that code
-// belongs to the actions step-up unlocks, not to step-up itself.
-// Failures are counted only in the step-up bucket (5 failures per
-// 15 minutes per account, desain-auth.md section 6.4); they never
-// touch the login lockout.
+// wrong, the TOTP code was missing, wrong, or replayed, the account
+// holds no TOTP credential at all, the recovery code was missing,
+// used, or wrong, or both or neither second factor was presented.
+// The step-up endpoint never answers step_up_required (contract
+// section 3.12): that code belongs to the actions step-up unlocks,
+// not to step-up itself. Failures are counted only in the step-up
+// bucket (5 failures per 15 minutes per account, desain-auth.md
+// section 6.4); they never touch the login lockout.
 //
 // Registration: the integrator wires registerAuthStepUpRoutes in
 // buildApp next to registerAuthCoreRoutes (AD-57: overlap workers
@@ -46,7 +54,7 @@ import {
 } from '../middleware/rate-limit.js';
 import { loadSessionAndUser } from '../middleware/session.js';
 import { requireStore, type AuthContext } from '../auth/context.js';
-import { buildSessionCookie, clientIp, truncateUserAgent } from '../auth/crypto.js';
+import { buildSessionCookie, clientIp, hashToken, truncateUserAgent } from '../auth/crypto.js';
 import {
   recordAudit,
   rotateSessionForRow,
@@ -54,7 +62,7 @@ import {
   unavailableOnDbError,
 } from '../auth/service.js';
 import { deriveSealKey, unsealTotpSecret } from '../auth/totp-seal.js';
-import { verifyTotpCode } from '../auth/totp-verify.js';
+import { normalizeRecoveryCode, verifyTotpCode } from '../auth/totp-verify.js';
 import {
   optionalString,
   requireBodyObject,
@@ -72,10 +80,11 @@ export interface AuthStepUpRouteDeps {
 export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthStepUpRouteDeps): Promise<void> {
   const auth = deps.auth;
 
-  // POST /api/auth/step-up: password re-verification (plus the
-  // current TOTP code when TOTP is enabled), session rotation, and
-  // a fresh step-up stamp. See the module header for the failure
-  // semantics: one generic 401 for every verification failure.
+  // POST /api/auth/step-up: password re-verification (plus exactly
+  // one of the current TOTP code and an unused recovery code when
+  // TOTP is enabled), session rotation, and a fresh step-up stamp.
+  // See the module header for the failure semantics: one generic
+  // 401 for every verification failure.
   app.post(
     '/api/auth/step-up',
     { config: { requiresAuth: true } },
@@ -85,10 +94,15 @@ export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthS
         throw ApiError.unauthenticated();
       }
       const body = requireBodyObject(request.body);
-      const issues: FieldIssue[] = [...unknownFieldIssues(body, ['password', 'code'])];
+      const issues: FieldIssue[] = [...unknownFieldIssues(body, ['password', 'code', 'recoveryCode'])];
       const password = requiredString(body, 'password', issues, { maxCodePoints: PASSWORD_MAX_LENGTH });
       const code = optionalString(body, 'code', issues, { maxCodePoints: 64 });
+      const recoveryCode = optionalString(body, 'recoveryCode', issues, { maxCodePoints: 64 });
       throwIfIssues(issues);
+      // The exactly-one second-factor rule is enforced after the
+      // account loads: it applies only when TOTP is enabled, and
+      // accounts without TOTP ignore both factor fields, exactly as
+      // the code field was already ignored for them.
 
       const loaded = await loadSessionAndUser(auth, request, principal);
       if (loaded === null) {
@@ -146,14 +160,22 @@ export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthS
       };
 
       const passwordOk = await auth.hasher.verify(loaded.user.passwordHash, password as string);
-      let totpStep: number | null = null;
+      let usedRecovery = false;
       if (loaded.user.totpEnabled) {
-        // TOTP accounts must also present the current code. A missing
-        // credential, an unsealable secret, a wrong code, and a
-        // replayed code all fail identically to a wrong password.
-        // Verification alone never consumes the code: the step is
-        // claimed only after the password has also verified.
-        if (code !== undefined) {
+        // TOTP accounts must also present exactly one second factor:
+        // the current TOTP code or one unused recovery code. Both
+        // together, or neither, fail exactly like a wrong password,
+        // so no failure mode is distinguishable. Verification alone
+        // never consumes anything: the TOTP step is claimed, and
+        // the recovery code is marked used, only after the password
+        // has also verified.
+        const hasCode = code !== undefined;
+        const hasRecoveryCode = recoveryCode !== undefined;
+        if (hasCode === hasRecoveryCode) {
+          await failStepUp();
+        }
+        if (hasCode) {
+          let totpStep: number | null = null;
           const credential = await unavailableOnDbError(() => store.findTotpCredential(loaded.user.id));
           const key = deriveSealKey(auth.encryptionKey);
           const secret =
@@ -163,7 +185,7 @@ export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthS
           if (secret !== null && credential !== null) {
             const result = verifyTotpCode({
               secretBase32: secret,
-              code,
+              code: code as string,
               nowMs,
               lastUsedStep: credential.lastUsedStep,
             });
@@ -171,13 +193,37 @@ export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthS
               totpStep = result.step;
             }
           }
-        }
-        if (!passwordOk || totpStep === null) {
-          await failStepUp();
-        }
-        const claimed = await unavailableOnDbError(() => store.claimTotpStep(loaded.user.id, totpStep as number, now));
-        if (!claimed) {
-          await failStepUp();
+          if (!passwordOk || totpStep === null) {
+            await failStepUp();
+          }
+          const claimed = await unavailableOnDbError(() =>
+            store.claimTotpStep(loaded.user.id, totpStep as number, now),
+          );
+          if (!claimed) {
+            await failStepUp();
+          }
+        } else {
+          // Recovery-code step-up (desain-auth.md section 1.4;
+          // DA-02-F04): the only way back into TOTP management for
+          // a user who lost the authenticator. The lookup is
+          // read-only; the code is consumed by the conditional
+          // mark below, after the password has verified, so a
+          // wrong password never burns a code and a concurrent
+          // use of the same code loses the race.
+          const row = await unavailableOnDbError(() =>
+            store.findUnusedRecoveryCode(loaded.user.id, hashToken(normalizeRecoveryCode(recoveryCode as string))),
+          );
+          // The mark runs only when the code exists and the password
+          // verified; any other outcome funnels into the same
+          // generic failure below without consuming the code.
+          const marked =
+            row !== null && passwordOk
+              ? await unavailableOnDbError(() => store.markRecoveryCodeUsed(row.id, now))
+              : false;
+          if (!marked) {
+            await failStepUp();
+          }
+          usedRecovery = true;
         }
       } else if (!passwordOk) {
         await failStepUp();
@@ -192,12 +238,28 @@ export async function registerAuthStepUpRoutes(app: FastifyInstance, deps: AuthS
           eventType: 'step_up_succeeded',
           ip,
           userAgent,
-          metadata: {},
+          metadata: { recoveryCodeUsed: usedRecovery },
         },
         () => {
           request.log.warn({ event: 'step_up_succeeded' }, 'audit write failed');
         },
       );
+      if (usedRecovery) {
+        await recordAudit(
+          store,
+          {
+            userId: loaded.user.id,
+            actorUserId: loaded.user.id,
+            eventType: 'recovery_code_used',
+            ip,
+            userAgent,
+            metadata: {},
+          },
+          () => {
+            request.log.warn({ event: 'recovery_code_used' }, 'audit write failed');
+          },
+        );
+      }
       reply.header(
         'Set-Cookie',
         buildSessionCookie(

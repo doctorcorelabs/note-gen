@@ -36,6 +36,13 @@
       "when": 1794691610105,
       "tag": "0004_m8-contract-tables",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794995933845,
+      "tag": "0005_totp-enrollment-stages",
+      "breakpoints": true
     }
   ]
 }

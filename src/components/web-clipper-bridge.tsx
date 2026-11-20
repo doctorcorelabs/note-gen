@@ -17,6 +17,7 @@ import {
   localizeCapturedImages,
   removeLinkAssetGroup,
 } from '@/lib/web-capture/images'
+import { normalizeCanonicalUrl } from '@/lib/web-capture/extract'
 import type {
   WebClipperBridgeRequest,
   WebClipperClip,
@@ -284,6 +285,31 @@ async function recognizeSelectionImages(
   if (updated) await refreshRecordStores()
 }
 
+// The page url of a clip, validated as an absolute http(s) URL.
+// The protocol check runs on the parsed URL, so control-character
+// obfuscation cannot smuggle a javascript: URL past it. Throws when
+// the clip carries no usable page url; the request handler reports
+// the failure to the extension instead of storing a bad url.
+function clipperPageUrl(clip: WebClipperClip): string {
+  try {
+    const parsed = new URL(clip.url)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.href
+    }
+  } catch {
+    // Fall through to the throw below.
+  }
+  throw new Error('Web clipper clip has no valid http or https page URL.')
+}
+
+// The url stored for a clipped link: the page canonical url when it
+// normalizes to the same host as the page url, else the page url
+// itself. The canonical url comes from the clipped page markup and
+// must never reach storage unvalidated.
+function clipperLinkUrl(clip: WebClipperClip): string {
+  return normalizeCanonicalUrl(clip.canonicalUrl || '', clip.url) || clipperPageUrl(clip)
+}
+
 async function createLinkRecord(connection: WebClipperConnection, clip: WebClipperClip) {
   const sourceId = `web-clipper:${connection.installId}:${clip.clipId}`
   return insertExternalMark({
@@ -292,7 +318,7 @@ async function createLinkRecord(connection: WebClipperConnection, clip: WebClipp
     type: 'link',
     desc: clip.title,
     content: '',
-    url: clip.canonicalUrl || clip.url,
+    url: clipperLinkUrl(clip),
   })
 }
 
@@ -306,7 +332,7 @@ async function enrichLinkRecord(mark: Mark, clip: WebClipperClip) {
       ...mark,
       desc: page.title || clip.title,
       content: localized.contentMarkdown || page.excerpt || '',
-      url: page.canonicalUrl || page.finalUrl || clip.url,
+      url: page.canonicalUrl || page.finalUrl || clipperPageUrl(clip),
     })
     shouldCleanup = false
     await refreshRecordStores()

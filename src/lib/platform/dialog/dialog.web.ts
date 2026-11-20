@@ -14,11 +14,10 @@
  * Confirm, ask, message and prompt never use `window.confirm`,
  * `window.alert` or `window.prompt`. They delegate to the `DialogService`
  * injected through the factory options or registered as the module default
- * with `setDefaultDialogService`. The centralized dialog UI module that
- * implements the service belongs to V2-10; the merge point is that module
- * calling `setDefaultDialogService` once at app startup, or the integrator
- * passing the service through the registry when wiring the adapter. Until
- * a service is registered, those methods throw a `PlatformCapabilityError`.
+ * with `setDefaultDialogService`. The centralized dialog host
+ * (`WebDialogHost`) installs its host-backed service through
+ * `installHostDialogService` on mount; until a host mounts, those
+ * methods throw a `PlatformCapabilityError`.
  *
  * All browser globals are read at call time through `globalThis`, never
  * captured at module load, so unit tests can substitute mocks and so the

@@ -9,7 +9,7 @@ import useSettingStore from "@/stores/setting"
 import { v4 as uuid } from 'uuid'
 import { uploadImage } from "@/lib/imageHosting"
 import { useRef, useEffect, useCallback } from 'react'
-import { isMobileDevice } from '@/lib/check'
+import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import emitter from '@/lib/emitter'
 import { toast } from '@/hooks/use-toast'
 import { useRecordCompletion } from './use-record-completion'
@@ -158,6 +158,27 @@ export function ControlImage() {
       if (isMobile) {
         fileInputRef.current?.removeAttribute('capture')
         fileInputRef.current?.click()
+        return
+      }
+
+      if (!checkIsTauri()) {
+        // Web mode has no OS paths: the content-shaped picker
+        // returns picked Files, and the File-based upload path
+        // already handles them. Path-shaped open() rejects here.
+        const picked = await platform.dialog.openFiles({
+          multiple: true,
+          directory: false,
+          filters: [{
+            name: 'Image',
+            extensions: ['png', 'jpeg', 'jpg', 'gif', 'webp', 'bmp']
+          }]
+        });
+        if (!picked) return
+
+        const files = Array.isArray(picked) ? picked : [picked]
+        for (const entry of files) {
+          await uploadMobileFile(entry.file)
+        }
         return
       }
 

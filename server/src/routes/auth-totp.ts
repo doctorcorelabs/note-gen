@@ -196,11 +196,12 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
 
   // POST /api/auth/totp/enroll/start: stage a fresh sealed secret
   // and show it once as an otpauth URL plus its Base32 string. The
-  // body, if any, is ignored, like logout. Re-enrollment stages a
-  // replacement secret; the old credential is replaced only in
-  // the sense that the single credential row holds the staged
-  // secret until confirm activates it, so a user who abandons a
-  // re-enrollment must re-start or confirm with the staged secret.
+  // body, if any, is ignored, like logout. The stage lives in
+  // totp_enrollment_stages, apart from the live credential row, so
+  // a re-enrollment never disturbs TOTP login until confirm
+  // promotes the stage; a user who abandons a re-enrollment keeps
+  // logging in with the old secret, and an expired stage simply
+  // requires a fresh start.
   app.post('/api/auth/totp/enroll/start', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const loaded = await loadSteppedUp(request);
     const key = sealKeyOr503();
@@ -225,11 +226,15 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
   });
 
   // POST /api/auth/totp/enroll/confirm: verify a code from the
-  // staged secret, activate TOTP, and issue the initial recovery
-  // set. The initial set is stored (hashed) but not displayed;
-  // the user obtains visible codes through regenerate. An expired
-  // stage (15 minutes, TOTP still off) is deleted and answers the
-  // generic code error, like every other proof failure.
+  // staged secret, promote the stage into the live credential in
+  // one transaction, and issue the initial recovery set. The
+  // initial set is stored (hashed) but not displayed; the user
+  // obtains visible codes through regenerate. An expired stage
+  // (15 minutes, for a first enrollment or a re-enrollment alike)
+  // is deleted and answers the generic code error, like every
+  // other proof failure, leaving any live credential untouched.
+  // The confirmation step is recorded by activation itself, so no
+  // separate step claim runs here.
   app.post('/api/auth/totp/enroll/confirm', sessionRoute(), async (request: FastifyRequest, reply: FastifyReply) => {
     const body = requireBodyObject(request.body);
     const issues: FieldIssue[] = [...unknownFieldIssues(body, ['code'])];
@@ -237,34 +242,38 @@ export async function registerAuthTotpRoutes(app: FastifyInstance, deps: AuthTot
     throwIfIssues(issues);
     const loaded = await loadSteppedUp(request);
     const key = sealKeyOr503();
-    const store = requireStore(auth);
     const nowMs = auth.clock();
     const now = new Date(nowMs);
-    const credential = await unavailableOnDbError(() => store.findTotpCredential(loaded.user.id));
-    if (credential === null) {
+    const stage = await unavailableOnDbError(() => enrollment.findStage(loaded.user.id));
+    if (stage === null) {
       throw ApiError.invalidVerificationCode();
     }
-    if (isStageExpired(credential, loaded.user.totpEnabled, nowMs)) {
-      await unavailableOnDbError(() => enrollment.deleteCredential(loaded.user.id));
+    if (isStageExpired(stage, nowMs)) {
+      await unavailableOnDbError(() => enrollment.deleteStage(loaded.user.id));
       throw ApiError.invalidVerificationCode();
     }
-    const proof = verifyTotpProof({ credential, sealKey: key, code: code as string, nowMs });
+    const proof = verifyTotpProof({
+      credential: { secretSealed: stage.secretSealed, keyVersion: stage.keyVersion, lastUsedStep: null },
+      sealKey: key,
+      code: code as string,
+      nowMs,
+    });
     if (!proof.valid) {
       throw ApiError.invalidVerificationCode();
     }
-    const claimed = await unavailableOnDbError(() => store.claimTotpStep(loaded.user.id, proof.step, now));
-    if (!claimed) {
-      throw ApiError.invalidVerificationCode();
-    }
     const batch = newRecoveryCodeBatch(now);
-    await unavailableOnDbError(() =>
+    const activated = await unavailableOnDbError(() =>
       enrollment.activateEnrollment({
         userId: loaded.user.id,
         enrolledAt: now,
         verifiedAt: now,
+        totpStep: proof.step,
         batch,
       }),
     );
+    if (!activated) {
+      throw ApiError.invalidVerificationCode();
+    }
     await auditTotpEvent(request, loaded.user.id, TOTP_ENROLLED_EVENT);
     const csrfToken = await rotateAndRevokeOthers(request, reply, loaded, now);
     return reply.code(200).send(successEnvelope({ totpEnabled: true, csrfToken }));

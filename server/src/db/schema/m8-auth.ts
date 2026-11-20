@@ -80,6 +80,27 @@ export const totpCredentials = pgTable('totp_credentials', {
   verifiedAt: timestamp('verified_at', { withTimezone: true, mode: 'date' }),
 });
 
+// Pending TOTP enrollment stages (DA-02-F03; desain-auth.md section
+// 1.4). One row per account with an unconfirmed stage-1 secret. The
+// staged secret lives here, never in the live credential row, so a
+// re-enrollment that is abandoned or expires cannot destroy the
+// credential the login path still verifies against. Confirm promotes
+// the stage into totp_credentials in one transaction; an expired
+// stage is deleted and the live credential, if any, is untouched.
+// Created by migration 0005, not by the M8 expand migration.
+export const totpEnrollmentStages = pgTable('totp_enrollment_stages', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  // Sealed staged TOTP secret (AES-256-GCM, base64url of iv + tag +
+  // ciphertext), the same sealed form as totp_credentials.
+  secretSealed: text('secret_sealed').notNull(),
+  keyVersion: integer('key_version').notNull(),
+  // When the stage was created. A stage older than 15 minutes is
+  // expired (TOTP_ENROLL_STAGE_MS in services/auth/totp-enroll.ts).
+  stagedAt: timestamp('staged_at', { withTimezone: true, mode: 'date' }).notNull(),
+});
+
 export const recoveryCodes = pgTable(
   'recovery_codes',
   {

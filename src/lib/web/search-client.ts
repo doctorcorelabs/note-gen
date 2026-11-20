@@ -239,6 +239,43 @@ export function searchResultKey(result: KeywordSearchResult): string {
 }
 
 /**
+ * Merge one cursor page into the accumulated search response
+ * (DA11-02 / S-P0-05). Results accumulate in server order with
+ * duplicates dropped by searchResultKey (first page wins), so a
+ * repeated or overlapping page can never duplicate a row. The
+ * cursor, hasMore flag, fuzzy block, and degraded flag come from
+ * the newest page. A page for a different query or scope is
+ * returned unchanged instead of merged: pages from two searches
+ * must never be combined.
+ */
+export function mergeKeywordSearchPages(
+  previous: KeywordSearchResponse,
+  page: KeywordSearchResponse,
+): KeywordSearchResponse {
+  if (page.query !== previous.query || page.scope !== previous.scope) {
+    return page;
+  }
+  const seen = new Set(previous.results.map((result) => searchResultKey(result)));
+  const results = [...previous.results];
+  for (const result of page.results) {
+    const key = searchResultKey(result);
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push(result);
+    }
+  }
+  return {
+    query: page.query,
+    scope: page.scope,
+    results,
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
+    fuzzy: page.fuzzy,
+    degraded: page.degraded,
+  };
+}
+
+/**
  * First tag id of a record result, or undefined when the record has
  * no tags. The server returns a tag id array; the legacy inbox
  * navigation takes a single current tag, so the first entry is the

@@ -62,7 +62,7 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const trimmedQuery = searchValue.trim()
-  const { status, response, searchedQuery, isCurrent, isPending, searchNow, retry } = useKeywordSearch({
+  const { status, response, searchedQuery, isCurrent, isPending, hasMore, isLoadingMore, loadMoreError, searchNow, retry, loadMore } = useKeywordSearch({
     query: searchValue,
     scope: scopeForSearchFilter(searchFilter),
     enabled: open,
@@ -291,7 +291,7 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
           {!isMobileRoute ? (
             <>
               <div className="text-sm font-semibold tracking-tight text-foreground/90">
-                {t('search.results', { count: searchResult.length })}
+                {t('search.results', { count: hasMore ? `${searchResult.length}+` : searchResult.length })}
               </div>
               <Separator orientation="vertical" className="h-5" />
             </>
@@ -422,6 +422,22 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
             })}
             </div>
           </CommandGroup>
+        )}
+        {isCurrent && searchResult.length > 0 && hasMore && (
+          <div className="flex flex-col items-center gap-2 px-5 py-3">
+            {loadMoreError ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                <span>{t('article.file.search.remoteError')}</span>
+                <Button variant="outline" size="sm" data-testid="search-dialog-load-more-retry" onClick={() => loadMore()}>
+                  {t('article.file.search.retry')}
+                </Button>
+              </div>
+            ) : null}
+            <Button variant="outline" size="sm" data-testid="search-dialog-load-more" disabled={isLoadingMore} onClick={() => loadMore()}>
+              {isLoadingMore ? <Spinner /> : null}
+              {isLoadingMore ? t('search.loadingMore') : t('search.loadMore')}
+            </Button>
+          </div>
         )}
       </CommandList>
     </>

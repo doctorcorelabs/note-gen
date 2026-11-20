@@ -4286,6 +4286,12 @@
         "passwordLabel": "密码",
         "codeLabel": "验证器验证码",
         "codeHelp": "输入验证器应用中的当前 6 位验证码。",
+        "proofChoice": "确认方式",
+        "proofCode": "验证器验证码",
+        "proofRecovery": "恢复代码",
+        "recoveryCodeLabel": "恢复代码",
+        "recoveryCodePlaceholder": "abcd-efgh-ijkm-npqr",
+        "recoveryCodeHelp": "输入一个未使用的恢复代码，每个代码只能使用一次。",
         "submit": "确认",
         "cancel": "取消"
       }
@@ -5800,6 +5806,8 @@
   "search": {
     "placeholder": "搜索笔记、记录和画布...",
     "results": "{count} 个搜索结果",
+    "loadMore": "加载更多结果",
+    "loadingMore": "正在加载更多结果...",
     "exactMatches": "精确结果",
     "relatedContent": "相关内容",
     "searchingRelated": "正在查找语义相关内容…",

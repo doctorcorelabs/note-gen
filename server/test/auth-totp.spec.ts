@@ -21,17 +21,21 @@
 // implementation serves in production.
 //
 // What is pinned here: start shows a fresh otpauth URL plus Base32
-// secret once and stores only the sealed secret; confirm activates
-// TOTP, rotates the current session, kills other sessions, and
-// never bumps the epoch; a stage older than 15 minutes is deleted
-// and answers the generic code error; disable accepts a TOTP code
-// or a recovery code, clears credential plus codes in one logical
-// step, and answers success without proof when already disabled;
-// regenerate replaces the whole batch with exactly 10 fresh codes
-// shown once and accepts only a TOTP code; every route without a
-// fresh step-up answers 403 step_up_required; every proof failure
-// shares one generic 401 invalid_verification_code; and start
-// fails closed with 503 when no encryption key is configured.
+// secret once and stores only the sealed secret, in the stage
+// table apart from the live credential row, so staging never
+// disturbs TOTP login; confirm activates TOTP, rotates the current
+// session, kills other sessions, and never bumps the epoch; a
+// stage older than 15 minutes is deleted and answers the generic
+// code error, for a first enrollment or a re-enrollment alike,
+// leaving any live credential untouched; disable accepts a TOTP
+// code or a recovery code, clears credential plus codes in one
+// logical step, and answers success without proof when already
+// disabled; regenerate replaces the whole batch with exactly 10
+// fresh codes shown once and accepts only a TOTP code; every route
+// without a fresh step-up answers 403 step_up_required; every
+// proof failure shares one generic 401 invalid_verification_code;
+// and start fails closed with 503 when no encryption key is
+// configured.
 
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -45,6 +49,7 @@ import {
   type ActivateEnrollmentInput,
   type RecoveryBatchInput,
   type StageCredentialInput,
+  type TotpEnrollmentStageRow,
   type TotpEnrollmentStore,
 } from '../src/services/auth/totp-enroll.js';
 import { FakeAuthStore } from './auth/fake-store.js';
@@ -75,38 +80,56 @@ function jsonPayload(payload: unknown): { payload: string; headers: Record<strin
 }
 
 // Fake TotpEnrollmentStore over the FakeAuthStore maps. It mirrors
-// the Drizzle implementation's observable effects (upsert stage,
-// transactional activate/disable/replace, delete-other-sessions)
-// without Postgres.
+// the Drizzle implementation's observable effects (upsert stage
+// into the stages map, transactional activate/disable/replace,
+// delete-other-sessions) without Postgres. Stages and live
+// credentials are separate maps, exactly as they are separate
+// tables in production.
 class FakeTotpEnrollmentStore implements TotpEnrollmentStore {
   constructor(private readonly fake: FakeAuthStore) {}
 
   async stageCredential(input: StageCredentialInput): Promise<void> {
-    this.fake.totp.set(input.userId, {
+    this.fake.stages.set(input.userId, {
       userId: input.userId,
       secretSealed: input.secretSealed,
       keyVersion: input.keyVersion,
-      lastUsedStep: null,
-      enrolledAt: input.stagedAt,
-      verifiedAt: null,
+      stagedAt: input.stagedAt,
     });
   }
 
-  async activateEnrollment(input: ActivateEnrollmentInput): Promise<void> {
-    const credential = this.fake.totp.get(input.userId);
-    if (credential !== undefined) {
-      credential.enrolledAt = input.enrolledAt;
-      credential.verifiedAt = input.verifiedAt;
+  async findStage(userId: string): Promise<TotpEnrollmentStageRow | null> {
+    return this.fake.stages.get(userId) ?? null;
+  }
+
+  async deleteStage(userId: string): Promise<void> {
+    this.fake.stages.delete(userId);
+  }
+
+  async activateEnrollment(input: ActivateEnrollmentInput): Promise<boolean> {
+    const stage = this.fake.stages.get(input.userId);
+    if (stage === undefined) {
+      return false;
     }
+    this.fake.totp.set(input.userId, {
+      userId: input.userId,
+      secretSealed: stage.secretSealed,
+      keyVersion: stage.keyVersion,
+      lastUsedStep: input.totpStep,
+      enrolledAt: input.enrolledAt,
+      verifiedAt: input.verifiedAt,
+    });
     const user = this.fake.users.get(input.userId);
     if (user !== undefined) {
       user.totpEnabled = true;
       user.updatedAt = input.enrolledAt;
     }
     this.insertBatch(input.userId, input.batch);
+    this.fake.stages.delete(input.userId);
+    return true;
   }
 
   async disableTotp(userId: string, at: Date): Promise<void> {
+    this.fake.stages.delete(userId);
     this.fake.totp.delete(userId);
     this.fake.recovery = this.fake.recovery.filter((row) => row.userId !== userId);
     const user = this.fake.users.get(userId);
@@ -118,10 +141,6 @@ class FakeTotpEnrollmentStore implements TotpEnrollmentStore {
 
   async replaceRecoveryCodes(userId: string, batch: RecoveryBatchInput): Promise<void> {
     this.insertBatch(userId, batch);
-  }
-
-  async deleteCredential(userId: string): Promise<void> {
-    this.fake.totp.delete(userId);
   }
 
   async deleteOtherSessions(userId: string, keepSessionId: string): Promise<number> {
@@ -218,6 +237,28 @@ async function enrollFully(
   return { secret: started.secret, cookie: cookie as string, csrfToken };
 }
 
+// Logs in through the real two-step login flow and returns the
+// step-2 status code, so re-enrollment tests can prove from
+// outside the enrollment routes that the live credential still
+// verifies (or no longer does) while a stage is pending.
+async function loginWithTotp(app: FastifyInstance, email: string, code: string): Promise<number> {
+  const first = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    headers: publicHeaders({ 'content-type': 'application/json' }),
+    payload: { email, password: PASSWORD },
+  });
+  expect(first.statusCode).toBe(202);
+  const challengeToken = (bodyOf(first).data as { challengeToken: string }).challengeToken;
+  const second = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login/totp',
+    headers: publicHeaders({ 'content-type': 'application/json' }),
+    payload: { challengeToken, code },
+  });
+  return second.statusCode;
+}
+
 describe('TOTP enrollment routes', () => {
   let fixture: TestAuth;
   let app: FastifyInstance;
@@ -247,10 +288,13 @@ describe('TOTP enrollment routes', () => {
       expect(data.otpauthUrl).toBe(
         `otpauth://totp/NoteGen:a%40example.invalid?secret=${data.secret}&issuer=NoteGen&digits=6&period=30`,
       );
-      const credential = await fixture.store.findTotpCredential(session.userId);
-      expect(credential).not.toBeNull();
-      expect(credential?.secretSealed).not.toContain(data.secret);
-      expect(credential?.keyVersion).toBe(1);
+      // The staged secret lives in the stage table, not in the live
+      // credential row: no credential exists until confirm.
+      expect(await fixture.store.findTotpCredential(session.userId)).toBeNull();
+      const stage = fixture.store.stages.get(session.userId);
+      expect(stage).toBeDefined();
+      expect(stage?.secretSealed).not.toContain(data.secret);
+      expect(stage?.keyVersion).toBe(1);
       expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(false);
       // Show-once: /me never carries the secret or the otpauth URL.
       const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: session.cookie } });
@@ -374,9 +418,11 @@ describe('TOTP enrollment routes', () => {
         payload: JSON.stringify({ code }),
       });
       expect(first.statusCode).toBe(200);
-      // Same code, same stage, rotated session (step-up preserved):
-      // the step was claimed by the first confirm, so this is a
-      // replay and must answer the generic 401.
+      // Same code, rotated session (step-up preserved): the stage
+      // was consumed by the first confirm, so there is nothing
+      // left to confirm and the generic 401 must answer. The
+      // confirmed step is also recorded on the live credential,
+      // so the same code cannot pass login either.
       const rotatedCookie = cookieFromResponse(first) as string;
       const rotatedCsrf = (bodyOf(first).data as { csrfToken: string }).csrfToken;
       const replay = await app.inject({
@@ -405,6 +451,7 @@ describe('TOTP enrollment routes', () => {
       });
       expect(res.statusCode).toBe(401);
       expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+      expect(fixture.store.stages.get(session.userId)).toBeUndefined();
       expect(await fixture.store.findTotpCredential(session.userId)).toBeNull();
       expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(false);
     });
@@ -443,6 +490,111 @@ describe('TOTP enrollment routes', () => {
       });
       expect(res.statusCode).toBe(400);
       expect(bodyOf(res).error?.code).toBe('validation_failed');
+    });
+  });
+
+  describe('re-enrollment keeps the live credential (DA-02-F03)', () => {
+    it('start stages a replacement without touching the live credential or TOTP login', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const enrolled = await enrollFully(app, fixture, session);
+      const before = await fixture.store.findTotpCredential(session.userId);
+      expect(before).not.toBeNull();
+      const liveSealed = before?.secretSealed;
+      fixture.clock.advance(STEP_MS);
+      const stepped = await steppedUpSessionForUser(fixture, session.userId);
+      const staged = await enrollStart(app, stepped);
+      expect(staged.secret).not.toBe(enrolled.secret);
+      const stage = fixture.store.stages.get(session.userId);
+      expect(stage).toBeDefined();
+      expect(stage?.secretSealed).not.toBe(liveSealed);
+      const after = await fixture.store.findTotpCredential(session.userId);
+      expect(after?.secretSealed).toBe(liveSealed);
+      expect(after?.enrolledAt).toEqual(before?.enrolledAt);
+      expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(true);
+      // The old authenticator secret still logs in while a stage
+      // is pending: login never reads the stage table.
+      fixture.clock.advance(STEP_MS);
+      expect(await loginWithTotp(app, 'a@example.invalid', codeFor(enrolled.secret, fixture.clock.nowMs))).toBe(
+        200,
+      );
+    });
+
+    it('an expired re-enrollment stage is deleted and the live credential survives', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const enrolled = await enrollFully(app, fixture, session);
+      const liveSealed = (await fixture.store.findTotpCredential(session.userId))?.secretSealed;
+      fixture.clock.advance(STEP_MS);
+      const stepped = await steppedUpSessionForUser(fixture, session.userId);
+      const staged = await enrollStart(app, stepped);
+      fixture.clock.advance(FIFTEEN_MINUTES_MS + 1000);
+      // Re-establish a fresh step-up at the new clock so the failure
+      // is the stage expiry, not step-up staleness.
+      const steppedAgain = await steppedUpSessionForUser(fixture, session.userId);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/enroll/confirm',
+        headers: { ...sessionHeaders(steppedAgain.cookie, steppedAgain.csrfToken), ...jsonPayload({}).headers },
+        payload: JSON.stringify({ code: codeFor(staged.secret, fixture.clock.nowMs) }),
+      });
+      expect(res.statusCode).toBe(401);
+      expect(bodyOf(res).error?.code).toBe('invalid_verification_code');
+      expect(fixture.store.stages.get(session.userId)).toBeUndefined();
+      const credential = await fixture.store.findTotpCredential(session.userId);
+      expect(credential?.secretSealed).toBe(liveSealed);
+      expect((await fixture.store.findUserById(session.userId))?.totpEnabled).toBe(true);
+      // The old secret still logs in after the abandoned stage
+      // expired: nothing needs restoring, because nothing was
+      // ever overwritten.
+      fixture.clock.advance(STEP_MS);
+      expect(await loginWithTotp(app, 'a@example.invalid', codeFor(enrolled.secret, fixture.clock.nowMs))).toBe(
+        200,
+      );
+    });
+
+    it('confirm proves the staged secret, not the live one, and replaces it on success', async () => {
+      const session = await steppedUpSession(fixture, 'a@example.invalid');
+      const enrolled = await enrollFully(app, fixture, session);
+      const liveSealed = (await fixture.store.findTotpCredential(session.userId))?.secretSealed;
+      fixture.clock.advance(STEP_MS);
+      const stepped = await steppedUpSessionForUser(fixture, session.userId);
+      const staged = await enrollStart(app, stepped);
+      const confirmHeaders = {
+        ...sessionHeaders(stepped.cookie, stepped.csrfToken),
+        ...jsonPayload({}).headers,
+      };
+      // A code from the OLD secret must not confirm the new stage,
+      // and the failed proof leaves the stage in place for retry.
+      const wrong = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/enroll/confirm',
+        headers: confirmHeaders,
+        payload: JSON.stringify({ code: codeFor(enrolled.secret, fixture.clock.nowMs) }),
+      });
+      expect(wrong.statusCode).toBe(401);
+      expect(bodyOf(wrong).error?.code).toBe('invalid_verification_code');
+      expect(fixture.store.stages.get(session.userId)).toBeDefined();
+      expect((await fixture.store.findTotpCredential(session.userId))?.secretSealed).toBe(liveSealed);
+      // A code from the STAGED secret confirms and replaces the
+      // live secret in the same transaction that clears the stage.
+      const ok = await app.inject({
+        method: 'POST',
+        url: '/api/auth/totp/enroll/confirm',
+        headers: confirmHeaders,
+        payload: JSON.stringify({ code: codeFor(staged.secret, fixture.clock.nowMs) }),
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(fixture.store.stages.get(session.userId)).toBeUndefined();
+      const replaced = await fixture.store.findTotpCredential(session.userId);
+      expect(replaced?.secretSealed).not.toBe(liveSealed);
+      expect(replaced?.secretSealed).not.toContain(staged.secret);
+      expect(replaced?.lastUsedStep).not.toBeNull();
+      // The new secret logs in; the old one no longer does.
+      fixture.clock.advance(STEP_MS);
+      expect(await loginWithTotp(app, 'a@example.invalid', codeFor(staged.secret, fixture.clock.nowMs))).toBe(200);
+      fixture.clock.advance(STEP_MS);
+      expect(await loginWithTotp(app, 'a@example.invalid', codeFor(enrolled.secret, fixture.clock.nowMs))).toBe(
+        401,
+      );
     });
   });
 
@@ -720,6 +872,7 @@ describe('TOTP enrollment routes', () => {
         expect(res.statusCode).toBe(503);
         expect(bodyOf(res).error?.code).toBe('service_unavailable');
         expect(await noKey.store.findTotpCredential(session.userId)).toBeNull();
+        expect(noKey.store.stages.get(session.userId)).toBeUndefined();
       } finally {
         await keylessApp.close();
       }

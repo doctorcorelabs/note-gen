@@ -20,16 +20,17 @@
 // encryption key is configured and never stores plaintext. The
 // routes enforce the 503; this module never invents a key.
 //
-// Pending-stage storage: there is no pending-enrollment table and
-// totp_credentials has no created_at column, so the staged secret
-// is stored in the credential row itself (desain-auth.md section
-// 1.4: the stage-1 secret is stored sealed while totp_enabled stays
-// false) with enrolled_at holding the staging time as a placeholder.
-// Confirm overwrites enrolled_at with the confirmation time. A
-// staged row is expired when totp_enabled is false and the
-// placeholder is older than 15 minutes; confirm deletes it and
-// answers the generic code error. When totp_enabled is true the
-// row is live, not staged, so no expiry applies.
+// Pending-stage storage: the staged secret lives in its own table,
+// totp_enrollment_stages, never in the live credential row
+// (desain-auth.md section 1.4; DA-02-F03). Storing the stage in
+// totp_credentials destroyed the active credential on enroll/start
+// and broke TOTP login until the new secret was confirmed. The
+// stage row holds the sealed secret plus staged_at; enrolled_at on
+// the credential row is filled only when confirm promotes the
+// stage. A stage older than 15 minutes is expired whether or not
+// the account already has TOTP enabled; confirm deletes it and
+// answers the generic code error, and the live credential, if any,
+// is untouched.
 //
 // Persistence port: AuthStore (../../auth/store.ts) has no credential
 // or recovery-code write methods, and this overlap batch must not
@@ -42,9 +43,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, ne } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
-import { recoveryCodes, sessions, totpCredentials, users } from '../../db/index.js';
+import { recoveryCodes, sessions, totpCredentials, totpEnrollmentStages, users } from '../../db/index.js';
 import { hashToken } from '../../auth/crypto.js';
-import type { TotpCredentialRow } from '../../auth/store.js';
 import { unsealTotpSecret } from '../../auth/totp-seal.js';
 import { normalizeRecoveryCode, verifyTotpCode } from '../../auth/totp-verify.js';
 import type { AuditEventType } from '../../auth/values.js';
@@ -146,17 +146,30 @@ export function newRecoveryCodeBatch(createdAt: Date): RecoveryCodeBatch {
   };
 }
 
-// Pure TOTP code check against a stored credential: unseal, then
-// verify with the window and anti-replay rule. Any failure (no
-// credential, no key, unseal failure, bad shape, wrong code,
-// replayed step) yields the same invalid outcome, so callers can
-// answer one generic error. Verification alone never consumes the
-// code: the caller must claim the step through
-// AuthStore.claimTotpStep, exactly as the login path does.
+// Sealed-secret shape shared by a live credential row and an
+// enrollment stage row: both carry the same sealed form and key
+// version. A stage has no anti-replay history, so callers pass
+// lastUsedStep null for a stage; the confirmation step is recorded
+// when activation promotes the stage.
+export interface TotpProofCredential {
+  secretSealed: string;
+  keyVersion: number;
+  lastUsedStep: number | null;
+}
+
+// Pure TOTP code check against a stored credential or stage:
+// unseal, then verify with the window and anti-replay rule. Any
+// failure (no credential, no key, unseal failure, bad shape, wrong
+// code, replayed step) yields the same invalid outcome, so callers
+// can answer one generic error. Verification alone never consumes
+// the code: callers proving against a live credential must claim
+// the step through AuthStore.claimTotpStep, exactly as the login
+// path does; callers proving against a stage record the step when
+// activation promotes the stage.
 export type TotpProofResult = { valid: true; step: number } | { valid: false };
 
 export function verifyTotpProof(input: {
-  credential: TotpCredentialRow | null;
+  credential: TotpProofCredential | null;
   sealKey: Buffer | null;
   code: string;
   nowMs: number;
@@ -177,17 +190,17 @@ export function verifyTotpProof(input: {
   return result.valid ? { valid: true, step: result.step } : { valid: false };
 }
 
-// True when a credential row is an unconfirmed stage-1 secret older
-// than 15 minutes (desain-auth.md section 1.4). The enrolled_at
-// column holds the staging time until confirm overwrites it. The
-// boundary is inclusive: exactly 15 minutes still counts, matching
-// the step-up freshness boundary in ../../auth/service.ts.
-export function isStageExpired(credential: TotpCredentialRow, totpEnabled: boolean, nowMs: number): boolean {
-  if (totpEnabled) {
-    return false;
-  }
-  return nowMs - credential.enrolledAt.getTime() > TOTP_ENROLL_STAGE_MS;
+// True when an enrollment stage is older than 15 minutes
+// (desain-auth.md section 1.4). The boundary is inclusive: exactly
+// 15 minutes still counts, matching the step-up freshness boundary
+// in ../../auth/service.ts. Expiry applies to every stage,
+// including a re-enrollment stage on a TOTP-enabled account: the
+// live credential is stored separately and is never the stage.
+export function isStageExpired(stage: TotpEnrollmentStageRow, nowMs: number): boolean {
+  return nowMs - stage.stagedAt.getTime() > TOTP_ENROLL_STAGE_MS;
 }
+
+export type TotpEnrollmentStageRow = typeof totpEnrollmentStages.$inferSelect;
 
 export interface StageCredentialInput {
   userId: string;
@@ -200,30 +213,41 @@ export interface ActivateEnrollmentInput {
   userId: string;
   enrolledAt: Date;
   verifiedAt: Date;
+  // The TOTP step the confirmation code proved. Activation records
+  // it as last_used_step on the promoted credential, so the same
+  // code cannot then pass login as a fresh proof.
+  totpStep: number;
   batch: RecoveryBatchInput;
 }
 
 export interface TotpEnrollmentStore {
-  // Upserts the staged sealed secret (last_used_step and
-  // verified_at reset; enrolled_at holds the staging time until
-  // confirm). Overwriting an active credential is the re-enrollment
-  // path: the caller verifies the old proof first.
+  // Upserts the staged sealed secret into totp_enrollment_stages,
+  // replacing any pending stage. The live credential row is never
+  // touched: until confirm promotes the stage, login keeps
+  // verifying against the old secret.
   stageCredential(input: StageCredentialInput): Promise<void>;
-  // One transaction: set enrolled_at/verified_at on the credential,
-  // set users.totp_enabled, and replace the whole recovery set with
-  // the new batch. last_used_step is untouched: the caller claimed
-  // the confirmation step before calling.
-  activateEnrollment(input: ActivateEnrollmentInput): Promise<void>;
-  // One transaction: delete the credential, delete all recovery
-  // codes, and set users.totp_enabled false (desain-auth.md
-  // section 1.4).
+  // Reads the pending stage, or null when the account has none.
+  findStage(userId: string): Promise<TotpEnrollmentStageRow | null>;
+  // Deletes the pending stage (expired-stage cleanup). The live
+  // credential, the recovery codes, and the totp_enabled flag are
+  // untouched.
+  deleteStage(userId: string): Promise<void>;
+  // One transaction: promote the pending stage into the credential
+  // row (insert, or replace the old secret for re-enrollment, with
+  // enrolled_at/verified_at/last_used_step set), set
+  // users.totp_enabled, replace the whole recovery set with the new
+  // batch, and delete the stage. Returns false without writing
+  // anything when no stage exists (a concurrent confirm already
+  // promoted or deleted it); the caller answers the generic code
+  // error in that case.
+  activateEnrollment(input: ActivateEnrollmentInput): Promise<boolean>;
+  // One transaction: delete the credential, the pending stage if
+  // any, and all recovery codes, and set users.totp_enabled false
+  // (desain-auth.md section 1.4).
   disableTotp(userId: string, at: Date): Promise<void>;
   // One transaction: delete every recovery code of the account
   // (used and unused) and insert the new batch.
   replaceRecoveryCodes(userId: string, batch: RecoveryBatchInput): Promise<void>;
-  // Deletes the credential row (expired-stage cleanup). Recovery
-  // codes and the totp_enabled flag are untouched.
-  deleteCredential(userId: string): Promise<void>;
   // Deletes every session of the account except the kept one.
   // Returns the number deleted. No epoch change: TOTP changes
   // revoke other sessions explicitly without bumping the epoch
@@ -236,33 +260,71 @@ export class DrizzleTotpEnrollmentStore implements TotpEnrollmentStore {
 
   async stageCredential(input: StageCredentialInput): Promise<void> {
     await this.db
-      .insert(totpCredentials)
+      .insert(totpEnrollmentStages)
       .values({
         userId: input.userId,
         secretSealed: input.secretSealed,
         keyVersion: input.keyVersion,
-        lastUsedStep: null,
-        enrolledAt: input.stagedAt,
-        verifiedAt: null,
+        stagedAt: input.stagedAt,
       })
       .onConflictDoUpdate({
-        target: totpCredentials.userId,
+        target: totpEnrollmentStages.userId,
         set: {
           secretSealed: input.secretSealed,
           keyVersion: input.keyVersion,
-          lastUsedStep: null,
-          enrolledAt: input.stagedAt,
-          verifiedAt: null,
+          stagedAt: input.stagedAt,
         },
       });
   }
 
-  async activateEnrollment(input: ActivateEnrollmentInput): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  async findStage(userId: string): Promise<TotpEnrollmentStageRow | null> {
+    const rows = await this.db
+      .select()
+      .from(totpEnrollmentStages)
+      .where(eq(totpEnrollmentStages.userId, userId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async deleteStage(userId: string): Promise<void> {
+    await this.db.delete(totpEnrollmentStages).where(eq(totpEnrollmentStages.userId, userId));
+  }
+
+  async activateEnrollment(input: ActivateEnrollmentInput): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      // Lock the stage row: a concurrent confirm for the same
+      // account waits here, then re-reads after this transaction
+      // commits and finds the stage gone, so exactly one confirm
+      // can promote a stage.
+      const stages = await tx
+        .select()
+        .from(totpEnrollmentStages)
+        .where(eq(totpEnrollmentStages.userId, input.userId))
+        .for('update');
+      const stage = stages[0];
+      if (stage === undefined) {
+        return false;
+      }
       await tx
-        .update(totpCredentials)
-        .set({ enrolledAt: input.enrolledAt, verifiedAt: input.verifiedAt })
-        .where(eq(totpCredentials.userId, input.userId));
+        .insert(totpCredentials)
+        .values({
+          userId: input.userId,
+          secretSealed: stage.secretSealed,
+          keyVersion: stage.keyVersion,
+          lastUsedStep: input.totpStep,
+          enrolledAt: input.enrolledAt,
+          verifiedAt: input.verifiedAt,
+        })
+        .onConflictDoUpdate({
+          target: totpCredentials.userId,
+          set: {
+            secretSealed: stage.secretSealed,
+            keyVersion: stage.keyVersion,
+            lastUsedStep: input.totpStep,
+            enrolledAt: input.enrolledAt,
+            verifiedAt: input.verifiedAt,
+          },
+        });
       await tx
         .update(users)
         .set({ totpEnabled: true, updatedAt: input.enrolledAt })
@@ -276,11 +338,14 @@ export class DrizzleTotpEnrollmentStore implements TotpEnrollmentStore {
           createdAt: input.batch.createdAt,
         })),
       );
+      await tx.delete(totpEnrollmentStages).where(eq(totpEnrollmentStages.userId, input.userId));
+      return true;
     });
   }
 
   async disableTotp(userId: string, at: Date): Promise<void> {
     await this.db.transaction(async (tx) => {
+      await tx.delete(totpEnrollmentStages).where(eq(totpEnrollmentStages.userId, userId));
       await tx.delete(totpCredentials).where(eq(totpCredentials.userId, userId));
       await tx.delete(recoveryCodes).where(eq(recoveryCodes.userId, userId));
       await tx.update(users).set({ totpEnabled: false, updatedAt: at }).where(eq(users.id, userId));
@@ -299,10 +364,6 @@ export class DrizzleTotpEnrollmentStore implements TotpEnrollmentStore {
         })),
       );
     });
-  }
-
-  async deleteCredential(userId: string): Promise<void> {
-    await this.db.delete(totpCredentials).where(eq(totpCredentials.userId, userId));
   }
 
   async deleteOtherSessions(userId: string, keepSessionId: string): Promise<number> {

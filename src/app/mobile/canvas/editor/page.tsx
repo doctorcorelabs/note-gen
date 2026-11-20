@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button'
 import { SwipeBack, type SwipeBackHandle } from '@/components/ui/swipe-back'
 import { MobileBackButton } from '@/components/mobile-back-button'
 import emitter from '@/lib/emitter'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import useCanvasStore from '@/stores/canvas'
 import useChatStore from '@/stores/chat'
 
@@ -28,6 +30,11 @@ export function MobileCanvasEditorScreen({ canvasId }: MobileCanvasEditorScreenP
   const router = useRouter()
   const pathname = usePathname()
   const t = useTranslations('canvas')
+  // Web fork (Fase 1, S-P0-04): canvas is NOT active in the web MVP
+  // (AD-33 KEP-1). Mirror the desktop gate in editor-layout.tsx: do
+  // not mount the editor, so no edit can look saved while every
+  // write through getDb() rejects. Desktop behavior is unchanged.
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
   const project = useCanvasStore(state => state.projects.find(item => item.id === canvasId))
   const openProject = useCanvasStore(state => state.openProject)
   const setActiveCanvasId = useCanvasStore(state => state.setActiveCanvasId)
@@ -37,6 +44,7 @@ export function MobileCanvasEditorScreen({ canvasId }: MobileCanvasEditorScreenP
   const swipeBackRef = useRef<SwipeBackHandle>(null)
 
   useEffect(() => {
+    if (canvasDisabled) return
     if (!canvasId) return
     void openProject(canvasId).then(openedProject => {
       const mobileContexts = useChatStore.getState().mobileActiveContexts
@@ -46,7 +54,7 @@ export function MobileCanvasEditorScreen({ canvasId }: MobileCanvasEditorScreenP
         useChatStore.getState().setMobileActiveContexts({ canvasId: null })
       }
     })
-  }, [canvasId, openProject, setActiveCanvasId, setSelectionContext])
+  }, [canvasId, canvasDisabled, openProject, setActiveCanvasId, setSelectionContext])
 
   useEffect(() => {
     if (!canvasId || pathname !== '/mobile/canvas/editor') return
@@ -104,6 +112,33 @@ export function MobileCanvasEditorScreen({ canvasId }: MobileCanvasEditorScreenP
       <div className="flex size-full items-center justify-center text-sm text-muted-foreground">
         {t('loading')}
       </div>
+    )
+  }
+
+  if (canvasDisabled) {
+    return (
+      <SwipeBack
+        ref={swipeBackRef}
+        onBack={closeEditor}
+        backdrop={<MobileCanvasPage preview />}
+      >
+        <div id="mobile-canvas-editor" className="flex h-full min-h-0 w-full flex-col bg-background">
+          <header className="mobile-page-header flex shrink-0 items-center gap-2 border-b px-2">
+            <MobileBackButton
+              label={t('manager.title')}
+              onClick={() => swipeBackRef.current?.back()}
+            />
+            <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
+              {t('manager.title')}
+            </h1>
+          </header>
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
+            <div className="w-full max-w-md">
+              <EditorDisabledNotice feature="canvas" />
+            </div>
+          </div>
+        </div>
+      </SwipeBack>
     )
   }
 

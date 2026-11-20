@@ -74,10 +74,14 @@
  * called, never at registration, so registration stays free of
  * I/O. See the probe for the response mapping.
  *
- * DialogService wiring (N-10) is a separate AD-33 item and is not
- * done here: the dialog adapter is registered with no dialog
- * service, so confirm/ask/message/prompt methods throw the
- * documented unavailable error until the service wiring lands.
+ * DialogService wiring (N-10): the dialog adapter is registered with
+ * no explicit dialog service, and reads the module default at call
+ * time. The centralized dialog host (`WebDialogHost`, mounted in the
+ * core and mobile shells) installs the host-backed service on mount
+ * through `installHostDialogService`, so confirm/ask/message/prompt
+ * resolve with real user answers once a shell mounts. Calls made
+ * before any host mounts keep throwing the documented unavailable
+ * error. See `dialog/dialog-wiring.ts`.
  *
  * Guard note: scripts/platform-guard.sh check 3 predates the AD-33
  * correction and exempts only registry.ts. It flags the direct

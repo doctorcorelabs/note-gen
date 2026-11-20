@@ -39,6 +39,8 @@ import { PlatformSwitchProgress } from './components/platform-switch-progress'
 import { WorkspaceRepoMapping } from './components/workspace-repo-mapping'
 import { DataSyncOverview } from './components/data-sync-overview'
 import { SettingType } from '../components/setting-base'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -99,7 +101,7 @@ const PLATFORM_LOGOS: Partial<Record<SyncPlatform, string>> = {
   selfHosted: '/app-icon.png',
 }
 
-export default function SyncPage() {
+function SyncPage() {
   const t = useTranslations()
   const pathname = usePathname()
   const syncSettingsOpen = useSettingsDialogStore(state => state.open && state.activeSection === 'sync')
@@ -622,4 +624,16 @@ function SyncPlatformIcon({
       )}
     </span>
   )
+}
+
+// Web fork (Fase 1, S-P0-07): the settings dialog gates the sync
+// section (AD-20), but this direct route mounted the full upstream
+// page in web mode, including credential fields that can never save.
+// In web mode render only the same disabled marker; the upstream
+// page stays in the tree for later phases. Desktop is unchanged.
+export default function GatedSyncSettingPage() {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="sync" />
+  }
+  return <SyncPage />
 }

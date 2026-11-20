@@ -4286,6 +4286,12 @@
         "passwordLabel": "Password",
         "codeLabel": "Authenticator code",
         "codeHelp": "Enter the current 6-digit code from your authenticator app.",
+        "proofChoice": "Confirm with",
+        "proofCode": "Authenticator code",
+        "proofRecovery": "Recovery code",
+        "recoveryCodeLabel": "Recovery code",
+        "recoveryCodePlaceholder": "abcd-efgh-ijkm-npqr",
+        "recoveryCodeHelp": "Enter one unused recovery code. Each code works once.",
         "submit": "Confirm",
         "cancel": "Cancel"
       }
@@ -5800,6 +5806,8 @@
   "search": {
     "placeholder": "Search notes, records, and canvases...",
     "results": "{count} search results",
+    "loadMore": "Load more results",
+    "loadingMore": "Loading more results...",
     "exactMatches": "Exact results",
     "relatedContent": "Related content",
     "searchingRelated": "Finding semantically related content…",

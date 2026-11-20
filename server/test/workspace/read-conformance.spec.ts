@@ -247,6 +247,19 @@ describe('GET file: raw text with an independently recomputed revision', () => {
     expect(res.headers['x-revision']).toBe(independentRevision('plain.txt', 'plain'));
   });
 
+  it('sends nosniff and a sandbox CSP so a directly opened file cannot be sniffed as HTML', async () => {
+    const { app, root } = await setup();
+    await writeDisk(root, 'markup.md', '<html><body>not a page</body></html>');
+    const res = await app.inject({ method: 'GET', url: fileUrl('markup.md'), headers: { ...AUTH_HEADERS } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toBe('sandbox');
+    const head = await app.inject({ method: 'HEAD', url: fileUrl('markup.md'), headers: { ...AUTH_HEADERS } });
+    expect(head.statusCode).toBe(200);
+    expect(head.headers['x-content-type-options']).toBe('nosniff');
+    expect(head.headers['content-security-policy']).toBe('sandbox');
+  });
+
   it('changes the revision when the path changes even if the bytes are identical', async () => {
     const { app, root } = await setup();
     await writeDisk(root, 'a.md', 'same');

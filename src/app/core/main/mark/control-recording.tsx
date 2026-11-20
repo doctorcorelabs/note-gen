@@ -10,7 +10,7 @@ import { toast } from '@/hooks/use-toast'
 import { transcribeRecording } from '@/lib/audio'
 import { platform, BaseDirectory } from '@/lib/platform'
 import { useRef } from 'react'
-import { isMobileDevice } from '@/lib/check'
+import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { convertToWav } from '@/lib/audio-converter'
 import { useEffect } from 'react'
 import emitter from '@/lib/emitter'
@@ -215,34 +215,52 @@ export function ControlRecording() {
         return
       }
 
-      // PC端使用 Tauri dialog
-      const selected = await platform.dialog.open({
-        multiple: false,
-        filters: [{
-          name: 'Audio',
-          extensions: ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'webm']
-        }]
-      })
+      // Web mode has no OS paths: the content-shaped picker
+      // returns the picked File, which is a Blob already.
+      // Path-shaped open() rejects here.
+      let audioBlob: Blob | null = null
+      if (!checkIsTauri()) {
+        const picked = await platform.dialog.openFiles({
+          multiple: false,
+          filters: [{
+            name: 'Audio',
+            extensions: ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'webm']
+          }]
+        })
+        const firstPicked = Array.isArray(picked) ? picked[0] : picked
+        audioBlob = firstPicked?.file ?? null
+      } else {
+        // PC端使用 Tauri dialog
+        const selected = await platform.dialog.open({
+          multiple: false,
+          filters: [{
+            name: 'Audio',
+            extensions: ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'webm']
+          }]
+        })
 
-      if (!selected) return
+        if (!selected) return
 
-      // 读取文件
-      const filePath = selected as string
-      const fileData = await platform.fs.readFile(filePath)
+        // 读取文件
+        const filePath = selected as string
+        const fileData = await platform.fs.readFile(filePath)
       
-      // 根据文件扩展名确定 MIME 类型
-      const extension = filePath.split('.').pop()?.toLowerCase()
-      const mimeType = extension === 'wav' ? 'audio/wav' :
-                      extension === 'mp3' ? 'audio/mpeg' :
-                      extension === 'm4a' ? 'audio/mp4' :
-                      extension === 'mp4' ? 'audio/mp4' :
-                      extension === 'ogg' ? 'audio/ogg' :
-                      extension === 'webm' ? 'audio/webm' :
-                      'audio/mpeg'
+        // 根据文件扩展名确定 MIME 类型
+        const extension = filePath.split('.').pop()?.toLowerCase()
+        const mimeType = extension === 'wav' ? 'audio/wav' :
+                        extension === 'mp3' ? 'audio/mpeg' :
+                        extension === 'm4a' ? 'audio/mp4' :
+                        extension === 'mp4' ? 'audio/mp4' :
+                        extension === 'ogg' ? 'audio/ogg' :
+                        extension === 'webm' ? 'audio/webm' :
+                        'audio/mpeg'
       
-      // 将 Uint8Array 转换为 ArrayBuffer
-      const buffer = fileData.buffer.slice(fileData.byteOffset, fileData.byteOffset + fileData.byteLength) as ArrayBuffer
-      const audioBlob = new Blob([buffer], { type: mimeType })
+        // 将 Uint8Array 转换为 ArrayBuffer
+        const buffer = fileData.buffer.slice(fileData.byteOffset, fileData.byteOffset + fileData.byteLength) as ArrayBuffer
+        audioBlob = new Blob([buffer], { type: mimeType })
+      }
+
+      if (!audioBlob) return
 
       // 创建队列ID
       const queueId = `recording-${Date.now()}`
