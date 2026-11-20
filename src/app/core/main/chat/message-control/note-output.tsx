@@ -17,6 +17,7 @@ import { extractTitle } from "@/lib/markdown"
 import { getFilePathOptions, getWorkspacePath, getGenericPathOptions } from "@/lib/workspace"
 import useTagStore from "@/stores/tag"
 import { platform, BaseDirectory } from "@/lib/platform"
+import { isAlreadyExistsLike } from "@/app/core/main/editor/markdown/revision-conflict"
 import { SquarePen, TriangleAlert } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useRouter } from 'next/navigation'
@@ -41,21 +42,39 @@ export function NoteOutput({chat}: {chat: Chat}) {
 
   async function handleTransform() {
     const content = chat?.content || ''
-    // 统一处理：将空格替换为下划线，确保本地和远程文件名一致
+    // 统一处理：将空格替换下划线，确保本地和远程文件名一致
     const sanitizedTitle = title.replace(/\s+/g, '_')
-    const writePath = `${path}/${sanitizedTitle}`
-    
-    // Use workspace functions instead of directly using BaseDirectory.AppData
-    const pathOptions = await getFilePathOptions(writePath)
-    if (pathOptions.baseDir) {
-      await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
-    } else {
-      // Handle custom workspace (direct path, no baseDir)
-      await platform.fs.writeTextFile(pathOptions.path, content)
+
+    // DA-12-11 (DATA2D-2, AD-798): createNew so a colliding name never
+    // overwrites an existing note. On collision, fall back to the next
+    // available path (`name (1).md`, `name (2).md`, ...) instead of
+    // blanking the file that is already there.
+    const dot = sanitizedTitle.lastIndexOf('.')
+    const stem = dot > 0 ? sanitizedTitle.slice(0, dot) : sanitizedTitle
+    const ext = dot > 0 ? sanitizedTitle.slice(dot) : ''
+    let finalTitle = sanitizedTitle
+    for (let attempt = 0; attempt < 100; attempt++) {
+      finalTitle = attempt === 0 ? sanitizedTitle : `${stem} (${attempt})${ext}`
+      const writePath = `${path}/${finalTitle}`
+      // Use workspace functions instead of directly using BaseDirectory.AppData
+      const pathOptions = await getFilePathOptions(writePath)
+      try {
+        if (pathOptions.baseDir) {
+          await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir, createNew: true })
+        } else {
+          // Handle custom workspace (direct path, no baseDir)
+          await platform.fs.writeTextFile(pathOptions.path, content, { createNew: true })
+        }
+        break
+      } catch (error) {
+        if (!isAlreadyExistsLike(error) || attempt === 99) {
+          throw error
+        }
+      }
     }
-    
+
     const store = await platform.store.load('store.json');
-    await store.set('activeFilePath', title)
+    await store.set('activeFilePath', finalTitle)
     if (isRemove) {
       deleteTag(currentTagId)
     }

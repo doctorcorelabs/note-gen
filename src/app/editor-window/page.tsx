@@ -39,6 +39,15 @@ import { setRuntimeWorkspaceRoot } from '@/lib/workspace'
 import { PluginCommandPalette } from '@/components/plugins/plugin-command-palette'
 import { PluginHostBridge } from '@/components/plugins/plugin-host-bridge'
 import useSettingStore, { DEVELOPER_MODE_CHANGED_EVENT } from '@/stores/setting'
+import { RevisionConflictDialog } from '@/app/core/main/editor/markdown/revision-conflict-dialog'
+import {
+  applyRevisionConflictChoice,
+  extractConflictPayload,
+  isRevisionConflictLike,
+  toRevisionConflictInfo,
+  type RevisionConflictChoice,
+  type RevisionConflictInfo,
+} from '@/app/core/main/editor/markdown/revision-conflict'
 
 export default function EditorWindowPage() {
   const t = useTranslations('editorWindow')
@@ -53,7 +62,13 @@ export default function EditorWindowPage() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false)
   const [pluginSettingsReady, setPluginSettingsReady] = useState(false)
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false)
+  const [conflict, setConflict] = useState<RevisionConflictInfo | null>(null)
+  const [conflictBusyChoice, setConflictBusyChoice] = useState<RevisionConflictChoice | null>(null)
+  const [conflictError, setConflictError] = useState<string | null>(null)
+  const [copyNameTaken, setCopyNameTaken] = useState(false)
+  const [editorKey, setEditorKey] = useState(0)
   const closingRef = useRef(false)
+  const revisionRef = useRef<string | null>(null)
   const sessionRef = useRef<EditorWindowSession | null>(null)
   const contentRef = useRef('')
   const savedContentRef = useRef('')
@@ -71,12 +86,36 @@ export default function EditorWindowPage() {
         if (!await platform.fs.exists(currentSession.absolutePath)) {
           throw new Error(t('fileMissing'))
         }
-        await platform.fs.writeTextFile(currentSession.absolutePath, nextContent)
+        // DA-12-11 (DATA2D-2, AD-798): guard the save with the revision
+        // this window loaded, so a file changed elsewhere is never
+        // overwritten silently. A stale guard surfaces the conflict
+        // dialog below instead of a plain error line.
+        await platform.fs.writeTextFile(
+          currentSession.absolutePath,
+          nextContent,
+          revisionRef.current ? { expectedRevision: revisionRef.current } : undefined,
+        )
         savedContentRef.current = nextContent
+        try {
+          const info = await platform.fs.stat(currentSession.absolutePath)
+          revisionRef.current = info.revision ?? null
+        } catch {
+          revisionRef.current = null
+        }
         if (contentRef.current === nextContent) setDirty(false)
         setError('')
       })
       .catch(reason => {
+        if (isRevisionConflictLike(reason)) {
+          setConflict(toRevisionConflictInfo(
+            currentSession.absolutePath,
+            nextContent,
+            extractConflictPayload(reason),
+          ))
+          setConflictError(null)
+          setCopyNameTaken(false)
+          return
+        }
         setError(reason instanceof Error ? reason.message : String(reason))
       })
       .finally(() => {
@@ -90,6 +129,47 @@ export default function EditorWindowPage() {
     useArticleStore.setState({ currentArticle: nextContent })
     queueSave(nextContent)
   }, [queueSave])
+
+  const handleChooseConflict = useCallback(async (choice: RevisionConflictChoice, copyPath?: string) => {
+    const currentSession = sessionRef.current
+    if (!currentSession || conflictBusyChoice) return
+    setConflictBusyChoice(choice)
+    setConflictError(null)
+    setCopyNameTaken(false)
+    try {
+      const result = await applyRevisionConflictChoice(platform.fs, {
+        choice,
+        sourceOptions: { path: currentSession.absolutePath },
+        copyOptions: copyPath ? { path: copyPath } : undefined,
+        copyPath,
+        localContent: contentRef.current,
+      })
+      if (result.status === 'copy-exists') {
+        setCopyNameTaken(true)
+        setConflict(prev => prev ? { ...prev, suggestedCopyPath: result.suggestedCopyPath } : prev)
+        return
+      }
+      if (result.status === 'reloaded' || result.status === 'copied') {
+        contentRef.current = result.content
+        savedContentRef.current = result.content
+        revisionRef.current = result.revision
+        useArticleStore.setState({ currentArticle: result.content })
+        setContent(result.content)
+        setEditorKey(key => key + 1)
+        setDirty(false)
+      } else if (result.status === 'overwritten') {
+        savedContentRef.current = contentRef.current
+        revisionRef.current = result.revision
+        setDirty(false)
+      }
+      setConflict(null)
+      setError('')
+    } catch (reason) {
+      setConflictError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setConflictBusyChoice(null)
+    }
+  }, [conflictBusyChoice])
 
   const closeWindow = useCallback(async () => {
     const currentSession = sessionRef.current
@@ -151,7 +231,9 @@ export default function EditorWindowPage() {
         return
       }
       setRuntimeWorkspaceRoot(storedSession.workspaceRoot, storedSession.workspaceIsCustom ?? true)
-      const initialContent = await platform.fs.readTextFile(storedSession.absolutePath)
+      const initial = await platform.fs.readTextFileDetailed(storedSession.absolutePath)
+      const initialContent = initial.content
+      revisionRef.current = initial.revision
       sessionRef.current = storedSession
       contentRef.current = initialContent
       savedContentRef.current = initialContent
@@ -260,6 +342,7 @@ export default function EditorWindowPage() {
       {error && <div className="border-b px-3 py-2 text-xs text-destructive">{error}</div>}
       <div className="flex min-h-0 flex-1">
         <TipTapEditor
+          key={editorKey}
           initialContent={content}
           onChange={handleContentChange}
           placeholder={tEditor('placeholder')}
@@ -275,6 +358,20 @@ export default function EditorWindowPage() {
         surface="editor-window"
       />
       <PluginCommandPalette />
+      {conflict ? (
+        <RevisionConflictDialog
+          open
+          conflict={conflict}
+          busyChoice={conflictBusyChoice}
+          error={conflictError}
+          copyNameTaken={copyNameTaken}
+          onChoose={handleChooseConflict}
+          onDismiss={() => {
+            setConflict(null)
+            setError(t('conflictHeld'))
+          }}
+        />
+      ) : null}
       <AlertDialog
         open={discardDialogOpen}
         onOpenChange={open => {

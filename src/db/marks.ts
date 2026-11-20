@@ -342,6 +342,39 @@ export async function getMarkById(id: number) {
   return row === null ? undefined : toMark(row)
 }
 
+export async function getActiveMarkPage(options: { tagId?: number; offset: number; limit: number }): Promise<{ marks: Mark[]; hasMore: boolean }> {
+  // Paged active-mark read for the plugin records module
+  // (DATA2D-3): same kinds and order as getMarks/getMarkPreviews
+  // (createdAt descending, id tiebreak via the cursor), paged
+  // until the requested window plus one lookahead row is
+  // collected. Rows carry the version, like every read here.
+  const want = options.offset + options.limit + 1
+  const rows: SqlMarkRow[] = []
+  let cursor: string | undefined
+  while (rows.length < want) {
+    const page = options.tagId === undefined
+      ? await getSqlAdapter().query({
+        kind: 'marks.list',
+        deleted: 'active',
+        ...(cursor === undefined ? {} : { cursor }),
+        limit: MARK_LIST_PAGE_SIZE,
+      })
+      : await getSqlAdapter().query({
+        kind: 'marks.listByTag',
+        tagId: options.tagId,
+        deleted: 'active',
+        ...(cursor === undefined ? {} : { cursor }),
+        limit: MARK_LIST_PAGE_SIZE,
+      })
+    rows.push(...page)
+    if (page.length < MARK_LIST_PAGE_SIZE) break
+    const last = page[page.length - 1]
+    cursor = `${last.createdAt}:${last.id}`
+  }
+  const window = rows.slice(options.offset, options.offset + options.limit)
+  return { marks: window.map(toMark), hasMore: rows.length > options.offset + options.limit }
+}
+
 // DA-11-08: every marks.update from this module carries the version
 // the caller loaded, exactly like the web detail's expectedVersion.
 // A missing version fails closed instead of overwriting silently;
@@ -354,6 +387,24 @@ function requireMarkVersion(version: number | undefined, id: number): number {
     throw new Error(`updateMark needs mark.version for record ${id} (read the record first); refusing an unguarded overwrite.`)
   }
   return version
+}
+
+// A guarded kind write answers a stale expected version with a
+// CONFLICT adapter error (wire code revision_conflict, status 409).
+// Recognition is structural, like records-kind-client: the error
+// classes live in platform implementation files this module does
+// not import. For `marks.update` the only conflict is the stale
+// version guard, so the CONFLICT code is decisive here.
+export function isMarkRevisionConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const shape = error as Error & Record<string, unknown>
+  if (shape.code === 'CONFLICT') return true
+  const details = shape.details
+  if (typeof details === 'object' && details !== null) {
+    const record = details as Record<string, unknown>
+    if (record.wireCode === 'revision_conflict' || record.status === 409) return true
+  }
+  return false
 }
 
 export async function updateMarkTag(id: number, tagId: number, expectedVersion?: number) {
@@ -626,30 +677,30 @@ export async function restoreMarks(ids: number[]) {
   }
 }
 
-/** Compare the complete old row in SQL so a plugin cannot overwrite concurrent edits. */
+/** Guarded plugin record update: the write carries the version the plugin read, so a concurrent edit answers 409 instead of being overwritten. */
 export async function updatePluginTextRecord(previous: Mark, next: Mark, beforeWrite: () => Promise<void>) {
-  // NOT migrated in wave 5 (D-DEMO-3): the guard compares the
-  // complete old row. `Mark` now optionally carries a version
-  // (DA-11-08), but this function's callers read through the
-  // unmigrated plugin path, so no version reaches it here and no
-  // kind call expresses this compare without a read-then-write
-  // race. It still fails loudly through `getDb` until that module
-  // migrates with a version-carrying read.
-  const db = await getDb()
+  // Migrated to kind `marks.update` (DATA2D-3): the plugin module
+  // reads through `getMarkById` (kind `marks.get`), so `previous`
+  // carries the version it loaded and the write is guarded with
+  // `expected: { version }` like every other marks.update in this
+  // module (DA-11-08). A missing version fails closed. A stale
+  // version answers 409 from the handler, mapped to `false` so
+  // the plugin caller keeps its StaleRevision contract. The
+  // handler also rejects a missing or soft-deleted row (404) and
+  // a primary tag that names no tag in the workspace (400),
+  // covering the deleted/tag-existence checks of the retired
+  // full-row compare; moving the primary tag keeps the
+  // additional tags, as the compare's tag-set check allowed.
+  const version = requireMarkVersion(previous.version, previous.id)
   await beforeWrite()
-  const result = await db.execute(
-    `update marks set tagId = $1, content = $2, desc = $3
-     where id = $4 and deleted = 0 and type = $5 and tagId = $6
-     and content is $7 and desc is $8 and url is $9 and createdAt = $10 and sourceId is $11
-     and coalesce((select tagIds from record_tag_metadata where markId = marks.id), json_array(tagId)) = $12
-     and exists (select 1 from tags where id = $1)`,
-    [next.tagId, next.content, next.desc, previous.id, previous.type, previous.tagId,
-      previous.content ?? null, previous.desc ?? null, previous.url, previous.createdAt, previous.sourceId ?? null, JSON.stringify(recordTagIds(previous))],
-  )
-  if (result.rowsAffected) {
-    enqueueRecordsAutoSync('mark:plugin-update')
-    await invalidateMarkKnowledgeIndex(previous.id)
-    enqueueMarkKnowledgeIndex(previous.id)
+  try {
+    await getSqlAdapter().execute({ kind: 'marks.update', id: previous.id, patch: toMarkPatch(next), expected: { version } })
+  } catch (error) {
+    if (isMarkRevisionConflict(error)) return false
+    throw error
   }
-  return result.rowsAffected > 0
+  enqueueRecordsAutoSync('mark:plugin-update')
+  await invalidateMarkKnowledgeIndex(previous.id)
+  enqueueMarkKnowledgeIndex(previous.id)
+  return true
 }

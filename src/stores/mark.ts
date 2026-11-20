@@ -1,5 +1,8 @@
 import type { RemoteWriteCondition } from '@/lib/sync/write-condition'
-import { getAllMarks, getMarkPreviews, getMarks, getTrashMarkPreviews, Mark, updateMark } from '@/db/marks'
+import { getAllMarks, getMarkPreviews, getMarks, getTrashMarkPreviews, isMarkRevisionConflict, Mark, updateMark } from '@/db/marks'
+import { toast } from '@/hooks/use-toast'
+import { createTranslator } from 'next-intl'
+import { LANGUAGE_STORAGE_KEY, loadMessagesWithFallback, normalizeLocale } from '@/i18n/config'
 import { replaceRecordSnapshot, validateRecordSnapshot } from '@/db/record-snapshot'
 import { isMobileDevice } from '@/lib/check'
 import { normalizeTagRules, preserveLegacyRecordTags, reconcileTagRules, recordTagIds, type TagRules } from '@/lib/record-tags'
@@ -20,6 +23,32 @@ import { S3Config } from '@/types/sync'
 import { normalizeRecordFilters } from '@/app/core/main/mark/mark-filters'
 import { setAutoDataSyncApplyingRemote } from '@/lib/sync/auto-data-sync-queue'
 import useArticleStore from './article'
+
+// DATA2D-5 (AD-800): improved conflict toast for the legacy record
+// surfaces. Clear message plus a one-tap reload action; no full dialog.
+// Strings come from record.mark.conflict with an English fallback so the
+// conflict surfaces even when message loading fails.
+async function showMarkConflictToast(onReload: () => void): Promise<void> {
+  let title = 'Save conflict'
+  let description = 'This record changed elsewhere, so your edit was not saved. Reload to see the latest version.'
+  let reload = 'Reload'
+  try {
+    const locale = normalizeLocale(typeof window === 'undefined' ? null : localStorage.getItem(LANGUAGE_STORAGE_KEY))
+    const messages = await loadMessagesWithFallback(locale)
+    const t = createTranslator({ locale, messages, namespace: 'record.mark.conflict' })
+    title = t('title')
+    description = t('description')
+    reload = t('reload')
+  } catch {
+    // Keep the English fallback strings above.
+  }
+  toast({
+    title,
+    description,
+    variant: 'destructive',
+    action: { label: reload, onClick: onReload },
+  })
+}
 
 interface RecordDataDownloadOptions {
   fetchOnly?: boolean
@@ -171,6 +200,8 @@ const useMarkStore = create<MarkState>((set, get) => ({
       throw new Error(`updateMark needs mark.version for record ${mark.id} (read the record first); refusing an unguarded overwrite.`)
     }
     const guarded: Mark = { ...mark, version }
+    const previousMarks = get().marks
+    const previousAllMarks = get().allMarks
     set((state) => {
       return {
         marks: state.marks.map(item => {
@@ -198,7 +229,27 @@ const useMarkStore = create<MarkState>((set, get) => ({
       }
     })
     void useArticleStore.getState().updateRecordTab(guarded)
-    await updateMark(guarded)
+    try {
+      await updateMark(guarded)
+    } catch (error) {
+      // DATA2D-5 (AD-800): a rejected guarded write must not leave the
+      // optimistic state behind. Roll this record back to the loaded
+      // row, and on a revision conflict show the conflict toast with a
+      // one-tap reload. The error still propagates so callers with
+      // their own handling keep working.
+      set((state) => ({
+        marks: state.marks.map(item => item.id === guarded.id
+          ? (previousMarks.find(prev => prev.id === guarded.id) ?? item)
+          : item),
+        allMarks: state.allMarks.map(item => item.id === guarded.id
+          ? (previousAllMarks.find(prev => prev.id === guarded.id) ?? item)
+          : item),
+      }))
+      if (isMarkRevisionConflict(error)) {
+        void showMarkConflictToast(() => { void get().fetchMarks() })
+      }
+      throw error
+    }
   },
   setMarks: (marks) => {
     set({ marks })

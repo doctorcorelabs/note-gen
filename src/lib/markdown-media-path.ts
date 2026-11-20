@@ -340,13 +340,37 @@ async function readMarkdownFile(path: string): Promise<string> {
     : await platform.fs.readTextFile(pathOptions.path)
 }
 
-async function writeMarkdownFile(path: string, content: string): Promise<void> {
+async function readMarkdownFileDetailed(
+  path: string,
+): Promise<{ content: string; revision: string | null }> {
   const pathOptions = await getFilePathOptions(path)
+  const result = pathOptions.baseDir
+    ? await platform.fs.readTextFileDetailed(pathOptions.path, { baseDir: pathOptions.baseDir })
+    : await platform.fs.readTextFileDetailed(pathOptions.path)
+  return { content: result.content, revision: result.revision }
+}
+
+async function writeMarkdownFile(
+  path: string,
+  content: string,
+  expectedRevision?: string | null,
+): Promise<void> {
+  const pathOptions = await getFilePathOptions(path)
+  const guard = expectedRevision ? { expectedRevision } : {}
   if (pathOptions.baseDir) {
-    await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir })
+    await platform.fs.writeTextFile(pathOptions.path, content, { baseDir: pathOptions.baseDir, ...guard })
   } else {
-    await platform.fs.writeTextFile(pathOptions.path, content)
+    await platform.fs.writeTextFile(pathOptions.path, content, guard)
   }
+}
+
+// DA-12-11 (DATA2D-2, AD-798): restore writes compare content first and
+// stay guarded by the revision just read, so a restore never clobbers a
+// newer edit that landed after the failed rewrite.
+async function restoreMarkdownFile(path: string, content: string): Promise<void> {
+  const current = await readMarkdownFileDetailed(path)
+  if (current.content === content) return
+  await writeMarkdownFile(path, content, current.revision)
 }
 
 export async function rewriteWorkspaceMarkdownMediaPaths(
@@ -385,7 +409,12 @@ export async function rewriteWorkspaceMarkdownMediaPaths(
       markEditorPathMutation(update.path)
       const committedUpdateRef: { current: CommittedMediaPathUpdate | null } = { current: null }
       const didCommit = await runEditorPathWriteTransaction(update.path, async ({ hasQueuedSave }) => {
-        const latestContent = await readMarkdownFile(update.path)
+        // Compare-isi (DATA2D-2, AD-798): the rewrite is derived from the
+        // content read here and the write stays guarded by that read's
+        // revision, so a concurrent edit between read and write fails
+        // the commit instead of being overwritten by the mass rewrite.
+        const latest = await readMarkdownFileDetailed(update.path)
+        const latestContent = latest.content
         const previousPath = mapPathBackward(update.path, moves)
         const nextContent = rewriteMarkdownMediaPaths(
           latestContent,
@@ -396,10 +425,10 @@ export async function rewriteWorkspaceMarkdownMediaPaths(
         if (nextContent === latestContent) return true
 
         try {
-          await writeMarkdownFile(update.path, nextContent)
+          await writeMarkdownFile(update.path, nextContent, latest.revision)
         } catch (writeError) {
           try {
-            await writeMarkdownFile(update.path, latestContent)
+            await restoreMarkdownFile(update.path, latestContent)
           } catch (restoreError) {
             console.error(`Failed to restore Markdown after a media path write error: ${update.path}`, restoreError)
           }
@@ -408,7 +437,7 @@ export async function rewriteWorkspaceMarkdownMediaPaths(
         const targetIsActive = useArticleStore.getState().activeFilePath === update.path
         const editorIsStable = !targetIsActive || prepareActiveEditorDeactivation()
         if (!editorIsStable || hasQueuedSave()) {
-          await writeMarkdownFile(update.path, latestContent)
+          await restoreMarkdownFile(update.path, latestContent)
           return false
         }
         markEditorPathMutation(update.path)
@@ -433,9 +462,9 @@ export async function rewriteWorkspaceMarkdownMediaPaths(
     await Promise.allSettled(written.map(async update => {
       markEditorPathMutation(update.path)
       await runEditorPathWriteTransaction(update.path, async () => {
-        const currentContent = await readMarkdownFile(update.path)
-        if (currentContent !== update.content) return false
-        await writeMarkdownFile(update.path, update.previousContent)
+        const current = await readMarkdownFileDetailed(update.path)
+        if (current.content !== update.content) return false
+        await writeMarkdownFile(update.path, update.previousContent, current.revision)
         markEditorPathMutation(update.path)
         return true
       })

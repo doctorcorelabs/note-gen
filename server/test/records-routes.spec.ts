@@ -253,7 +253,7 @@ describe('marks create and read', () => {
 });
 
 describe('marks PATCH guards', () => {
-  it('applies last-write-wins without a guard and 409 revision_conflict on a stale guard', async () => {
+  it('fails closed without a guard and 409 revision_conflict on a stale guard', async () => {
     const { app } = await setup();
     const tagId = await createTag(app, 'Work');
     const created = dataOf<{ id: number; version: number }>(
@@ -283,7 +283,17 @@ describe('marks PATCH guards', () => {
       headers: authHeaders(),
       payload: JSON.stringify({ content: 'v3' }),
     });
-    expect(unguarded.statusCode).toBe(200);
+    // DATA2D-4 (AD-799): no expectedVersion/If-Match and no force fails
+    // closed with 400 validation_failed instead of last-write-wins.
+    expect(unguarded.statusCode).toBe(400);
+    expect(errorOf(unguarded).code).toBe('validation_failed');
+    const forcedUnguarded = await app.inject({
+      method: 'PATCH',
+      url: `/api/marks/${created.id}`,
+      headers: authHeaders(),
+      payload: JSON.stringify({ content: 'v3', force: true }),
+    });
+    expect(forcedUnguarded.statusCode).toBe(200);
   });
 
   it('overwrites with force on a stale guard and writes a force activity event', async () => {
@@ -305,13 +315,20 @@ describe('marks PATCH guards', () => {
   it('edits a soft-deleted record without changing its deleted status', async () => {
     const { app } = await setup();
     const tagId = await createTag(app, 'Work');
-    const created = dataOf<{ id: number }>(await createRecord(app, { type: 'text', content: 'v1', tagId }));
+    const created = dataOf<{ id: number; version: number }>(await createRecord(app, { type: 'text', content: 'v1', tagId }));
     await app.inject({ method: 'DELETE', url: `/api/marks/${created.id}`, headers: authHeadersNoBody() });
+    // The soft delete bumps the version, so the guarded PATCH must carry
+    // the post-delete version read back from the record.
+    const afterDelete = dataOf<{ version: number }>(await app.inject({
+      method: 'GET',
+      url: `/api/marks/${created.id}`,
+      headers: authHeadersNoBody(),
+    }));
     const patched = await app.inject({
       method: 'PATCH',
       url: `/api/marks/${created.id}`,
       headers: authHeaders(),
-      payload: JSON.stringify({ content: 'edited in trash' }),
+      payload: JSON.stringify({ content: 'edited in trash', expectedVersion: afterDelete.version }),
     });
     expect(patched.statusCode).toBe(200);
     const data = dataOf<Record<string, unknown>>(patched);
@@ -323,13 +340,13 @@ describe('marks PATCH guards', () => {
     const { app } = await setup();
     const tagId = await createTag(app, 'Work');
     const todo = JSON.stringify({ title: 'Old', description: '', priority: 'low', completed: false });
-    const created = dataOf<{ id: number }>(await createRecord(app, { type: 'todo', content: todo, tagId }));
+    const created = dataOf<{ id: number; version: number }>(await createRecord(app, { type: 'todo', content: todo, tagId }));
     const next = JSON.stringify({ title: 'New', description: 'd', priority: 'high', completed: true });
     const patched = await app.inject({
       method: 'PATCH',
       url: `/api/marks/${created.id}`,
       headers: authHeaders(),
-      payload: JSON.stringify({ content: next }),
+      payload: JSON.stringify({ content: next, expectedVersion: created.version }),
     });
     expect(patched.statusCode).toBe(200);
     expect(dataOf<Record<string, unknown>>(patched)['desc']).toBe('New');
@@ -337,7 +354,7 @@ describe('marks PATCH guards', () => {
       method: 'PATCH',
       url: `/api/marks/${created.id}`,
       headers: authHeaders(),
-      payload: JSON.stringify({ desc: 'Not the title' }),
+      payload: JSON.stringify({ desc: 'Not the title', expectedVersion: created.version + 1 }),
     });
     expect(badDesc.statusCode).toBe(400);
   });

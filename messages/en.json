@@ -4469,6 +4469,11 @@
     },
     "mark": {
       "empty": "No records yet",
+      "conflict": {
+        "title": "Save conflict",
+        "description": "This record changed elsewhere, so your edit was not saved. Reload to see the latest version.",
+        "reload": "Reload"
+      },
       "loading": "Loading...",
       "createdAt": "Created At",
       "detail": {
@@ -7748,6 +7753,7 @@
     "discardDescription": "The file could not be saved. Closing the window will lose the current changes.",
     "discardCancel": "Keep Editing",
     "discardConfirm": "Discard and Close",
+    "conflictHeld": "Save conflict unresolved. Your edits are held in this window and nothing was overwritten.",
     "pin": "Always on Top",
     "unpin": "Turn Off Always on Top",
     "more": "More Window Actions",

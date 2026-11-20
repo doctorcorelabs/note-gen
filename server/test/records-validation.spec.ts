@@ -142,7 +142,15 @@ describe('parseCreateBody', () => {
 describe('parsePatchBody', () => {
   it('requires at least one content field', () => {
     expect(errorOf(() => parsePatchBody({}, undefined)).code).toBe('validation_failed');
-    expect(parsePatchBody({ content: 'new' }, undefined).content).toBe('new');
+    expect(parsePatchBody({ content: 'new', expectedVersion: 1 }, undefined).content).toBe('new');
+  });
+
+  it('requires a guard unless force is set', () => {
+    // DATA2D-4 (AD-799): PATCH fails closed without expectedVersion/If-Match.
+    expect(errorOf(() => parsePatchBody({ content: 'x' }, undefined)).code).toBe('validation_failed');
+    expect(parsePatchBody({ content: 'x', expectedVersion: 3 }, undefined).expectedVersion).toBe(3);
+    expect(parsePatchBody({ content: 'x' }, '3').expectedVersion).toBe(3);
+    expect(parsePatchBody({ content: 'x', force: true }, undefined).force).toBe(true);
   });
 
   it('merges the If-Match header with the body guard and rejects mismatches', () => {
@@ -157,7 +165,7 @@ describe('parsePatchBody', () => {
 
   it('parses force as a boolean only', () => {
     expect(parsePatchBody({ content: 'x', force: true }, undefined).force).toBe(true);
-    expect(parsePatchBody({ content: 'x' }, undefined).force).toBe(false);
+    expect(parsePatchBody({ content: 'x', expectedVersion: 1 }, undefined).force).toBe(false);
     expect(errorOf(() => parsePatchBody({ content: 'x', force: 'yes' }, undefined)).code).toBe(
       'validation_failed',
     );

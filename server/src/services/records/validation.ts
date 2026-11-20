@@ -334,12 +334,23 @@ export function parsePatchBody(
   if (rawForce !== undefined && typeof rawForce !== 'boolean') {
     throw fieldError('force', 'must be a boolean');
   }
+  const expectedVersion = (rawExpected as number | undefined) ?? headerGuard;
+  const force = rawForce === true;
+  // DA-11-08 parity (DATA2D-4, AD-799): fail closed like PUT tags and
+  // the client kind. Without a guard the PATCH used to fall back to
+  // last-write-wins; now a missing expectedVersion/If-Match is a 400
+  // unless the caller explicitly forces the overwrite.
+  if (expectedVersion === undefined && !force) {
+    throw ApiError.validation('Request validation failed.', {
+      fields: [{ field: 'expectedVersion', issue: 'is required unless force is true' }],
+    });
+  }
   return {
     content,
     desc,
     url,
-    expectedVersion: (rawExpected as number | undefined) ?? headerGuard,
-    force: rawForce === true,
+    expectedVersion,
+    force,
   };
 }
 

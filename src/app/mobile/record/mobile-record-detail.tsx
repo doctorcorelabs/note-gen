@@ -45,7 +45,7 @@ import { getRecordTabPath } from '@/app/core/main/mark/mark-record-tab'
 import { getMarkTypeListBadgeClasses } from '@/app/core/main/mark/mark-type-meta'
 import type { Priority } from '@/app/core/main/mark/todo-form'
 import { isLargeMarkdownDocument } from '@/app/core/main/editor/markdown/large-markdown'
-import { delMark, delMarkForever, getMarkById, restoreMark, type Mark } from '@/db/marks'
+import { delMark, delMarkForever, getMarkById, isMarkRevisionConflict, restoreMark, type Mark } from '@/db/marks'
 import { toast } from '@/hooks/use-toast'
 import { cn, isHttpUrl } from '@/lib/utils'
 import useMarkStore from '@/stores/mark'
@@ -241,11 +241,16 @@ export function MobileRecordDetail({ markId, isActive }: MobileRecordDetailProps
       }
       return true
     } catch (error) {
-      toast({
-        title: t('common.error'),
-        description: error instanceof Error ? error.message : t('common.error'),
-        variant: 'destructive',
-      })
+      // DATA2D-5 (AD-800): on a revision conflict the mark store already
+      // rolled back and showed the conflict toast with a reload action;
+      // do not stack a generic error toast on top of it.
+      if (!isMarkRevisionConflict(error)) {
+        toast({
+          title: t('common.error'),
+          description: error instanceof Error ? error.message : t('common.error'),
+          variant: 'destructive',
+        })
+      }
       return false
     } finally {
       setIsSaving(false)

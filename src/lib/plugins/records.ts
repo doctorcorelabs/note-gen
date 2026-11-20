@@ -1,7 +1,7 @@
 import { PluginError, type PluginContext, type PluginPermissionName, type PluginRecord } from '@notegen/plugin-api'
 import { z } from 'zod/v3'
-import { getDb } from '@/db'
-import { attachMarkTagIds, getMarkById, insertMark, RECORD_TAG_MATCH_SQL, updatePluginTextRecord, type Mark } from '@/db/marks'
+import { getActiveMarkPage, getMarkById, insertMark, updatePluginTextRecord, type Mark } from '@/db/marks'
+import { getTags } from '@/db/tags'
 import emitter from '@/lib/emitter'
 import useMarkStore from '@/stores/mark'
 
@@ -43,8 +43,10 @@ async function existing(id: number): Promise<Mark> {
   return mark
 }
 async function assertTag(id: number) {
-  const db = await getDb()
-  if (!(await db.select<{ id: number }[]>('select id from tags where id = $1', [id])).length) throw new PluginError('NotFound', 'Record tag not found')
+  // Kind read (DATA2D-3): tags.list carries every tag in the
+  // workspace; presence by id replaces the raw select.
+  const tags = await getTags()
+  if (!tags.some(tag => tag.id === id)) throw new PluginError('NotFound', 'Record tag not found')
 }
 function refresh() {
   const store = useMarkStore.getState()
@@ -57,19 +59,24 @@ export function createRecordsApi(guard: (permission: PluginPermissionName) => Pr
       const input = parse(listSchema, options)
       await guard('records.read')
       const limit = input.limit ?? 20
-      const db = await getDb()
-      const rows = await attachMarkTagIds(await db.select<Mark[]>(`select * from marks where deleted = 0 and (
-        $1 is null or ${RECORD_TAG_MATCH_SQL}
-        ) order by createdAt desc, id desc limit $2 offset $3`, [input.tagId ?? null, limit + 1, input.offset ?? 0]))
-      const items = await Promise.all(rows.slice(0, limit).map(row => snapshot(row, true)))
+      // Kind read (DATA2D-3): marks.list/marks.listByTag carry the
+      // tag-subtree plus metadata match server-side and order by
+      // createdAt descending, matching the retired raw select.
+      const page = await getActiveMarkPage({ tagId: input.tagId, offset: input.offset ?? 0, limit })
+      const items = await Promise.all(page.marks.map(row => snapshot(row, true)))
       await guard('records.read')
-      return { items, hasMore: rows.length > limit }
+      return { items, hasMore: page.hasMore }
     },
     async read(id) { await guard('records.read'); const result = await snapshot(await existing(id)); await guard('records.read'); return result },
     async tags() {
       await guard('records.read')
-      const db = await getDb()
-      const result = await db.select<{ id: number; name: string }[]>('select id, name from tags order by sortOrder, id limit 1000')
+      // Kind read (DATA2D-3): same order and cap as the retired
+      // raw select (sortOrder, then id, at most 1000).
+      const tags = await getTags()
+      const result = [...tags]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id)
+        .slice(0, 1000)
+        .map(tag => ({ id: tag.id, name: tag.name }))
       await guard('records.read')
       return result
     },

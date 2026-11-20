@@ -24,7 +24,7 @@ import {
 import { PhotoView } from "react-photo-view"
 import { useTranslations } from "next-intl"
 import { PluginEmbeddedViews } from '@/components/plugins/plugin-embedded-views'
-import { delMark, delMarkForever, restoreMark, type Mark } from "@/db/marks"
+import { delMark, delMarkForever, isMarkRevisionConflict, restoreMark, type Mark } from "@/db/marks"
 import { LocalImage } from "@/components/local-image"
 import { PhotoPreviewProvider } from "@/components/photo-preview-provider"
 import { AudioPlayer } from "@/components/audio-player"
@@ -485,11 +485,16 @@ function MarkDetailToolbar({
         description: t('record.mark.toolbar.regenerateDesc'),
       })
     } catch (error) {
-      toast({
-        title: t('common.error'),
-        description: error instanceof Error ? error.message : t('record.mark.toolbar.regenerateDesc'),
-        variant: 'destructive',
-      })
+      // DATA2D-5 (AD-800): on a revision conflict the mark store already
+      // rolled back and showed the conflict toast; do not stack a
+      // generic error toast on top of it.
+      if (!isMarkRevisionConflict(error)) {
+        toast({
+          title: t('common.error'),
+          description: error instanceof Error ? error.message : t('record.mark.toolbar.regenerateDesc'),
+          variant: 'destructive',
+        })
+      }
     } finally {
       setIsRegeneratingDesc(false)
     }
@@ -905,11 +910,14 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
         description: t('record.capture.screenshotRecognizeAgain'),
       })
     } catch (error) {
-      toast({
-        title: t('common.error'),
-        description: error instanceof Error ? error.message : t('record.capture.screenshotRecognitionFailed'),
-        variant: 'destructive',
-      })
+      // DATA2D-5 (AD-800): conflict toast comes from the mark store.
+      if (!isMarkRevisionConflict(error)) {
+        toast({
+          title: t('common.error'),
+          description: error instanceof Error ? error.message : t('record.capture.screenshotRecognitionFailed'),
+          variant: 'destructive',
+        })
+      }
     } finally {
       setIsRecognizingImage(false)
       setRecognizingStage(null)

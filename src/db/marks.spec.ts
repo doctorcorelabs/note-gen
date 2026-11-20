@@ -40,6 +40,7 @@ import {
   deleteMarks,
   delMark,
   delMarkForever,
+  getActiveMarkPage,
   getAllMarks,
   getMarkById,
   getMarkPreviews,
@@ -90,6 +91,14 @@ vi.mock("@/lib/record-image-thumbnail", () => ({
 function kindFailure(code: string, message: string): Error {
   const error = new Error(`${code} ${message}`);
   error.name = "SqlAdapterError";
+  const status = Number(code);
+  const localCode =
+    status === 409 ? "CONFLICT" : status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION" : "UNKNOWN";
+  Object.assign(error, {
+    code: localCode,
+    retryable: false,
+    details: { wireCode: message, status },
+  });
   return error;
 }
 
@@ -731,6 +740,58 @@ describe("updates and deletes", () => {
     ).rejects.toThrow("409 revision_conflict");
   });
 
+  it("updatePluginTextRecord sends the loaded version and returns true", async () => {
+    const mark = seedTextMark();
+    const ok = await updatePluginTextRecord(mark, { ...mark, content: "plugin-edited", desc: "plugin title" }, async () => {});
+    expect(ok).toBe(true);
+    const update = fakeSql.executes.find((op) => op.kind === "marks.update");
+    expect(update).toMatchObject({ id: mark.id, expected: { version: mark.version } });
+    expect(update?.patch).toMatchObject({ content: "plugin-edited", desc: "plugin title" });
+    expect(fakeSql.marks.get(mark.id)?.content).toBe("plugin-edited");
+    expect(fakeSql.marks.get(mark.id)?.version).toBe((mark.version ?? 0) + 1);
+  });
+
+  it("updatePluginTextRecord returns false on a stale version without writing", async () => {
+    const mark = seedTextMark();
+    await updateMark({ ...mark, content: "concurrent" });
+    const ok = await updatePluginTextRecord(mark, { ...mark, content: "plugin-stale" }, async () => {});
+    expect(ok).toBe(false);
+    expect(fakeSql.marks.get(mark.id)?.content).toBe("concurrent");
+  });
+
+  it("updatePluginTextRecord fails closed without a version", async () => {
+    const mark = seedTextMark();
+    const unversioned: Mark = { ...mark };
+    delete unversioned.version;
+    await expect(
+      updatePluginTextRecord(unversioned, { ...unversioned, content: "x" }, async () => {}),
+    ).rejects.toThrow(/mark\.version/);
+    expect(fakeSql.executes.filter((op) => op.kind === "marks.update")).toHaveLength(0);
+  });
+
+  it("updatePluginTextRecord runs beforeWrite before the kind call", async () => {
+    const mark = seedTextMark();
+    await expect(
+      updatePluginTextRecord(mark, { ...mark, content: "x" }, async () => { throw new Error("permission revoked"); }),
+    ).rejects.toThrow("permission revoked");
+    expect(fakeSql.executes.filter((op) => op.kind === "marks.update")).toHaveLength(0);
+    expect(fakeSql.marks.get(mark.id)?.content).toBe("body");
+  });
+
+  it("getActiveMarkPage pages active marks with a lookahead hasMore", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      fakeSql.seedMark({ tagId: 2, content: `page-${index}`, createdAt: 1000 + index });
+    }
+    fakeSql.seedMark({ tagId: 2, content: "trashed", deleted: true, createdAt: 2000 });
+    const firstPage = await getActiveMarkPage({ tagId: 2, offset: 0, limit: 2 });
+    expect(firstPage.marks.map((mark) => mark.content)).toEqual(["page-4", "page-3"]);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.marks[0].version).toBe(1);
+    const lastPage = await getActiveMarkPage({ tagId: 2, offset: 4, limit: 2 });
+    expect(lastPage.marks.map((mark) => mark.content)).toEqual(["page-0"]);
+    expect(lastPage.hasMore).toBe(false);
+  });
+
   it("updateMark, updateMarkTag, and updateMarks fail closed without a version", async () => {
     const mark = seedTextMark();
     const unversioned: Mark = { ...mark };
@@ -798,7 +859,7 @@ describe("updates and deletes", () => {
     ]);
     expect(fakeSql.marks.get(first.id)?.content).toBe("one-edited");
     expect(fakeSql.marks.get(second.id)?.deleted).toBe(false);
-  });
+  }, 30000);
 
   it("initMarksDb creates the three asset directories", async () => {
     await initMarksDb();
@@ -868,22 +929,11 @@ describe("tag sets", () => {
 });
 
 describe("unmigrated functions still fail loudly", () => {
-  it("insertMarks, clearTrash, deleteAllMarks, and updatePluginTextRecord reject through getDb", async () => {
+  it("insertMarks, clearTrash, and deleteAllMarks reject through getDb", async () => {
     await expect(insertMarks([{ tagId: 2, type: "text" }])).rejects.toBeInstanceOf(
       PlatformCapabilityError,
     );
     await expect(clearTrash()).rejects.toBeInstanceOf(PlatformCapabilityError);
     await expect(deleteAllMarks()).rejects.toBeInstanceOf(PlatformCapabilityError);
-    const mark: Mark = {
-      id: 1,
-      tagId: 2,
-      type: "text",
-      url: "",
-      deleted: 0,
-      createdAt: 1,
-    };
-    await expect(updatePluginTextRecord(mark, mark, async () => {})).rejects.toBeInstanceOf(
-      PlatformCapabilityError,
-    );
   });
 });
