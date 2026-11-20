@@ -21,10 +21,42 @@
 # Exit code: 0 sehat (atau pulih sesudah tindakan); 1 tetap gagal sesudah
 # tindakan / tanpa tindakan yang diizinkan; 2 masalah kredensial tepi atau
 # kredensial eksekusi; 3 VM tidak terjangkau. Lihat README untuk rinciannya.
+#
+# Semantik AD-170 (S-P0-10): probe publik bertoken yang dijawab 401 origin
+# (JSON error unauthenticated) adalah bukti tunnel hidup, bukan kredensial
+# tepi; 401 pola origin + probe internal sehat berarti SEHAT tanpa restart.
+# 401 tanpa pola origin, 403, dan 302 tetap exit 2. Mode probe-saja dapat
+# keluar lewat probe sehat di atas atau flag --reset-probe-only; lihat
+# runbook-probe-only-reset.md di direktori ini.
 
 set -u
 
 TAG="tunnel"
+
+# ---------------- Argumen baris perintah ----------------
+# Satu-satunya argumen yang dikenal: --reset-probe-only dan --help/-h.
+# Argumen lain ditolak keras (exit 1) agar langkah verifikasi draf yang
+# memanggil flag tak dikenal tidak pernah berubah menjadi run live diam-diam.
+RESET_PROBE_ONLY=0
+if [ "$#" -gt 0 ]; then
+  for _CLI_ARG in "$@"; do
+    case "$_CLI_ARG" in
+      --reset-probe-only) RESET_PROBE_ONLY=1 ;;
+      --help|-h)
+        printf '%s\n' "penggunaan: notegen-tunnel-watchdog.sh [--reset-probe-only] [--help]"
+        printf '%s\n' "  tanpa argumen: satu run watchdog (probe publik + diagnosis internal)"
+        printf '%s\n' "  --reset-probe-only: hapus penanda mode probe-saja + reset hitung, tanpa probe"
+        printf '%s\n' "  --help: tampilkan bantuan ini"
+        printf '%s\n' "prosedur reset: runbook-probe-only-reset.md di direktori skrip ini"
+        exit 0
+        ;;
+      *)
+        echo "notegen-tunnel-watchdog: argumen tidak dikenal: $_CLI_ARG" >&2
+        exit 1
+        ;;
+    esac
+  done
+fi
 
 # ---------------- Konfigurasi ----------------
 
@@ -247,6 +279,31 @@ print("LIVE_OK=" + ("1" if (code == "200" and ok) else "0"))
 PYEOF
 )"
 
+# Pengenal 401 origin (KHUSUS skrip tunnel; bukan blok bersama). Pola E-A03-7
+# di bawah AD-170: HTTP 401 + JSON amplop galat origin dengan
+# error.code == "unauthenticated" (ApiError.unauthenticated di
+# server/src/plugins/envelope.ts). HTML tepi, JSON tanpa pola itu, dan kode
+# lain menghasilkan ORIGIN401=0 (fail closed ke cabang kredensial tepi).
+# Blok ini TIDAK BOLEH disamakan ke skrip compose: compose tidak punya
+# probe publik dan tidak membaca jawaban 401 origin.
+PY_ORIGIN_401="$(cat <<'PYEOF'
+import json, sys
+code = sys.argv[1]
+raw = sys.stdin.read()
+origin = False
+if code == "401":
+    try:
+        data = json.loads(raw)
+    except Exception:
+        data = None
+    if isinstance(data, dict) and data.get("ok") is False:
+        err = data.get("error")
+        if isinstance(err, dict) and err.get("code") == "unauthenticated":
+            origin = True
+print("ORIGIN401=" + ("1" if origin else "0"))
+PYEOF
+)"
+
 # Ekstraktor payload jarak jauh: ib.py mencetak JSON respons API yang bentuk
 # pastinya tidak dikunci di sini. Kumpulkan semua nilai string secara
 # rekursif, lalu ambil blok di antara penanda NOTEGEN_WD_BEGIN/END.
@@ -359,10 +416,38 @@ fi
 # dari 30 hari. Berkas watchdog lain dan berkas state tidak disentuh.
 find "$LOG_DIR" -maxdepth 1 -name "$LOG_PREFIX-*.log" -mtime +30 -delete 2>/dev/null || true
 
+# Bersihkan sisa berkas konfigurasi curl sementara dari probe publik yang
+# terputus paksa (G27): berkas itu memuat header token dan hanya boleh hidup
+# selama satu probe. Lock sudah dipegang, sehingga tidak ada run lain yang
+# memakai pola nama ini saat pembersihan berjalan.
+rm -f "$STATE_DIR"/.curlcfg.* 2>/dev/null || true
+
 MAINTENANCE=0
 if [ -e "$MAINTENANCE_FILE" ]; then MAINTENANCE=1; fi
 
 log "INFO run_start utc=$RUN_START_UTC wib=$RUN_START_WIB dry_run=$DRY_RUN maintenance=$MAINTENANCE local_mode=$LOCAL_MODE"
+
+# Flag --reset-probe-only (S-P0-10): keluar dari mode probe-saja secara
+# eksplisit tanpa probe apa pun. Dijalankan SEBELUM validasi konfigurasi
+# agar jalan keluar darurat tidak terblokir env yang salah; lock sudah
+# dipegang dan log sudah siap. Idempotent: aman walau penanda/hitung sudah
+# bersih. Riwayat verdict (PREV_FILE) dipertahankan agar run sehat
+# berikutnya tetap mencatat pemulihan dengan benar. Format berkas hitung
+# di bawah harus sama dengan write_count_file (COUNT=0, FIRST_FAIL kosong).
+if [ "$RESET_PROBE_ONLY" = "1" ]; then
+  if [ -f "$PROBEONLY_FILE" ]; then
+    rm -f "$PROBEONLY_FILE" 2>/dev/null || true
+    log "INFO reset mode probe-saja: penanda dihapus ($PROBEONLY_FILE)"
+  else
+    log "INFO reset mode probe-saja: tidak ada penanda aktif"
+  fi
+  write_state_file "$COUNT_FILE" "COUNT=0
+FIRST_FAIL=
+" || log "WARN gagal menulis berkas hitung ($COUNT_FILE)"
+  log "INFO reset mode probe-saja: hitung upaya direset ke 0"
+  echo "notegen-tunnel-watchdog: mode probe-saja direset (hitung 0, log: $LOG_FILE)"
+  exit 0
+fi
 
 # ---------------- Validasi konfigurasi pra-mulai ----------------
 # Kegagalan konfigurasi lokal dipetakan ke exit 1 (run gagal, tanpa tindakan).
@@ -629,25 +714,49 @@ CID=""
 SEC=""
 
 # $1: satu baris berkas token. Return 0 bila baris DITOLAK (kosong, atau
-# memuat spasi/tab/kutip/backslash, atau berprefix Bearer), 1 bila diterima.
+# memuat spasi/tab/kutip/backslash, atau berprefix bearer tanpa peduli
+# kapitalisasi, atau memuat CR di mana pun), 1 bila diterima.
 # Nilai baris tidak pernah dicatat.
 token_line_rejected() {
   case "$1" in
-    ''|*' '*|*$'\t'*|*"'"*|*'"'*|Bearer*) return 0 ;;
+    ''|*' '*|*$'\t'*|*"'"*|*'"'*|[Bb][Ee][Aa][Rr][Ee][Rr]*) return 0 ;;
   esac
   case "$1" in *$'\\'*) return 0 ;; esac
+  case "$1" in *$'\r'*) return 0 ;; esac
   return 1
 }
 
 load_token() {
-  local perm="" line="" line1="" line2="" n=0 bad=0
+  local perm="" owner="" line="" line1="" line2="" n=0 bad=0
   if [ ! -f "$TOKEN_FILE" ]; then
     log "ERROR berkas token tidak ada: $TOKEN_FILE; gagal bersih exit 2 tanpa probe"
     return 2
   fi
+  # G27: symlink, kepemilikan, dan mode longgar ditolak keras (exit 2).
+  # Berkas token hanya boleh berupa berkas biasa milik UID pelaksana tanpa
+  # bit izin grup/other. Mode 0400 tetap diterima dengan WARN (lebih ketat
+  # dari 0600); mode apa pun dengan bit grup/other gagal bersih.
+  if [ -L "$TOKEN_FILE" ]; then
+    log "ERROR berkas token adalah symlink, ditolak: $TOKEN_FILE; gagal bersih exit 2 tanpa probe"
+    return 2
+  fi
+  owner="$(stat -c %u "$TOKEN_FILE" 2>/dev/null || echo "?")"
+  if [ "$owner" != "$EUID" ]; then
+    log "ERROR berkas token bukan milik UID pelaksana (owner=$owner): $TOKEN_FILE; gagal bersih exit 2 tanpa probe"
+    return 2
+  fi
   perm="$(stat -c %a "$TOKEN_FILE" 2>/dev/null || echo "?")"
+  case "$perm" in ''|*[!0-9]*)
+    log "ERROR mode berkas token tidak dapat dibaca: $TOKEN_FILE; gagal bersih exit 2 tanpa probe"
+    return 2
+    ;;
+  esac
+  if [ $(( 8#$perm & 8#77 )) -ne 0 ]; then
+    log "ERROR berkas token mengizinkan grup/other (mode=$perm): $TOKEN_FILE; perbaiki dengan chmod 600; gagal bersih exit 2 tanpa probe"
+    return 2
+  fi
   if [ "$perm" != "600" ]; then
-    log "WARN berkas token bukan 0600 (mode=$perm): $TOKEN_FILE"
+    log "WARN berkas token bukan 0600 (mode=$perm, tanpa bit grup/other): $TOKEN_FILE"
   fi
   CID=""
   SEC=""
@@ -683,17 +792,53 @@ PUB_BODY=""
 PUB_CURL_RC=0
 
 probe_public() {
-  local raw=""
+  # G27: header token TIDAK PERNAH lewat argv (terlihat di ps//proc).
+  # Header ditulis lewat berkas konfigurasi curl -K bermode 0600 yang
+  # dihapus segera sesudah probe. Nilai CID/SEC aman ditulis ke berkas
+  # konfigurasi karena token_line_rejected menolak spasi/tab/kutip/
+  # backslash/CR, sehingga nilai tidak dapat memutus baris konfigurasi.
+  local raw="" cfg=""
+  cfg="$(mktemp "$STATE_DIR/.curlcfg.XXXXXX" 2>/dev/null)" || cfg=""
+  if [ -z "$cfg" ]; then
+    log "WARN gagal membuat berkas konfigurasi curl sementara; probe publik dibatalkan"
+    PUB_CURL_RC=1
+    PUB_CODE="000"
+    PUB_BODY=""
+    return 0
+  fi
+  chmod 600 "$cfg" 2>/dev/null || true
+  {
+    printf 'header = "CF-Access-Client-Id: %s"\n' "$CID"
+    printf 'header = "CF-Access-Client-Secret: %s"\n' "$SEC"
+    printf 'header = "Cache-Control: no-cache"\n'
+  } > "$cfg" 2>/dev/null
+  if [ ! -s "$cfg" ]; then
+    log "WARN berkas konfigurasi curl sementara kosong; probe publik dibatalkan"
+    rm -f "$cfg" 2>/dev/null || true
+    PUB_CURL_RC=1
+    PUB_CODE="000"
+    PUB_BODY=""
+    return 0
+  fi
   raw="$(curl -s -m "$PROBE_TIMEOUT" -w "\nNOTEGEN_CODE:%{http_code}" \
-    -H "CF-Access-Client-Id: $CID" -H "CF-Access-Client-Secret: $SEC" \
-    -H "Cache-Control: no-cache" \
+    -K "$cfg" \
     "$PUBLIC_URL" 2>/dev/null)"
   PUB_CURL_RC=$?
+  rm -f "$cfg" 2>/dev/null || true
   PUB_CODE="$(printf '%s' "$raw" | tail -n 1 | sed 's/^NOTEGEN_CODE://')"
   case "$PUB_CODE" in
     ''|*[!0-9]*) PUB_CODE="000";;
   esac
   PUB_BODY="$(printf '%s' "$raw" | sed '$d')"
+}
+
+# Klasifikasi 401 origin (S-P0-10/AD-170). Masukan: $1 kode HTTP, $2 body.
+# Keluaran: ORIGIN_401 (1 bila 401 pola origin, 0 bila bukan).
+classify_origin_401() {
+  local out=""
+  ORIGIN_401=0
+  out="$(printf '%s' "$2" | python3 -c "$PY_ORIGIN_401" "$1" 2>/dev/null)"
+  case "$out" in "ORIGIN401=1") ORIGIN_401=1;; *) ORIGIN_401=0;; esac
 }
 
 # Validasi satu jawaban ready. Masukan: $1 kode HTTP, $2 body. Keluaran:
@@ -881,9 +1026,11 @@ fi
 # 2. Probe publik + validasi penuh (seksi 1.2).
 probe_public
 validate_ready "$PUB_CODE" "$PUB_BODY"
+classify_origin_401 "$PUB_CODE" "$PUB_BODY"
 PUB_VALID="$V_VALID"; PUB_OK="$V_OK"; PUB_STATUS="$V_STATUS"
 PUB_FAILED="$V_FAILED"; PUB_WARNINGS="$V_WARNINGS"; PUB_PARSE="$V_PARSE"
-log "INFO probe_luar http=$PUB_CODE curl_rc=$PUB_CURL_RC ok=$PUB_OK status=$PUB_STATUS parse=$PUB_PARSE gagal=[$PUB_FAILED] peringatan=[$PUB_WARNINGS]"
+PUB_ORIGIN_401="$ORIGIN_401"
+log "INFO probe_luar http=$PUB_CODE curl_rc=$PUB_CURL_RC ok=$PUB_OK status=$PUB_STATUS parse=$PUB_PARSE origin401=$PUB_ORIGIN_401 gagal=[$PUB_FAILED] peringatan=[$PUB_WARNINGS]"
 
 # 3a. Sehat: diam (kecuali peringatan), reset hitung + mode probe-saja.
 if [ "$PUB_VALID" = "1" ]; then
@@ -904,8 +1051,22 @@ fi
 
 # 3b. Kredensial tepi (seksi 1.3): 401/403/302. Tanpa restart, tanpa
 #     menghubungi muse-2. Hitung kegagalan tidak berubah.
+#     Pengecualian AD-170 (S-P0-10): 401 dengan pola origin (JSON
+#     unauthenticated) BUKAN kredensial tepi; ia membuktikan tunnel
+#     mengantarkan jawaban origin, sehingga run lanjut ke diagnosis
+#     internal (langkah 4) dan tidak pernah restart atas 401 ini.
 case "$PUB_CODE" in
-  401|403|302)
+  401)
+    if [ "$PUB_ORIGIN_401" = "1" ]; then
+      log "INFO probe_luar http=401 pola origin AD-170: tunnel mengantarkan jawaban origin; lanjut diagnosis internal; 401 ini tidak memicu restart"
+    else
+      log "WARN probe_luar http=$PUB_CODE: masalah kredensial tepi (service token); bukan masalah tunnel; tanpa restart, tanpa hubungi muse-2"
+      note_transition "credential"
+      finish_run 2 "credential" "$PREV_FIRST_FAIL" "tidak ada" \
+        "KREDENSIAL TEPI: HTTP $PUB_CODE, tunnel TIDAK direstart"
+    fi
+    ;;
+  403|302)
     log "WARN probe_luar http=$PUB_CODE: masalah kredensial tepi (service token); bukan masalah tunnel; tanpa restart, tanpa hubungi muse-2"
     note_transition "credential"
     finish_run 2 "credential" "$PREV_FIRST_FAIL" "tidak ada" \
@@ -948,7 +1109,12 @@ validate_live "$DL_CODE" "$DL_BODY"; DL_OK="$L_OK"
 log "INFO probe_internal caddy_ready http=$CR_CODE valid=$CR_VALID parse=$CR_PARSE gagal=[$CR_FAILED] caddy_live ok=$CL_OK direct_ready http=$DR_CODE exec_rc=$DR_EXEC_RC valid=$DR_VALID parse=$DR_PARSE gagal=[$DR_FAILED] direct_live ok=$DL_OK"
 
 # Putusan internal (seksi 1.4 + AD-133 A1):
-# - ready lewat Caddy valid berarti origin sehat lewat jalur Caddy.
+# - ready lewat Caddy valid berarti origin sehat lewat jalur Caddy, TETAPI
+#   probe ini tanpa token dan AD-133 menuntutnya dijawab 401; valid berarti
+#   penegakan Access tidak tampak (DA-18-N02): putusan dibedakan menjadi
+#   healthy_ungated + WARN, agar pemantauan dapat membedakannya dari
+#   sehat-terjaga. Alur kendali sama dengan sehat (lanjut ke langkah 4b/5);
+#   yang berbeda hanya penanda dan log.
 # - ready langsung loopback valid + Caddy menjawab 401/403 berarti origin
 #   sehat dan jalur Caddy dijaga Access sebagaimana dirancang (probe tanpa
 #   token memang ditolak di origin); keduanya berarti origin hidup.
@@ -958,9 +1124,12 @@ log "INFO probe_internal caddy_ready http=$CR_CODE valid=$CR_VALID parse=$CR_PAR
 #   bermasalah: tunnel tidak direstart.
 # - Caddy 401/403 tanpa jawaban langsung yang dapat dinilai berarti ambigu:
 #   tanpa restart (fail closed).
+ACCESS_UNGATED=0
 INTERNAL="failed"
 if [ "$CR_VALID" = "1" ]; then
-  INTERNAL="healthy"
+  INTERNAL="healthy_ungated"
+  ACCESS_UNGATED=1
+  log "WARN penegakan Access tidak tampak: ready lewat Caddy valid tanpa token (AD-133 menuntut 401); origin sehat tetapi tidak terjaga"
 elif [ "$DR_VALID" = "1" ] && { [ "$CR_CODE" = "401" ] || [ "$CR_CODE" = "403" ]; }; then
   INTERNAL="healthy"
 elif [ "$DR_VALID" = "1" ]; then
@@ -974,7 +1143,7 @@ elif [ "$CR_CODE" = "401" ] || [ "$CR_CODE" = "403" ]; then
 else
   INTERNAL="failed"
 fi
-log "INFO diagnosis_internal=$INTERNAL"
+log "INFO diagnosis_internal=$INTERNAL access_ungated=$ACCESS_UNGATED"
 
 if [ "$INTERNAL" = "caddy_suspect" ]; then
   log "WARN temuan untuk watchdog compose: probe langsung ke API sehat tetapi probe lewat Caddy gagal; Caddy dicurigai; tunnel TIDAK direstart"
@@ -995,6 +1164,32 @@ if [ "$INTERNAL" = "ambiguous" ]; then
     "INTERNAL AMBIGU: tanpa restart"
 fi
 
+# 4b. AD-170 (S-P0-10): 401 origin + internal sehat = tunnel hidup dan
+#     origin sehat. Kriteria sukses ini TERCAPAI di bawah AD-170, sehingga
+#     hitung direset dan mode probe-saja keluar lewat kode (bukan hanya
+#     lewat reset manual). TIDAK ADA restart pada jalur ini: 401 origin
+#     tidak pernah memicu restart (AD-170).
+if [ "$PUB_ORIGIN_401" = "1" ]; then
+  if [ "$INTERNAL" = "healthy" ] || [ "$INTERNAL" = "healthy_ungated" ]; then
+    if [ -f "$PROBEONLY_FILE" ]; then
+      rm -f "$PROBEONLY_FILE" 2>/dev/null || true
+      log "INFO mode probe-saja berakhir: 401 origin AD-170 + probe internal sehat"
+    fi
+    reset_count_file
+    note_transition "healthy"
+    if [ "$ACCESS_UNGATED" = "1" ]; then
+      finish_run 0 "healthy" "" "tidak ada" \
+        "SEHAT (AD-170: 401 origin + internal sehat; tunnel hidup, tanpa restart; WARN: Access tidak terjaga)"
+    fi
+    finish_run 0 "healthy" "" "tidak ada" \
+      "SEHAT (AD-170: 401 origin + internal sehat; tunnel hidup, tanpa restart)"
+  fi
+  log "WARN 401 origin AD-170 tanpa bukti internal sehat (diagnosis=$INTERNAL): tanpa restart"
+  note_transition "unhealthy"
+  finish_run 1 "unhealthy" "$EPISODE_FIRST" "tidak ada (401 origin, internal tidak sehat)" \
+    "TIDAK SEHAT: 401 origin tanpa bukti internal sehat; tunnel TIDAK direstart"
+fi
+
 # 5. Internal sehat + luar gagal: diagnosis tunnel mati, origin hidup.
 #    Gerbang sebelum restart: MAINTENANCE, mode probe-saja, DRY_RUN.
 if [ "$MAINTENANCE" -eq 1 ]; then
@@ -1004,7 +1199,7 @@ if [ "$MAINTENANCE" -eq 1 ]; then
     "TIDAK SEHAT, tindakan ditunda: MAINTENANCE aktif"
 fi
 if [ -f "$PROBEONLY_FILE" ]; then
-  log "INFO mode probe-saja aktif (3 upaya restart gagal berturut-turut): restart tunnel ditunda sampai satu probe sehat atau reset manual"
+  log "INFO mode probe-saja aktif (3 upaya restart gagal berturut-turut): restart tunnel ditunda sampai satu probe sehat atau reset eksplisit (--reset-probe-only)"
   note_transition "unhealthy"
   finish_run 1 "unhealthy" "$EPISODE_FIRST" "ditunda (mode probe-saja)" \
     "TIDAK SEHAT, tindakan ditunda: mode probe-saja aktif"
@@ -1061,8 +1256,13 @@ if [ "$REPROBE_WAIT" -gt 0 ]; then
 fi
 probe_public
 validate_ready "$PUB_CODE" "$PUB_BODY"
-log "INFO probe_ulang_luar http=$PUB_CODE ok=$V_OK status=$V_STATUS gagal=[$V_FAILED] sesudah tunggu ${REPROBE_WAIT} detik"
-if [ "$V_VALID" = "1" ]; then
+classify_origin_401 "$PUB_CODE" "$PUB_BODY"
+log "INFO probe_ulang_luar http=$PUB_CODE ok=$V_OK status=$V_STATUS origin401=$ORIGIN_401 gagal=[$V_FAILED] sesudah tunggu ${REPROBE_WAIT} detik"
+# S-P0-10: probe ulang 401 pola origin juga berarti PULIH. Internal sudah
+# terbukti sehat sebelum restart pada run ini; 401 origin membuktikan
+# tunnel kini mengantarkan jawaban origin. Upaya restart yang berhasil
+# tidak lagi dihitung gagal menuju mode probe-saja.
+if [ "$V_VALID" = "1" ] || [ "$ORIGIN_401" = "1" ]; then
   if [ -f "$PROBEONLY_FILE" ]; then
     rm -f "$PROBEONLY_FILE" 2>/dev/null || true
   fi
@@ -1084,7 +1284,7 @@ if [ "$NEW_COUNT" -ge "$PROBEONLY_AFTER" ]; then
   write_state_file "$PROBEONLY_FILE" "SINCE=$RUN_START_EPOCH
 COUNT=$NEW_COUNT
 " || log "WARN gagal menulis penanda mode probe-saja"
-  log "WARN mode probe-saja AKTIF: $NEW_COUNT upaya restart gagal berturut-turut sejak epoch=$COUNT_FIRST; restart ditunda sampai satu probe sehat atau reset manual"
+  log "WARN mode probe-saja AKTIF: $NEW_COUNT upaya restart gagal berturut-turut sejak epoch=$COUNT_FIRST; restart ditunda sampai satu probe sehat atau reset eksplisit (--reset-probe-only)"
 fi
 note_transition "unhealthy"
 finish_run 1 "unhealthy" "$EPISODE_FIRST" "restart tunnel ($LAUNCH_OUTCOME), probe ulang gagal" \
