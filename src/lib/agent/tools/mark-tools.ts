@@ -1,5 +1,5 @@
 import { Tool, ToolResult } from '../types'
-import { getMarks, getAllMarks, insertMark, updateMark, delMark, restoreMark, Mark, insertMarks, updateMarks, deleteMarks, restoreMarks } from '@/db/marks'
+import { getMarks, getAllMarks, getMarkById, insertMark, updateMark, delMark, restoreMark, Mark, insertMarks, updateMarks, deleteMarks, restoreMarks } from '@/db/marks'
 import useTagStore from '@/stores/tag'
 
 /**
@@ -436,16 +436,26 @@ export const updateMarksBatchTool: Tool = {
         }
       }
 
-      const marksToUpdate: Mark[] = params.marks.map((mark: any) => ({
-        id: mark.id,
-        tagId: mark.tagId,
-        type: mark.type,
-        content: mark.content,
-        url: mark.url,
-        desc: mark.desc,
-        deleted: mark.deleted ?? 0,
-        createdAt: mark.createdAt || Date.now(),
-      }))
+      // DA-11-08: bulk updates are guarded, so each patch is
+      // applied onto the row read at tool time, carrying its
+      // version. A missing or deleted row fails the tool instead
+      // of writing a version-less row over a concurrent edit.
+      const marksToUpdate: Mark[] = []
+      for (const mark of params.marks) {
+        const current = await getMarkById(mark.id)
+        if (!current || current.deleted) {
+          throw new Error(`Record not found: ${mark.id}`)
+        }
+        marksToUpdate.push({
+          ...current,
+          tagId: mark.tagId ?? current.tagId,
+          type: mark.type ?? current.type,
+          content: mark.content ?? current.content,
+          url: mark.url ?? current.url,
+          desc: mark.desc ?? current.desc,
+          deleted: mark.deleted ?? current.deleted,
+        })
+      }
 
       await updateMarks(marksToUpdate)
       

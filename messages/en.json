@@ -4845,6 +4845,8 @@
           "deleteSelected": "Move selected to trash",
           "restoreSelected": "Restore selected",
           "deleteForeverSelected": "Delete selected forever",
+          "deleteForeverSelectedConfirmTitle": "Delete {count} selected records forever?",
+          "deleteForeverSelectedConfirmDescription": "This cannot be undone. {count} records and their assets will be permanently deleted.",
           "clearSelection": "Clear selection",
           "movePartial": "Some records were not updated. Reload the list and try again.",
           "errorLoading": "Records could not be loaded. Try again.",

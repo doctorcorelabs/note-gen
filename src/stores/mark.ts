@@ -158,25 +158,38 @@ const useMarkStore = create<MarkState>((set, get) => ({
 
   marks: [],
   updateMark: async (mark) => {
+    // Guard parity with the web detail (DA-11-08): the persisted
+    // write carries the version the editing surface loaded. Prefer
+    // the caller's version; fall back to the loaded list only when
+    // the caller passed a row without one. Refuse before touching
+    // local state when no version is known, so a rejected write
+    // never leaves optimistic state behind.
+    const known = get().marks.find((item) => item.id === mark.id)
+      ?? get().allMarks.find((item) => item.id === mark.id)
+    const version = mark.version ?? known?.version
+    if (typeof version !== 'number' || !Number.isFinite(version)) {
+      throw new Error(`updateMark needs mark.version for record ${mark.id} (read the record first); refusing an unguarded overwrite.`)
+    }
+    const guarded: Mark = { ...mark, version }
     set((state) => {
       return {
         marks: state.marks.map(item => {
-          if (item.id === mark.id) {
+          if (item.id === guarded.id) {
             return {
               ...item,
-              ...mark,
-              tagIds: recordTagIds({ tagId: mark.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
+              ...guarded,
+              tagIds: recordTagIds({ tagId: guarded.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
               tagUpdatedAt: item.tagUpdatedAt,
             }
           }
           return item
         }),
         allMarks: state.allMarks.map(item => {
-          if (item.id === mark.id) {
+          if (item.id === guarded.id) {
             return {
               ...item,
-              ...mark,
-              tagIds: recordTagIds({ tagId: mark.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
+              ...guarded,
+              tagIds: recordTagIds({ tagId: guarded.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
               tagUpdatedAt: item.tagUpdatedAt,
             }
           }
@@ -184,8 +197,8 @@ const useMarkStore = create<MarkState>((set, get) => ({
         }),
       }
     })
-    void useArticleStore.getState().updateRecordTab(mark)
-    await updateMark(mark)
+    void useArticleStore.getState().updateRecordTab(guarded)
+    await updateMark(guarded)
   },
   setMarks: (marks) => {
     set({ marks })

@@ -19,6 +19,7 @@ import { getSyncRepoName } from '@/lib/sync/repo-utils'
 import { getCurrentSyncContext, getSyncMetadataKey } from '@/lib/sync/sync-context'
 import { toast } from '@/hooks/use-toast'
 import { platform, type StoreHandle } from '@/lib/platform'
+import { isRevisionConflictError } from '@/lib/platform/fs/errors'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 import {
   checkFileLock,
@@ -588,6 +589,12 @@ export async function ensureDirectoryExists(filePath: string): Promise<void> {
 
 /**
  * 保存文件到本地（增强版，处理文件名兼容性和目录创建）
+ *
+ * DA-12-11: the web FS adapter guards every write (stat-then-guard,
+ * If-Match on the current revision), so a revision conflict surfaces
+ * here as a revision_conflict error. It propagates unchanged: callers
+ * must treat it as "the disk copy is newer, nothing was written" and
+ * must never restore an older snapshot over it (see performSync).
  */
 export async function saveLocalFile(path: string, content: string): Promise<void> {
   if (isBinaryFilePath(path)) throw new Error('Binary files must be saved through the byte-preserving sync API')
@@ -892,10 +899,17 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
         try {
           await saveLocalFile(actualPath, finalContent)
         } catch (writeError) {
-          try {
-            await restoreLocalSnapshot(latestLocalSnapshot)
-          } catch (restoreError) {
-            console.error(`Failed to restore local content after syncing ${actualPath}:`, restoreError)
+          // DA-12-11: on a revision conflict the disk copy is newer
+          // than the snapshot, so restoring the snapshot would
+          // overwrite the concurrent edit the guard just protected.
+          // Skip the restore; the conflict toast below reports that
+          // nothing was overwritten.
+          if (!isRevisionConflictError(writeError)) {
+            try {
+              await restoreLocalSnapshot(latestLocalSnapshot)
+            } catch (restoreError) {
+              console.error(`Failed to restore local content after syncing ${actualPath}:`, restoreError)
+            }
           }
           throw writeError
         }
@@ -931,10 +945,14 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
         try {
           await saveLocalFile(actualPath, remoteContent)
         } catch (writeError) {
-          try {
-            await restoreLocalSnapshot(latestLocalSnapshot)
-          } catch (restoreError) {
-            console.error(`Failed to restore local content after syncing ${actualPath}:`, restoreError)
+          // DA-12-11: same as the conflict branch above: never
+          // restore an older snapshot over a revision conflict.
+          if (!isRevisionConflictError(writeError)) {
+            try {
+              await restoreLocalSnapshot(latestLocalSnapshot)
+            } catch (restoreError) {
+              console.error(`Failed to restore local content after syncing ${actualPath}:`, restoreError)
+            }
           }
           throw writeError
         }
@@ -960,7 +978,18 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
 
       return remoteContent
     }
-  } catch {
+  } catch (error) {
+    // DA-12-11: a revision conflict is not a generic sync failure.
+    // The guarded write was refused, the local copy is intact, and
+    // no snapshot restore ran over it; say so instead of failing
+    // silently like every other error in this catch.
+    if (isRevisionConflictError(error)) {
+      toast({
+        title: 'Sync conflict',
+        description: 'The file changed during sync. Nothing was overwritten; reload the file and try again.',
+        variant: 'destructive'
+      })
+    }
     return null
   }
   

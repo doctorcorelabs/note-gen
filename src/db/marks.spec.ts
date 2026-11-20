@@ -673,6 +673,7 @@ describe("updates and deletes", () => {
       tagId: row.tagId,
       tagIds: [...row.tagIds],
       tagUpdatedAt: row.tagUpdatedAt,
+      version: row.version,
       type: row.type,
       content: row.content,
       desc: row.desc,
@@ -714,10 +715,34 @@ describe("updates and deletes", () => {
 
   it("updateMarkTag moves the primary tag through marks.update", async () => {
     const mark = seedTextMark();
-    await updateMarkTag(mark.id, 3);
+    await updateMarkTag(mark.id, 3, mark.version);
     const update = fakeSql.executes.find((op) => op.kind === "marks.update");
-    expect(update).toMatchObject({ id: mark.id, patch: { tagId: 3 } });
+    expect(update).toMatchObject({ id: mark.id, patch: { tagId: 3 }, expected: { version: mark.version } });
     expect(fakeSql.marks.get(mark.id)?.tagId).toBe(3);
+  });
+
+  it("updateMark sends the loaded version and rejects a stale guard", async () => {
+    const mark = seedTextMark();
+    await updateMark({ ...mark, content: "edited" });
+    const update = fakeSql.executes.find((op) => op.kind === "marks.update");
+    expect(update).toMatchObject({ expected: { version: mark.version } });
+    await expect(
+      updateMark({ ...mark, content: "stale" }),
+    ).rejects.toThrow("409 revision_conflict");
+  });
+
+  it("updateMark, updateMarkTag, and updateMarks fail closed without a version", async () => {
+    const mark = seedTextMark();
+    const unversioned: Mark = { ...mark };
+    delete unversioned.version;
+    await expect(updateMark({ ...unversioned, content: "x" })).rejects.toThrow(
+      /mark\.version/,
+    );
+    await expect(updateMarkTag(mark.id, 3)).rejects.toThrow(/mark\.version/);
+    await expect(
+      updateMarks([{ ...unversioned, content: "x" }]),
+    ).rejects.toThrow(/mark\.version/);
+    expect(fakeSql.executes.filter((op) => op.kind === "marks.update")).toHaveLength(0);
   });
 
   it("delMark and restoreMark run the matching kinds", async () => {

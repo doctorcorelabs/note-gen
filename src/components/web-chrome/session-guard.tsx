@@ -17,6 +17,10 @@ import {
   SESSION_EXPIRED_LOGIN_PATH,
   getSharedAuthSessionClient,
 } from '@/lib/web/auth-client'
+import {
+  flushUnsavedChanges,
+  hasUnsavedChanges,
+} from '@/lib/web/unsaved-changes-guard'
 
 type GuardState =
   | { kind: 'checking' }
@@ -110,9 +114,26 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       return
     }
     // Mid-session expiry: a 401 anywhere in the app ends the shell.
+    // DA-28-04 (partial, R24-ED1D handoff): before the shell unmounts
+    // and in-memory edits are lost, flush pending saves best-effort
+    // with a bounded wait. A dead session usually cannot write, so
+    // this only helps saves already in flight or queued against a
+    // session that still answers; draft preservation across login
+    // still needs the interstitial (UTANG-ED1D-1). When nothing is
+    // unsaved, the redirect stays immediate.
     const unsubscribe = getSharedAuthSessionClient().subscribeToSessionExpiry(() => {
-      setState({ kind: 'unauthenticated', code: 'SESSION_REJECTED' })
-      goToLogin()
+      if (!hasUnsavedChanges()) {
+        setState({ kind: 'unauthenticated', code: 'SESSION_REJECTED' })
+        goToLogin()
+        return
+      }
+      void Promise.race([
+        flushUnsavedChanges(),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]).then(() => {
+        setState({ kind: 'unauthenticated', code: 'SESSION_REJECTED' })
+        goToLogin()
+      })
     })
     return unsubscribe
   }, [webMode, goToLogin])
