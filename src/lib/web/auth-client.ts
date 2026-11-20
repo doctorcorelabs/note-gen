@@ -992,12 +992,12 @@ export function createAuthSessionClient(
       handleUnauthorizedError(seam, error);
     },
     csrfTokenProvider: () => seam.csrf.getToken(),
+    // Same budget as createAuthSession (DA28-01): a session client
+    // without a timeout hangs on a stalled API like any other.
+    defaultTimeoutMs: deps.defaultTimeoutMs ?? AUTH_REQUEST_TIMEOUT_MS,
   };
   if (deps.fetchFn !== undefined) {
     clientOptions.fetchFn = deps.fetchFn;
-  }
-  if (deps.defaultTimeoutMs !== undefined) {
-    clientOptions.defaultTimeoutMs = deps.defaultTimeoutMs;
   }
   const apiClient = createApiClient(clientOptions);
 

@@ -119,6 +119,19 @@ const IDEMPOTENCY_HEADER = "Idempotency-Key";
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 /**
+ * Default per-request timeout for production ApiClient instances
+ * (DA28-01 / S-P0-17). Matches the auth budget
+ * (AUTH_REQUEST_TIMEOUT_MS in auth-client.ts) and the boot guard
+ * total budget. Every production construction site sets this as
+ * its defaultTimeoutMs so a stalled API, tunnel, or database
+ * surfaces a retryable TIMEOUT ApiError instead of hanging the
+ * caller forever. A request may still override it with
+ * options.timeoutMs, and callers with a longer legitimate budget
+ * must do so explicitly per request.
+ */
+export const DEFAULT_API_CLIENT_TIMEOUT_MS = 15000;
+
+/**
  * SEAM (V3-30b): invoked once per HTTP 401 response, awaited, before
  * the ApiError is thrown. The name matches the callback type in
  * csrf.ts (V3-30b). That module's listeners receive an
@@ -169,6 +182,9 @@ export interface ApiClientOptions {
    * signal (if any) governs. A timeout produces a TIMEOUT ApiError;
    * the fetch is aborted and raced so a signal-ignoring fetch
    * implementation can never hang the caller (F1-59 lesson).
+   * Production construction sites must set
+   * DEFAULT_API_CLIENT_TIMEOUT_MS here (DA28-01); leaving it
+   * unset is reserved for tests that inject their own fetch.
    */
   defaultTimeoutMs?: number;
 }
@@ -1018,6 +1034,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
  * Default unwired client (global fetch, no hooks). Callers that need
  * the wired CSRF/401 behavior must use a client created by
  * createApiClient with the V3-30b seams; this instance is never
- * mutated and never gains hooks implicitly.
+ * mutated and never gains hooks implicitly. It carries the
+ * production default timeout (DA28-01): unwired must never mean
+ * unbounded.
  */
-export const defaultApiClient: ApiClient = new ApiClient();
+export const defaultApiClient: ApiClient = new ApiClient({
+  defaultTimeoutMs: DEFAULT_API_CLIENT_TIMEOUT_MS,
+});

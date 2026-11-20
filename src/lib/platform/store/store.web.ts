@@ -126,6 +126,19 @@ const MAX_QUEUE_ENTRIES = 500;
 const MAX_BACKGROUND_FAILURES = 3;
 
 /**
+ * Default per-request timeout for settings HTTP calls (DA28-01 /
+ * S-P0-17). Matches the ApiClient production budget (15 seconds).
+ * Every request through requestData is raced against this budget,
+ * so a stalled API, tunnel, or database surfaces a retryable
+ * `timeout` StoreWebError instead of hanging the caller forever.
+ * Override per adapter through WebStoreAdapterDeps.defaultTimeoutMs.
+ */
+export const DEFAULT_STORE_REQUEST_TIMEOUT_MS = 15000;
+
+/** Rejection sentinel for the requestData timeout race. Never surfaces to callers. */
+const FETCH_TIMEOUT_SENTINEL: unique symbol = Symbol("store-fetch-timeout");
+
+/**
  * R-MVP-REJECT keys (V1-02 section 2.5 table plus section 2.10).
  * Frozen snapshot, same provenance as the one in store.fake.ts; the
  * canonical list lives in key-schema.ts once it lands. This snapshot
@@ -222,6 +235,13 @@ export interface StoreWebFetchInit {
   headers?: Record<string, string>;
   body?: string;
   credentials?: string;
+  /**
+   * Abort signal for the request. requestData always supplies its
+   * own timeout controller signal, so a fetch implementation that
+   * honors signals aborts promptly; the timeout race bounds the
+   * call even for implementations that ignore the signal.
+   */
+  signal?: AbortSignal;
 }
 
 export type StoreWebFetch = (
@@ -366,6 +386,14 @@ export interface WebStoreAdapterDeps {
   maxWaitMs?: number;
   /** Idempotency key factory. Defaults to crypto.randomUUID(). */
   createIdempotencyKey?: () => string;
+  /**
+   * Per-request timeout in milliseconds for settings HTTP calls.
+   * Defaults to DEFAULT_STORE_REQUEST_TIMEOUT_MS. Must be a finite
+   * number above zero when set; anything else throws at
+   * construction. There is no unbounded mode: a stalled request
+   * must always surface as a `timeout` error (DA28-01).
+   */
+  defaultTimeoutMs?: number;
 }
 
 /** A web store handle: the StoreHandle surface plus web extensions. */
@@ -1642,6 +1670,12 @@ export function createWebStoreAdapter(
   deps: WebStoreAdapterDeps = {},
 ): StoreAdapter {
   const fetchImpl: StoreWebFetch = deps.fetchImpl ?? defaultFetchImpl();
+  const timeoutMs = deps.defaultTimeoutMs ?? DEFAULT_STORE_REQUEST_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError(
+      "WebStoreAdapterDeps.defaultTimeoutMs must be a finite number above zero",
+    );
+  }
   const classify = deps.classifyKey ?? createDefaultStoreKeyClassifier();
   const memoryFallback = new MemoryStorage();
   const storage = resolveStorage(deps.storage, memoryFallback);
@@ -1734,14 +1768,44 @@ export function createWebStoreAdapter(
       }
       Object.assign(headers, await csrfHeader(opts.mutating));
       let res: StoreWebFetchResponse;
+      // Timeout race (DA28-01): the fetch is raced against an
+      // explicit timer on top of the AbortSignal, mirroring
+      // ApiClient.fetchWithBudget, so the call can never hang on a
+      // fetch implementation that ignores the signal. A timeout
+      // surfaces as a retryable `timeout` StoreWebError, never as
+      // a hang and never with the request URL in the message.
+      const controller = new AbortController();
+      let timedOut = false;
+      let rejectOnTimeout: ((reason: unknown) => void) | undefined;
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        rejectOnTimeout = reject;
+      });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        rejectOnTimeout?.(FETCH_TIMEOUT_SENTINEL);
+      }, timeoutMs);
       try {
-        res = await fetchImpl(url, {
-          method,
-          headers,
-          body: encoded,
-          credentials: "same-origin",
-        });
+        res = await Promise.race([
+          fetchImpl(url, {
+            method,
+            headers,
+            body: encoded,
+            credentials: "same-origin",
+            signal: controller.signal,
+          }),
+          timeoutPromise,
+        ]);
       } catch (err) {
+        if (err === FETCH_TIMEOUT_SENTINEL || timedOut) {
+          throw new StoreWebError({
+            code: "timeout",
+            status: 0,
+            message:
+              "Settings request timed out: the server did not respond in time. Try again.",
+            retryable: true,
+          });
+        }
         if (err instanceof StoreWebError) {
           throw err;
         }
@@ -1751,6 +1815,8 @@ export function createWebStoreAdapter(
           message: `Settings request failed: ${messageOf(err)}`,
           retryable: true,
         });
+      } finally {
+        clearTimeout(timer);
       }
       let text = "";
       try {

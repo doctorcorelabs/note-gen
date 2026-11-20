@@ -47,6 +47,7 @@
 
 import {
   createApiClient,
+  DEFAULT_API_CLIENT_TIMEOUT_MS,
   type ApiClient,
 } from "./api-client";
 import {
@@ -350,6 +351,7 @@ export function createDefaultSecurityTransport(): {
     onUnauthorized: (error) => {
       handleUnauthorizedError(seam, error);
     },
+    defaultTimeoutMs: DEFAULT_API_CLIENT_TIMEOUT_MS,
   });
   return { transport: createSecurityTransport(client, seam), seam };
 }

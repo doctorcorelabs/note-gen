@@ -36,7 +36,11 @@
 //   KindRecordsApi, 17 Nov 2026); live acceptance still waits on a
 //   live E2E harness run (E2E-S3).
 
-import { ApiClient, defaultApiClient } from "./api-client";
+import {
+  ApiClient,
+  DEFAULT_API_CLIENT_TIMEOUT_MS,
+  defaultApiClient,
+} from "./api-client";
 import { ApiError } from "./errors";
 import {
   createWebApiAuthSeam,
@@ -537,6 +541,7 @@ export function createWiredRecordsApi(): WiredRecordsApi {
     onUnauthorized: (error) => {
       handleUnauthorizedError(seam, error);
     },
+    defaultTimeoutMs: DEFAULT_API_CLIENT_TIMEOUT_MS,
   });
   return { api: new RecordsApi({ client, seam }), seam, client };
 }
