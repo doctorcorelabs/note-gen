@@ -250,19 +250,6 @@ function notFoundError(): ApiError {
   });
 }
 
-function capabilityUnavailableError(capability: string): ApiError {
-  return new ApiError({
-    localCode: mapWireCodeToLocalCode("capability_unavailable", 410),
-    wireCode: "capability_unavailable",
-    status: 410,
-    retryable: false,
-    details: {
-      capability,
-      phase: "Fase 1 integrator escalation (D-3D-1)",
-    },
-  });
-}
-
 function toApiRecord(row: SqlMarkRow, duplicate?: boolean): ApiRecord {
   return {
     id: row.id,
