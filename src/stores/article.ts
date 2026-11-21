@@ -2349,7 +2349,9 @@ const useArticleStore = create<NoteState>((set, get) => ({
 
     const collapsibleList = uniq([...get().collapsibleList, ...folderPaths])
     const store = await getStore()
-    await store.set('collapsibleList', collapsibleList)
+    // UTANG-UJI-04: write the scoped key initCollapsibleList reads;
+    // the legacy key is ignored once a scoped list exists.
+    await store.set(await getCollapsibleStoreKey(), collapsibleList)
     set({ collapsibleList })
   },
   insertLocalEntry: (relativePath: string, isDirectory: boolean) => {
@@ -3448,6 +3450,15 @@ const useArticleStore = create<NoteState>((set, get) => ({
         }
         await get().loadCollapsibleFiles(activeFilePath)
       } else {
+        // UTANG-UJI-04: keep the active note's parent folders expanded
+        // so loadFileTree loads their children after a reload.
+        const parentFolders = getFolderPathsToExpand(activeFilePath)
+        const missingFolders = parentFolders.filter(folder => !get().collapsibleList.includes(folder))
+        if (missingFolders.length > 0) {
+          const nextCollapsibleList = uniq([...get().collapsibleList, ...missingFolders])
+          set({ collapsibleList: nextCollapsibleList })
+          await store.set(key, nextCollapsibleList)
+        }
         const canReuseActiveArticle = currentState.activeFilePath === activeFilePath
           && (
             hasCurrentPendingArticleRead(activeFilePath)

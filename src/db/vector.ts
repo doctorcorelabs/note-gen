@@ -1,4 +1,4 @@
-import { db } from './index';
+import { db, getSqlAdapter } from './index';
 import { getBM25Index } from '@/lib/bm25';
 import { createKnowledgeSourceKey, parseKnowledgeSourceKey } from '@/types/knowledge';
 
@@ -205,32 +205,31 @@ export async function getAllVectorDocuments(): Promise<VectorDocumentSnapshot[]>
 }
 
 export async function getVectorIndexSummaries(): Promise<VectorIndexSummary[]> {
-  return await db.select<VectorIndexSummary[]>(`
-    select filename, max(updated_at) as updated_at
-    from vector_documents
-    group by filename
-  `);
+  // Migrated to catalog kind `vector.summaries` (UTANG-UJI-05): the
+  // legacy `db` facade always rejects in web mode. Catalog rows split
+  // the upstream filename into (sourceType, sourceId); map back to the
+  // legacy {filename, updated_at} shape callers read.
+  const rows = await getSqlAdapter().query({ kind: 'vector.summaries' });
+  return rows.map(row => ({
+    filename: createKnowledgeSourceKey(row.sourceType, row.sourceId),
+    updated_at: row.updatedAt,
+  }));
 }
 
 export async function getVectorIndexStats(): Promise<VectorIndexStats> {
-  const rows = await db.select<Array<{
-    document_count: number;
-    chunk_count: number;
-    last_updated_at: number | null;
-  }>>(`
-    select
-      count(distinct filename) as document_count,
-      count(*) as chunk_count,
-      max(updated_at) as last_updated_at
-    from vector_documents
-  `);
+  // Derived from `vector.summaries` (UTANG-UJI-05): summaries carry no
+  // chunk counts, so chunkCount is reported as 0 until a stats kind
+  // exists in the catalog.
+  const summaries = await getVectorIndexSummaries();
   const bm25Stats = getBM25Index()?.getStats();
   return {
-    documentCount: Number(rows[0]?.document_count || 0),
-    chunkCount: Number(rows[0]?.chunk_count || 0),
+    documentCount: summaries.length,
+    chunkCount: 0,
     bm25DocumentCount: bm25Stats?.documentCount || 0,
     bm25ChunkCount: bm25Stats?.chunkCount || 0,
-    lastUpdatedAt: rows[0]?.last_updated_at ? Number(rows[0].last_updated_at) : null
+    lastUpdatedAt: summaries.length > 0
+      ? Math.max(...summaries.map(summary => summary.updated_at))
+      : null
   };
 }
 
@@ -328,21 +327,19 @@ export async function getVectorIndexStatsForFiles(filenames: readonly string[]):
   chunkCount: number;
   lastUpdatedAt: number | null;
 }> {
-  const keys = [...new Set(filenames.map(normalizeVectorDocumentKey))];
-  const summary = { documentCount: 0, chunkCount: 0, lastUpdatedAt: null as number | null };
-  for (let offset = 0; offset < keys.length; offset += 200) {
-    const batch = keys.slice(offset, offset + 200);
-    const placeholders = batch.map((_, index) => `$${index + 1}`).join(',');
-    const rows = await db.select<Array<{ documentCount: number; chunkCount: number; lastUpdatedAt: number | null }>>(
-      `select count(distinct filename) as documentCount,count(*) as chunkCount,max(updated_at) as lastUpdatedAt
-       from vector_documents where filename in (${placeholders})`, batch);
-    const result = rows[0];
-    if (!result) continue;
-    summary.documentCount += Number(result.documentCount) || 0;
-    summary.chunkCount += Number(result.chunkCount) || 0;
-    if (result.lastUpdatedAt !== null) summary.lastUpdatedAt = Math.max(summary.lastUpdatedAt ?? 0, Number(result.lastUpdatedAt));
-  }
-  return summary;
+  // Derived from `vector.summaries` (UTANG-UJI-05): the catalog has no
+  // per-file stats kind, and summaries carry no chunk counts, so
+  // chunkCount is reported as 0 until a stats kind exists.
+  const keys = new Set(filenames.map(normalizeVectorDocumentKey));
+  const summaries = await getVectorIndexSummaries();
+  const matched = summaries.filter(summary => keys.has(summary.filename));
+  return {
+    documentCount: matched.length,
+    chunkCount: 0,
+    lastUpdatedAt: matched.length > 0
+      ? Math.max(...matched.map(summary => summary.updated_at))
+      : null,
+  };
 }
 
 // 通过文件名删除向量文档
