@@ -13,7 +13,7 @@
 // set, against a scratch database carrying the canonical M8
 // schema.
 
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -384,5 +384,58 @@ describePg('direct keyword search port over Postgres (live)', () => {
     expect(caught).toBeInstanceOf(ApiError);
     expect((caught as ApiError).statusCode).toBe(404);
     expect((caught as ApiError).code).toBe('not_found');
+  });
+});
+
+describe('direct keyword search port degradation (F-15-03)', () => {
+  let root: string;
+
+  afterEach(async () => {
+    await chmod(join(root, 'rahasia.md'), 0o644).catch(() => {});
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('reports degraded true when a matching file cannot be read', async () => {
+    root = await mkdtemp(join(tmpdir(), 'w4wire-search-'));
+    await writeFile(join(root, 'terbuka.md'), 'gagal jantung terbuka', 'utf8');
+    await writeFile(join(root, 'rahasia.md'), 'gagal jantung rahasia', 'utf8');
+    await chmod(join(root, 'rahasia.md'), 0o000);
+    const port = createDirectKeywordSearchPort({
+      workspaceRoot: root,
+      resolveWorkspaceId: async () => null,
+    });
+    const page = await port.search(searchInput({ query: 'gagal jantung', scope: 'files' }));
+    expect(page.degraded).toBe(true);
+    expect(page.results.length).toBe(1);
+  });
+
+  it('keeps degraded false when only rule-based skips happen', async () => {
+    root = await mkdtemp(join(tmpdir(), 'w4wire-search-'));
+    await seedFiles(root);
+    const port = createDirectKeywordSearchPort({
+      workspaceRoot: root,
+      resolveWorkspaceId: async () => null,
+    });
+    const page = await port.search(searchInput({ query: 'gagal jantung', scope: 'files' }));
+    expect(page.degraded).toBe(false);
+    expect(page.results.length).toBe(1);
+  });
+
+  it('reports degraded true when the version map fails', async () => {
+    root = await mkdtemp(join(tmpdir(), 'w4wire-search-'));
+    await writeFile(join(root, 'terbuka.md'), 'gagal jantung terbuka', 'utf8');
+    const failingDb = {
+      select: () => {
+        throw new Error('db down');
+      },
+    };
+    const port = createDirectKeywordSearchPort({
+      workspaceRoot: root,
+      db: failingDb as never,
+      resolveWorkspaceId: async () => 'ws-1',
+    });
+    const page = await port.search(searchInput({ query: 'gagal jantung', scope: 'files' }));
+    expect(page.degraded).toBe(true);
+    expect(page.results.length).toBe(1);
   });
 });

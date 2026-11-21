@@ -4,8 +4,8 @@
 // Run the adapter node:test suites with asserted per-file counts
 // (AD-36; finding T1 in fase1/audit-workflow-ci.md).
 //
-// The 15 TypeScript spec/test files under src/lib/platform and the
-// 3 under src/lib/web (V3-30a plus the V3-28 search client) use
+// The 23 TypeScript spec/test files under src/lib/platform and the
+// 6 under src/lib/web (V3-30a plus the V3-28 search client) use
 // node:test, not Vitest. Vitest collects the *.spec.ts files but
 // counts 0 tests from them, and
 // its unit project does not include the *.test.ts files at all, so
@@ -68,6 +68,7 @@ const ADAPTER_SPECS = [
   "src/lib/platform/http/http.web.test.ts",
   "src/lib/platform/invoke/channel.web.spec.ts",
   "src/lib/platform/invoke/router.spec.ts",
+  "src/lib/platform/notification/in-app-toasts.spec.ts",
   "src/lib/platform/notification/notification.fallback.test.ts",
   "src/lib/platform/os/os.web.test.ts",
   "src/lib/platform/path/path.web.contract.test.ts",
@@ -91,6 +92,7 @@ const WEB_NODE_SPECS = [
   "src/lib/web/errors.spec.ts",
   "src/lib/web/platform-boot.spec.ts",
   "src/lib/web/search-client.spec.ts",
+  "src/lib/web/user-error-message.spec.ts",
 ];
 
 // Vitest-style suites, run by `vitest run --project unit` (the second

@@ -70,6 +70,7 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
   const searchResult = isCurrent && response ? response.results : []
   const showError = Boolean(trimmedQuery) && status === 'error' && searchedQuery === trimmedQuery
   const fuzzyStatus = isCurrent && response && !response.fuzzy.available ? response.fuzzy.message : null
+  const degradedStatus = isCurrent && response?.degraded ? t('search.degraded') : null
 
   // 高亮搜索关键词 (titles only; snippets use server offsets)
   function highlightText(text: string, query: string) {
@@ -319,6 +320,11 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
         {fuzzyStatus ? (
           <div data-testid="search-dialog-fuzzy-status" role="status" className="px-5 pb-1 pt-3 text-xs leading-5 text-muted-foreground">
             {fuzzyStatus}
+          </div>
+        ) : null}
+        {degradedStatus ? (
+          <div data-testid="search-dialog-degraded" role="status" className="px-5 pb-1 pt-3 text-xs leading-5 text-muted-foreground">
+            {degradedStatus}
           </div>
         ) : null}
         {!searchValue && (

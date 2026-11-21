@@ -186,6 +186,7 @@ export function SidebarSearch({ activeTab, children }: { activeTab: SidebarTab; 
   const showError = searching && status === 'error' && searchedQuery === normalizedQuery
   const currentResults = isCurrent && response ? response.results : []
   const fuzzyStatus = isCurrent && response && !response.fuzzy.available ? response.fuzzy.message : null
+  const degradedStatus = isCurrent && response?.degraded ? t('search.degraded') : null
 
   useEffect(() => {
     if (!sidebarSearchFocusRequest) return
@@ -315,6 +316,11 @@ export function SidebarSearch({ activeTab, children }: { activeTab: SidebarTab; 
             {fuzzyStatus ? (
               <div data-testid="search-fuzzy-status" role="status" className="px-3 pb-1 pt-2 text-[11px] leading-4 text-muted-foreground">
                 {fuzzyStatus}
+              </div>
+            ) : null}
+            {degradedStatus ? (
+              <div data-testid="search-degraded" role="status" className="px-3 pb-1 pt-2 text-[11px] leading-4 text-muted-foreground">
+                {degradedStatus}
               </div>
             ) : null}
 

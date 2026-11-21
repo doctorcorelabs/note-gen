@@ -30,7 +30,7 @@ import emitter from '@/lib/emitter'
 import { useWikiActionScope } from '@/components/wiki/use-wiki-action-scope'
 
 interface FolderStatsViewProps { folderPath: string; folderFiles: string[] }
-interface FolderIndexStats { documentCount: number; chunkCount: number; lastUpdatedAt: number | null }
+interface FolderIndexStats { documentCount: number; chunkCount: number | null; lastUpdatedAt: number | null }
 interface BatchProgress { total: number; processed: number; failed: number; currentFile: string }
 const indexingFolders = new Set<string>()
 

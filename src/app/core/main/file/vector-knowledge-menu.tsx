@@ -56,7 +56,14 @@ export function VectorKnowledgeMenu({ item, hasVector, onVectorUpdated }: Vector
 
       // 直接调用 RAG 库计算向量，与文件夹批量计算保持一致
       const { processMarkdownFile } = await import('@/lib/rag')
-      await processMarkdownFile(filePath, content)
+      // DA-2 (K-07): processMarkdownFile reports failure by
+      // returning false; never show completed/success for it.
+      const processed = await processMarkdownFile(filePath, content)
+      if (!processed) {
+        setVectorCalcStatus(filePath, 'idle')
+        toast({ title: t('context.vectorCalcFailed'), variant: 'destructive' })
+        return
+      }
 
       // 更新向量索引状态
       await checkFileVectorIndexed(filePath)

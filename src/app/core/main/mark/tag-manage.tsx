@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import emitter from '@/lib/emitter'
 import { EmitterRecordEvents } from '@/config/emitters'
 import { toast } from '@/hooks/use-toast'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import useTagStore from '@/stores/tag'
 import useMarkStore from '@/stores/mark'
 import useChatStore from '@/stores/chat'
@@ -36,6 +37,7 @@ export function TagManage() {
   const isMobile = useIsMobile()
   const t = useTranslations('record.tagging')
   const common = useTranslations('common')
+  const userErrorMessage = useUserErrorMessage()
   const old = useTranslations('record.mark.tag')
   const id = React.useId()
   const { tags, currentTagId, fetchTags, initTags, setCurrentTagId, getCurrentTag } = useTagStore()
@@ -72,8 +74,13 @@ export function TagManage() {
   const selectedPath = selected?.name ?? destination?.name
 
   const report = React.useCallback((error: unknown) => {
-    toast({ title: common('error'), description: String(error), variant: 'destructive' })
-  }, [common])
+    // Callers pass either a thrown error or pre-localized text;
+    // only the former goes through the shared formatter (DA-2).
+    const message = typeof error === 'string' ? error : userErrorMessage(error)
+    if (message) {
+      toast({ title: common('error'), description: message, variant: 'destructive' })
+    }
+  }, [common, userErrorMessage])
 
   const initialize = React.useCallback(async () => {
     setLoadError(false)
@@ -176,11 +183,9 @@ export function TagManage() {
     const parent = active.kind === 'create' ? active.parent : parentPath(active.tag.name)
     let path = ''
     if (active.kind !== 'delete') {
-      try {
-        if (!name.trim()) throw new Error(t('nameRequired'))
-        path = normalizeTagName(parent ? parent + '/' + name : name)
-        if (tags.some(tag => tag.name === path && (active.kind !== 'rename' || tag.id !== active.tag.id))) throw new Error(t('nameExists'))
-      } catch (error) { setError(String(error)); return }
+      if (!name.trim()) { setError(t('nameRequired')); return }
+      path = normalizeTagName(parent ? parent + '/' + name : name)
+      if (tags.some(tag => tag.name === path && (active.kind !== 'rename' || tag.id !== active.tag.id))) { setError(t('nameExists')); return }
     }
     savingRef.current = true
     setSaving(true)
@@ -209,7 +214,7 @@ export function TagManage() {
         report(t('savedRefreshFailed'))
         console.error(error)
       }
-    } catch (error) { setError(String(error)) }
+    } catch (error) { setError(userErrorMessage(error) ?? '') }
     finally { savingRef.current = false; setSaving(false) }
   }
 

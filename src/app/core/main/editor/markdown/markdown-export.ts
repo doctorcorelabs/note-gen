@@ -31,6 +31,10 @@ export interface MarkdownExportOptions {
   onPdfRenderStart?: () => void
   /** Explicit export locale. When omitted, the active UI locale is used (D-6). */
   locale?: string
+  // DA-2 (EXP-04): flush pending editor saves before a file-tree
+  // export reads from disk; resolving false aborts the export
+  // instead of silently exporting stale saved content.
+  flushPendingSave?: () => Promise<boolean>
 }
 
 const IMAGE_LOAD_TIMEOUT_MS = 5000
@@ -763,6 +767,9 @@ export async function exportMarkdownFile(
   filePath: string,
   options?: MarkdownExportOptions,
 ) {
+  if (options?.flushPendingSave && !await options.flushPendingSave()) {
+    throw new Error('UNSAVED_CHANGES')
+  }
   const pathOptions = await getFilePathOptions(filePath)
   const readMarkdown = () => (
     pathOptions.baseDir

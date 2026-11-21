@@ -120,13 +120,20 @@ export function Settings() {
       await consentStore.set('ragStructuredKnowledgeConsent', true)
       if (hasEmbeddingModel) await processAllDocuments()
       else {
-        await initBM25Search()
-        await markIndexClean()
-        const builtAt = Date.now()
-        const store = await platform.store.load('store.json')
-        await store.set('lastVectorProcessTime', builtAt)
-        useVectorStore.setState({ lastProcessTime: builtAt })
-        toast.success(t('lexicalIndexRebuilt'))
+        // DA-2 (K-07): only claim a clean rebuilt index when the
+        // BM25 build actually succeeded.
+        const rebuilt = await initBM25Search()
+        if (rebuilt) {
+          await markIndexClean()
+          const builtAt = Date.now()
+          const store = await platform.store.load('store.json')
+          await store.set('lastVectorProcessTime', builtAt)
+          useVectorStore.setState({ lastProcessTime: builtAt })
+          toast.success(t('lexicalIndexRebuilt'))
+        } else {
+          await markIndexDirty()
+          toast.error(t('lexicalIndexRebuildFailed'))
+        }
       }
       await refreshIndexStats()
       await refreshKnowledgeStats()
@@ -141,10 +148,16 @@ export function Settings() {
 
   async function handlePurgeDisabledIndex() {
     if (!await platform.dialog.confirm(t('purgeDisabledConfirm'))) return
-    await purgeDisabledKnowledgeVectors()
-    await refreshIndexStats()
-    await refreshKnowledgeStats()
-    toast.success(t('purgeDisabledSuccess'))
+    // DA-2 (K-10): report partial purge failures honestly.
+    try {
+      const result = await purgeDisabledKnowledgeVectors()
+      await refreshIndexStats()
+      await refreshKnowledgeStats()
+      if (result.failed > 0) toast.error(t('purgeDisabledFailed'))
+      else toast.success(t('purgeDisabledSuccess'))
+    } catch {
+      toast.error(t('purgeDisabledFailed'))
+    }
   }
 
   async function handleRetrySource(sourceKey: string) {
@@ -203,7 +216,7 @@ export function Settings() {
           {knowledgeStats ? <Item variant="outline"><ItemMedia variant="icon"><Layers /></ItemMedia><ItemContent><ItemTitle>{t('structuredIndexTitle')}</ItemTitle><ItemDescription>{(['article', 'record', 'canvas'] as KnowledgeSourceType[]).map(type => <span key={type} className="mr-3 inline-block">{t(`sourceTypes.${type}.title`)}: {knowledgeStats[type].ready}/{Object.values(knowledgeStats[type]).reduce((sum, value) => sum + value, 0)}{knowledgeStats[type].failed > 0 ? ` · ${t('failedCount', { count: knowledgeStats[type].failed })}` : ''}</span>)}</ItemDescription><Progress value={(() => { const total = Object.values(knowledgeStats).flatMap(stats => Object.values(stats)).reduce((sum, value) => sum + value, 0); const ready = Object.values(knowledgeStats).reduce((sum, stats) => sum + stats.ready, 0); return total > 0 ? ready / total * 100 : 100 })()} /></ItemContent><ItemActions><Button size="sm" variant="outline" onClick={() => void toggleIndexPaused(!indexPaused)}>{indexPaused ? <Play data-icon="inline-start" /> : <Pause data-icon="inline-start" />}{indexPaused ? t('continueIndex') : t('pauseIndex')}</Button></ItemActions></Item> : null}
           {failedKnowledgeSources.map(source => <Item key={source.sourceKey} variant="outline"><ItemMedia variant="icon"><AlertTriangle /></ItemMedia><ItemContent><ItemTitle>{source.title}</ItemTitle><ItemDescription>{source.error || t('unknownIndexError')}</ItemDescription></ItemContent><ItemActions><Button size="sm" variant="outline" onClick={() => void handleRetrySource(source.sourceKey)}><RefreshCw data-icon="inline-start" />{t('retrySource')}</Button></ItemActions></Item>)}
         </ItemGroup>
-        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[[t('vectorDocuments'), indexStats.documentCount], [t('vectorChunks'), indexStats.chunkCount], [t('bm25Documents'), indexStats.bm25DocumentCount], [t('bm25Chunks'), indexStats.bm25ChunkCount]].map(([label, value]) => <div key={String(label)}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="font-medium">{value}</dd></div>)}</dl>
+        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[[t('vectorDocuments'), indexStats.documentCount], [t('vectorChunks'), indexStats.chunkCount ?? '-'], [t('bm25Documents'), indexStats.bm25DocumentCount], [t('bm25Chunks'), indexStats.bm25ChunkCount]].map(([label, value]) => <div key={String(label)}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="font-medium">{value}</dd></div>)}</dl>
         <div className="flex flex-wrap items-center gap-2"><ToggleGroup type="single" variant="outline" size="sm" value={(['precision', 'balanced', 'recall'] as RagPreset[]).find(isPresetActive) || ''} aria-label={t('presetDesc')} onValueChange={value => { if (value) void applyPreset(value as RagPreset) }}>{(['precision', 'balanced', 'recall'] as RagPreset[]).map(preset => <ToggleGroupItem key={preset} value={preset}>{t(`presets.${preset}.title`)}</ToggleGroupItem>)}</ToggleGroup><span className="text-xs text-muted-foreground">{t('presetDesc')}</span></div>
         <ItemGroup>{numericSettings.map(renderNumericSetting)}</ItemGroup>
         <div className="flex justify-end"><Button variant="outline" size="sm" onClick={() => void resetToDefaults()}><RefreshCw data-icon="inline-start" />{t('resetToDefaults')}</Button></div>

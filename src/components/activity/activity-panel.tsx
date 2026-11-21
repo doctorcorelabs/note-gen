@@ -16,6 +16,9 @@ interface ActivityPanelProps {
   data: ActivityCalendarData | null
   selectedDay?: ActivityDaySummary
   loading?: boolean
+  // DA-2 (BUG-08): explicit load-failure state with retry.
+  error?: unknown
+  onRetry?: () => void
   onSelectDay: (day: ActivityDaySummary) => void
   showSummary?: boolean
   showHeatmap?: boolean
@@ -26,6 +29,8 @@ export function ActivityPanel({
   data,
   selectedDay,
   loading = false,
+  error,
+  onRetry,
   onSelectDay,
   showSummary = true,
   showHeatmap = true,
@@ -72,6 +77,23 @@ export function ActivityPanel({
     return (
       <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
         {t('loading')}
+      </div>
+    )
+  }
+
+  if (error && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground">
+        <p>{t('error')}</p>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-md border px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+          >
+            {t('refresh')}
+          </button>
+        ) : null}
       </div>
     )
   }

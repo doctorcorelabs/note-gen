@@ -14,6 +14,7 @@ import {
 import { PluginIcon } from '@/components/plugins/plugin-icon'
 import { usePluginEditorCommands } from '@/components/plugins/use-plugin-editor-commands'
 import { toast } from '@/hooks/use-toast'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
 
 interface SlashMenuProps {
@@ -46,6 +47,7 @@ function ShortcutHint({ keys }: { keys: string[] }) {
 export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, range, query, onSelectItem }, ref) => {
   const t = useTranslations('editor.slashCommand')
   const tDisabled = useTranslations('editor.disabled')
+  const userErrorMessage = useUserErrorMessage()
   // Web fork (Fase 1, V3-24): AI slash items stay visible in web
   // mode, but selecting one shows the disabled marker instead of
   // dispatching an AI event that no listener would answer.
@@ -147,7 +149,8 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
     fileInsert: {
       failed: t('fileInsert.failed'),
     },
-  }), [t])
+    errorMessage: userErrorMessage,
+  }), [t, userErrorMessage])
 
   // 分组顺序
   const groupOrder = useMemo(() => [
@@ -175,14 +178,14 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
         void executePluginUserCommand(command.id).catch((error) => {
           toast({
             title: command.title,
-            description: error instanceof Error ? error.message : String(error),
+            description: userErrorMessage(error) ?? undefined,
             variant: 'destructive',
           })
         })
       },
     }))
     return filterItems([...suggestionItems(translations), ...pluginItems], query)
-  }, [pluginCommands, query, translations])
+  }, [pluginCommands, query, translations, userErrorMessage])
 
   const groupedItems = useMemo(() => {
     const groups: Record<string, SlashCommandItem[]> = {}
@@ -260,7 +263,7 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
           const reportFailure = (error: unknown) => {
             toast({
               title: translations.imageUpload.failed,
-              description: error instanceof Error ? error.message : String(error),
+              description: userErrorMessage(error) ?? undefined,
               variant: 'destructive',
             })
           }

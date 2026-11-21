@@ -79,6 +79,9 @@ export interface KnowledgeWikiPageCandidate extends KnowledgeWikiPageGrant {
 export interface KnowledgeSearchResults {
   sources: KnowledgeSearchCandidate[]
   wikiPages: KnowledgeWikiPageCandidate[]
+  // DA-2 (K-06): true when semantic search was requested but the
+  // vector leg was unavailable, so results are lexical only.
+  semanticDegraded?: boolean
 }
 
 export interface KnowledgeReadPage {

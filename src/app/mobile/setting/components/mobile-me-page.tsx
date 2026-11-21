@@ -86,6 +86,7 @@ export function MobileMePage({
   )
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [loading, setLoading] = useState(() => !mobileActivityCache)
+  const [activityError, setActivityError] = useState<unknown>(null)
   const [cloudFolderProvider, setCloudFolderProvider] = useState<CloudFolderConfig['provider']>()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const restoredScrollRef = useRef(false)
@@ -117,6 +118,7 @@ export function MobileMePage({
 
   async function refreshActivity() {
     setLoading(true)
+    setActivityError(null)
     try {
       const nextData = await loadActivityCalendarData()
       mobileActivityCache = nextData
@@ -130,6 +132,11 @@ export function MobileMePage({
         return nextData.days.find((day) => day.day === nextData.endDate)
           || [...nextData.days].reverse().find((day) => day.totalCount > 0)
       })
+    } catch (loadError) {
+      // DA-2 (BUG-08): a failed load renders the error text, not
+      // the empty state.
+      console.error('Failed to load activity data:', loadError)
+      setActivityError(loadError)
     } finally {
       setLoading(false)
     }
@@ -550,6 +557,8 @@ export function MobileMePage({
               />
               <p className="mt-3 text-xs leading-5 text-muted-foreground">{tMe('activity.tip')}</p>
             </>
+          ) : activityError ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">{tActivity('error')}</div>
           ) : (
             <div className="py-10 text-center text-sm text-muted-foreground">{tActivity('empty')}</div>
           )}

@@ -489,6 +489,7 @@
       "rebuildIndex": "Rebuild",
       "rebuildingIndex": "Rebuilding",
       "lexicalIndexRebuilt": "Local BM25 index rebuilt",
+      "lexicalIndexRebuildFailed": "Failed to rebuild the local BM25 index",
       "basicSettingsTitle": "Basic settings",
       "basicSettingsDesc": "AI decides when other notes are useful; you can tune how deeply it searches and how broadly it matches.",
       "sourceTypes": {
@@ -516,6 +517,7 @@
       "purgeDisabledIndex": "Delete disabled indexes",
       "purgeDisabledConfirm": "Delete local vectors for all disabled source types? Re-enabling them will require rebuilding.",
       "purgeDisabledSuccess": "Disabled source vectors deleted",
+      "purgeDisabledFailed": "Some disabled source vectors could not be deleted",
       "automaticSearchTitle": "Allow AI to reference other notes",
       "automaticSearchDesc": "When a question depends on your records, AI finds relevant notes automatically. It skips search for general questions or when the current note is sufficient.",
       "agentStrategyTitle": "Automatic search strategy",
@@ -5822,6 +5824,7 @@
     "indexingProgress": "Indexing {ready}/{total}",
     "noResults": "No search results",
     "tryDifferentKeywords": "Try using different keywords",
+    "degraded": "Some files could not be read; results may be incomplete",
     "clear": "Clear search",
     "openFailed": "Unable to open search result",
     "item": {
@@ -6307,6 +6310,7 @@
     },
     "loading": "Loading activity data...",
     "empty": "No activity data yet",
+    "error": "Failed to load activity data",
     "refresh": "Refresh",
     "summary": {
       "totalCount": "Total Activity",
@@ -6323,7 +6327,6 @@
       "canvas": "Canvas"
     },
     "heatmap": {
-      "title": "Last 26 Weeks",
       "range": "{startDate} - {endDate}",
       "less": "Less",
       "more": "More",
@@ -6334,6 +6337,26 @@
       "title": "Day Details",
       "empty": "Select a day to inspect its activity details."
     }
+  },
+  "errors": {
+    "unknown": "Something went wrong. Please try again.",
+    "unauthenticated": "Your session has expired. Please sign in again.",
+    "tag_name_taken": "A tag with this name already exists.",
+    "tag_locked": "This tag is locked and cannot be changed.",
+    "tag_in_use": "This tag is still used by records. Reassign it or remove it from those records first.",
+    "revision_conflict": "This item was changed elsewhere. Reload and try again.",
+    "CAPABILITY_UNAVAILABLE": "This capability is not available right now.",
+    "CAPABILITY_GATED": "This feature is not available in this mode.",
+    "FEATURE_NOT_YET_AVAILABLE": "This feature is not available yet.",
+    "UNKNOWN_COMMAND": "The requested action is not supported.",
+    "VALIDATION_ERROR": "The request was not valid. Check the input and try again.",
+    "AUTH_REQUIRED": "Sign-in is required. Please sign in again.",
+    "NETWORK_ERROR": "Network error. Check your connection and try again.",
+    "TIMEOUT": "The request timed out. Please try again.",
+    "CONFLICT": "The item changed on the server. Reload and try again.",
+    "PAYLOAD_TOO_LARGE": "The file is too large.",
+    "RATE_LIMITED": "Too many requests. Please wait and try again.",
+    "SERVER_ERROR": "The server could not complete the request. Please try again."
   },
   "marks": {
     "types": {
@@ -6548,6 +6571,7 @@
         "convertSuccess": "Import complete",
         "convertSuccessDesc": "Created {count} Markdown files",
         "convertPartialDesc": "{success} succeeded and {failed} failed",
+        "importPartialDesc": "{success} succeeded and {failed} failed",
         "convertError": "Import failed",
         "importNotion": "Import Notion (.zip)",
         "importing": "Importing...",

@@ -2,6 +2,7 @@ import { ContextMenuItem } from "@/components/ui/enhanced-context-menu";
 import { Download, LoaderCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
+import { useUserErrorMessage } from "@/lib/use-user-error-message";
 import { useState } from "react";
 import useArticleStore, { DirTree } from "@/stores/article";
 import { computedParentPath } from "@/lib/path";
@@ -12,6 +13,7 @@ import { useSettingsDialogStore } from "@/stores/settings-dialog";
 
 export default function DownloadFolder({ item, mobile = false }: { item: DirTree; mobile?: boolean }) {
   const t = useTranslations('article.file')
+  const userErrorMessage = useUserErrorMessage()
   const [isSyncing, setIsSyncing] = useState(false)
 
   const { loadFileTree, setEntryLoading, setEntrySyncError } = useArticleStore()
@@ -72,10 +74,10 @@ export default function DownloadFolder({ item, mobile = false }: { item: DirTree
         duration: 5000,
       })
     } catch (error) {
-      syncError = error instanceof Error ? error.message : String(error)
+      syncError = userErrorMessage(error) ?? undefined
       progressToast.update({
         title: t('context.syncFolderError'),
-        description: String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
         duration: 5000,
       })

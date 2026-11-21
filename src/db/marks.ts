@@ -145,7 +145,7 @@ function enqueueMarkKnowledgeIndex(id?: number | null) {
   if (!id) return
   void import('@/lib/knowledge-index').then(({ enqueueKnowledgeSourceIndex }) => {
     enqueueKnowledgeSourceIndex(`record:${id}`)
-  })
+  }).catch(error => console.error('Record knowledge enqueue failed:', error))
 }
 
 async function invalidateMarkKnowledgeIndex(id: number) {
@@ -184,8 +184,8 @@ async function removeMarkKnowledgeIndex(id: number) {
 
 function reconcileRecordKnowledgeIndex() {
   void import('@/lib/knowledge-index').then(({ reconcileStructuredKnowledgeSources }) => {
-    void reconcileStructuredKnowledgeSources()
-  })
+    void reconcileStructuredKnowledgeSources().catch(error => console.error('Record knowledge reconcile failed:', error))
+  }).catch(error => console.error('Record knowledge reconcile failed:', error))
 }
 
 

@@ -27,6 +27,7 @@ import { cn, isHttpUrl } from '@/lib/utils'
 import { Spinner } from '@/components/ui/spinner'
 import { refreshRemoteRecordsNow } from '@/lib/sync/auto-data-sync-queue'
 import { toast } from '@/hooks/use-toast'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 
 const TIME_OPTIONS: RecordTimePreset[] = ['all', 'today', 'last7Days', 'last30Days']
 const PULL_REFRESH_THRESHOLD = 72
@@ -60,6 +61,7 @@ interface MobileRecordStreamProps {
 
 export function MobileRecordStream({ preview = false }: MobileRecordStreamProps = {}) {
   const t = useTranslations()
+  const userErrorMessage = useUserErrorMessage()
   const router = useRouter()
   const {
     trashState,
@@ -463,7 +465,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
       await setCurrentTagId(id)
       setTagDrawerOpen(false)
     } catch (error) {
-      toast({ title: t('common.error'), description: String(error), variant: 'destructive' })
+      toast({ title: t('common.error'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     }
   }
 
@@ -473,7 +475,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
       if (selected) await handleMoveSelected(id)
       else await handleMoveTargetTag(id)
     } catch (error) {
-      toast({ title: t('common.error'), description: String(error), variant: 'destructive' })
+      toast({ title: t('common.error'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     }
   }
 
@@ -491,7 +493,10 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
     if (!newTagName.trim()) return
     try {
       const value = normalizeTagName(newTagParent ? `${newTagParent}/${newTagName}` : newTagName)
-      if (tags.some(tag => tag.name === value)) throw new Error(t('record.tagging.nameExists'))
+      if (tags.some(tag => tag.name === value)) {
+        toast({ title: t('common.error'), description: t('record.tagging.nameExists'), variant: 'destructive' })
+        return
+      }
       const res = await insertTag({ name: value })
       const newTagId = Number(res.lastInsertId)
       await fetchTags()
@@ -501,7 +506,7 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
       setTagDrawerOpen(false)
       setCreateTagOpen(false)
     } catch (error) {
-      toast({ title: t('common.error'), description: String(error), variant: 'destructive' })
+      toast({ title: t('common.error'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     }
   }
 

@@ -54,13 +54,16 @@ async function registerDocument(document: KnowledgeSourceDocument) {
 }
 
 export async function indexKnowledgeDocument(document: KnowledgeSourceDocument): Promise<boolean> {
-  const needsIndex = await registerDocument(document)
-  if (!needsIndex) return true
-  await updateKnowledgeSourceIndexState(document.sourceKey, {
-    status: 'indexing',
-    indexedHash: null,
-  })
   try {
+    // DA-2 (K-02): registration is inside the try so a register
+    // failure also ends in the honest failed state below instead
+    // of leaving the source pending forever.
+    const needsIndex = await registerDocument(document)
+    if (!needsIndex) return true
+    await updateKnowledgeSourceIndexState(document.sourceKey, {
+      status: 'indexing',
+      indexedHash: null,
+    })
     const embeddings: Array<number[] | null> = []
     for (let offset = 0; offset < document.chunks.length; offset += 16) {
       embeddings.push(...await fetchEmbeddings(
@@ -93,11 +96,15 @@ export async function indexKnowledgeDocument(document: KnowledgeSourceDocument):
     })
     return true
   } catch (error) {
-    await updateKnowledgeSourceIndexState(document.sourceKey, {
-      status: 'failed',
-      indexedHash: null,
-      error: error instanceof Error ? error.message : String(error),
-    })
+    try {
+      await updateKnowledgeSourceIndexState(document.sourceKey, {
+        status: 'failed',
+        indexedHash: null,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    } catch (stateError) {
+      console.error('Failed to mark knowledge source as failed:', stateError)
+    }
     return false
   }
 }
@@ -111,17 +118,29 @@ async function drainQueue() {
       const sourceKey = pendingKeys.values().next().value as string | undefined
       if (!sourceKey) break
       pendingKeys.delete(sourceKey)
-      const document = await getKnowledgeSourceDocument(sourceKey)
-      if (!document) {
-        await deleteVectorDocumentsByFilename(sourceKey)
-        await deleteKnowledgeSource(sourceKey)
-        continue
+      // DA-2 (K-05): one bad source must not kill the queue; the
+      // loop continues with the next key after logging.
+      try {
+        const document = await getKnowledgeSourceDocument(sourceKey)
+        if (!document) {
+          // DA-2 (K-08): the kind delete runs first so the source
+          // row is always removed; vector cleanup is best-effort.
+          await deleteKnowledgeSource(sourceKey)
+          try {
+            await deleteVectorDocumentsByFilename(sourceKey)
+          } catch (cleanupError) {
+            console.error('Vector cleanup failed for removed source:', cleanupError)
+          }
+          continue
+        }
+        if (!isKnowledgeSourceEnabled(document, settings)) {
+          await registerDocument(document)
+          continue
+        }
+        await indexKnowledgeDocument(document)
+      } catch (error) {
+        console.error(`Knowledge indexing failed for ${sourceKey}:`, error)
       }
-      if (!isKnowledgeSourceEnabled(document, settings)) {
-        await registerDocument(document)
-        continue
-      }
-      await indexKnowledgeDocument(document)
     }
   })().finally(() => {
     drainPromise = null
@@ -133,15 +152,22 @@ export function enqueueKnowledgeSourceIndex(sourceKey: string) {
   void import('@/lib/wiki/queue').then(({ enqueueWikiSource }) => enqueueWikiSource(sourceKey))
     .catch(error => console.error('Failed to schedule Wiki source:', error))
   pendingKeys.add(sourceKey)
-  void drainQueue()
+  void drainQueue().catch(error => console.error('Knowledge index queue failed:', error))
 }
 
 export async function removeKnowledgeSourceIndex(sourceKey: string) {
   pendingKeys.delete(sourceKey)
   const { removeWikiSource } = await import('@/lib/wiki/queue')
   await removeWikiSource(sourceKey)
-  await deleteVectorDocumentsByFilename(sourceKey)
+  // DA-2 (K-08): delete the source row (healthy kind) first; the
+  // legacy vector cleanup is best-effort so a cleanup failure can
+  // no longer leave a ghost knowledge_sources row behind.
   await deleteKnowledgeSource(sourceKey)
+  try {
+    await deleteVectorDocumentsByFilename(sourceKey)
+  } catch (cleanupError) {
+    console.error('Vector cleanup failed for removed source:', cleanupError)
+  }
 }
 
 export async function resumeKnowledgeIndexQueue() {
@@ -243,15 +269,27 @@ export async function retryKnowledgeSource(sourceKey: string) {
 export async function purgeDisabledKnowledgeVectors() {
   const settings = await getKnowledgeSettings()
   const sources = await getKnowledgeSources()
+  let purged = 0
+  let failed = 0
   for (const source of sources) {
     if (!isKnowledgeSourceEnabled(source, settings)) {
-      await deleteVectorDocumentsByFilename(source.sourceKey)
+      // DA-2 (K-10): a cleanup failure on one source must not
+      // stop the purge or skip the status reset; count it so the
+      // caller can report honestly.
+      try {
+        await deleteVectorDocumentsByFilename(source.sourceKey)
+        purged++
+      } catch (error) {
+        failed++
+        console.error(`Vector purge failed for ${source.sourceKey}:`, error)
+      }
       await updateKnowledgeSourceIndexState(source.sourceKey, {
         status: 'pending',
         indexedHash: null,
       })
     }
   }
+  return { purged, failed }
 }
 
 export async function getReadyKnowledgeVectorKeys(sourceTypes?: readonly KnowledgeSourceType[]) {

@@ -23,7 +23,9 @@ export type VectorDocumentSnapshot = Omit<VectorDocument, 'id'>;
 
 export interface VectorIndexStats {
   documentCount: number;
-  chunkCount: number;
+  // DA-2 (K-09): null when the catalog cannot report chunk
+  // counts; never a fabricated 0.
+  chunkCount: number | null;
   bm25DocumentCount: number;
   bm25ChunkCount: number;
   lastUpdatedAt: number | null;
@@ -106,6 +108,17 @@ class VectorCache {
   }
 
   // 添加单个向量到缓存
+  // DA-2 (K-03): local clear for the post-clearVectorDb path;
+  // update() goes through the legacy facade and always rejects
+  // in web mode, which made a successful server clear report
+  // failure.
+  clear() {
+    this.cache.clear();
+    this.vectorsByFilename.clear();
+    this.lastUpdate = Date.now();
+    this.cacheVersion++;
+  }
+
   add(doc: VectorDocument) {
     try {
       const embedding = JSON.parse(doc.embedding) as number[];
@@ -243,13 +256,13 @@ export async function getVectorIndexSummaries(): Promise<VectorIndexSummary[]> {
 
 export async function getVectorIndexStats(): Promise<VectorIndexStats> {
   // Derived from `vector.summaries` (UTANG-UJI-05): summaries carry no
-  // chunk counts, so chunkCount is reported as 0 until a stats kind
-  // exists in the catalog.
+  // chunk counts, so chunkCount is null (unavailable) until a stats
+  // kind exists in the catalog (DA-2 K-09: never a fabricated 0).
   const summaries = await getVectorIndexSummaries();
   const bm25Stats = getBM25Index()?.getStats();
   return {
     documentCount: summaries.length,
-    chunkCount: 0,
+    chunkCount: null,
     bm25DocumentCount: bm25Stats?.documentCount || 0,
     bm25ChunkCount: bm25Stats?.chunkCount || 0,
     lastUpdatedAt: summaries.length > 0
@@ -349,18 +362,19 @@ export async function getVectorDocumentsByFilename(filename: string) {
 /** Aggregate only this folder's known notes without loading embedding payloads. */
 export async function getVectorIndexStatsForFiles(filenames: readonly string[]): Promise<{
   documentCount: number;
-  chunkCount: number;
+  chunkCount: number | null;
   lastUpdatedAt: number | null;
 }> {
   // Derived from `vector.summaries` (UTANG-UJI-05): the catalog has no
   // per-file stats kind, and summaries carry no chunk counts, so
-  // chunkCount is reported as 0 until a stats kind exists.
+  // chunkCount is null (unavailable) until a stats kind exists
+  // (DA-2 K-09: never a fabricated 0).
   const keys = new Set(filenames.map(normalizeVectorDocumentKey));
   const summaries = await getVectorIndexSummaries();
   const matched = summaries.filter(summary => keys.has(summary.filename));
   return {
     documentCount: matched.length,
-    chunkCount: 0,
+    chunkCount: null,
     lastUpdatedAt: matched.length > 0
       ? Math.max(...matched.map(summary => summary.updated_at))
       : null,
@@ -495,8 +509,10 @@ export async function clearVectorDb() {
   // web mode. Cache cleanup below stays client-side.
   await getSqlAdapter().execute({ kind: 'vector.clear' });
 
-  // 清空缓存
-  await vectorCache.update();
+  // DA-2 (K-03): clear the local cache directly; vectorCache
+  // .update() reads through the legacy facade and always rejects
+  // in web mode, turning a successful clear into a false failure.
+  vectorCache.clear();
   getBM25Index()?.clear();
 }
 

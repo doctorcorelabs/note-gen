@@ -14,6 +14,7 @@ import { cloneDeep } from "lodash-es";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";
 import { toast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
+import { useUserErrorMessage } from "@/lib/use-user-error-message";
 import useClipboardStore from "@/stores/clipboard";
 import { generateUniqueFilename } from "@/lib/default-filename";
 import { MobileActionMenu, MobileMenuItem, MobileSeparator } from "./mobile-action-menu";
@@ -145,6 +146,7 @@ export function FileItem({
   const deleteEntries = useFileDeletion()
   const pendingDeletionPaths = useFileDeletionStore(state => state.pendingPaths)
   const t = useTranslations('article.file')
+  const userErrorMessage = useUserErrorMessage()
   const tCommon = useTranslations('common')
   const tTabs = useTranslations('tabContext')
   const isMobile = useIsMobile()
@@ -268,7 +270,7 @@ export function FileItem({
       } catch (error) {
         toast({
           title: t('cloudLibrary.operationFailed'),
-          description: error instanceof Error ? error.message : String(error),
+          description: userErrorMessage(error) ?? undefined,
           variant: 'destructive',
         })
         return
@@ -355,7 +357,7 @@ export function FileItem({
     try {
       await commitRename()
     } catch (error) {
-      setRenameError(error instanceof Error ? error.message : String(error))
+      setRenameError(userErrorMessage(error) ?? '')
     } finally {
       renameInProgressRef.current = false
       setIsRenaming(false)
@@ -486,7 +488,7 @@ export function FileItem({
           const { renameVectorDocumentsByFilename } = await import('@/db/vector')
           await renameVectorDocumentsByFilename(path, targetRelativePath)
         } catch (error) {
-          setRenameError(error instanceof Error ? error.message : String(error))
+          setRenameError(userErrorMessage(error) ?? '')
           setTimeout(() => inputRef.current?.focus(), 0)
           return
         } finally {
@@ -661,7 +663,12 @@ export function FileItem({
       const exported = await exportMarkdownFile(
         format,
         path,
-        { onPdfRenderStart: showPdfExportStartToast },
+        {
+          onPdfRenderStart: showPdfExportStartToast,
+          // DA-2 (EXP-04): flush pending editor saves first so the
+          // export never silently uses stale disk content.
+          flushPendingSave: () => prepareActiveEditorPathMutationDurably(activeFilePath, [path]),
+        },
       )
 
       if (exported) {
@@ -671,7 +678,7 @@ export function FileItem({
       console.error(`Export selected file failed: ${path}`, error)
       toast({
         title: t('exportFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     } finally {
@@ -710,10 +717,10 @@ export function FileItem({
         duration: 3000,
       })
     } catch (error) {
-      setEntrySyncError(path, error instanceof Error ? error.message : String(error))
+      setEntrySyncError(path, userErrorMessage(error) ?? '')
       progressToast.update({
         title: t('context.uploadFileError'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
         duration: 5000,
       })

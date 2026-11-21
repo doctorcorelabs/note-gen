@@ -3,7 +3,8 @@ import { DirTree } from "@/stores/article";
 import { computedParentPath } from "@/lib/path";
 import { Copy } from "lucide-react"
 import { Kbd } from "@/components/ui/kbd"
-import { platform, BaseDirectory } from "@/lib/platform";
+import { platform } from "@/lib/platform";
+import { duplicateFolderTree } from "./duplicate-folder-tree";
 import { toast } from "@/hooks/use-toast";
 
 interface DuplicateFolderProps {
@@ -28,7 +29,6 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
       const targetPath = parentPath ? `${parentPath}/${targetName}` : targetName
 
       // 获取源路径和目标路径的选项
-      const sourcePathOptions = await getFilePathOptions(path)
       const targetPathOptions = await getFilePathOptions(targetPath)
 
       // 创建目标文件夹
@@ -38,50 +38,33 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
         await platform.fs.mkdir(targetPathOptions.path, { baseDir: targetPathOptions.baseDir })
       }
 
-      // 递归复制文件夹内容
-      const copyDirRecursively = async (srcRelative: string, destRelative: string) => {
-        const entries = await platform.fs.readDir(
-          srcRelative,
-          workspace.isCustom ? {} : { baseDir: BaseDirectory.AppData }
-        )
-
-        for (const entry of entries) {
-          const srcEntryPath = `${srcRelative}/${entry.name}`
-          const destEntryPath = `${destRelative}/${entry.name}`
-
-          if (entry.isDirectory) {
-            // 创建子目录
-            if (workspace.isCustom) {
-              await platform.fs.mkdir(destEntryPath)
-            } else {
-              await platform.fs.mkdir(destEntryPath, { baseDir: BaseDirectory.AppData })
-            }
-            await copyDirRecursively(srcEntryPath, destEntryPath)
-          } else {
-            // 复制文件
-            try {
-              let content = ''
-              if (workspace.isCustom) {
-                content = await platform.fs.readTextFile(srcEntryPath)
-                await platform.fs.writeTextFile(destEntryPath, content)
-              } else {
-                content = await platform.fs.readTextFile(srcEntryPath, { baseDir: BaseDirectory.AppData })
-                await platform.fs.writeTextFile(destEntryPath, content, { baseDir: BaseDirectory.AppData })
-              }
-            } catch (err) {
-              console.error(`Error copying file ${srcEntryPath}:`, err)
-            }
-          }
-        }
-      }
-
-      await copyDirRecursively(sourcePathOptions.path, targetPathOptions.path)
+      // DA-2 (F-03): byte-faithful copy on workspace-relative
+      // paths with per-entry path options; failures are counted
+      // and reported instead of hidden behind a success toast.
+      const copyResult = await duplicateFolderTree(
+        {
+          readDir: (dirPath, options) => platform.fs.readDir(dirPath, options),
+          mkdir: (dirPath, options) => platform.fs.mkdir(dirPath, options),
+          copyFile: (fromPath, toPath, options) => platform.fs.copyFile(fromPath, toPath, options),
+          getFilePathOptions,
+        },
+        path,
+        targetPath,
+      )
 
       // 刷新文件树
       const useArticleStore = (await import('@/stores/article')).default
       useArticleStore.getState().loadFileTree()
 
-      toast({ title: `Folder copied as ${targetName}` })
+      if (copyResult.failed.length > 0) {
+        toast({
+          title: `Folder copied as ${targetName} with ${copyResult.failed.length} failed file(s)`,
+          description: copyResult.failed.join(', '),
+          variant: 'destructive',
+        })
+      } else {
+        toast({ title: `Folder copied as ${targetName}` })
+      }
     } catch (error) {
       console.error('Duplicate folder failed:', error)
       toast({ title: 'Failed to copy the folder', variant: 'destructive' })

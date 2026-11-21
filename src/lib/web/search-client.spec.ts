@@ -223,6 +223,15 @@ describe("searchKeyword", () => {
     assert.equal(response.degraded, false);
   });
 
+  it("parses a degraded true flag from the wire (F-15-03)", async () => {
+    const { fetchFn } = makeFetch(() =>
+      fakeResponse(200, successBody(keywordData({ degraded: true }))),
+    );
+    const client = new ApiClient({ fetchFn });
+    const response = await searchKeyword(client, { query: "gagal jantung", scope: "all" });
+    assert.equal(response.degraded, true);
+  });
+
   it("maps scope and cursor onto the request", async () => {
     const { fetchFn, calls } = makeFetch(() =>
       fakeResponse(200, successBody(keywordData({ scope: "files", results: [] }))),
@@ -593,6 +602,19 @@ describe("mergeKeywordSearchPages", () => {
       ["record:1", "record:2", "file:notes/b.md"],
     );
     assert.equal(merged.nextCursor, null);
+    assert.equal(merged.degraded, false);
+  });
+
+  it("keeps the merged result degraded when either page was degraded (F-15-03)", () => {
+    const degradedPrevious = { ...pageResponse([recordHit(1)], "c1", true), degraded: true };
+    const fromPrevious = mergeKeywordSearchPages(
+      degradedPrevious,
+      pageResponse([recordHit(2)], null, false),
+    );
+    assert.equal(fromPrevious.degraded, true);
+    const degradedPage = { ...pageResponse([recordHit(3)], null, false), degraded: true };
+    const merged = mergeKeywordSearchPages(fromPrevious, degradedPage);
+    assert.equal(merged.degraded, true);
     assert.equal(merged.hasMore, false);
   });
 

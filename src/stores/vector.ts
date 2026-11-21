@@ -85,7 +85,7 @@ const useVectorStore = create<VectorState>((set, get) => ({
         }
         if (structuredKnowledgeConsent) {
           const { resumeKnowledgeIndexQueue } = await import('@/lib/knowledge-index');
-          void resumeKnowledgeIndexQueue();
+          void resumeKnowledgeIndexQueue().catch(error => console.error('Knowledge index resume failed:', error));
         }
       }
 
@@ -232,7 +232,12 @@ const useVectorStore = create<VectorState>((set, get) => ({
   // 处理单个文档向量
   processDocument: async (filePath: string, content: string) => {
     try {
-      await processMarkdownFile(filePath, content);
+      // DA-2 (K-07): a false return is a failed indexing run,
+      // not a success; log it instead of swallowing it.
+      const processed = await processMarkdownFile(filePath, content);
+      if (!processed) {
+        console.error(`Document vector processing failed for ${filePath}`);
+      }
     } catch (error) {
       console.error(`处理文档 ${filePath} 向量失败:`, error);
     }

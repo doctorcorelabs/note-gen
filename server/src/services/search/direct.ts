@@ -142,7 +142,7 @@ async function loadVersionMap(db: Database, workspaceId: string): Promise<Map<st
 async function loadFileItems(
   workspaceRoot: string,
   versions: ReadonlyMap<string, number>,
-): Promise<FakeSearchItem[]> {
+): Promise<{ items: FakeSearchItem[]; skipped: number }> {
   let rootReal: string;
   try {
     rootReal = await realpath(workspaceRoot);
@@ -157,6 +157,10 @@ async function loadFileItems(
     throw ApiError.serviceUnavailable('The workspace is not available.');
   }
   const items: FakeSearchItem[] = [];
+  // DA-2 (F-15-03): count only error-driven skips (readdir,
+  // lstat, readFile failures). Rule-based skips below (dot
+  // segments, symlinks, non-.md) are not degradation.
+  let skipped = 0;
   const stack: string[] = [''];
   while (stack.length > 0) {
     const current = stack.pop() as string;
@@ -165,6 +169,7 @@ async function loadFileItems(
     try {
       dirents = await readdir(currentFs, { withFileTypes: true });
     } catch {
+      skipped += 1;
       continue;
     }
     for (const dirent of dirents) {
@@ -177,6 +182,7 @@ async function loadFileItems(
       try {
         childStats = await lstat(childFs);
       } catch {
+        skipped += 1;
         continue;
       }
       if (childStats.isSymbolicLink()) {
@@ -193,6 +199,7 @@ async function loadFileItems(
       try {
         bytes = await readFile(childFs);
       } catch {
+        skipped += 1;
         continue;
       }
       items.push({
@@ -205,7 +212,7 @@ async function loadFileItems(
       });
     }
   }
-  return items;
+  return { items, skipped };
 }
 
 export function createDirectKeywordSearchPort(
@@ -226,6 +233,7 @@ export function createDirectKeywordSearchPort(
         }
       }
       const items: FakeSearchItem[] = [];
+      let degraded = false;
       if (needsRecords && deps.db !== undefined && workspaceId !== null) {
         items.push(...(await loadRecordItems(deps.db, workspaceId)));
       }
@@ -240,6 +248,7 @@ export function createDirectKeywordSearchPort(
               workspaceId = await deps.resolveWorkspaceId(input.principal);
             } catch {
               workspaceId = null;
+              degraded = true;
             }
           }
           if (workspaceId !== null) {
@@ -247,12 +256,15 @@ export function createDirectKeywordSearchPort(
               versions = await loadVersionMap(deps.db, workspaceId);
             } catch {
               versions = new Map();
+              degraded = true;
             }
           }
         }
-        items.push(...(await loadFileItems(deps.workspaceRoot, versions)));
+        const loaded = await loadFileItems(deps.workspaceRoot, versions);
+        items.push(...loaded.items);
+        if (loaded.skipped > 0) degraded = true;
       }
-      return executeKeywordSearch(items, input);
+      return { ...executeKeywordSearch(items, input), degraded };
     },
   };
 }

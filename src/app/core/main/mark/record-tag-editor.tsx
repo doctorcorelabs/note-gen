@@ -13,10 +13,12 @@ import { recordTagIds } from '@/lib/record-tags'
 import useTagStore from '@/stores/tag'
 import useMarkStore from '@/stores/mark'
 import { toast } from '@/hooks/use-toast'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 
 export function RecordTagEditor({ mark, onSaved }: { mark: Mark; onSaved?: (mark: Mark) => void }) {
   const t = useTranslations('record.tagging')
   const common = useTranslations('common')
+  const userErrorMessage = useUserErrorMessage()
   const id = useId()
   const { tags, fetchTags } = useTagStore()
   const [open, setOpen] = useState(false)
@@ -46,7 +48,7 @@ export function RecordTagEditor({ mark, onSaved }: { mark: Mark; onSaved?: (mark
       setPending([])
       setOpen(true)
     } catch (error) {
-      toast({ title: common('error'), description: String(error), variant: 'destructive' })
+      toast({ title: common('error'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     } finally { setBusy(false) }
   }
 
@@ -71,7 +73,7 @@ export function RecordTagEditor({ mark, onSaved }: { mark: Mark; onSaved?: (mark
         console.error('Record tags saved but refresh failed:', error)
       }
     } catch (error) {
-      toast({ title: common('error'), description: String(error), variant: 'destructive' })
+      toast({ title: common('error'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     } finally { saving.current = false; setBusy(false) }
   }
 

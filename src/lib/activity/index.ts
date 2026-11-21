@@ -60,13 +60,10 @@ export async function loadActivityCalendarData(): Promise<ActivityCalendarData> 
   const timeZone = getBrowserTimeZone()
   const { startDate, endDate } = getDefaultRange()
 
-  let entries: ActivityEntry[] = []
-
-  try {
-    entries = await loadActivityEntries()
-  } catch (error) {
-    console.error('Failed to load activity events:', error)
-  }
+  // DA-2 (BUG-08): a load failure must propagate to the caller
+  // as an error state; returning zeroed data here made a failed
+  // load indistinguishable from "no activity yet".
+  const entries = await loadActivityEntries()
 
   const days = summarizeActivityEntries(entries, { timeZone }) as ActivityDaySummary[]
   const heatmap = buildActivityHeatmap(days, { startDate, endDate }) as {

@@ -88,7 +88,7 @@ export async function delTag(id: number, options: { sync?: boolean } = {}) {
     await store.save()
   }
   if (options.sync !== false) enqueueRecordsAutoSync('tag:delete')
-  void import('@/lib/knowledge-index').then(({ reconcileStructuredKnowledgeSources }) => reconcileStructuredKnowledgeSources())
+  void import('@/lib/knowledge-index').then(({ reconcileStructuredKnowledgeSources }) => reconcileStructuredKnowledgeSources()).catch(error => console.error('Tag knowledge reconcile failed:', error))
   return { rowsAffected: 1 }
 }
 

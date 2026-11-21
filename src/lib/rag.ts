@@ -42,14 +42,31 @@ import {
 /**
  * 统一错误处理函数
  */
+// DA-2 (K-06): semantic search degradation must be visible
+// once per session instead of living only in console output.
+let semanticDegradedNotified = false;
+function notifySemanticDegradedOnce(): void {
+  if (semanticDegradedNotified) return;
+  semanticDegradedNotified = true;
+  toast({
+    title: 'Semantic search unavailable',
+    description: 'Vector search failed; results use keyword matching only.',
+    variant: 'destructive',
+  });
+}
+
 function handleRAGError(error: unknown, context: string, showToast: boolean = true): void {
   const errorMessage = error instanceof Error ? error.message : String(error);
   console.error(`[RAG Error] ${context}:`, errorMessage);
 
   if (showToast) {
+    // DA-2 (BUG-07): never render the raw error text; the raw
+    // message stays in the console.error above. This module has
+    // no translator (hardcoded English surface), so the generic
+    // sentence is English until the surface is localized.
     toast({
       title: 'RAG Error',
-      description: `${context}: ${errorMessage}`,
+      description: `${context}: The request failed. Please try again.`,
       variant: 'destructive',
     });
   }
@@ -292,13 +309,23 @@ export function chunkText(
  * 初始化 BM25 索引
  * 从工作区的 Markdown 文件构建 BM25 索引
  */
-export async function initBM25Search(): Promise<void> {
+export async function initBM25Search(): Promise<boolean> {
   try {
     const items = await collectMarkdownContents();
     const { collectCanvasKnowledgeDocuments, collectRecordKnowledgeDocuments } = await import('@/lib/knowledge-content');
+    // DA-2 (K-04): isolate the canvas collector; its legacy
+    // getDb() throw must not kill the whole BM25 build for
+    // articles and records.
+    const recordDocuments = await collectRecordKnowledgeDocuments();
+    let canvasDocuments: Awaited<ReturnType<typeof collectCanvasKnowledgeDocuments>> = [];
+    try {
+      canvasDocuments = await collectCanvasKnowledgeDocuments();
+    } catch (canvasError) {
+      console.error('Canvas knowledge collection failed; continuing without canvas documents:', canvasError);
+    }
     const structuredDocuments = [
-      ...await collectRecordKnowledgeDocuments(),
-      ...await collectCanvasKnowledgeDocuments(),
+      ...recordDocuments,
+      ...canvasDocuments,
     ];
     const store = await platform.store.load('store.json');
     const chunkSize = await store.get<number>('ragChunkSize');
@@ -320,8 +347,10 @@ export async function initBM25Search(): Promise<void> {
     )));
 
     initBM25Index(documents);
+    return true;
   } catch (error) {
     console.error('初始化 BM25 索引失败:', error);
+    return false;
   }
 }
 
@@ -487,6 +516,9 @@ export async function processMarkdownFile(
   filePath: string,
   fileContent?: string
 ): Promise<boolean> {
+  // DA-2 (K-02): hoisted so the catch below can mark the source
+  // failed instead of leaving it pending forever.
+  let vectorDocumentKey: string | null = null;
   try {
     // 检查文件是否在 skills 文件夹下，如果是则跳过处理
     const pathParts = filePath.split('/');
@@ -503,7 +535,7 @@ export async function processMarkdownFile(
       content = fileContent || await platform.fs.readTextFile(path, { baseDir })
     }
     const articlePath = getVectorDocumentKey(filePath);
-    const vectorDocumentKey = createKnowledgeSourceKey('article', articlePath);
+    vectorDocumentKey = createKnowledgeSourceKey('article', articlePath);
     const legacyFilename = filePath.split('/').pop() || filePath;
     // 空文件也视为成功处理，同时清理它可能遗留的旧索引。
     if (!content || content.trim().length === 0) {
@@ -591,12 +623,13 @@ export async function processMarkdownFile(
       await deleteVectorDocumentsByFilename(legacyFilename);
     }
 
+    const documentKey = vectorDocumentKey;
     await replaceVectorDocumentsByFilename(
-      vectorDocumentKey,
+      documentKey,
       chunks.flatMap((chunk, index) => {
         const embedding = embeddings[index];
         return embedding ? [{
-        filename: vectorDocumentKey,
+        filename: documentKey,
         chunk_id: index,
         content: chunk,
         embedding: JSON.stringify(embedding),
@@ -621,6 +654,19 @@ export async function processMarkdownFile(
     return true;
   } catch (error) {
     console.error(`处理文件 ${filePath} 失败:`, error);
+    // DA-2 (K-02): honest failed state; the state write itself is
+    // best-effort so it never masks the original error.
+    if (vectorDocumentKey) {
+      try {
+        await updateKnowledgeSourceIndexState(vectorDocumentKey, {
+          status: 'failed',
+          indexedHash: null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } catch (stateError) {
+        console.error('Failed to mark knowledge source as failed:', stateError);
+      }
+    }
     return false;
   }
 }
@@ -1128,6 +1174,7 @@ export async function getContextForQuery(
       }
     } catch (error) {
       handleRAGError(error, 'Vector search failed', false);
+      notifySemanticDegradedOnce();
     }
 
     // 3. 使用 BM25 搜索找到相关文档
@@ -1699,6 +1746,7 @@ export async function getContextForQueryInFolder(
       }
     } catch (error) {
       handleRAGError(error, 'Vector search failed', false);
+      notifySemanticDegradedOnce();
     }
 
     // 3. 使用 BM25 搜索找到相关文档（限定到文件夹范围）

@@ -618,6 +618,8 @@ export function EmptyState({
                       data={activity.data}
                       selectedDay={activity.selectedDay}
                       loading={activity.loading}
+                      error={activity.error}
+                      onRetry={activity.reload}
                       onSelectDay={activity.setSelectedDay}
                       showSummary={sectionId === 'activity'}
                       showHeatmap={sectionId === 'activity'}

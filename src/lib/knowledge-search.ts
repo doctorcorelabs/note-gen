@@ -150,9 +150,9 @@ async function resolveFragment(sourceKey: string, chunkId: number, content: stri
 async function searchOriginalKnowledge(
   query: string,
   options: KnowledgeSearchOptions = {}
-): Promise<KnowledgeSearchCandidate[]> {
+): Promise<{ candidates: KnowledgeSearchCandidate[]; semanticDegraded: boolean }> {
   const normalizedQuery = query.trim()
-  if (!normalizedQuery) return []
+  if (!normalizedQuery) return { candidates: [], semanticDegraded: false }
   const lexicalQuery = normalizedQuery.normalize('NFKC').toLowerCase()
   const exactIdentifier = getIdentifierTerms(normalizedQuery).includes(lexicalQuery)
     ? lexicalQuery : undefined
@@ -173,7 +173,7 @@ async function searchOriginalKnowledge(
       && matchesKnowledgeSearchScope(source, options)
       && (!dateRange || (source.updatedAt >= dateRange.start && source.updatedAt < dateRange.end))
     ))
-  if (sources.length === 0) return []
+  if (sources.length === 0) return { candidates: [], semanticDegraded: false }
   const sourceByKey = new Map(sources.map(source => [source.sourceKey, source]))
   const lexicalKeys = new Set(sources.map(source => source.sourceKey))
   const readyVectorKeys = new Set(sources
@@ -194,6 +194,13 @@ async function searchOriginalKnowledge(
     if (!current || candidate.score > current.score) candidates.set(key, candidate)
   }
 
+  // DA-2 (K-06): semantic search is degraded when it is enabled
+  // but no source is vector-ready, or when the vector leg fails;
+  // callers surface this instead of silently returning lexical
+  // results as if they were semantic.
+  let semanticDegraded = options.mode !== 'keyword'
+    && settings.semanticSearchEnabled
+    && readyVectorKeys.size === 0
   if (options.mode !== 'keyword' && settings.semanticSearchEnabled && readyVectorKeys.size > 0) {
     try {
       const queryEmbedding = await fetchEmbedding(normalizedQuery)
@@ -212,6 +219,7 @@ async function searchOriginalKnowledge(
         }))
       }
     } catch (error) {
+      semanticDegraded = true
       console.warn('统一知识库 Embedding 不可用，已降级为本地检索:', error)
     }
   }
@@ -269,7 +277,7 @@ async function searchOriginalKnowledge(
       fragments,
     }
   })
-  if (sourceCandidates.length === 0) return []
+  if (sourceCandidates.length === 0) return { candidates: [], semanticDegraded }
   const rankingInput = sourceCandidates.map((candidate, id) => ({
     id, filename: candidate.sourceKey, content: candidate.content, similarity: candidate.score,
   }))
@@ -325,11 +333,14 @@ async function searchOriginalKnowledge(
     if (hintedIndex >= 0) return hintedIndex
     return 10 + (source.sourceType === 'article' ? 0 : source.sourceType === 'record' ? 1 : 2)
   }
-  return results
-    .sort((left, right) => Math.abs(right.relevanceScore - left.relevanceScore) > 0.0001
-      ? right.relevanceScore - left.relevanceScore
-      : priority(left) - priority(right))
-    .slice(0, resultCount)
+  return {
+    candidates: results
+      .sort((left, right) => Math.abs(right.relevanceScore - left.relevanceScore) > 0.0001
+        ? right.relevanceScore - left.relevanceScore
+        : priority(left) - priority(right))
+      .slice(0, resultCount),
+    semanticDegraded,
+  }
 }
 
 const READ_PAGE_SIZE = 7000
@@ -368,7 +379,7 @@ export async function searchKnowledgeWithWiki(
       ? (await resolveWikiSourceReference(state.source))?.source : state.source
     if (source) states.set(source.sourceKey, { ...state, sourceKey: source.sourceKey, source })
   }
-  const original = await searchOriginalKnowledge(query, { ...options, limit,
+  const { candidates: original, semanticDegraded } = await searchOriginalKnowledge(query, { ...options, limit,
     sourceFilter: states ? source => {
       const state = states.get(source.sourceKey)
       return Boolean(state && !['deleted', 'excluded', 'unavailable'].includes(state.status)
@@ -397,6 +408,7 @@ export async function searchKnowledgeWithWiki(
       wikiPageIds: previous.wikiPageIds, evidenceKind: 'wiki' } : { ...hit, evidenceKind: 'source' })
   }
   return {
+    semanticDegraded,
     sources: [...results.values()].sort((left, right) => right.relevanceScore - left.relevanceScore).slice(0, limit),
     wikiPages: wiki.map(hit => ({
       contextId: context.id,

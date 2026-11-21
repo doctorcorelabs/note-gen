@@ -128,6 +128,11 @@ export interface SearchPage {
   results: SearchResultItem[];
   nextCursor: string | null;
   hasMore: boolean;
+  // DA-2 (F-15-03): true when the backing loader skipped input
+  // because of an error (unreadable file, failed version map), so
+  // the page may be incomplete. The pure engine never degrades;
+  // only the direct port sets this.
+  degraded: boolean;
 }
 
 export interface KeywordSearchPort {
@@ -506,6 +511,7 @@ export function executeKeywordSearch(
     results: page.map((candidate) => candidate.result),
     nextCursor: hasMore && last !== undefined ? encodeSearchCursor(input, last) : null,
     hasMore,
+    degraded: false,
   };
 }
 

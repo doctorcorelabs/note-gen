@@ -11,6 +11,7 @@ import {
 import { loadWebSearchSettings } from '@/lib/web-search/settings';
 import { isBuiltInOpenAIProvider, isMainlandChinaAppStore } from './storefront-policy';
 import { createTranslator, type AbstractIntlMessages } from 'next-intl';
+import { userErrorMessageKey } from '@/lib/web/user-error-message';
 import { DEFAULT_LOCALE, LANGUAGE_STORAGE_KEY, loadMessagesWithFallback, normalizeLocale } from '@/i18n/config';
 import fallbackCommonMessages from '../../../messages/common/zh.json';
 
@@ -269,7 +270,16 @@ export async function handleAIError(
   }
   const t = createTranslator({ locale, messages, namespace: 'common.requestErrors' })
   const title = t(operation)
-  const description = errorMessage.trim() || t('unknownError')
+  // DA-2 (BUG-07): map through the shared user error formatter
+  // instead of rendering the raw provider message. The return
+  // contract below ("title: description") is unchanged (SET-11
+  // is a separate item).
+  const tRoot = createTranslator({ locale, messages })
+  const errorKey = userErrorMessageKey(error)
+  const description = errorKey && tRoot.has(errorKey) ? tRoot(errorKey) : t('unknownError')
+  if (errorMessage.trim()) {
+    console.error('AI request failed:', errorMessage)
+  }
 
   if (showToast) {
     toast({

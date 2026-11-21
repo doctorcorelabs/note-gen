@@ -504,6 +504,26 @@ describe('keyword search', () => {
     await app.close();
   });
 
+  it('forwards a degraded page from the port instead of a literal false (F-15-03)', async () => {
+    const counter = countingPort(fixtureItems());
+    const degradedPort: KeywordSearchPort = {
+      async search(input: KeywordSearchInput): Promise<SearchPage> {
+        const page = await counter.port.search(input);
+        return { ...page, degraded: true };
+      },
+    };
+    const app = await searchApp({ port: degradedPort, calls: counter.calls });
+    const res = await app.inject({
+      method: 'GET',
+      url: searchUrl({ q: 'gagal jantung' }),
+      headers: SESSION_HEADERS,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as SearchEnvelopeBody;
+    expect(body.data.degraded).toBe(true);
+    await app.close();
+  });
+
   it('orders hits by score, then updatedAt, then the stable key', async () => {
     const counter = countingPort(fixtureItems());
     const app = await searchApp(counter);
@@ -1074,7 +1094,7 @@ describe('fake keyword search port', () => {
       cursor: undefined,
       limit: 50,
     });
-    expect(page).toEqual({ results: [], nextCursor: null, hasMore: false });
+    expect(page).toEqual({ results: [], nextCursor: null, hasMore: false, degraded: false });
   });
 
   it('falls back to the content start when a record desc is empty', async () => {

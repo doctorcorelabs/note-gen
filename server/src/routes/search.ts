@@ -67,7 +67,10 @@ export const FUZZY_MAX_LIMIT = 200;
 
 // The fuzzy status block of every keyword response (V1-14 8.2).
 // In MVP, fuzzy matching is declared unavailable; that is a
-// stated status, not a degradation, so degraded stays false.
+// stated status, not a degradation. The separate degraded flag
+// (DA-2 F-15-03) reports loader partiality from the search port:
+// true when files were skipped because of read errors or the
+// version map failed, so results may be incomplete.
 export const SEARCH_FUZZY_STATUS = {
   available: false,
   reason: 'not_in_mvp',
@@ -373,7 +376,7 @@ export async function registerSearchRoutes(app: FastifyInstance, deps: SearchRou
         nextCursor: page.nextCursor,
         hasMore: page.hasMore,
         fuzzy: { ...SEARCH_FUZZY_STATUS },
-        degraded: false,
+        degraded: page.degraded,
       };
       return successEnvelope(data);
     },

@@ -10,7 +10,10 @@ import type { DialogAdapter } from "./dialog/interface";
 import type { EventAdapter } from "./event/interface";
 import type { FsAdapter } from "./fs/interface";
 import type { HttpAdapter } from "./http/interface";
-import type { NotificationAdapter } from "./notification/interface";
+import type {
+  NotificationAdapter,
+  NotificationAdapterExtensions,
+} from "./notification/interface";
 import type { OpenerAdapter } from "./opener/interface";
 import type { OsAdapter } from "./os/interface";
 import type { PathAdapter } from "./path/interface";
@@ -62,7 +65,11 @@ export interface PlatformAdapters {
   readonly http: HttpAdapter;
   readonly os: OsAdapter;
   readonly clipboard: ClipboardAdapter;
-  readonly notification: NotificationAdapter;
+  // DA-2 (ACT-02): widened so the UI can reach the in-app
+  // fallback surface (onInAppNotification) where the running
+  // adapter provides it; Partial keeps adapters without the
+  // extension (tauri) valid.
+  readonly notification: NotificationAdapter & Partial<NotificationAdapterExtensions>;
   readonly window: WindowAdapter;
   readonly event: EventAdapter;
   readonly shortcut: ShortcutAdapter;

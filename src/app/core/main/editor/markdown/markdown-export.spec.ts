@@ -22,7 +22,37 @@ vi.mock("@/lib/markdown/export-document", () => ({
   renderMarkdownExportFragment: async () => ({ html: "<p>halo</p>" }),
 }));
 
-import { exportMarkdownSource } from "./markdown-export";
+const exportFileMocks = vi.hoisted(() => ({
+  readTextFile: vi.fn(),
+}));
+
+vi.mock("@/lib/workspace", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/workspace")>();
+  return {
+    ...actual,
+    getFilePathOptions: async (filePath: string) => ({ path: filePath }),
+  };
+});
+
+vi.mock("@/lib/platform", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/platform")>();
+  return {
+    ...actual,
+    platform: {
+      fs: {
+        readTextFile: exportFileMocks.readTextFile,
+        writeTextFile: async () => {},
+      },
+      dialog: { save: async () => null },
+      event: { once: async () => () => {} },
+      os: { platform: async () => "web" },
+      store: { load: async () => ({ get: async () => null }) },
+      window: { createWebviewWindow: async () => ({}) },
+    },
+  };
+});
+
+import { exportMarkdownFile, exportMarkdownSource } from "./markdown-export";
 
 type RafCallback = () => void;
 
@@ -128,5 +158,42 @@ describe("web PDF export (UTANG-UJI-07 putaran 2)", () => {
 
     await expect(promise).resolves.toBe(true);
     expect(printMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("file-tree export flush guard (EXP-04)", () => {
+  it("aborts before reading disk when the pending-save flush fails", async () => {
+    exportFileMocks.readTextFile.mockResolvedValue("# Halo");
+    const flushPendingSave = vi.fn(async () => false);
+    await expect(
+      exportMarkdownFile("markdown", "note.md", { flushPendingSave }),
+    ).rejects.toThrow("UNSAVED_CHANGES");
+    expect(flushPendingSave).toHaveBeenCalledTimes(1);
+    expect(exportFileMocks.readTextFile).not.toHaveBeenCalled();
+  });
+
+  it("flushes before reading disk when the flush succeeds", async () => {
+    exportFileMocks.readTextFile.mockResolvedValue("# Halo");
+    const order: string[] = [];
+    const flushPendingSave = vi.fn(async () => {
+      order.push("flush");
+      return true;
+    });
+    exportFileMocks.readTextFile.mockImplementation(async () => {
+      order.push("read");
+      return "# Halo";
+    });
+    const link = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: () => link,
+      body: { appendChild: vi.fn() },
+      styleSheets: [],
+      baseURI: "http://localhost/",
+    });
+    await expect(
+      exportMarkdownFile("markdown", "note.md", { flushPendingSave }),
+    ).resolves.toBe(true);
+    expect(order).toEqual(["flush", "read"]);
+    expect(link.click).toHaveBeenCalledTimes(1);
   });
 });

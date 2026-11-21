@@ -3786,7 +3786,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
       set({ currentArticle: localContent, loading: false })
       // 检查文件的向量索引状态
       if (!isAbsoluteFsPath(actualPath)) {
-        get().checkFileVectorIndexed(actualPath)
+        void get().checkFileVectorIndexed(actualPath).catch(error => console.error('Vector index check failed:', error))
       }
     } catch (error) {
       if (!isCurrentArticleRead()) return

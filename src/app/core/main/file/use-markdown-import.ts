@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { platform, type DialogPickedFile } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
 import { useTranslations } from 'next-intl'
+import { useUserErrorMessage } from "@/lib/use-user-error-message";
 import { toast } from '@/hooks/use-toast'
 import { getWorkspacePath } from '@/lib/workspace'
 import useArticleStore from '@/stores/article'
@@ -58,12 +59,20 @@ async function getAvailableCopyPath(targetDir: string, fileName: string) {
   return candidate
 }
 
-async function copyMarkdownFilesRecursively(
+export interface MarkdownCopyResult {
+  copied: number
+  failures: string[]
+}
+
+// DA-2 (IMP-02): per-file failures are collected and reported
+// instead of aborting the whole folder import at the first bad
+// file (mirrors convertDocumentsToMarkdown in this file).
+export async function copyMarkdownFilesRecursively(
   sourceDir: string,
   targetDir: string,
   relativePath = ''
-): Promise<number> {
-  let copiedCount = 0
+): Promise<MarkdownCopyResult> {
+  const result: MarkdownCopyResult = { copied: 0, failures: [] }
   const entries = await platform.fs.readDir(sourceDir)
 
   for (const entry of entries) {
@@ -74,39 +83,46 @@ async function copyMarkdownFilesRecursively(
     const sourcePath = await platform.path.join(sourceDir, entry.name)
     const nextRelativePath = relativePath ? await platform.path.join(relativePath, entry.name) : entry.name
 
-    if (entry.isDirectory) {
-      copiedCount += await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath)
-      continue
-    }
+    try {
+      if (entry.isDirectory) {
+        const nested = await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath)
+        result.copied += nested.copied
+        result.failures.push(...nested.failures)
+        continue
+      }
 
-    if (!entry.isFile) {
-      continue
-    }
+      if (!entry.isFile) {
+        continue
+      }
 
-    const isMarkdown = entry.name.endsWith('.md')
-    const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(entry.name)
-    if (!isMarkdown && !isImage) {
-      continue
-    }
+      const isMarkdown = entry.name.endsWith('.md')
+      const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(entry.name)
+      if (!isMarkdown && !isImage) {
+        continue
+      }
 
-    const targetDirectory = relativePath ? await platform.path.join(targetDir, relativePath) : targetDir
-    if (!await platform.fs.exists(targetDirectory)) {
-      await platform.fs.mkdir(targetDirectory, { recursive: true })
-    }
+      const targetDirectory = relativePath ? await platform.path.join(targetDir, relativePath) : targetDir
+      if (!await platform.fs.exists(targetDirectory)) {
+        await platform.fs.mkdir(targetDirectory, { recursive: true })
+      }
 
-    const availableTarget = await getAvailableCopyPath(targetDirectory, entry.name)
-    await platform.fs.copyFile(sourcePath, availableTarget)
-    copiedCount++
+      const availableTarget = await getAvailableCopyPath(targetDirectory, entry.name)
+      await platform.fs.copyFile(sourcePath, availableTarget)
+      result.copied++
+    } catch (error) {
+      console.error(`Import copy failed: ${entry.name}`, error)
+      result.failures.push(entry.name)
+    }
   }
 
-  return copiedCount
+  return result
 }
 
-async function copyPickedMarkdownFiles(
+export async function copyPickedMarkdownFiles(
   picked: DialogPickedFile[],
   targetDir: string,
-): Promise<number> {
-  let copiedCount = 0
+): Promise<MarkdownCopyResult> {
+  const result: MarkdownCopyResult = { copied: 0, failures: [] }
 
   for (const entry of picked) {
     // Directory picks report paths relative to the picked directory
@@ -135,28 +151,34 @@ async function copyPickedMarkdownFiles(
       continue
     }
 
-    const targetDirectory = parts.length > 1
-      ? await platform.path.join(targetDir, ...parts.slice(0, -1))
-      : targetDir
-    if (!await platform.fs.exists(targetDirectory)) {
-      await platform.fs.mkdir(targetDirectory, { recursive: true })
-    }
+    try {
+      const targetDirectory = parts.length > 1
+        ? await platform.path.join(targetDir, ...parts.slice(0, -1))
+        : targetDir
+      if (!await platform.fs.exists(targetDirectory)) {
+        await platform.fs.mkdir(targetDirectory, { recursive: true })
+      }
 
-    // DA-12-11 reconciliation (R24-OVLP3): the web picked-files
-    // path gets the same no-overwrite treatment as the desktop
-    // recursive copy; a colliding name lands on a suffixed copy.
-    const targetPath = await getAvailableCopyPath(targetDirectory, fileName)
-    await platform.fs.writeFile(targetPath, new Uint8Array(await entry.file.arrayBuffer()))
-    copiedCount++
+      // DA-12-11 reconciliation (R24-OVLP3): the web picked-files
+      // path gets the same no-overwrite treatment as the desktop
+      // recursive copy; a colliding name lands on a suffixed copy.
+      const targetPath = await getAvailableCopyPath(targetDirectory, fileName)
+      await platform.fs.writeFile(targetPath, new Uint8Array(await entry.file.arrayBuffer()))
+      result.copied++
+    } catch (error) {
+      console.error(`Import copy failed: ${fileName}`, error)
+      result.failures.push(fileName)
+    }
   }
 
-  return copiedCount
+  return result
 }
 
 export function useMarkdownImport() {
   const [isImporting, setIsImporting] = useState(false)
   const loadFileTree = useArticleStore(state => state.loadFileTree)
   const t = useTranslations('article.file.toolbar')
+  const userErrorMessage = useUserErrorMessage()
 
   const importMarkdown = useCallback(async () => {
     if (isImporting) {
@@ -169,7 +191,7 @@ export function useMarkdownImport() {
       const targetDir = workspace.isCustom
         ? workspace.path
         : await platform.path.join(await platform.path.appDataDir(), 'article')
-      let copiedCount: number
+      let copyResult: MarkdownCopyResult
       if (!checkIsTauri()) {
         // Web mode has no OS paths: the content-shaped directory
         // pick returns the picked files with their content.
@@ -183,7 +205,7 @@ export function useMarkdownImport() {
           return
         }
         const pickedFiles = Array.isArray(picked) ? picked : [picked]
-        copiedCount = await copyPickedMarkdownFiles(pickedFiles, targetDir)
+        copyResult = await copyPickedMarkdownFiles(pickedFiles, targetDir)
       } else {
         const selectedPath = await platform.dialog.open({
           directory: true,
@@ -195,25 +217,35 @@ export function useMarkdownImport() {
           return
         }
 
-        copiedCount = await copyMarkdownFilesRecursively(selectedPath, targetDir)
+        copyResult = await copyMarkdownFilesRecursively(selectedPath, targetDir)
       }
 
-      await loadFileTree()
-      toast({
-        title: t('importSuccess'),
-        description: t('importSuccessDesc', { count: copiedCount }),
-      })
+      if (copyResult.copied > 0) {
+        await loadFileTree()
+        toast({
+          title: t('importSuccess'),
+          description: copyResult.failures.length > 0
+            ? t('importPartialDesc', { success: copyResult.copied, failed: copyResult.failures.length })
+            : t('importSuccessDesc', { count: copyResult.copied }),
+        })
+      } else if (copyResult.failures.length > 0) {
+        toast({
+          title: t('importError'),
+          description: copyResult.failures.join(', '),
+          variant: 'destructive',
+        })
+      }
     } catch (error) {
       console.error('Import markdown error:', error)
       toast({
         title: t('importError'),
-        description: String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     } finally {
       setIsImporting(false)
     }
-  }, [isImporting, loadFileTree, t])
+  }, [isImporting, loadFileTree, t, userErrorMessage])
 
   const importNotionZip = useCallback(async () => {
     if (isImporting) {
@@ -250,13 +282,13 @@ export function useMarkdownImport() {
       console.error('Import notion zip error:', error)
       toast({
         title: t('importError'),
-        description: String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     } finally {
       setIsImporting(false)
     }
-  }, [isImporting, loadFileTree, t])
+  }, [isImporting, loadFileTree, t, userErrorMessage])
 
   const convertDocumentsToMarkdown = useCallback(async () => {
     if (isImporting) {
@@ -319,13 +351,13 @@ export function useMarkdownImport() {
       console.error('Convert documents to Markdown error:', error)
       toast({
         title: t('convertError'),
-        description: String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     } finally {
       setIsImporting(false)
     }
-  }, [isImporting, loadFileTree, t])
+  }, [isImporting, loadFileTree, t, userErrorMessage])
 
   return { isImporting, importMarkdown, importNotionZip, convertDocumentsToMarkdown }
 }

@@ -23,6 +23,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from 'next/navigation'
 import { Chat } from "@/db/chats"
 import { useTranslations } from "next-intl"
+import { toast } from "@/hooks/use-toast"
+import { useUserErrorMessage } from "@/lib/use-user-error-message"
 import useArticleStore from "@/stores/article"
 import { useIsMobile } from "@/hooks/use-mobile"
 
@@ -37,6 +39,7 @@ export function NoteOutput({chat}: {chat: Chat}) {
   const [folders, setFolders] = useState<string[]>([])
   const [isRemove, setIsRemove] = useState<CheckedState>(true)
   const t = useTranslations('record.chat')
+  const userErrorMessage = useUserErrorMessage()
   const router = useRouter()
   const isMobile = useIsMobile()
 
@@ -76,7 +79,17 @@ export function NoteOutput({chat}: {chat: Chat}) {
     const store = await platform.store.load('store.json');
     await store.set('activeFilePath', finalTitle)
     if (isRemove) {
-      deleteTag(currentTagId)
+      // DA-2 (TAG-02): await the destructive delete and report
+      // failure; the note is already saved, so a failed delete
+      // must not cancel navigation, but it must not be silent.
+      try {
+        await deleteTag(currentTagId)
+      } catch (error) {
+        const message = userErrorMessage(error)
+        if (message) {
+          toast({ description: message, variant: 'destructive' })
+        }
+      }
     }
     setOpen(false)
     await loadFileTree()

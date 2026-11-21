@@ -67,7 +67,7 @@ async function recordCanvasProjectActivity(id: string, title: string, createdAt:
 function enqueueCanvasKnowledgeIndex(id: string) {
   void import('@/lib/knowledge-index').then(({ enqueueKnowledgeSourceIndex }) => {
     enqueueKnowledgeSourceIndex(`canvas:${id}`)
-  })
+  }).catch(error => console.error('Canvas knowledge enqueue failed:', error))
 }
 
 async function invalidateCanvasKnowledgeIndex(id: string) {
@@ -89,8 +89,8 @@ async function removeCanvasKnowledgeIndex(id: string) {
 
 function reconcileCanvasKnowledgeIndex() {
   void import('@/lib/knowledge-index').then(({ reconcileStructuredKnowledgeSources }) => {
-    void reconcileStructuredKnowledgeSources()
-  })
+    void reconcileStructuredKnowledgeSources().catch(error => console.error('Canvas knowledge reconcile failed:', error))
+  }).catch(error => console.error('Canvas knowledge reconcile failed:', error))
 }
 
 export async function initCanvasesDb() {

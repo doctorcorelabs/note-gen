@@ -348,6 +348,9 @@ export interface SlashCommandTranslations {
   fileInsert: {
     failed: string
   }
+  // DA-2 (BUG-07): shared user error formatter supplied by the
+  // hook-owning caller; returns null for silent aborts.
+  errorMessage?: (error: unknown) => string | null
 }
 
 // 导出搜索函数供外部使用
@@ -680,7 +683,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
           if (!isCurrentOperation()) return
           toast({
             title: tr.imageUpload.failed,
-            description: error instanceof Error ? error.message : 'Unknown error',
+            description: tr.errorMessage?.(error) ?? undefined,
             variant: 'destructive',
           })
         } finally {
@@ -728,7 +731,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
         } catch (error) {
           toast({
             title: tr.fileInsert.failed,
-            description: error instanceof Error ? error.message : 'Unknown error',
+            description: tr.errorMessage?.(error) ?? undefined,
             variant: 'destructive',
           })
         }

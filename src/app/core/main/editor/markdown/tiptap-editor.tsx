@@ -53,6 +53,7 @@ import {
 import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { pickImagesFromPhotoLibrary } from '@/lib/image-picker'
 import { useTranslations } from 'next-intl'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { replaceLinesInRange } from '@/lib/agent/react-diff-helpers'
 import { agentDebugLog } from '@/lib/agent/debug-log'
 import { buildEditorTextEdits, EDITOR_EDIT_SKIPPED, EditorEditSkipped } from '@/lib/agent/editor-adapter'
@@ -2491,6 +2492,7 @@ export function TipTapEditor({
   const tSelfHosted = useTranslations('settings.sync.selfHosted')
   const tMermaid = useTranslations('editor.mermaid.templates')
   const tImage = useTranslations('editor.image')
+  const userErrorMessage = useUserErrorMessage()
   const tSourceMode = useTranslations('settings.editor.sourceMode')
   const tAgentDiff = useTranslations('agentDiffNavigation')
   const tDisabled = useTranslations('editor.disabled')
@@ -5476,7 +5478,7 @@ export function TipTapEditor({
           if (!isCurrentOperation()) return
           toast({
             title: tImage('failed'),
-            description: error instanceof Error ? error.message : undefined,
+            description: userErrorMessage(error) ?? undefined,
             variant: 'destructive',
           })
         })
@@ -5624,7 +5626,7 @@ export function TipTapEditor({
             : droppedImageFiles.length > 0
               ? tImage('failed')
               : t('slashCommand.fileInsert.failed'),
-          description: error instanceof Error ? error.message : undefined,
+          description: userErrorMessage(error) ?? undefined,
           variant: 'destructive',
         })
       }).finally(() => {
@@ -5645,7 +5647,7 @@ export function TipTapEditor({
       dom.removeEventListener('paste', handlePaste as EventListener)
       dom.removeEventListener('drop', handleDrop as EventListener, true)
     }
-  }, [captureEditorOperation, editor, t, tImage])
+  }, [captureEditorOperation, editor, t, tImage, userErrorMessage])
 
   // Use the same Markdown clipboard content for copy and cut.
   useEffect(() => {
@@ -5885,14 +5887,14 @@ export function TipTapEditor({
       if (!isCurrentOperation()) return
       toast({
         title: tImage('failed'),
-        description: error instanceof Error ? error.message : undefined,
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     } finally {
       placeholder.remove()
       editorOperationCleanupsRef.current.delete(placeholder.remove)
     }
-  }, [captureEditorOperation, editor, isMobile, tImage])
+  }, [captureEditorOperation, editor, isMobile, tImage, userErrorMessage])
 
   useEffect(() => {
     if (!isActive) return
@@ -6661,7 +6663,7 @@ export function TipTapEditor({
         if (!currentController.signal.aborted) {
           toast({
             title: t('aiGenerate.continueFailed'),
-            description: error instanceof Error ? error.message : String(error),
+            description: userErrorMessage(error) ?? undefined,
             variant: 'destructive',
           })
         }
@@ -6926,7 +6928,7 @@ export function TipTapEditor({
               if (!isCurrentOperation()) return
               toast({
                 title: tImage('failed'),
-                description: error instanceof Error ? error.message : undefined,
+                description: userErrorMessage(error) ?? undefined,
                 variant: 'destructive',
               })
             })
@@ -6953,7 +6955,7 @@ export function TipTapEditor({
         console.error('Failed to parse dropped mark:', error)
       }
     }
-  }, [captureEditorOperation, editor, tImage])
+  }, [captureEditorOperation, editor, tImage, userErrorMessage])
 
   // Handle math formula insertion from slash menu
   useEffect(() => {

@@ -1,5 +1,6 @@
 'use client'
 import { Toaster } from "@/components/ui/sonner"
+import { InAppNotificationToasts } from "@/components/in-app-notification-toasts"
 import "./globals.css";
 import 'react-photo-view/dist/react-photo-view.css';
 import { Suspense, useEffect } from "react";
@@ -71,6 +72,7 @@ export default function RootLayout({
             </TooltipProvider>
           </Suspense>
           <Toaster closeButton richColors position="top-center" />
+          <InAppNotificationToasts />
         </body>
       </html>
     </>

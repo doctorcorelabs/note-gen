@@ -31,6 +31,7 @@ import useClipboardStore from "@/stores/clipboard"
 import { MobileActionMenu, MobileMenuItem, MobileSeparator } from "../mobile-action-menu"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTranslations } from "next-intl"
+import { useUserErrorMessage } from "@/lib/use-user-error-message"
 import { FolderVectorMenu } from './folder-vector-menu'
 import { pasteIntoFolder } from './paste-into-folder'
 import emitter from '@/lib/emitter'
@@ -98,6 +99,7 @@ export function FolderItem({
   const pendingDeletionPaths = useFileDeletionStore(state => state.pendingPaths)
   const isMobile = useIsMobile()
   const t = useTranslations('article.file')
+  const userErrorMessage = useUserErrorMessage()
   const tCommon = useTranslations('common')
 
   // 检查路径是否在 skills 文件夹下
@@ -368,7 +370,7 @@ export function FolderItem({
     try {
       await commitRename()
     } catch (error) {
-      setRenameError(error instanceof Error ? error.message : String(error))
+      setRenameError(userErrorMessage(error) ?? '')
     } finally {
       renameInProgressRef.current = false
       setIsRenaming(false)
@@ -459,7 +461,7 @@ export function FolderItem({
         const { renameVectorDocumentsByPrefix } = await import('@/db/vector')
         await renameVectorDocumentsByPrefix(path, targetRelativePath)
       } catch (error) {
-        setRenameError(error instanceof Error ? error.message : String(error))
+        setRenameError(userErrorMessage(error) ?? '')
         setTimeout(() => inputRef.current?.focus(), 0)
         return
       } finally {

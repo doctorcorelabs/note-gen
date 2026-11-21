@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import useArticleStore from '@/stores/article'
 import { toast } from '@/hooks/use-toast'
+import { useTranslations } from 'next-intl'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import {
   exportMarkdownSource,
   getMarkdownExportBaseName,
@@ -26,6 +28,8 @@ interface ExportButtonProps {
 export function ExportButton({ editor, markdown, getMarkdown }: ExportButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [exporting, setExporting] = useState<MarkdownExportFormat | null>(null)
+  const t = useTranslations('article.file')
+  const userErrorMessage = useUserErrorMessage()
 
   const showPdfExportStart = useCallback(() => {
     toast({
@@ -51,20 +55,20 @@ export function ExportButton({ editor, markdown, getMarkdown }: ExportButtonProp
       )
 
       if (exported) {
-        toast({ title: format === 'pdf' ? 'PDF print window opened' : 'Export successful' })
+        toast({ title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess') })
       }
     } catch (error) {
       console.error(`${format} export failed:`, error)
       toast({
-        title: 'Export failed',
-        description: error instanceof Error ? error.message : String(error),
+        title: t('exportFailed'),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     } finally {
       setExporting(null)
       setIsOpen(false)
     }
-  }, [editor, getMarkdown, markdown, showPdfExportStart])
+  }, [editor, getMarkdown, markdown, showPdfExportStart, t, userErrorMessage])
 
   const handleExport = useCallback((format: MarkdownExportFormat) => {
     void runExport(format)

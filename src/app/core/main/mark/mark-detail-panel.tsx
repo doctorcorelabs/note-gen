@@ -69,6 +69,8 @@ import { platform, BaseDirectory } from "@/lib/platform"
 import { ImageRecognitionStage, recognizeImageWithFallback } from "@/lib/image-recognition"
 import { getImageRecognitionProgressText } from "@/lib/image-recognition-progress"
 import { toast } from "@/hooks/use-toast"
+import { useUserErrorMessage } from "@/lib/use-user-error-message"
+import { runPanelAction } from "./panel-action"
 import { canOpenMarkSource, getMarkOpenAction } from "./mark-open-path"
 import { createRecordTab, getRecordTabPath } from "./mark-record-tab"
 import { getMarkTypeListBadgeClasses } from "./mark-type-meta"
@@ -399,67 +401,87 @@ function MarkDetailToolbar({
     }
   }, [fetchAllMarks, fetchAllTrashMarks, fetchMarks, isTrashMark])
 
+  const userErrorMessage = useUserErrorMessage()
+  const reportPanelError = useCallback((error: unknown) => {
+    const message = userErrorMessage(error)
+    if (message) {
+      toast({ title: t('common.error'), description: message, variant: 'destructive' })
+    }
+  }, [t, userErrorMessage])
+  const panelActionDeps = useMemo(() => ({
+    isConflict: isMarkRevisionConflict,
+    showError: reportPanelError,
+  }), [reportPanelError])
+
   const handleTransfer = useCallback(async (tagId: number) => {
-    await updateMark({ ...mark, tagId, tagIds: [...markTagIds.filter((id) => id !== mark.tagId), tagId] })
-    await fetchTags()
-    getCurrentTag()
-    await refreshMarks()
-  }, [fetchTags, getCurrentTag, mark, markTagIds, refreshMarks, updateMark])
+    await runPanelAction(async () => {
+      await updateMark({ ...mark, tagId, tagIds: [...markTagIds.filter((id) => id !== mark.tagId), tagId] })
+      await fetchTags()
+      getCurrentTag()
+      await refreshMarks()
+    }, panelActionDeps)
+  }, [fetchTags, getCurrentTag, mark, markTagIds, panelActionDeps, refreshMarks, updateMark])
 
   const handleTitleChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextTitle = event.target.value
     setTitleValue(nextTitle)
 
-    if (mark.type === 'todo') {
-      const todoData = parseTodoMarkContent(mark)
-      await updateMark({
-        ...mark,
-        desc: nextTitle.trim(),
-        content: JSON.stringify({
-          ...todoData,
-          title: nextTitle,
-        }),
-      })
-      return
-    }
+    await runPanelAction(async () => {
+      if (mark.type === 'todo') {
+        const todoData = parseTodoMarkContent(mark)
+        await updateMark({
+          ...mark,
+          desc: nextTitle.trim(),
+          content: JSON.stringify({
+            ...todoData,
+            title: nextTitle,
+          }),
+        })
+        return
+      }
 
-    if (mark.type === 'text') {
+      if (mark.type === 'text') {
+        await updateMark({
+          ...mark,
+          content: nextTitle,
+          desc: nextTitle,
+        })
+        return
+      }
+
       await updateMark({
         ...mark,
-        content: nextTitle,
         desc: nextTitle,
       })
-      return
-    }
-
-    await updateMark({
-      ...mark,
-      desc: nextTitle,
-    })
-  }, [mark, updateMark])
+    }, panelActionDeps)
+  }, [mark, panelActionDeps, updateMark])
 
   const handleTodoMetaChange = useCallback(async (nextTodoData: TodoData) => {
     if (mark.type !== 'todo') {
       return
     }
 
-    await updateMark({
-      ...mark,
-      desc: nextTodoData.title.trim(),
-      content: JSON.stringify(nextTodoData),
-    })
-    await fetchTags()
-    getCurrentTag()
-  }, [fetchTags, getCurrentTag, mark, updateMark])
+    await runPanelAction(async () => {
+      await updateMark({
+        ...mark,
+        desc: nextTodoData.title.trim(),
+        content: JSON.stringify(nextTodoData),
+      })
+      await fetchTags()
+      getCurrentTag()
+    }, panelActionDeps)
+  }, [fetchTags, getCurrentTag, mark, panelActionDeps, updateMark])
 
   const handleCopyLink = useCallback(async () => {
     if (!mark.url) {
       return
     }
 
-    await navigator.clipboard.writeText(mark.url)
-    toast({ title: t('record.mark.toolbar.copied') })
-  }, [mark.url, t])
+    await runPanelAction(async () => {
+      await navigator.clipboard.writeText(mark.url)
+      toast({ title: t('record.mark.toolbar.copied') })
+    }, panelActionDeps)
+  }, [mark.url, panelActionDeps, t])
 
   const handleRegenerateDesc = useCallback(async () => {
     if (mark.type === 'text' || !mark.content?.trim()) {
@@ -525,37 +547,46 @@ function MarkDetailToolbar({
   }, [mark, t])
 
   const handleRestore = useCallback(async () => {
-    await restoreMark(mark.id)
-    await fetchAllTrashMarks()
-    await removeTab(getRecordTabPath(mark.id))
-    if (nextMark) {
-      setActiveMarkId(nextMark.id)
-      const recordTab = createRecordTab(nextMark, t(`record.mark.type.${nextMark.type}`))
-      await addTab(recordTab)
-      await setActiveTabId(recordTab.id)
-      await setActiveFilePath('')
-      return
-    }
+    await runPanelAction(async () => {
+      await restoreMark(mark.id)
+      await fetchAllTrashMarks()
+      await removeTab(getRecordTabPath(mark.id))
+      if (nextMark) {
+        setActiveMarkId(nextMark.id)
+        const recordTab = createRecordTab(nextMark, t(`record.mark.type.${nextMark.type}`))
+        await addTab(recordTab)
+        await setActiveTabId(recordTab.id)
+        await setActiveFilePath('')
+        return
+      }
 
-    clearActiveMark()
-    onClose()
-  }, [addTab, clearActiveMark, fetchAllTrashMarks, mark.id, nextMark, onClose, removeTab, setActiveFilePath, setActiveMarkId, setActiveTabId, t])
+      clearActiveMark()
+      onClose()
+    }, panelActionDeps)
+  }, [addTab, clearActiveMark, fetchAllTrashMarks, mark.id, nextMark, onClose, panelActionDeps, removeTab, setActiveFilePath, setActiveMarkId, setActiveTabId, t])
 
   const handleDelete = useCallback(async () => {
     const candidateMark = nextMark
 
-    if (destructiveAction === 'deleteForever') {
-      await delMarkForever(mark.id)
-      await fetchAllTrashMarks()
-    } else if (destructiveAction === 'delete') {
-      await delMark(mark.id)
-      await fetchMarks()
-      await fetchAllMarks()
-      await fetchTags()
-      getCurrentTag()
-    }
+    // DA-2 (T-02-02): the confirm dialog closes in finally so a
+    // failed delete never leaves it hanging without a message;
+    // tab navigation below only runs after a successful delete.
+    let deleted = false
+    await runPanelAction(async () => {
+      if (destructiveAction === 'deleteForever') {
+        await delMarkForever(mark.id)
+        await fetchAllTrashMarks()
+      } else if (destructiveAction === 'delete') {
+        await delMark(mark.id)
+        await fetchMarks()
+        await fetchAllMarks()
+        await fetchTags()
+        getCurrentTag()
+      }
+      deleted = true
+    }, panelActionDeps, () => setDestructiveAction(null))
+    if (!deleted) return
 
-    setDestructiveAction(null)
     await removeTab(getRecordTabPath(mark.id))
 
     if (candidateMark) {
@@ -783,6 +814,17 @@ function TodoDetailEditor({ mark, isActive }: { mark: Mark; isActive: boolean })
   const t = useTranslations()
   const { updateMark } = useMarkStore()
   const { fetchTags, getCurrentTag } = useTagStore()
+  const userErrorMessage = useUserErrorMessage()
+  const reportPanelError = useCallback((error: unknown) => {
+    const message = userErrorMessage(error)
+    if (message) {
+      toast({ title: t('common.error'), description: message, variant: 'destructive' })
+    }
+  }, [t, userErrorMessage])
+  const panelActionDeps = useMemo(() => ({
+    isConflict: isMarkRevisionConflict,
+    showError: reportPanelError,
+  }), [reportPanelError])
   const [todoData, setTodoData] = useState<TodoData>(() => parseTodoMarkContent(mark))
   const isLargeDescription = isLargeMarkdownDocument(todoData.description)
 
@@ -792,14 +834,16 @@ function TodoDetailEditor({ mark, isActive }: { mark: Mark; isActive: boolean })
 
   const persistTodoData = useCallback(async (nextTodoData: TodoData) => {
     setTodoData(nextTodoData)
-    await updateMark({
-      ...mark,
-      desc: nextTodoData.title.trim(),
-      content: JSON.stringify(nextTodoData),
-    })
-    await fetchTags()
-    getCurrentTag()
-  }, [fetchTags, getCurrentTag, mark, updateMark])
+    await runPanelAction(async () => {
+      await updateMark({
+        ...mark,
+        desc: nextTodoData.title.trim(),
+        content: JSON.stringify(nextTodoData),
+      })
+      await fetchTags()
+      getCurrentTag()
+    }, panelActionDeps)
+  }, [fetchTags, getCurrentTag, mark, panelActionDeps, updateMark])
 
   const handleDescriptionChange = useCallback((description: string) => {
     void persistTodoData({ ...todoData, description })
@@ -847,6 +891,17 @@ function TodoDetailEditor({ mark, isActive }: { mark: Mark; isActive: boolean })
 function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
   const t = useTranslations()
   const markT = useTranslations('record.mark')
+  const userErrorMessage = useUserErrorMessage()
+  const reportPanelError = useCallback((error: unknown) => {
+    const message = userErrorMessage(error)
+    if (message) {
+      toast({ title: t('common.error'), description: message, variant: 'destructive' })
+    }
+  }, [t, userErrorMessage])
+  const panelActionDeps = useMemo(() => ({
+    isConflict: isMarkRevisionConflict,
+    showError: reportPanelError,
+  }), [reportPanelError])
   const { updateMark } = useMarkStore()
   const { primaryModel } = useSettingStore()
   const [value, setValue] = useState(() => mark.content || '')
@@ -865,16 +920,18 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
 
   const handleContentChange = useCallback(async (nextContent: string) => {
     setValue(nextContent)
-    await updateMark({
-      ...mark,
-      content: nextContent,
-      desc: mark.type === 'text'
-        ? nextContent
-        : mark.type === 'recording'
-          ? nextContent.trim().slice(0, 100)
-          : mark.desc,
-    })
-  }, [mark, updateMark])
+    await runPanelAction(async () => {
+      await updateMark({
+        ...mark,
+        content: nextContent,
+        desc: mark.type === 'text'
+          ? nextContent
+          : mark.type === 'recording'
+            ? nextContent.trim().slice(0, 100)
+            : mark.desc,
+      })
+    }, panelActionDeps)
+  }, [mark, panelActionDeps, updateMark])
 
   const handleRecognizeImage = useCallback(async () => {
     if (mark.type !== 'image' && mark.type !== 'scan') {

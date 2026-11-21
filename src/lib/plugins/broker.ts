@@ -1055,11 +1055,17 @@ async function reconcileCreatedNote(
   }
   await useArticleStore.getState().ensurePathExpanded(path)
   useArticleStore.getState().scheduleVectorCalculation(path, content)
-  await recordWritingActivity({
-    path,
-    title: path.split('/').pop()?.replace(/\.md$/i, '') || path,
-    description: path,
-  })
+  // DA-2 (ACT-03): activity recording must not fail plugin note
+  // propagation; mirror the main save path (stores/article.ts).
+  try {
+    await recordWritingActivity({
+      path,
+      title: path.split('/').pop()?.replace(/\.md$/i, '') || path,
+      description: path,
+    })
+  } catch (error) {
+    console.error('Failed to record plugin writing activity:', error)
+  }
   emitPluginNoteChange(
     { type: changeType, path },
     { binding: workspaceBinding, source: 'plugin-api' },

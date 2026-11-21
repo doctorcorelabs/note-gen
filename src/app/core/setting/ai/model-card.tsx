@@ -43,6 +43,7 @@ import ModelSelect from "./modelSelect"
 import { useState, useRef } from "react"
 import { createOpenAIClient } from "@/lib/ai/utils"
 import { toast } from "@/hooks/use-toast"
+import { useUserErrorMessage } from "@/lib/use-user-error-message";
 import { blobToBytes, invokeAiBinary, invokeAiJson, invokeAiMultipart, resolveAiRequestConfig } from "@/lib/ai/tauri-client"
 
 interface ModelCardProps {
@@ -85,6 +86,7 @@ export default function ModelCard({
 }: ModelCardProps) {
   const t = useTranslations('settings.ai')
   const tc = useTranslations('common')
+  const userErrorMessage = useUserErrorMessage()
   const [checkState, setCheckState] = useState<'ok' | 'error' | 'checking' | 'init'>('init')
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -93,12 +95,22 @@ export default function ModelCard({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    
+
     setCheckState('checking')
-    abortControllerRef.current = new AbortController()
-    
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    // DA-2 (SET-07): deadline so a hanging provider cannot spin
+    // forever (UTANG-UJI-07 class). The timer aborts this check
+    // only; a newer check replaces the controller first.
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, 30000)
+
     try {
-      const aiStatus = await checkModelStatus(modelConfig, aiConfig, abortControllerRef.current.signal)
+      const aiStatus = await checkModelStatus(modelConfig, aiConfig, controller.signal)
+      if (abortControllerRef.current !== controller) return
       if (aiStatus) {
         setCheckState('ok')
         toast({
@@ -106,12 +118,21 @@ export default function ModelCard({
         })
       } else {
         setCheckState('error')
+        if (timedOut) {
+          toast({ description: t('connectionFailed'), variant: 'destructive' })
+        }
       }
     } catch (error) {
+      if (abortControllerRef.current !== controller) return
       if (error instanceof Error && error.name === 'AbortError') {
+        // DA-2 (SET-07): an abort must not leave the state stuck
+        // on 'checking'.
+        setCheckState(timedOut ? 'error' : 'init')
         return
       }
       setCheckState('error')
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -215,14 +236,19 @@ export default function ModelCard({
               role: 'user' as const,
               content: 'Hello'
             }],
-          })
+          }, { signal })
           return true
       }
     } catch (error) {
-      toast({
-        description: error instanceof Error ? error.message : 'Error',
-        variant: 'destructive'
-      })
+      // DA-2 (SET-07): aborts stay silent (the caller owns the
+      // state); every other failure goes through the shared
+      // user error formatter instead of the raw provider text.
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        toast({
+          description: userErrorMessage(error) ?? undefined,
+          variant: 'destructive'
+        })
+      }
       return false
     }
   }

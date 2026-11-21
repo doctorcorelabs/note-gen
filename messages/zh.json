@@ -489,6 +489,7 @@
       "rebuildIndex": "重新构建",
       "rebuildingIndex": "正在构建",
       "lexicalIndexRebuilt": "本地 BM25 索引已重新构建",
+      "lexicalIndexRebuildFailed": "本地 BM25 索引重建失败",
       "basicSettingsTitle": "基础设置",
       "basicSettingsDesc": "AI 会自行判断是否需要参考其他笔记；你也可以调整自动检索的深度和匹配范围。",
       "sourceTypes": {
@@ -516,6 +517,7 @@
       "purgeDisabledIndex": "删除已停用索引",
       "purgeDisabledConfirm": "确定删除所有已关闭来源类型的本地向量吗？重新启用后需要再次构建。",
       "purgeDisabledSuccess": "已删除停用来源的本地向量",
+      "purgeDisabledFailed": "部分已停用来源的向量无法删除",
       "automaticSearchTitle": "允许 AI 参考其他笔记",
       "automaticSearchDesc": "问题依赖你的记录时，AI 会自行查找相关笔记；普通问题和当前笔记内容足够时不会检索。",
       "agentStrategyTitle": "自动检索策略",
@@ -5822,6 +5824,7 @@
     "indexingProgress": "建库 {ready}/{total}",
     "noResults": "暂无搜索结果",
     "tryDifferentKeywords": "尝试使用不同的关键词搜索",
+    "degraded": "部分文件无法读取，结果可能不完整",
     "clear": "清除搜索",
     "openFailed": "无法打开搜索结果",
     "item": {
@@ -6307,6 +6310,7 @@
     },
     "loading": "正在加载活跃度数据...",
     "empty": "暂无活跃度数据",
+    "error": "活动数据加载失败",
     "refresh": "刷新",
     "summary": {
       "totalCount": "总活跃次数",
@@ -6323,7 +6327,6 @@
       "canvas": "绘图"
     },
     "heatmap": {
-      "title": "最近 26 周热力图",
       "range": "{startDate} - {endDate}",
       "less": "少",
       "more": "多",
@@ -6334,6 +6337,26 @@
       "title": "当天明细",
       "empty": "选择一个日期查看当天的活动明细。"
     }
+  },
+  "errors": {
+    "unknown": "出了点问题，请重试。",
+    "unauthenticated": "登录已过期，请重新登录。",
+    "tag_name_taken": "已存在同名标签。",
+    "tag_locked": "该标签已锁定，无法修改。",
+    "tag_in_use": "该标签仍被记录使用。请先重新分配或从这些记录中移除。",
+    "revision_conflict": "该内容已在其他地方被修改。请刷新后重试。",
+    "CAPABILITY_UNAVAILABLE": "该功能目前不可用。",
+    "CAPABILITY_GATED": "当前模式下该功能不可用。",
+    "FEATURE_NOT_YET_AVAILABLE": "该功能尚未开放。",
+    "UNKNOWN_COMMAND": "不支持所请求的操作。",
+    "VALIDATION_ERROR": "请求无效。请检查输入后重试。",
+    "AUTH_REQUIRED": "需要登录。请重新登录。",
+    "NETWORK_ERROR": "网络错误。请检查连接后重试。",
+    "TIMEOUT": "请求超时。请重试。",
+    "CONFLICT": "服务器上的内容已更改。请刷新后重试。",
+    "PAYLOAD_TOO_LARGE": "文件过大。",
+    "RATE_LIMITED": "请求过于频繁。请稍后再试。",
+    "SERVER_ERROR": "服务器无法完成请求。请重试。"
   },
   "marks": {
     "types": {
@@ -6548,6 +6571,7 @@
         "convertSuccess": "导入完成",
         "convertSuccessDesc": "已生成 {count} 个 Markdown 文件",
         "convertPartialDesc": "成功 {success} 个，失败 {failed} 个",
+        "importPartialDesc": "成功 {success} 个，失败 {failed} 个",
         "convertError": "导入失败",
         "importNotion": "导入 Notion（.zip）",
         "importing": "正在导入...",

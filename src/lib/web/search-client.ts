@@ -271,7 +271,7 @@ export function mergeKeywordSearchPages(
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,
     fuzzy: page.fuzzy,
-    degraded: page.degraded,
+    degraded: previous.degraded || page.degraded,
   };
 }
 

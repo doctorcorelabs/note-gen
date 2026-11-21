@@ -3,6 +3,7 @@ import { FolderUp, LoaderCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ContextMenuItem } from '@/components/ui/enhanced-context-menu'
 import { toast } from '@/hooks/use-toast'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { uploadLocalLibraryFolder } from '@/lib/sync/remote-library'
 import useArticleStore, { DirTree } from '@/stores/article'
 import { MobileMenuItem } from '../mobile-action-menu'
@@ -12,6 +13,7 @@ import { useSettingsDialogStore } from '@/stores/settings-dialog'
 
 export function UploadFolder({ item, mobile = false }: { item: DirTree; mobile?: boolean }) {
   const t = useTranslations('article.file.context')
+  const userErrorMessage = useUserErrorMessage()
   const [isUploading, setIsUploading] = useState(false)
   const { loadFileTree, loadRemoteSyncFiles, markFileRemote, setEntryLoading, setEntrySyncError } = useArticleStore()
 
@@ -61,10 +63,10 @@ export function UploadFolder({ item, mobile = false }: { item: DirTree; mobile?:
         duration: 5000,
       })
     } catch (error) {
-      setEntrySyncError(folderPath, error instanceof Error ? error.message : String(error))
+      setEntrySyncError(folderPath, userErrorMessage(error) ?? '')
       progressToast.update({
         title: t('uploadFolderError'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
         duration: 5000,
       })
