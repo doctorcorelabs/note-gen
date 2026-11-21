@@ -244,7 +244,8 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
 
       {error ? <Alert variant="destructive"><AlertDescription>{errorMessage(error)}</AlertDescription></Alert> : null}
       <KnowledgeSettingCard title={wiki('wikiTitle')} description={t('wikiSourceDescription')} icon={BookOpen} label={wiki('defaultMode')} enabled={data?.settings.enabled && selection?.included}>
-        {loading || !data || !selection ? <p className="text-sm text-muted-foreground">{t('loadingFolder')}</p>
+        {error && !data ? <p className="text-sm text-muted-foreground">{t('folderStatsFailed')}</p>
+          : loading || !data || !selection ? <p className="text-sm text-muted-foreground">{t('loadingFolder')}</p>
           : !data.settings.enabled ? <div className="flex flex-col items-start gap-3"><p className="text-sm text-muted-foreground">{t('wikiGlobalDisabled')}</p>{openSettingsButton}</div>
             : <>
               <ItemGroup><Item variant="muted"><ItemContent><ItemTitle>{t('wikiSourceToggle')}</ItemTitle><ItemDescription>{t('subfoldersIncluded')}{selection.inheritedFrom !== null ? ` · ${t('wikiInherited', { path: selection.inheritedFrom || '/' })}` : ''}</ItemDescription></ItemContent><ItemActions><Switch aria-label={t('wikiSourceToggle')} checked={selection.included} disabled={busy} onCheckedChange={included => void runWiki(() => setWikiFolderEnabled(path, included, data.context.id), t('folderSelectionSaved'))} /></ItemActions></Item></ItemGroup>
@@ -257,7 +258,8 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
       </KnowledgeSettingCard>
 
       <KnowledgeSettingCard title={rag('ragTitle')} description={t('ragFolderDescription')} icon={Layers} label={wiki('optionalMode')} enabled={semanticEnabled}>
-        {loading || !data ? <p className="text-sm text-muted-foreground">{t('loadingFolder')}</p>
+        {error && !data ? <p className="text-sm text-muted-foreground">{t('folderStatsFailed')}</p>
+          : loading || !data ? <p className="text-sm text-muted-foreground">{t('loadingFolder')}</p>
           : !semanticEnabled ? <div className="flex flex-col items-start gap-3"><p className="text-sm text-muted-foreground">{t('ragGlobalDisabled')}</p>{openSettingsButton}</div>
             : <>
               {statsError ? <Alert variant="destructive"><AlertDescription>{t('folderStatsFailed')}</AlertDescription></Alert> : null}

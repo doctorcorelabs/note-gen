@@ -461,9 +461,13 @@ beforeEach(() => {
 });
 
 function opKinds(): string[] {
-  return fakeSql.ops.map(
-    (op) => (op as { kind: string }).kind,
-  );
+  // Wiki reads flow through the adapter since the wiki migration
+  // (UTANG-UJI-09), so index cleanup on delete/restore records
+  // wiki.* reads alongside the marks writes. This spec asserts the
+  // marks write ordering only, so wiki reads are filtered out here.
+  return fakeSql.ops
+    .map((op) => (op as { kind: string }).kind)
+    .filter((kind) => !kind.startsWith("wiki."));
 }
 
 describe("insertMark (ControlText save path)", () => {

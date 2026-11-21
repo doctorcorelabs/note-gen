@@ -54,6 +54,8 @@ import {
   type RecordsApiPort,
   type SequentialResult,
 } from "@/lib/web/records-client";
+import emitter from "@/lib/emitter";
+import { EmitterRecordEvents } from "@/config/emitters";
 import { WebInboxList, type InboxLoadError, type SelectionAction } from "./web-inbox-list";
 import { WebRecordCreate } from "./web-record-create";
 import { WebRecordDetail } from "./web-record-detail";
@@ -151,6 +153,19 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
     await loadRecords({ append: false });
   }, [loadTags, loadRecords]);
 
+  // UTANG-UJI-01: the upstream MarkActions controls create
+  // records through the same marks.create kind and announce it
+  // with refreshMarks, but this inbox keeps its own state and
+  // never heard the event, so the list and tag counts went
+  // stale until a filter change or reload. Reload on the
+  // event (same mechanism tag-manage uses). This inbox never
+  // emits refreshMarks itself, so there is no loop.
+  useEffect(() => {
+    const refresh = () => { void reloadAll() }
+    emitter.on(EmitterRecordEvents.refreshMarks, refresh)
+    return () => { emitter.off(EmitterRecordEvents.refreshMarks, refresh) }
+  }, [reloadAll])
+
   useEffect(() => {
     void loadTags().catch(() => {
       // Tags load again with the record list below; a tags-only
@@ -227,9 +242,10 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
       .filter((record): record is ApiRecord => record !== undefined)
       .map((record) => ({
         id: record.id,
-        // Contract 3.8 move: the new set is the target tag alone,
-        // guarded by the set the UI loaded.
-        tagIds: [targetTagId],
+        // Move adds the target tag to the set the UI loaded
+        // (union, UTANG-UJI-02); it never drops the record's
+        // other tags. The guard still expects the loaded set.
+        tagIds: [...new Set([...record.tagIds, targetTagId])],
         expectedTagIds: record.tagIds,
       }));
     const result = await moveRecordsTagsSequential(api, items);

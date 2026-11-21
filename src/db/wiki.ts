@@ -1,211 +1,144 @@
-import { db, executeRecordTransaction, type RecordStatement } from './index'
+// SPDX-License-Identifier: GPL-3.0-only
+// This file is part of the NoteGen web fork. See LICENSE and FORK.md.
+//
+// Wiki persistence client, migrated to typed catalog kinds
+// (UTANG-UJI-09). The legacy `db` facade always rejects in web
+// mode, so every read and write below goes through
+// getSqlAdapter() with `wiki.*` kinds from ops-catalog.ts.
+// Schema creation (the old initWikiDb CREATE TABLE block) is
+// gone: the server owns the wiki tables.
+//
+// Wave reality, stated plainly: the ten read kinds are W1 with
+// real server handlers, so reads work in Fase 1. The seven
+// write kinds are W2 stubs that answer UNAVAILABLE in Fase 1
+// (handler and consumer land with the Fase 2 wiki engine), so
+// writes fail explicitly with a typed adapter error instead of
+// the legacy facade throw. Dirty bookkeeping is server-side:
+// wiki.upsertSource, wiki.commitRevision, and wiki.upsertPage
+// set the dirty flag in the same transaction, and wiki.putMeta
+// with key 'dirty' = true advances dirty-version (catalog
+// comments at the kind definitions).
+//
+// Known catalog gaps, recorded instead of hidden:
+// - No kind inserts a standalone revision row; only
+//   wiki.commitRevision writes revisions. cacheWikiMarkdown-
+//   Document therefore cannot persist the revision payload.
+// - No kind deletes a page or revision row, so
+//   removeWikiMarkdownCache cannot remove those rows yet.
+// - No kind clears the dirty flag conditionally on
+//   dirty-version, so markWikiSynced checks the version with
+//   a read before writing (not atomic).
+// All three gaps are unreachable in Fase 1 because the first
+// write of each function already answers UNAVAILABLE.
+
+import { getSqlAdapter } from './index'
+import type { SqlJsonValue } from '@/lib/platform/sql/ops-catalog'
 import type {
   WikiJob, WikiPage, WikiSegmentCache, WikiSourceRevision,
   WikiSourceState, WikiUsage,
 } from '@/types/wiki'
 
-let initialization: Promise<void> | null = null
-
 export function emitWikiUpdated() {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('wiki-updated'))
 }
 
-export function initWikiDb(): Promise<void> {
-  if (!initialization) initialization = (async () => {
-    for (const sql of [
-      `create table if not exists wiki_sources (context_id text not null, stable_id text not null,
-        source_key text not null, content_hash text not null, status text not null, revision_id text,
-        version integer not null, payload text not null, primary key(context_id, stable_id))`,
-      `create table if not exists wiki_revisions (context_id text not null, id text not null,
-        source_id text not null, input_hash text not null, output_hash text not null,
-        payload text not null, primary key(context_id, id))`,
-      `create index if not exists wiki_revisions_input on wiki_revisions(context_id, input_hash, output_hash)`,
-      `create table if not exists wiki_pages (context_id text not null, id text not null,
-        kind text not null, status text not null, payload text not null, primary key(context_id, id))`,
-      `create table if not exists wiki_jobs (context_id text not null, id text not null,
-        status text not null, ready_at integer not null, payload text not null, primary key(context_id, id))`,
-      `create table if not exists wiki_segments (context_id text not null, cache_key text not null,
-        payload text not null, primary key(context_id, cache_key))`,
-      `create table if not exists wiki_meta (context_id text not null, key text not null,
-        value text not null, primary key(context_id, key))`,
-    ]) await db.execute(sql)
-  })().catch(error => { initialization = null; throw error })
-  return initialization
-}
-
-async function readPayloads<T>(sql: string, values: string[]): Promise<T[]> {
-  await initWikiDb()
-  const rows = await db.select<Array<{ payload: string }>>(sql, values)
-  return rows.flatMap(row => {
-    try { return [JSON.parse(row.payload) as T] } catch { return [] }
-  })
-}
-
 export async function getWikiMeta<T>(contextId: string, key: string): Promise<T | null> {
-  await initWikiDb()
-  const rows = await db.select<Array<{ value: string }>>(
-    'select value from wiki_meta where context_id = $1 and key = $2', [contextId, key])
-  try { return rows[0] ? JSON.parse(rows[0].value) as T : null } catch { return null }
+  const row = await getSqlAdapter().queryOne({ kind: 'wiki.getMeta', contextId, key })
+  return (row ?? null) as unknown as T | null
 }
 
 export async function setWikiMeta<T>(contextId: string, key: string, value: T) {
-  await initWikiDb()
-  if (key === 'dirty' && value === true) {
-    const statement = dirtyStatement(contextId)
-    await db.execute(statement.sql, statement.values)
-    return
-  }
-  await db.execute(`insert into wiki_meta(context_id,key,value) values($1,$2,$3)
-    on conflict(context_id,key) do update set value=excluded.value`, [contextId, key, JSON.stringify(value)])
-}
-
-function dirtyStatement(contextId: string): RecordStatement {
-  return { sql: `insert into wiki_meta(context_id,key,value)
-    values($1,'dirty','true'),($1,'dirty-version','1')
-    on conflict(context_id,key) do update set value=case
-      when excluded.key='dirty-version' then cast(cast(wiki_meta.value as integer)+1 as text)
-      else excluded.value end`, values: [contextId] }
-}
-
-function sourceStatement(state: WikiSourceState): RecordStatement {
-  return {
-    sql: `insert into wiki_sources(context_id,stable_id,source_key,content_hash,status,revision_id,version,payload)
-      values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(context_id,stable_id) do update set
-      source_key=excluded.source_key,content_hash=excluded.content_hash,status=excluded.status,
-      revision_id=excluded.revision_id,version=excluded.version,payload=excluded.payload`,
-    values: [state.contextId, state.stableId, state.sourceKey, state.contentHash, state.status,
-      state.revisionId, state.version, JSON.stringify(state)],
-  }
-}
-
-function revisionStatement(revision: WikiSourceRevision): RecordStatement {
-  return { sql: `insert into wiki_revisions(context_id,id,source_id,input_hash,output_hash,payload)
-    values($1,$2,$3,$4,$5,$6) on conflict(context_id,id) do nothing`,
-  values: [revision.contextId, revision.id, revision.source.stableId, revision.inputHash,
-    revision.outputHash, JSON.stringify(revision)] }
-}
-
-function pageStatement(page: WikiPage): RecordStatement {
-  return { sql: `insert into wiki_pages(context_id,id,kind,status,payload) values($1,$2,$3,$4,$5)
-    on conflict(context_id,id) do update set kind=excluded.kind,status=excluded.status,payload=excluded.payload`,
-  values: [page.contextId, page.id, page.kind, page.status, JSON.stringify(page)] }
+  // Dirty semantics (key 'dirty' = true also advances
+  // dirty-version) are applied by the server handler.
+  await getSqlAdapter().execute({
+    kind: 'wiki.putMeta', contextId, key, value: value as unknown as SqlJsonValue,
+  })
 }
 
 export async function getWikiSourceState(contextId: string, stableId: string) {
-  return (await readPayloads<WikiSourceState>(
-    'select payload from wiki_sources where context_id=$1 and stable_id=$2', [contextId, stableId]))[0] ?? null
+  return await getSqlAdapter().queryOne({ kind: 'wiki.getSourceState', contextId, stableId })
 }
 
 export function listWikiSourceStates(contextId: string) {
-  return readPayloads<WikiSourceState>('select payload from wiki_sources where context_id=$1', [contextId])
+  return getSqlAdapter().query({ kind: 'wiki.listSourceStates', contextId })
 }
 
 export async function upsertWikiSourceState(state: WikiSourceState) {
-  await initWikiDb()
-  await executeRecordTransaction([sourceStatement(state), dirtyStatement(state.contextId)])
+  // The server sets the dirty flag in the same transaction.
+  await getSqlAdapter().execute({ kind: 'wiki.upsertSource', state })
   emitWikiUpdated()
 }
 
 export async function getWikiRevision(contextId: string, id: string) {
-  return (await readPayloads<WikiSourceRevision>(
-    'select payload from wiki_revisions where context_id=$1 and id=$2', [contextId, id]))[0] ?? null
+  return await getSqlAdapter().queryOne({ kind: 'wiki.getRevision', contextId, id })
 }
 
 export async function findWikiRevision(contextId: string, inputHash: string) {
-  return (await readPayloads<WikiSourceRevision>(`select payload from wiki_revisions
-    where context_id=$1 and input_hash=$2 order by output_hash asc limit 1`, [contextId, inputHash]))[0] ?? null
+  return await getSqlAdapter().queryOne({ kind: 'wiki.findRevisionByInputHash', contextId, inputHash })
 }
 
-export async function getActiveWikiRevisions(contextId: string) {
-  const revisions = await readPayloads<WikiSourceRevision>(`select r.payload from wiki_revisions r join wiki_sources s
-    on r.context_id=s.context_id and r.id=s.revision_id
-    where s.context_id=$1 and s.status='ready'`, [contextId])
-  const sources = new Map((await listWikiSourceStates(contextId)).map(source => [source.stableId, source]))
-  return revisions.flatMap(revision => {
-    const state = sources.get(revision.source.stableId)
-    return state?.status === 'ready' && state.revisionId === revision.id && state.contentHash === revision.source.contentHash
-      ? [{ ...revision, source: state.source }] : []
-  })
+export function getActiveWikiRevisions(contextId: string) {
+  // The server handler performs the same two-step join and
+  // payload filtering the legacy client did.
+  return getSqlAdapter().query({ kind: 'wiki.getActiveRevisions', contextId })
 }
 
-/** Persist Markdown first; SQLite stores the disposable projection and job guard. */
+/** Persist Markdown first; the server stores the disposable projection and job guard. */
 export async function commitWikiSourceRevision(
   revision: WikiSourceRevision, pages: WikiPage[], expectedVersion?: number,
 ): Promise<boolean> {
-  await initWikiDb()
-  const current = await getWikiSourceState(revision.contextId, revision.source.stableId)
-  if (!current || current.contentHash !== revision.source.contentHash
-    || ['deleted', 'excluded', 'unavailable'].includes(current.status)
-    || (expectedVersion !== undefined && current.version !== expectedVersion)) return false
   const { writeWikiPageFile } = await import('@/lib/wiki/files')
   const persistedPages: WikiPage[] = []
   for (const page of pages) persistedPages.push(await writeWikiPageFile(page, revision))
-  const next: WikiSourceState = { ...current, source: revision.source, status: 'ready',
-    revisionId: revision.id, version: current.version + 1, updatedAt: Date.now(), error: null }
-  try {
-    await executeRecordTransaction([
-      { sql: `update wiki_sources set revision_id=$1,status='ready',version=$2,payload=$3
-          where context_id=$4 and stable_id=$5 and version=$6 and content_hash=$7`,
-        values: [revision.id, next.version, JSON.stringify(next), revision.contextId,
-          revision.source.stableId, current.version, revision.source.contentHash], expectedRows: 1 },
-      revisionStatement(revision), ...persistedPages.map(pageStatement), dirtyStatement(revision.contextId),
-    ])
-    emitWikiUpdated()
-    return true
-  } catch (error) {
-    // The existing native transaction command reports optimistic conflicts with this legacy text.
-    if (error instanceof Error ? /changed|expected.*rows/i.test(error.message) : /changed|expected.*rows/i.test(String(error))) return false
-    throw error
-  }
+  // Guard (current state exists, contentHash matches, status
+  // not deleted/excluded/unavailable, expectedVersion match)
+  // is enforced server-side; a guard miss answers
+  // committed: false instead of throwing.
+  const result = await getSqlAdapter().execute({
+    kind: 'wiki.commitRevision', revision, pages: persistedPages, expectedVersion,
+  })
+  if (result.committed) emitWikiUpdated()
+  return result.committed
 }
 
 export async function getWikiPage(contextId: string, id: string) {
-  return (await readPayloads<WikiPage>('select payload from wiki_pages where context_id=$1 and id=$2', [contextId, id]))[0] ?? null
+  return await getSqlAdapter().queryOne({ kind: 'wiki.getPage', contextId, id })
 }
 
 export function listWikiPages(contextId: string) {
-  return readPayloads<WikiPage>('select payload from wiki_pages where context_id=$1', [contextId])
+  return getSqlAdapter().query({ kind: 'wiki.listPages', contextId })
 }
 
 export async function upsertWikiPage(page: WikiPage) {
-  await initWikiDb()
   const { writeWikiPageFile } = await import('@/lib/wiki/files')
   page = await writeWikiPageFile(page)
-  await executeRecordTransaction([pageStatement(page), dirtyStatement(page.contextId)])
+  // The server sets the dirty flag in the same transaction.
+  await getSqlAdapter().execute({ kind: 'wiki.upsertPage', page })
   emitWikiUpdated()
 }
 
 export function listWikiJobs(contextId: string) {
-  return readPayloads<WikiJob>('select payload from wiki_jobs where context_id=$1 order by ready_at', [contextId])
+  return getSqlAdapter().query({ kind: 'wiki.listJobs', contextId })
 }
 
 export async function upsertWikiJob(job: WikiJob) {
-  await initWikiDb()
-  await db.execute(`insert into wiki_jobs(context_id,id,status,ready_at,payload) values($1,$2,$3,$4,$5)
-    on conflict(context_id,id) do update set status=excluded.status,ready_at=excluded.ready_at,payload=excluded.payload`,
-  [job.contextId, job.id, job.status, job.readyAt, JSON.stringify(job)])
+  await getSqlAdapter().execute({ kind: 'wiki.upsertJob', job })
   emitWikiUpdated()
 }
 
 export async function removeWikiJob(contextId: string, id: string, expectedInputHash?: string) {
-  await initWikiDb()
-  if (expectedInputHash !== undefined) {
-    const current = (await readPayloads<WikiJob>('select payload from wiki_jobs where context_id=$1 and id=$2', [contextId, id]))[0]
-    if (!current || current.inputHash !== expectedInputHash) return
-    await db.execute('delete from wiki_jobs where context_id=$1 and id=$2 and payload=$3', [contextId, id, JSON.stringify(current)])
-  } else await db.execute('delete from wiki_jobs where context_id=$1 and id=$2', [contextId, id])
+  // Guarded removal is server-side: an expectedInputHash
+  // mismatch is a silent no-op.
+  await getSqlAdapter().execute({ kind: 'wiki.removeJob', contextId, id, expectedInputHash })
   emitWikiUpdated()
 }
 
 export async function getWikiSegmentCache(contextId: string, key: string) {
-  return (await readPayloads<WikiSegmentCache>(
-    'select payload from wiki_segments where context_id=$1 and cache_key=$2', [contextId, key]))[0] ?? null
+  return await getSqlAdapter().queryOne({ kind: 'wiki.getSegment', contextId, key })
 }
 
 export async function saveWikiSegmentCache(contextId: string, key: string, value: WikiSegmentCache) {
-  await initWikiDb()
-  await db.execute(`insert into wiki_segments(context_id,cache_key,payload) values($1,$2,$3)
-    on conflict(context_id,cache_key) do update set payload=excluded.payload`, [contextId, key, JSON.stringify(value)])
+  await getSqlAdapter().execute({ kind: 'wiki.putSegment', contextId, key, value })
 }
 
 let usageQueue: Promise<void> = Promise.resolve()
@@ -233,31 +166,40 @@ export async function getWikiSyncDirty(contextId: string) {
 }
 
 export async function markWikiSynced(contextId: string, expectedVersion?: number) {
+  // No catalog kind clears dirty conditionally on
+  // dirty-version; check the version with a read, then clear
+  // it with putMeta. Not atomic (see header note).
   const version = expectedVersion ?? await getWikiMeta<number>(contextId, 'dirty-version') ?? 0
-  await db.execute(`update wiki_meta set value='false' where context_id=$1 and key='dirty'
-    and coalesce((select cast(value as integer) from wiki_meta where context_id=$1 and key='dirty-version'),0)=$2`,
-  [contextId, version])
+  const current = await getWikiMeta<number>(contextId, 'dirty-version') ?? 0
+  if (current !== version) return
+  await setWikiMeta(contextId, 'dirty', false)
 }
 
 /** Cache a parsed Markdown document. This must never write back to the file. */
 export async function cacheWikiMarkdownDocument(
   page: WikiPage, revision?: WikiSourceRevision, originalAvailable = true,
 ): Promise<WikiSourceState | null> {
-  await initWikiDb()
   const previous = await getWikiPage(page.contextId, page.id)
-  const statements: RecordStatement[] = []
+  const ops: Array<
+    | { kind: 'wiki.upsertPage'; page: WikiPage }
+    | { kind: 'wiki.upsertSource'; state: WikiSourceState }
+  > = []
   let sourceState: WikiSourceState | null = null
-  if (JSON.stringify(previous) !== JSON.stringify(page)) statements.push(pageStatement(page))
+  if (JSON.stringify(previous) !== JSON.stringify(page)) {
+    ops.push({ kind: 'wiki.upsertPage', page })
+  }
   if (revision) {
-    if (!await getWikiRevision(page.contextId, revision.id)) statements.push(revisionStatement(revision))
+    // No catalog kind inserts a standalone revision row (only
+    // wiki.commitRevision writes revisions), so the revision
+    // payload itself is not persisted here; see header note.
     const current = await getWikiSourceState(page.contextId, revision.source.stableId)
     sourceState = current
     // A newer local source save takes precedence over an older synchronized Wiki.
     const hasNewerSource = current && current.contentHash !== revision.source.contentHash
       && ['pending', 'processing', 'failed'].includes(current.status)
     const localJob = current && ['pending', 'failed'].includes(current.status)
-      ? (await readPayloads<WikiJob>('select payload from wiki_jobs where context_id=$1 and id=$2',
-        [page.contextId, `source:${revision.source.stableId}`]))[0] : null
+      ? (await listWikiJobs(page.contextId)).find(job => job.id === `source:${revision.source.stableId}`) ?? null
+      : null
     const guarded = current?.status === 'processing' || current?.status === 'deleted'
       || ((current?.status === 'pending' || current?.status === 'failed') && page.status !== 'ready')
       || (localJob && localJob.inputHash !== revision.inputHash)
@@ -272,16 +214,16 @@ export async function cacheWikiMarkdownDocument(
       }
       const changed = !current || JSON.stringify({ ...current, version: 0 }) !== JSON.stringify({ ...next, version: 0 })
       if (changed) {
-        const statement = sourceStatement({ ...next, version: (current?.version ?? 0) + 1 })
-        // Cache parsing runs beside the source queue. Never overwrite a source
-        // that became pending/processing while the Markdown was being read.
-        statement.sql += ' where wiki_sources.version=$9'
-        statement.values.push(current?.version ?? -1)
-        statements.push(statement)
+        // The legacy atomic version guard (where version = $9)
+        // has no catalog equivalent; the upsert is unguarded.
+        // Cache parsing runs beside the source queue, so a
+        // source that became pending/processing meanwhile can
+        // be overwritten; recorded in the header note.
+        ops.push({ kind: 'wiki.upsertSource', state: { ...next, version: (current?.version ?? 0) + 1 } })
       }
     }
   }
-  if (statements.length) await executeRecordTransaction(statements)
+  if (ops.length) await getSqlAdapter().transaction(ops)
   if (revision) sourceState = await getWikiSourceState(page.contextId, revision.source.stableId)
   if (JSON.stringify(previous) !== JSON.stringify(page)) emitWikiUpdated()
   return sourceState
@@ -291,27 +233,21 @@ export async function cacheWikiMarkdownDocument(
 export async function removeWikiMarkdownCache(contextId: string, pageId: string, expectedInputHash?: string) {
   const page = await getWikiPage(contextId, pageId)
   if (!page || (expectedInputHash !== undefined && page.inputHash !== expectedInputHash)) return
-  const statements: RecordStatement[] = [{ sql: 'delete from wiki_pages where context_id=$1 and id=$2 and payload=$3',
-    values: [contextId, pageId, JSON.stringify(page)] }]
+  // No catalog kind deletes page or revision rows yet, so
+  // those rows cannot be removed here (see header note). The
+  // source-state updates below still run so sources stop
+  // pointing at the removed document.
+  const ops: Array<{ kind: 'wiki.upsertSource'; state: WikiSourceState }> = []
   if (page.kind === 'source') for (const source of page.sourceRefs) {
     const state = await getWikiSourceState(contextId, source.stableId)
-    const job = (await readPayloads<WikiJob>('select payload from wiki_jobs where context_id=$1 and id=$2',
-      [contextId, `source:${source.stableId}`]))[0]
+    const job = (await listWikiJobs(contextId)).find(entry => entry.id === `source:${source.stableId}`) ?? null
     const newerWork = state && ['pending', 'processing', 'failed'].includes(state.status)
       && (!job || job.inputHash !== page.inputHash)
     if (state && state.contentHash === source.contentHash && !newerWork) {
-      const statement = sourceStatement({ ...state, status: 'unavailable', revisionId: null,
-        version: state.version + 1, updatedAt: Date.now(), error: null })
-      statement.sql += ' where wiki_sources.version=$9'
-      statement.values.push(state.version)
-      statements.push(statement)
+      ops.push({ kind: 'wiki.upsertSource', state: { ...state, status: 'unavailable', revisionId: null,
+        version: state.version + 1, updatedAt: Date.now(), error: null } })
     }
-    // Keep a newer worker's revision (and any revision it still references).
-    statements.push({ sql: `delete from wiki_revisions where context_id=$1 and source_id=$2 and input_hash=$3
-      and not exists(select 1 from wiki_sources s where s.context_id=wiki_revisions.context_id
-        and s.revision_id=wiki_revisions.id and s.status in ('ready','pending','processing','failed'))`,
-    values: [contextId, source.stableId, page.inputHash] })
   }
-  await executeRecordTransaction(statements)
+  if (ops.length) await getSqlAdapter().transaction(ops)
   emitWikiUpdated()
 }
