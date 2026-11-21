@@ -143,6 +143,31 @@ class VectorCache {
   }
 
   // 检查是否需要更新缓存（5分钟过期）
+  // Re-key cached vectors after a file rename (K-01). Target entries
+  // are replaced first, mirroring the old SQL delete-then-update.
+  renameByFilename(oldFilename: string, newFilename: string) {
+    const ids = this.vectorsByFilename.get(oldFilename) || [];
+    if (ids.length === 0) return;
+    this.deleteByFilename(newFilename);
+    for (const id of ids) {
+      const cached = this.cache.get(id);
+      if (cached) cached.filename = newFilename;
+    }
+    this.vectorsByFilename.delete(oldFilename);
+    this.vectorsByFilename.set(newFilename, ids);
+    this.cacheVersion++;
+  }
+
+  // Re-key every cached filename under a renamed folder prefix (K-01).
+  renameByPrefix(oldPrefix: string, newPrefix: string) {
+    const keys = Array.from(this.vectorsByFilename.keys()).filter(
+      key => key === oldPrefix || key.startsWith(`${oldPrefix}/`)
+    );
+    for (const key of keys) {
+      this.renameByFilename(key, `${newPrefix}${key.slice(oldPrefix.length)}`);
+    }
+  }
+
   needsUpdate(): boolean {
     return Date.now() - this.lastUpdate > 5 * 60 * 1000 || this.cache.size === 0;
   }
@@ -358,13 +383,16 @@ export async function renameVectorDocumentsByFilename(oldFilename: string, newFi
   const normalizedOldFilename = normalizeVectorDocumentKey(oldFilename);
   const normalizedNewFilename = normalizeVectorDocumentKey(newFilename);
   if (normalizedOldFilename === normalizedNewFilename) return;
-  await db.execute('delete from vector_documents where filename = $1', [normalizedNewFilename]);
-  await db.execute(
-    'update vector_documents set filename = $1, updated_at = $2 where filename = $3',
-    [normalizedNewFilename, Date.now(), normalizedOldFilename]
-  );
+  // K-01: the legacy `db` facade always rejects in this fork, so the
+  // old SQL rename threw after the disk rename had already succeeded
+  // and broke rename/move in the file tree (single rename showed a
+  // raw error; batch move rolled back and the rollback threw too).
+  // Persistent chunks cannot exist yet in Fase 1 (the only chunk
+  // write kind, vector.replaceChunks, is a Fase 2 stub), so only the
+  // in-memory indexes are re-keyed here. Persistent chunk rename
+  // lands with the Fase 2 vector write path.
   getBM25Index()?.renameFilename(normalizedOldFilename, normalizedNewFilename);
-  await vectorCache.update();
+  vectorCache.renameByFilename(normalizedOldFilename, normalizedNewFilename);
 }
 
 export async function deleteVectorDocumentsByPrefix(prefix: string) {
@@ -381,21 +409,12 @@ export async function renameVectorDocumentsByPrefix(oldPrefix: string, newPrefix
   const normalizedOldPrefix = normalizeVectorDocumentKey(oldPrefix);
   const normalizedNewPrefix = normalizeVectorDocumentKey(newPrefix);
   if (normalizedOldPrefix === normalizedNewPrefix) return;
-  const filenames = await db.select<{ filename: string }[]>(
-    'select distinct filename from vector_documents where filename = $1 or filename like $2',
-    [normalizedOldPrefix, `${normalizedOldPrefix}/%`]
-  );
-  for (const { filename } of filenames) {
-    const suffix = filename.slice(normalizedOldPrefix.length);
-    const nextFilename = `${normalizedNewPrefix}${suffix}`;
-    await db.execute('delete from vector_documents where filename = $1', [nextFilename]);
-    await db.execute(
-      'update vector_documents set filename = $1, updated_at = $2 where filename = $3',
-      [nextFilename, Date.now(), filename]
-    );
-  }
+  // K-01: same legacy-facade removal as renameVectorDocumentsByFilename
+  // above. Folder rename and drag move call this after the disk move
+  // succeeds; it must not throw. Only the in-memory indexes are
+  // re-keyed in Fase 1; persistent chunk rename is Fase 2 work.
   getBM25Index()?.renameFilenamePrefix(normalizedOldPrefix, normalizedNewPrefix);
-  await vectorCache.update();
+  vectorCache.renameByPrefix(normalizedOldPrefix, normalizedNewPrefix);
 }
 
 // 检查文件是否已存在于向量数据库中

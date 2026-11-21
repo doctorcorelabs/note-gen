@@ -230,7 +230,18 @@ const useMarkStore = create<MarkState>((set, get) => ({
     })
     void useArticleStore.getState().updateRecordTab(guarded)
     try {
-      await updateMark(guarded)
+      const result = await updateMark(guarded)
+      // T-02-01: adopt the version the server returned. Without this,
+      // local state kept the pre-write version and the next sequential
+      // write from the same surface (title per keystroke, content,
+      // todo) was rejected 409 until a refetch.
+      if (typeof result.version === 'number') {
+        const nextVersion = result.version
+        set((state) => ({
+          marks: state.marks.map(item => item.id === guarded.id ? { ...item, version: nextVersion } : item),
+          allMarks: state.allMarks.map(item => item.id === guarded.id ? { ...item, version: nextVersion } : item),
+        }))
+      }
     } catch (error) {
       // DATA2D-5 (AD-800): a rejected guarded write must not leave the
       // optimistic state behind. Roll this record back to the loaded

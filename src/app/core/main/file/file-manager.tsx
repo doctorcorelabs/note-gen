@@ -486,6 +486,7 @@ export function FileManager({
             const sanitizedFileName = await writeDroppedFileToRoot({
               fileName: file.name,
               getFilePathOptions,
+              exists: platform.fs.exists,
               writeTextFile: platform.fs.writeTextFile,
             }, {
               kind: 'text',
@@ -508,6 +509,7 @@ export function FileManager({
             const sanitizedImageFileName = await writeDroppedFileToRoot({
               fileName: file.name,
               getFilePathOptions,
+              exists: platform.fs.exists,
               writeFile: platform.fs.writeFile,
             }, {
               kind: 'binary',

@@ -754,6 +754,17 @@ describe("updates and deletes", () => {
     ).rejects.toThrow("409 revision_conflict");
   });
 
+  it("updateMark returns the server version so sequential writes can adopt it (T-02-01)", async () => {
+    const mark = seedTextMark();
+    const first = await updateMark({ ...mark, content: "first" });
+    expect(first.version).toBe((mark.version ?? 0) + 1);
+    // The store adopts first.version; a second write guarded with it
+    // succeeds instead of rejecting 409 like the stale row above.
+    const second = await updateMark({ ...mark, version: first.version, content: "second" });
+    expect(second.version).toBe((mark.version ?? 0) + 2);
+    expect(fakeSql.marks.get(mark.id)?.content).toBe("second");
+  });
+
   it("updatePluginTextRecord sends the loaded version and returns true", async () => {
     const mark = seedTextMark();
     const ok = await updatePluginTextRecord(mark, { ...mark, content: "plugin-edited", desc: "plugin title" }, async () => {});

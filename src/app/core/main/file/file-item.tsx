@@ -22,6 +22,7 @@ import useSettingStore from "@/stores/setting";
 import { VectorKnowledgeMenu } from "./vector-knowledge-menu";
 import { isSkillsFolder } from "@/lib/skills/utils";
 import { exportMarkdownFile, type MarkdownExportFormat } from "../editor/markdown/markdown-export";
+import { isAlreadyExistsLike } from "../editor/markdown/revision-conflict";
 import { setFileManagerDragData } from "./file-dnd";
 import { debugSyncPath } from "@/lib/sync/remote-file";
 import { BatchSelectionContextMenu } from "./batch-selection-context-menu";
@@ -508,11 +509,22 @@ export function FileItem({
           setTimeout(() => inputRef.current?.focus(), 0)
           return
         } else {
-          // 创建新文件
-          if (workspace.isCustom) {
-            await platform.fs.writeTextFile(pathOptions.path, '')
-          } else {
-            await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
+          // N-03: createNew (If-None-Match: *), as in newFileOnFolder
+          // (DA-12-11): a file created between the exists check and
+          // this write must never be blanked by the empty write.
+          try {
+            if (workspace.isCustom) {
+              await platform.fs.writeTextFile(pathOptions.path, '', { createNew: true })
+            } else {
+              await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir, createNew: true })
+            }
+          } catch (error) {
+            if (isAlreadyExistsLike(error)) {
+              setRenameError(t('error.fileExists'))
+              setTimeout(() => inputRef.current?.focus(), 0)
+              return
+            }
+            throw error
           }
         }
       }

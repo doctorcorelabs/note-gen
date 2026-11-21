@@ -38,6 +38,7 @@ import { toast } from '@/hooks/use-toast'
 import { getWorkspacePath, isAbsoluteFsPath } from '@/lib/workspace'
 import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import { pickImagesFromPhotoLibrary } from '@/lib/image-picker'
+import { createUploadPlaceholder } from '../async-editor-operations'
 
 export interface SlashCommandItem {
   id?: string
@@ -598,19 +599,24 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
         const rangeStart = Math.min(Math.max(range.from, 0), docSize)
         const rangeEnd = Math.min(Math.max(range.to, rangeStart), docSize)
 
-        // Get the position range of the placeholder
-        const placeholderStart = rangeStart
-        const placeholderEnd = rangeStart + 'Uploading... '.length
-        let placeholderInserted = false
+        // M-02: capture the note this command started in. Switching
+        // notes during the picker or the upload must not insert the
+        // image into the new note; the toolbar path guards the same
+        // way through captureEditorOperation.
+        const targetFilePath = useArticleStore.getState().activeFilePath
+        const isCurrentOperation = () => !editor.isDestroyed
+          && useArticleStore.getState().activeFilePath === targetFilePath
+        if (!isCurrentOperation()) return
+
+        // A07-04: delete the slash range, then anchor a decoration
+        // placeholder that ProseMirror maps through later edits. The
+        // old text placeholder used raw positions captured before
+        // the picker/upload awaits, so typing or undo during the
+        // upload made its deleteRange eat real text.
+        editor.chain().focus().deleteRange({ from: rangeStart, to: rangeEnd }).run()
+        const placeholder = createUploadPlaceholder(editor, rangeStart)
 
         try {
-          // Insert "Uploading..." text as placeholder
-          editor.chain().focus().deleteRange({ from: rangeStart, to: rangeEnd }).insertContentAt(rangeStart, {
-            type: 'text',
-            text: 'Uploading... ',
-          }).run()
-          placeholderInserted = true
-
           let fileObj: File | null = null
 
           if (isMobileDevice()) {
@@ -629,6 +635,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
               ],
             })
 
+            if (!isCurrentOperation()) return
             const firstPicked = Array.isArray(picked) ? picked[0] : picked
             fileObj = firstPicked?.file ?? null
           } else {
@@ -642,6 +649,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
               ],
             })
 
+            if (!isCurrentOperation()) return
             if (typeof file === 'string') {
               const fileData = await platform.fs.readFile(file)
               const ext = file.split('.').pop() || 'png'
@@ -651,20 +659,16 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
             }
           }
 
-          if (!fileObj) {
-            // User cancelled, remove placeholder
-            editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
-            return
-          }
+          if (!isCurrentOperation()) return
+          if (!fileObj || placeholder.position() === undefined) return
 
-          const activeFilePath = useArticleStore.getState().activeFilePath
-          const result = await handleImageUpload(fileObj, activeFilePath)
+          const result = await handleImageUpload(fileObj, targetFilePath)
 
-          // Delete the placeholder text
-          editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
-
-          // Insert the actual image
-          editor.chain().focus().insertContentAt(placeholderStart, {
+          if (!isCurrentOperation()) return
+          const position = placeholder.position()
+          if (position === undefined) return
+          placeholder.remove()
+          editor.chain().focus().insertContentAt(position, {
             type: 'image',
             attrs: {
               src: result.src,
@@ -673,17 +677,14 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
             },
           }).run()
         } catch (error) {
-          // Remove the placeholder on error (only when it landed;
-          // deleting its range otherwise would eat real text).
-          if (placeholderInserted) {
-            editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
-          }
-
+          if (!isCurrentOperation()) return
           toast({
             title: tr.imageUpload.failed,
             description: error instanceof Error ? error.message : 'Unknown error',
             variant: 'destructive',
           })
+        } finally {
+          placeholder.remove()
         }
       },
     },

@@ -291,8 +291,10 @@ async function listAllMarkRowsByTag(tagId: number, deleted: SqlDeletedFilter): P
 
 // Map a kind write result onto the legacy shape unmigrated callers
 // read (`rowsAffected`, `lastInsertId`), as `tags.ts` does.
-function toLegacyWriteResult(result: { affected: number; id?: number | string }) {
-  return { rowsAffected: result.affected, lastInsertId: result.id as number }
+function toLegacyWriteResult(result: { affected: number; id?: number | string; version?: number }) {
+  // T-02-01: carry the version the server returned for a guarded
+  // write, so the store can adopt it for the next sequential write.
+  return { rowsAffected: result.affected, lastInsertId: result.id as number, version: result.version }
 }
 
 // Patch for `marks.update` from a full legacy row. `createdAt` is

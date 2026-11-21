@@ -29,6 +29,7 @@ import emitter from '@/lib/emitter'
 import { prefetchMarkdownTokens, warmMarkdownLexerWorker } from '@/app/core/main/editor/markdown/markdown-lexer-async'
 import type { Events } from '@/lib/emitter'
 import { isSkillsFolder } from '@/lib/skills/utils'
+import { checkIsTauri } from '@/lib/check'
 import { isWikiRootFolder } from '@/lib/wiki/path'
 import { buildVectorIndexedMap, getVectorDocumentKey } from '@/lib/vector-document-key'
 import { buildRemotePathsToLoad } from './article-remote-sync'
@@ -58,7 +59,7 @@ import {
 } from '@/lib/editor-deactivation'
 import { writeSelfHostedWorkspaceText } from '@/lib/self-hosted-sync/files'
 import { isFileDeletionPending } from './file-deletion'
-import type { FsConflictPayload } from '@/lib/platform/fs/errors'
+import { isNotFoundError, type FsConflictPayload } from '@/lib/platform/fs/errors'
 import {
   applyRevisionConflictChoice,
   deriveCopyPath,
@@ -142,10 +143,18 @@ function articleSaveErrorDetails(error: unknown): { message: string; code?: stri
 // the latest successful read or save per workspace-relative path. It is
 // deliberately module-level, not UI state: only the save path reads it,
 // and the conflict dialog subscribes to `revisionConflicts` instead.
-// A missing entry means "unknown": the adapter then stats first and
-// guards with the current revision, so an unknown revision can never
-// silently overwrite either.
+// A missing entry means "unknown". In web mode an unknown revision
+// never reaches the adapter stat-and-guard fallback (F10-1): the save
+// path stats first, writes only a file that does not exist yet
+// (createNew), and surfaces an existing file as a conflict instead of
+// silently overwriting edits made since load.
 const loadedArticleRevisions = new Map<string, string | null>()
+
+// Paths whose latest read failed with a non-not-found error (N-01).
+// While a path is in this set, saves for it refuse to write: the
+// editor content is not based on the file on disk, so an autosave
+// would overwrite the unread original. A successful read clears it.
+const failedArticleReads = new Set<string>()
 
 function getLoadedArticleRevision(path: string): string | null | undefined {
   return loadedArticleRevisions.get(path)
@@ -182,18 +191,52 @@ type GuardedWriteOutcome =
 // as the If-Match guard; a stale guard surfaces as a conflict outcome
 // instead of an overwrite, and every other error still throws.
 async function tryWriteGuardedArticleText(
+  path: string,
   pathOptions: ArticlePathOptions,
   content: string,
   expectedRevision: string | null | undefined,
 ): Promise<GuardedWriteOutcome> {
+  // N-01: never write over a file whose last read failed. The caller
+  // records the failure and retains the content; a successful reload
+  // clears the mark.
+  if (failedArticleReads.has(path)) {
+    throw new Error(
+      `Refusing to save ${path}: the last read of this file failed, so the editor content is not based on the file on disk. Reload the file before saving.`,
+    )
+  }
   try {
-    const options: { baseDir?: BaseDirectory; expectedRevision?: string } = {}
+    const options: { baseDir?: BaseDirectory; expectedRevision?: string; createNew?: boolean } = {}
     if (pathOptions.baseDir) options.baseDir = pathOptions.baseDir
-    if (expectedRevision) options.expectedRevision = expectedRevision
+    if (expectedRevision) {
+      options.expectedRevision = expectedRevision
+    } else if (!checkIsTauri()) {
+      // F10-1: web mode with an unknown loaded revision. Without this
+      // branch the adapter stats the current server revision and
+      // guards with it, silently overwriting edits another session
+      // made since load. Only a file that does not exist yet may be
+      // written (createNew); an existing file surfaces as a conflict
+      // and the dialog owns the next step. Tauri keeps the plain
+      // write: it has no revision guard (reads report revision null).
+      let exists = false
+      try {
+        if (!pathOptions.baseDir) {
+          await platform.fs.stat(pathOptions.path)
+        } else {
+          await platform.fs.stat(pathOptions.path, { baseDir: pathOptions.baseDir })
+        }
+        exists = true
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error
+      }
+      if (exists) {
+        return { status: 'conflict', conflict: null }
+      }
+      options.createNew = true
+    }
     await platform.fs.writeTextFile(pathOptions.path, content, options)
     return { status: 'written' }
   } catch (error) {
-    if (isRevisionConflictLike(error)) {
+    if (isRevisionConflictLike(error) || isAlreadyExistsLike(error)) {
       return { status: 'conflict', conflict: extractConflictPayload(error) }
     }
     throw error
@@ -3723,6 +3766,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
       localContent = detailed.content
       // The revision read here guards the next save (V1-09 section 3.9).
       setLoadedArticleRevision(actualPath, detailed.revision)
+      failedArticleReads.delete(actualPath)
 
       if (!isCurrentArticleRead()) return
 
@@ -3809,7 +3853,19 @@ const useArticleStore = create<NoteState>((set, get) => ({
           }
         }
       } else {
+        // N-01: a non-not-found read error must not present as an
+        // empty note. Mark the path read-failed (saves refuse to
+        // overwrite the unread original), drop any remembered
+        // revision, and record the failure explicitly.
+        failedArticleReads.add(actualPath)
+        loadedArticleRevisions.delete(actualPath)
         if (isCurrentArticleRead()) {
+          get().updateArticleSaveStatus(actualPath, {
+            status: 'failed',
+            attempts: 1,
+            updatedAt: Date.now(),
+            errorMessage: errorMsg,
+          })
           set({
             currentArticle: '',
             loading: false,
@@ -4107,6 +4163,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
             // Rust journal already persisted the file.
           } else {
             const outcome = await tryWriteGuardedArticleText(
+              path,
               pathOptions,
               content,
               getLoadedArticleRevision(path),
@@ -4242,6 +4299,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
             }
 
             const outcome = await tryWriteGuardedArticleText(
+              savePath,
               pathOptions,
               saveContent,
               getLoadedArticleRevision(savePath),
