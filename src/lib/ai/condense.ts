@@ -135,7 +135,7 @@ async function fetchCompactionSummary(
   config: Awaited<ReturnType<typeof getAISettings>>,
   contextWindow: number
 ) {
-  if (!config || await validateAIService(config.baseURL) === null) {
+  if (!config || await validateAIService(config) === null) {
     return ''
   }
 

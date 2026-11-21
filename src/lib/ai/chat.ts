@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getAISettings, validateAIService, prepareMessages, createOpenAIClient, createAssistantToolCallMessage, createChatCompletionStreamWithToolChoiceFallback, getChatTokenLimitParams, handleAIError, convertImageToBase64, withFastAiRequestOptions, withProviderCompatibleSampling } from './utils';
+import { resolveSamplingParams } from './sampling-params';
 
 interface StreamingChatToolCall {
   id: string
@@ -49,7 +50,7 @@ export async function fetchAi(
     const aiConfig = await getAISettings(modelType)
 
     // 验证AI服务
-    if (await validateAIService(aiConfig?.baseURL) === null) return ''
+    if (await validateAIService(aiConfig) === null) return ''
 
     // 准备消息
     const prepared = await prepareMessages(text, messages)
@@ -60,8 +61,7 @@ export async function fetchAi(
     const completion = await openai.chat.completions.create({
       model: aiConfig?.model || '',
       messages: finalMessages,
-      temperature: aiConfig?.temperature || 1,
-      top_p: aiConfig?.topP || 1,
+      ...resolveSamplingParams(aiConfig),
       ...getChatTokenLimitParams(aiConfig),
     })
 
@@ -101,7 +101,7 @@ export async function fetchAiStream(
     const aiConfig = await getAISettings()
 
     // 验证AI服务
-    const validatedBaseURL = await validateAIService(aiConfig?.baseURL)
+    const validatedBaseURL = await validateAIService(aiConfig)
     if (validatedBaseURL === null) {
       return ''
     }
@@ -483,7 +483,7 @@ export async function fetchAiStreamToken(text: string, onUpdate: (content: strin
     const aiConfig = await getAISettings()
     
     // 验证AI服务
-    if (await validateAIService(aiConfig?.baseURL) === null) return ''
+    if (await validateAIService(aiConfig) === null) return ''
     
     // 准备消息
     const { messages } = await prepareMessages(text)

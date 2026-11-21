@@ -14,6 +14,7 @@ export function ModelSetting({ kind }: { kind?: 'embedding' | 'reranking' } = {}
   const { hasEmbeddingModel, hasRerankModel, checkEmbeddingModel, checkRerankModel } = useVectorStore();
   const { markIndexDirty } = useRagSettingsStore();
   const [configuredModels, setConfiguredModels] = useState({ embedding: false, reranking: false });
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     platform.store.load('store.json').then(async store => {
@@ -24,6 +25,10 @@ export function ModelSetting({ kind }: { kind?: 'embedding' | 'reranking' } = {}
       setConfiguredModels({ embedding: Boolean(embedding), reranking: Boolean(reranking) });
       if (embedding) void checkEmbeddingModel();
       if (reranking) void checkRerankModel();
+    }).catch((error) => {
+      // DA-3 (SET-14): a failed load is not "not configured".
+      console.error('Failed to load RAG model settings:', error);
+      setLoadFailed(true);
     });
   }, [checkEmbeddingModel, checkRerankModel]);
 
@@ -74,9 +79,11 @@ export function ModelSetting({ kind }: { kind?: 'embedding' | 'reranking' } = {}
               <ItemTitle className="max-w-full min-w-0">
                 <span className="truncate">{option.title}</span>
                 <Badge variant={option.modelKey === 'embedding' ? (hasEmbeddingModel ? 'secondary' : 'outline') : (hasRerankModel ? 'secondary' : 'outline')}>
-                  {option.modelKey === 'embedding'
-                    ? (hasEmbeddingModel ? ragT('modelAvailable') : configuredModels.embedding ? ragT('modelUnavailable') : ragT('modelNotConfigured'))
-                    : (hasRerankModel ? ragT('modelAvailable') : configuredModels.reranking ? ragT('modelUnavailable') : ragT('modelNotConfigured'))}
+                  {loadFailed
+                    ? ragT('modelLoadFailed')
+                    : option.modelKey === 'embedding'
+                      ? (hasEmbeddingModel ? ragT('modelAvailable') : configuredModels.embedding ? ragT('modelUnavailable') : ragT('modelNotConfigured'))
+                      : (hasRerankModel ? ragT('modelAvailable') : configuredModels.reranking ? ragT('modelUnavailable') : ragT('modelNotConfigured'))}
                 </Badge>
               </ItemTitle>
               <ItemDescription>{option.desc}</ItemDescription>

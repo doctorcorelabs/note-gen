@@ -12,6 +12,7 @@ import { loadWebSearchSettings } from '@/lib/web-search/settings';
 import { isBuiltInOpenAIProvider, isMainlandChinaAppStore } from './storefront-policy';
 import { createTranslator, type AbstractIntlMessages } from 'next-intl';
 import { userErrorMessageKey } from '@/lib/web/user-error-message';
+import { validateAiConfigFields } from './validate-config';
 import { DEFAULT_LOCALE, LANGUAGE_STORAGE_KEY, loadMessagesWithFallback, normalizeLocale } from '@/i18n/config';
 import fallbackCommonMessages from '../../../messages/common/zh.json';
 
@@ -62,6 +63,18 @@ export async function getSystemPromptContent(): Promise<string> {
  * 获取AI设置
  */
 export async function getAISettings(modelType?: string): Promise<AiConfig | undefined> {
+  // DA-3 (SET-02): resolve against the latest selection, not a
+  // store snapshot still inside the settings funnel debounce
+  // window. The funnel reports its own failures, so a failed
+  // flush must not fail resolution here. Dynamic import avoids
+  // a stores/setting <-> lib/ai cycle (precedent:
+  // platform-switch-plan.ts).
+  try {
+    const settingStore = await import('@/stores/setting')
+    await settingStore.flushChangedSyncableSettingsPersist()
+  } catch {
+    // Resolution continues against the stored values.
+  }
   const store = await platform.store.load('store.json')
   const modelId = await store.get(modelType || 'primaryModel')
 
@@ -178,16 +191,38 @@ export function getChatTokenLimitParams(
 /**
  * 检查AI服务配置是否有效
  */
-export async function validateAIService(baseURL: string | undefined): Promise<string | null> {
-  if (!baseURL) {
-    toast({
-      title: 'AI Error',
-      description: 'Please set AI address first',
-      variant: 'destructive',
-    })
-    return null
+export async function validateAIService(config: AiConfig | undefined): Promise<string | null> {
+  const invalid = validateAiConfigFields(config)
+  if (!invalid) {
+    return config?.baseURL ?? null
   }
-  return baseURL
+  // DA-3 (SET-16): name the missing field instead of failing
+  // later as a raw provider error. Message loading follows the
+  // handleAIError pattern and must never throw.
+  let title = 'AI Error'
+  let description = 'Please complete the AI configuration first'
+  try {
+    const locale = normalizeLocale(typeof window === 'undefined' ? null : localStorage.getItem(LANGUAGE_STORAGE_KEY))
+    const messages = await loadMessagesWithFallback(locale)
+    const tErrors = createTranslator({ locale, messages, namespace: 'common.requestErrors' })
+    const tRoot = createTranslator({ locale, messages })
+    title = tErrors('aiRequestFailed')
+    const keyByField = {
+      baseURL: 'settings.ai.validation.baseUrlRequired',
+      model: 'settings.ai.validation.modelRequired',
+      apiKey: 'settings.ai.validation.apiKeyRequired',
+    } as const
+    const key = keyByField[invalid.field]
+    if (tRoot.has(key)) description = tRoot(key)
+  } catch {
+    // Keep the English fallback strings above.
+  }
+  toast({
+    title,
+    description,
+    variant: 'destructive',
+  })
+  return null
 }
 
 /**

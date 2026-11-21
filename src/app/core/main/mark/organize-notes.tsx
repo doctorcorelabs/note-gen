@@ -30,6 +30,7 @@ import { joinRelativePath } from "@/lib/path"
 import { toast } from "@/hooks/use-toast"
 import emitter from "@/lib/emitter"
 import { shouldEmitOrganizeOnboardingComplete } from "./organize-onboarding"
+import { cleanupEmptyOrganizeOutput } from "./organize-cleanup"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -527,6 +528,10 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
     const extraRequirement = additionalRequirement.trim()
     const fileName = `Organized Notes_${timestamp}.md`
     const filePath = buildOutputPath(outputFolder, fileName)
+    // DA-3 (SET-12): track the output file so a failure can
+    // remove it while it is still the empty placeholder.
+    let outputCreated = false
+    let outputRenamed = false
 
     try {
       const workspace = await getWorkspacePath()
@@ -537,6 +542,7 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
       } else {
         await platform.fs.writeTextFile(pathOptions.path, '', { baseDir: pathOptions.baseDir })
       }
+      outputCreated = true
 
       await loadFileTree()
       await setActiveFilePath(
@@ -844,6 +850,8 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
           await platform.fs.writeTextFile(newPathOptions.path, cleanedContent, { baseDir: newPathOptions.baseDir })
         }
 
+        outputRenamed = true
+
         // Delete old file
         if (pathChanged) {
           if (workspace.isCustom) {
@@ -896,6 +904,31 @@ export const OrganizeNotes = forwardRef<{ openOrganize: () => void }, OrganizeNo
           description: tMark('toolbar.organizeError'),
           variant: 'destructive',
         })
+      }
+      // DA-3 (SET-12): a failed Organize must not leave the
+      // empty output file behind. Partial content is kept, and
+      // cleanup failures never mask the original error.
+      if (outputCreated && !outputRenamed) {
+        try {
+          const cleanupWorkspace = await getWorkspacePath()
+          const cleanupPathOptions = await getFilePathOptions(filePath)
+          const removed = await cleanupEmptyOrganizeOutput({
+            readTextFile: () => cleanupWorkspace.isCustom
+              ? platform.fs.readTextFile(cleanupPathOptions.path)
+              : platform.fs.readTextFile(cleanupPathOptions.path, { baseDir: cleanupPathOptions.baseDir }),
+            removeFile: () => cleanupWorkspace.isCustom
+              ? platform.fs.remove(cleanupPathOptions.path)
+              : platform.fs.remove(cleanupPathOptions.path, { baseDir: cleanupPathOptions.baseDir }),
+          })
+          if (removed) {
+            await loadFileTree()
+            if (useArticleStore.getState().activeFilePath === filePath) {
+              await useArticleStore.getState().cleanTabsByDeletedFile(filePath)
+            }
+          }
+        } catch (cleanupError) {
+          console.error('Failed to clean up Organize output:', cleanupError)
+        }
       }
     } finally {
       organizingRef.current = false

@@ -45,6 +45,7 @@ import { createOpenAIClient } from "@/lib/ai/utils"
 import { toast } from "@/hooks/use-toast"
 import { useUserErrorMessage } from "@/lib/use-user-error-message";
 import { blobToBytes, invokeAiBinary, invokeAiJson, invokeAiMultipart, resolveAiRequestConfig } from "@/lib/ai/tauri-client"
+import { isSttFormatRejection } from "@/lib/ai/stt-check"
 
 interface ModelCardProps {
   modelConfig: ModelConfig
@@ -221,9 +222,12 @@ export default function ModelCard({
               }
             }, signal)
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            if (message.includes('401') || message.includes('403')) {
-              throw new Error(message)
+            // DA-3 (SET-08): only an audio-format rejection
+            // (HTTP 400) proves the check passed. Auth, route,
+            // model, 5xx (incl. the web-mode 501), and network
+            // failures must fail the check honestly.
+            if (!isSttFormatRejection(error)) {
+              throw error
             }
           }
           return true

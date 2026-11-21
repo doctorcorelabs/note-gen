@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { Plus } from "lucide-react"
-import { platform } from "@/lib/platform"
 import { v4 } from "uuid"
 
 import { Button } from "@/components/ui/button"
+import { toast } from "@/hooks/use-toast"
+import { useUserErrorMessage } from "@/lib/use-user-error-message"
 import useSettingStore from "@/stores/setting"
 import type { AiConfig } from "../config"
 
@@ -14,6 +15,7 @@ interface CreateConfigProps {
 
 export default function CreateConfig({ onConfigCreated }: CreateConfigProps) {
   const t = useTranslations('settings.ai')
+  const userErrorMessage = useUserErrorMessage()
   const { setAiModelList } = useSettingStore()
   const [creating, setCreating] = useState(false)
 
@@ -22,8 +24,7 @@ export default function CreateConfig({ onConfigCreated }: CreateConfigProps) {
 
     setCreating(true)
     try {
-      const store = await platform.store.load('store.json')
-      const aiModelList = await store.get<AiConfig[]>('aiModelList') || []
+      const aiModelList = useSettingStore.getState().aiModelList
       const id = v4()
       const newProvider: AiConfig = {
         key: id,
@@ -36,10 +37,15 @@ export default function CreateConfig({ onConfigCreated }: CreateConfigProps) {
       }
       const updatedList = [newProvider, ...aiModelList]
 
-      await store.set('aiModelList', updatedList)
-      await store.save()
       setAiModelList(updatedList)
+      const settingStore = await import('@/stores/setting')
+      await settingStore.flushChangedSyncableSettingsPersist()
       onConfigCreated?.(id)
+    } catch (error) {
+      toast({
+        description: userErrorMessage(error) ?? t('saveFailed'),
+        variant: 'destructive',
+      })
     } finally {
       setCreating(false)
     }

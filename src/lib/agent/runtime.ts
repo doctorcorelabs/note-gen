@@ -792,7 +792,7 @@ export class AgentRuntime {
 
     // A supplied turn snapshot must outlive changes to the global model picker.
     const aiConfig = input.aiConfig ?? await getAISettings()
-    const validatedBaseURL = await validateAIService(aiConfig?.baseURL)
+    const validatedBaseURL = await validateAIService(aiConfig)
     if (!aiConfig || validatedBaseURL === null) {
       agentDebugLog('ai_service_invalid', { runId })
       return {

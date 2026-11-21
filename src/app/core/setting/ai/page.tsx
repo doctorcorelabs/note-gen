@@ -11,6 +11,10 @@ import { ResponsiveSelect } from "@/components/responsive-select"
 import { SettingType } from "../components/setting-base";
 import { AiConfig, ModelConfig, ProxyMode, builtinProviderTemplates } from "../config";
 import useSettingStore from "@/stores/setting";
+import { toast } from "@/hooks/use-toast";
+import { useUserErrorMessage } from "@/lib/use-user-error-message";
+import { parseHeadersToKeyValue, convertKeyValueToJson } from "./header-pairs";
+import { roleValueReferencesConfig, roleValueReferencesModel } from "@/lib/ai/model-role-refs";
 import { BotMessageSquare, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Network, Plus, Server, Settings2, Trash2, X } from "lucide-react";
 import { OpenBroswer } from "@/components/open-broswer";
 import ModelCard from "./model-card";
@@ -101,6 +105,7 @@ function ProviderTitle({ config, template, modelCount }: { config: AiConfig; tem
 
 export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations('settings.ai');
+  const userErrorMessage = useUserErrorMessage();
   const {
     aiModelList,
     setAiModelList
@@ -151,18 +156,6 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
     !configuredTemplateKeys.has(template.templateKey || template.key)
   ))
   
-  const parseHeadersToKeyValue = (headers: Record<string, string> = {}) => {
-    return Object.entries(headers).map(([key, value]) => ({
-      key, value: String(value), id: Math.random().toString(36).substr(2, 9)
-    }))
-  }
-
-  const convertKeyValueToJson = (pairs: Array<{key: string, value: string}>) => {
-    const obj: Record<string, string> = {}
-    pairs.forEach(pair => { if (pair.key.trim()) obj[pair.key.trim()] = pair.value })
-    return obj
-  }
-
   // 添加新模型
   const addNewModel = async () => {
     if (!currentConfig) return
@@ -201,6 +194,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
     }
     
     await updateAiConfig(updatedConfig)
+    await clearModelRoles(value => roleValueReferencesModel(value, currentConfig.key, modelId))
     
     // 从展开列表中移除被删除的模型
     setExpandedModels(prev => prev.filter(id => id !== modelId))
@@ -238,6 +232,52 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
 
   }
 
+  // DA-3 (SET-04): every aiModelList mutation goes through
+  // state + the settings funnel, then flushes immediately so
+  // discrete actions (add/copy/delete) are durable without
+  // waiting out the debounce window. Dynamic import avoids a
+  // stores/setting cycle (precedent: platform-switch-plan.ts).
+  const persistAiModelList = async (updatedList: AiConfig[]) => {
+    aiModelListRef.current = updatedList
+    setAiModelList(updatedList)
+    const settingStore = await import('@/stores/setting')
+    await settingStore.flushChangedSyncableSettingsPersist()
+  }
+
+  // DA-3 (SET-06): clear model roles that pointed at a deleted
+  // model or provider so resolution never chases a stale id.
+  // Clearing goes through the official store setters so
+  // persistence follows the normal paths.
+  const clearModelRoles = async (matches: (value: string) => boolean) => {
+    const state = useSettingStore.getState()
+    const roles: Array<{ value: string, clear: () => Promise<void> | void }> = [
+      { value: state.primaryModel, clear: () => state.setPrimaryModel('') },
+      { value: state.editorModel, clear: () => state.setEditorModel('') },
+      { value: state.completionModel, clear: () => state.setCompletionModel('') },
+      { value: state.markDescModel, clear: () => state.setMarkDescModel('') },
+      { value: state.embeddingModel, clear: () => state.setEmbeddingModel('') },
+      { value: state.rerankingModel, clear: () => state.setRerankingModel('') },
+      { value: state.audioModel, clear: () => state.setAudioModel('') },
+      { value: state.sttModel, clear: () => state.setSttModel('') },
+    ]
+    let failed = false
+    for (const role of roles) {
+      if (!role.value || !matches(role.value)) continue
+      try {
+        await role.clear()
+      } catch (error) {
+        failed = true
+        console.error('Failed to clear model role:', error)
+      }
+    }
+    if (failed) {
+      toast({
+        description: t('saveFailed'),
+        variant: 'destructive',
+      })
+    }
+  }
+
   const addProviderFromTemplate = async (template: AiConfig) => {
     const templateKey = template.templateKey || template.key
     if (addingTemplateKey || configuredTemplateKeys.has(templateKey)) return
@@ -253,14 +293,14 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
         modelType: 'chat',
       }
       const updatedList = [newProvider, ...aiModelListRef.current]
-      const store = await platform.store.load('store.json')
-
-      await store.set('aiModelList', updatedList)
-      await store.save()
-      aiModelListRef.current = updatedList
-      setAiModelList(updatedList)
+      await persistAiModelList(updatedList)
       setSelectedAiConfig(id)
       setActiveTab('connection')
+    } catch (error) {
+      toast({
+        description: userErrorMessage(error) ?? t('saveFailed'),
+        variant: 'destructive',
+      })
     } finally {
       setAddingTemplateKey('')
     }
@@ -282,13 +322,16 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       })) || []
     }
 
-    const store = await platform.store.load('store.json')
-    const aiModelList = await store.get<AiConfig[]>('aiModelList') || []
-    const updatedList = [...aiModelList, newConfig]
-    
-    await store.set('aiModelList', updatedList)
-    setAiModelList(updatedList)
-    setSelectedAiConfig(newConfig.key)
+    try {
+      const updatedList = [...aiModelListRef.current, newConfig]
+      await persistAiModelList(updatedList)
+      setSelectedAiConfig(newConfig.key)
+    } catch (error) {
+      toast({
+        description: userErrorMessage(error) ?? t('saveFailed'),
+        variant: 'destructive',
+      })
+    }
   }
 
   // 删除当前配置
@@ -298,12 +341,15 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
     const confirmed = await platform.dialog.confirm(t('deleteCustomModelConfirm'))
     if (!confirmed) return
 
-    const store = await platform.store.load('store.json')
-    const aiModelList = await store.get<AiConfig[]>('aiModelList') || []
-    const updatedList = aiModelList.filter(item => item.key !== currentConfig.key)
-    
-    await store.set('aiModelList', updatedList)
-    setAiModelList(updatedList)
+    try {
+      const deletedConfig = currentConfig
+      const updatedList = aiModelListRef.current.filter(item => item.key !== deletedConfig.key)
+      await persistAiModelList(updatedList)
+      await clearModelRoles(value => roleValueReferencesConfig(
+        value,
+        deletedConfig.key,
+        (deletedConfig.models || []).map(model => model.id),
+      ))
 
     // 删除后选择下一个用户自定义模型
     const remainingUserModels = updatedList
@@ -311,6 +357,12 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       setSelectedAiConfig(remainingUserModels[0].key)
     } else {
       setSelectedAiConfig('')
+    }
+    } catch (error) {
+      toast({
+        description: userErrorMessage(error) ?? t('saveFailed'),
+        variant: 'destructive',
+      })
     }
   }
 
@@ -350,14 +402,19 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   }
 
   // 当选中的配置改变时，更新headers
+  // DA-3 (SET-17): reparse headers only when the selected
+  // provider changes. Depending on the config object reparsed
+  // on every keystroke (each edit builds a new object), which
+  // remounted the header inputs and dropped focus.
   useEffect(() => {
-    if (currentConfig) {
-      setHeaderPairs(parseHeadersToKeyValue(currentConfig.customHeaders))
+    const selected = aiModelListRef.current.find(model => model.key === selectedAiConfig)
+    if (selected) {
+      setHeaderPairs(parseHeadersToKeyValue(selected.customHeaders))
       setApiKeyVisible(false)
     } else {
       setHeaderPairs([])
     }
-  }, [currentConfig])
+  }, [selectedAiConfig])
 
   useEffect(() => {
     async function init() {
@@ -422,7 +479,12 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
         setSelectedAiConfig('')
       }
     }
-    init()
+    init().catch((error) => {
+      toast({
+        description: userErrorMessage(error) ?? t('loadFailed'),
+        variant: 'destructive',
+      })
+    })
   }, [])
 
   return (

@@ -21,6 +21,7 @@ import { describe, expect, it } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..");
 const SOURCE = readFileSync(join(REPO_ROOT, "src", "stores", "setting.ts"), "utf8");
+const UTILS_SOURCE = readFileSync(join(REPO_ROOT, "src", "lib", "ai", "utils.ts"), "utf8");
 
 function sliceBetween(startMarker: string, endMarker: string): string {
   const start = SOURCE.indexOf(startMarker);
@@ -86,5 +87,32 @@ describe("F122-Q2 setting funnels", () => {
     expect(handler).toContain("if (error instanceof PlatformCapabilityError) return");
     expect(handler).toContain("throw error");
     expect(SOURCE).toContain("PlatformCapabilityError } from '@/lib/platform'");
+  });
+});
+
+describe("DA-3 SET-02 funnel honesty", () => {
+  it("flush catch notifies the user and requeues the failed batch", () => {
+    const fn = sliceBetween(
+      "export async function flushChangedSyncableSettingsPersist()",
+      "\n}\n",
+    );
+    const catchAt = fn.indexOf(".catch(error => {");
+    expect(catchAt).toBeGreaterThanOrEqual(0);
+    const handler = fn.slice(catchAt);
+    expect(handler).toContain("showSettingPersistFailedToast");
+    expect(handler).toContain("pendingSettingPersistKeys.add");
+    expect(handler).toContain("pendingSettingSyncKeys.add");
+  });
+
+  it("getAISettings flushes pending persists before reading the store", () => {
+    const start = UTILS_SOURCE.indexOf("export async function getAISettings(");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = UTILS_SOURCE.indexOf("\n}\n", start);
+    expect(end).toBeGreaterThan(start);
+    const fn = UTILS_SOURCE.slice(start, end);
+    const flushAt = fn.indexOf("flushChangedSyncableSettingsPersist");
+    const readAt = fn.indexOf("store.get(modelType");
+    expect(flushAt).toBeGreaterThanOrEqual(0);
+    expect(readAt).toBeGreaterThan(flushAt);
   });
 });

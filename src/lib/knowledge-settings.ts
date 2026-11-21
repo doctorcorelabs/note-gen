@@ -16,16 +16,27 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: KnowledgeSettings = {
 }
 
 export async function getKnowledgeSettings(): Promise<KnowledgeSettings> {
-  const store = await platform.store.load('store.json')
-  return {
-    enabledSourceTypes: await store.get<KnowledgeSourceType[]>('ragEnabledSourceTypes')
-      ?? DEFAULT_KNOWLEDGE_SETTINGS.enabledSourceTypes,
-    globalSemanticSearchEnabled: await store.get<boolean>('ragGlobalSemanticSearchEnabled')
-      ?? DEFAULT_KNOWLEDGE_SETTINGS.globalSemanticSearchEnabled,
-    semanticSearchEnabled: await store.get<boolean>('wikiSemanticSearchEnabled')
-      ?? DEFAULT_KNOWLEDGE_SETTINGS.semanticSearchEnabled,
-    indexPaused: await store.get<boolean>('ragKnowledgeIndexPaused')
-      ?? DEFAULT_KNOWLEDGE_SETTINGS.indexPaused,
+  try {
+    const store = await platform.store.load('store.json')
+    return {
+      enabledSourceTypes: await store.get<KnowledgeSourceType[]>('ragEnabledSourceTypes')
+        ?? DEFAULT_KNOWLEDGE_SETTINGS.enabledSourceTypes,
+      globalSemanticSearchEnabled: await store.get<boolean>('ragGlobalSemanticSearchEnabled')
+        ?? DEFAULT_KNOWLEDGE_SETTINGS.globalSemanticSearchEnabled,
+      semanticSearchEnabled: await store.get<boolean>('wikiSemanticSearchEnabled')
+        ?? DEFAULT_KNOWLEDGE_SETTINGS.semanticSearchEnabled,
+      indexPaused: await store.get<boolean>('ragKnowledgeIndexPaused')
+        ?? DEFAULT_KNOWLEDGE_SETTINGS.indexPaused,
+    }
+  } catch (error) {
+    // DA-3 (SET-14): a failed settings load degrades to the
+    // defaults instead of rejecting into every caller. Return
+    // copies so callers cannot mutate the shared defaults.
+    console.error('Failed to load knowledge settings:', error)
+    return {
+      ...DEFAULT_KNOWLEDGE_SETTINGS,
+      enabledSourceTypes: [...DEFAULT_KNOWLEDGE_SETTINGS.enabledSourceTypes],
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getAISettings, prepareMessages, createOpenAIClient, handleAIError, withEditorFastAiRequestOptions } from './utils';
+import { resolveSamplingParams } from './sampling-params';
 
 /**
  * 生成文本描述
@@ -20,8 +21,7 @@ export async function fetchAiDesc(text: string) {
     const completion = await openai.chat.completions.create(withEditorFastAiRequestOptions({
       model: aiConfig?.model || '',
       messages: messages,
-      temperature: aiConfig?.temperature || 1,
-      top_p: aiConfig?.topP || 1,
+      ...resolveSamplingParams(aiConfig),
       max_tokens: 80,
     }, aiConfig))
     
@@ -87,8 +87,7 @@ export async function analyzeImagesWithVlm(
   const completion = await openai.chat.completions.create(withEditorFastAiRequestOptions({
       model: aiConfig?.model || '',
       messages: messages,
-      temperature: aiConfig?.temperature || 1,
-      top_p: aiConfig?.topP || 1,
+      ...resolveSamplingParams(aiConfig),
       max_tokens: maxTokens,
     }, aiConfig), { signal })
 

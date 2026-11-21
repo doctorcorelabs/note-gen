@@ -1,5 +1,8 @@
 // Modified for the web fork on 2026-11-14; see FORK.md.
 import { platform, PlatformCapabilityError } from '@/lib/platform'
+import { toast } from '@/hooks/use-toast'
+import { createTranslator } from 'next-intl'
+import { LANGUAGE_STORAGE_KEY, loadMessagesWithFallback, normalizeLocale } from '@/i18n/config'
 import { create } from 'zustand'
 import { AiConfig } from '@/app/core/setting/config'
 import { GitlabInstanceType } from '@/lib/sync/gitlab.types'
@@ -540,6 +543,26 @@ function scheduleChangedSettingsPersist(
   }, SETTING_LOCAL_PERSIST_DEBOUNCE_MS)
 }
 
+// DA-3 (SET-02): a failed settings persist must reach the user,
+// not only the console. Strings come from settings.persistence
+// with an English fallback so the failure surfaces even when
+// message loading fails (mark.ts conflict-toast precedent).
+async function showSettingPersistFailedToast(): Promise<void> {
+  let description = 'Could not save changes. Try again.'
+  try {
+    const locale = normalizeLocale(typeof window === 'undefined' ? null : localStorage.getItem(LANGUAGE_STORAGE_KEY))
+    const messages = await loadMessagesWithFallback(locale)
+    const t = createTranslator({ locale, messages, namespace: 'settings.persistence' })
+    description = t('failed')
+  } catch {
+    // Keep the English fallback string above.
+  }
+  toast({
+    description,
+    variant: 'destructive',
+  })
+}
+
 export async function flushChangedSyncableSettingsPersist() {
   if (pendingSettingPersistTimer) {
     clearTimeout(pendingSettingPersistTimer)
@@ -558,6 +581,15 @@ export async function flushChangedSyncableSettingsPersist() {
     .then(() => persistChangedSettings(state, changedKeys, syncableKeys))
     .catch(error => {
       console.error('Failed to persist changed settings:', error)
+      // DA-3 (SET-02): keep the failed batch pending so the next
+      // flush (mutation or pagehide) retries it instead of
+      // dropping the change silently. No retry timer of its own.
+      if (!pendingSettingPersistState) {
+        pendingSettingPersistState = state
+      }
+      changedKeys.forEach(key => pendingSettingPersistKeys.add(key))
+      syncableKeys.forEach(key => pendingSettingSyncKeys.add(key))
+      void showSettingPersistFailedToast()
     })
   await settingPersistQueue
 }

@@ -1,6 +1,9 @@
 import * as React from "react"
 import { useEffect, useState } from "react"
-import { AiConfig, ModelConfig } from "../../setting/config"
+import { AiConfig } from "../../setting/config"
+import { toast } from "@/hooks/use-toast"
+import { useUserErrorMessage } from "@/lib/use-user-error-message"
+import { groupModelsByConfig, persistModelSelection, type GroupedModel } from "./model-select-helpers"
 import { platform } from "@/lib/platform"
 import useSettingStore from "@/stores/setting"
 import { ChevronsUpDown, X } from "lucide-react"
@@ -20,12 +23,6 @@ import {
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { TooltipButton } from "@/components/tooltip-button"
-
-interface GroupedModel {
-  configKey: string
-  configTitle: string
-  model: ModelConfig
-}
 
 export function ModelSelect({
   modelKey,
@@ -47,6 +44,8 @@ export function ModelSelect({
   const [model, setModel] = useState<string>('')
   const [open, setOpen] = React.useState(false)
   const t = useTranslations('settings.defaultModel')
+  const tAi = useTranslations('settings.ai')
+  const userErrorMessage = useUserErrorMessage()
 
   useEffect(() => {
     if (value !== undefined) setModel(value)
@@ -192,11 +191,22 @@ export function ModelSelect({
       if (value === undefined) setModel(e)
       return
     }
+    const previousModel = model
     setPrimaryModelHandler(e)
-    const store = await platform.store.load('store.json');
-    const storeKey = getStoreKey(modelKey)
-    store.set(storeKey, e)
-    await store.save()
+    try {
+      const store = await platform.store.load('store.json');
+      const storeKey = getStoreKey(modelKey)
+      await persistModelSelection(store, storeKey, e)
+    } catch (error) {
+      // DA-3 (SET-01): a failed persist must not leave the UI
+      // showing a selection that was never saved.
+      setPrimaryModelHandler(previousModel)
+      toast({
+        description: userErrorMessage(error) ?? tAi('persistFailed'),
+        variant: 'destructive',
+      })
+      return
+    }
     await onValueChange?.(e)
   }
 
@@ -206,10 +216,19 @@ export function ModelSelect({
       if (value === undefined) setModel('')
       return
     }
-    const store = await platform.store.load('store.json');
-    const storeKey = getStoreKey(modelKey)
-    store.set(storeKey, '')
-    await store.save()
+    try {
+      const store = await platform.store.load('store.json');
+      const storeKey = getStoreKey(modelKey)
+      await persistModelSelection(store, storeKey, '')
+    } catch (error) {
+      // The handler below runs only after a successful persist,
+      // so the visible selection is still the previous one.
+      toast({
+        description: userErrorMessage(error) ?? tAi('persistFailed'),
+        variant: 'destructive',
+      })
+      return
+    }
     setPrimaryModelHandler('')
     await onValueChange?.('')
   }
@@ -235,14 +254,9 @@ export function ModelSelect({
     return null
   }
 
-  // 按配置分组模型
-  const groupedByConfig = groupedModels.reduce((acc, item) => {
-    if (!acc[item.configTitle]) {
-      acc[item.configTitle] = []
-    }
-    acc[item.configTitle].push(item)
-    return acc
-  }, {} as Record<string, GroupedModel[]>)
+  // 按配置分组模型 (DA-3 SET-13: group by provider key, not
+  // title, so same-title providers stay separate groups)
+  const groupedByConfig = groupModelsByConfig(groupedModels)
 
   useEffect(() => {
     initModelList()
@@ -278,15 +292,15 @@ export function ModelSelect({
         <Command>
           <CommandInput placeholder={t('placeholder')} className="h-9" />
           <CommandList>
-            <CommandEmpty>No model found.</CommandEmpty>
-            {Object.entries(groupedByConfig).map(([configTitle, models]) => (
+            <CommandEmpty>{t('noModelFound')}</CommandEmpty>
+            {groupedByConfig.map((group) => (
               <CommandGroup
-                key={configTitle}
-                heading={configTitle}
+                key={group.configKey}
+                heading={group.configTitle}
               >
-                {models.map((item) => (
+                {group.items.map((item) => (
                   <CommandItem
-                    key={item.model.id}
+                    key={`${item.configKey}-${item.model.id}`}
                     value={item.model.id}
                     data-checked={isModelSelected(item)}
                     onSelect={(currentValue) => {

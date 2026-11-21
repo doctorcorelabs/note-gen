@@ -139,6 +139,22 @@ export async function loadWebSearchSettings(
   targetStore?: StoreHandle,
   context: WebSearchSettingsContext = {}
 ): Promise<WebSearchSettings> {
+  try {
+    return await loadWebSearchSettingsInner(targetStore, context)
+  } catch (error) {
+    // DA-3 (SET-14): a failed settings load degrades to the
+    // defaults. This loader is read-only, so a whole-body
+    // catch is safe, and model resolution (getAISettingsByModelId)
+    // must not fail because web-search settings could not load.
+    console.error('Failed to load web search settings:', error)
+    return DEFAULT_WEB_SEARCH_SETTINGS
+  }
+}
+
+async function loadWebSearchSettingsInner(
+  targetStore?: StoreHandle,
+  context: WebSearchSettingsContext = {}
+): Promise<WebSearchSettings> {
   const store = targetStore || await platform.store.load('store.json')
   const [
     enabled,

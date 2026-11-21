@@ -475,6 +475,7 @@
       "modelAvailable": "Available",
       "modelUnavailable": "Unavailable",
       "modelNotConfigured": "Not configured",
+      "modelLoadFailed": "Load failed",
       "indexStatusTitle": "Index status",
       "indexStatusDesc": "Rebuild retrieval indexes after changing the embedding model or chunk settings.",
       "vectorDocuments": "Vector files",
@@ -1799,6 +1800,7 @@
       "desc": "Here, you can use different models for different scenes, to improve efficiency and reduce costs.",
       "tooltip": "Use main model",
       "noModel": "Follow main model",
+      "noModelFound": "No model found",
       "modelUnavailable": "Selected model unavailable",
       "placeholder": "Please select or search for models",
       "options": {
@@ -3754,6 +3756,14 @@
       "providerCount": "{count} platforms",
       "searchProviders": "Search platforms or endpoints",
       "endpointMissing": "Service endpoint not configured",
+      "persistFailed": "Could not save the model selection. Try again.",
+      "loadFailed": "Could not load AI settings. Try again.",
+      "saveFailed": "Could not save AI settings. Try again.",
+      "validation": {
+        "baseUrlRequired": "Please set the AI service address (Base URL) first",
+        "modelRequired": "Please select or enter a model name first",
+        "apiKeyRequired": "Please enter the API key for this provider first"
+      },
       "noProviderResults": "No matching model platforms",
       "noProvidersTitle": "No model platforms yet",
       "noProvidersDesc": "Start from a platform template or add a custom AI service.",

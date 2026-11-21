@@ -8,6 +8,7 @@ import {
   withEditorFastAiRequestOptions,
 } from './utils';
 import { createAiStreamContentProcessor } from './sanitize';
+import { resolveSamplingParams } from './sampling-params';
 
 /**
  * 翻译文本
@@ -21,7 +22,7 @@ export async function fetchAiTranslate(text: string, targetLanguage: string): Pr
     // 若不存在则使用编辑器模型，并在未选择时回退到主要模型。
     const aiConfig = await getAISettings('translateModel') || await getEditorAISettings()
 
-    if (await validateAIService(aiConfig?.baseURL) === null) {
+    if (await validateAIService(aiConfig) === null) {
       return ''
     }
     
@@ -35,8 +36,7 @@ export async function fetchAiTranslate(text: string, targetLanguage: string): Pr
     const completion = await openai.chat.completions.create(withEditorFastAiRequestOptions({
       model: aiConfig?.model || '',
       messages: messages,
-      temperature: aiConfig?.temperature || 1,
-      top_p: aiConfig?.topP || 1,
+      ...resolveSamplingParams(aiConfig),
     }, aiConfig))
     
     return completion.choices[0]?.message?.content || ''
@@ -55,7 +55,7 @@ export async function fetchAiTranslateStream(
   try {
     const aiConfig = await getAISettings('translateModel') || await getEditorAISettings()
 
-    if (await validateAIService(aiConfig?.baseURL) === null) {
+    if (await validateAIService(aiConfig) === null) {
       return
     }
 
@@ -68,8 +68,7 @@ export async function fetchAiTranslateStream(
     const stream = await openai.chat.completions.create(withEditorFastAiRequestOptions({
       model: aiConfig?.model || '',
       messages,
-      temperature: aiConfig?.temperature || 1,
-      top_p: aiConfig?.topP || 1,
+      ...resolveSamplingParams(aiConfig),
       stream: true,
     }, aiConfig), {
       signal: abortSignal,
