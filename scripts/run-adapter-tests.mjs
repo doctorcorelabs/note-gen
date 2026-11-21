@@ -101,6 +101,7 @@ const WEB_NODE_SPECS = [
 // sync. A Vitest-style suite must never be added to the node:test
 // lists: it would fail loudly here instead of passing.
 const VITEST_SPECS = [
+  "src/lib/platform/invoke/workspace-trash-handler.spec.ts",
   "src/lib/platform/sql/db-client.spec.ts",
   "src/lib/platform/sql/reconciled-forms.spec.ts",
   "src/lib/platform/sql/sql.tauri.spec.ts",

@@ -588,19 +588,29 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.block,
       searchTerms: ['image', 'picture', 'photo', 'img'],
       command: async ({ editor, range }: { editor: Editor; range: Range }) => {
-        const rangeStart = range.from
-
-        // Insert "Uploading..." text as placeholder
-        editor.chain().focus().deleteRange(range).insertContentAt(rangeStart, {
-          type: 'text',
-          text: 'Uploading... ',
-        }).run()
+        // The range was captured when the menu opened; the document
+        // may have changed since (autosave, save conflict), so clamp
+        // it to the current document size before touching it. A stale
+        // range used to throw here, outside the try, and vanish as
+        // an unhandled rejection with no dialog and no toast
+        // (UTANG-UJI-06 putaran 2).
+        const docSize = editor.state.doc.content.size
+        const rangeStart = Math.min(Math.max(range.from, 0), docSize)
+        const rangeEnd = Math.min(Math.max(range.to, rangeStart), docSize)
 
         // Get the position range of the placeholder
         const placeholderStart = rangeStart
         const placeholderEnd = rangeStart + 'Uploading... '.length
+        let placeholderInserted = false
 
         try {
+          // Insert "Uploading..." text as placeholder
+          editor.chain().focus().deleteRange({ from: rangeStart, to: rangeEnd }).insertContentAt(rangeStart, {
+            type: 'text',
+            text: 'Uploading... ',
+          }).run()
+          placeholderInserted = true
+
           let fileObj: File | null = null
 
           if (isMobileDevice()) {
@@ -663,8 +673,11 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
             },
           }).run()
         } catch (error) {
-          // Remove the placeholder on error
-          editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
+          // Remove the placeholder on error (only when it landed;
+          // deleting its range otherwise would eat real text).
+          if (placeholderInserted) {
+            editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run()
+          }
 
           toast({
             title: tr.imageUpload.failed,

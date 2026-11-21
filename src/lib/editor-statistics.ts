@@ -26,3 +26,22 @@ export function getEditorStatistics(text: string): EditorStatistics {
     readingMinutes,
   }
 }
+
+// Leaf text for the visual-mode character basis (UTANG-UJI-08):
+// atom/leaf nodes carry their countable text in attributes, not in
+// node text. The source basis (markdownToPlainText) counts fence
+// contents and image alt text, so the visual basis must count the
+// same: mermaid code (attrs.code) and image alt (attrs.alt). Every
+// other leaf counts 0.
+export function editorLeafText(node: {
+  type: { name: string }
+  attrs?: Record<string, unknown>
+}): string {
+  if (node.type.name === "mermaidDiagram") {
+    return typeof node.attrs?.code === "string" ? node.attrs.code : ""
+  }
+  if (node.type.name === "image") {
+    return typeof node.attrs?.alt === "string" ? node.attrs.alt : ""
+  }
+  return ""
+}

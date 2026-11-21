@@ -39,6 +39,7 @@ const PRINT_FRAME_CLEANUP_DELAY_MS = 60000
 const PRINT_EXPORT_STORE = 'print-export.json'
 const PRINT_WINDOW_START_TIMEOUT_MS = 15000
 const DIRECT_PDF_EXPORT_TIMEOUT_MS = 75000
+const ANIMATION_FRAME_TIMEOUT_MS = 250
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g
 
 interface TauriPrintDocument {
@@ -353,9 +354,17 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
 }
 
 function waitForAnimationFrame() {
-  return new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve())
-  })
+  // requestAnimationFrame never fires while the page is hidden or
+  // rendering is suppressed (automation), which used to hang PDF
+  // export forever (UTANG-UJI-07 putaran 2). Race it against a
+  // short timer: the frame wait is only a cosmetic yield so the
+  // "Preparing PDF" toast can paint before heavy work starts.
+  return Promise.race([
+    new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve())
+    }),
+    waitForTimeout(ANIMATION_FRAME_TIMEOUT_MS),
+  ])
 }
 
 function waitForTimeout(timeoutMs: number) {
@@ -654,12 +663,13 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
     )
   }
 
-  await notifyPdfRenderStart(options)
   // Overall deadline for the web branch, mirroring the Tauri
   // DIRECT_PDF_EXPORT_TIMEOUT_MS: a stalled build or resource
   // wait fails with a typed error the caller can surface,
   // instead of hanging after the "Preparing PDF" toast
-  // (UTANG-UJI-07).
+  // (UTANG-UJI-07). The deadline starts before the render-start
+  // notification and stays armed until just before print(), so
+  // every await in between is covered (UTANG-UJI-07 putaran 2).
   let deadlineTimer: number | undefined
   const deadline = new Promise<never>((_resolve, reject) => {
     deadlineTimer = window.setTimeout(
@@ -667,6 +677,7 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
       DIRECT_PDF_EXPORT_TIMEOUT_MS,
     )
   })
+  await Promise.race([notifyPdfRenderStart(options), deadline])
   const html = await Promise.race([
     buildMarkdownExportDocument(source, options),
     deadline,
@@ -682,8 +693,8 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
     }
 
     await Promise.race([waitForDocumentResources(frameDocument), deadline])
+    await Promise.race([waitForAnimationFrame(), deadline])
     window.clearTimeout(deadlineTimer)
-    await waitForAnimationFrame()
 
     let cleanedUp = false
     const cleanup = () => {

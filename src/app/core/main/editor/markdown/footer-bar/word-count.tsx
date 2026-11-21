@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Type } from 'lucide-react'
 
 import {
+  editorLeafText,
   getEditorStatistics,
   markdownToPlainText,
   type EditorStatistics,
@@ -28,9 +29,11 @@ const SOURCE_STATISTICS_IDLE_TIMEOUT_MS = 1_500
 // matches the source-mode basis (markdownToPlainText inserts a
 // newline between blocks). doc.textContent joins blocks with no
 // separator, which undercounts and merges words at block
-// boundaries (UTANG-UJI-08).
+// boundaries (UTANG-UJI-08). Leaf text counts mermaid code and
+// image alt, which the source basis also counts, so the number
+// no longer changes when switching modes (UTANG-UJI-08 putaran 2).
 function visualText(editor: Editor): string {
-  return editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n')
+  return editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', editorLeafText)
 }
 
 export function WordCount({ editor, sourceMarkdown, compact = false }: WordCountProps) {

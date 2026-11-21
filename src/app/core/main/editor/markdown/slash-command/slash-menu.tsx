@@ -255,11 +255,27 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
         if (onSelectItem) {
           onSelectItem(item)
         } else {
-          item.command({ editor, range })
+          // Surface command failures as a toast instead of letting
+          // them vanish as unhandled rejections (UTANG-UJI-06).
+          const reportFailure = (error: unknown) => {
+            toast({
+              title: translations.imageUpload.failed,
+              description: error instanceof Error ? error.message : String(error),
+              variant: 'destructive',
+            })
+          }
+          try {
+            const result = item.command({ editor, range }) as unknown
+            if (result instanceof Promise) {
+              result.catch(reportFailure)
+            }
+          } catch (error) {
+            reportFailure(error)
+          }
         }
       }
     },
-    [aiDisabled, editor, onSelectItem, range, tDisabled, translations.groups.ai]
+    [aiDisabled, editor, onSelectItem, range, tDisabled, translations.groups.ai, translations.imageUpload.failed]
   )
 
   const selectVisibleItem = useCallback(

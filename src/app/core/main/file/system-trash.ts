@@ -2,7 +2,8 @@ import { platform } from '@/lib/platform'
 
 import { getDefaultArticleAbsolutePath, getFilePathOptions } from '@/lib/workspace'
 import { deleteSelfHostedWorkspacePath } from '@/lib/self-hosted-sync/files'
-import { isMobileDevice } from '@/lib/check'
+import { checkIsTauri, isMobileDevice } from '@/lib/check'
+import type { MovePathsToTrashResult } from '@/lib/platform/invoke/workspace-trash-handler'
 
 async function resolveExistingAbsolutePath(relativePath: string, workspaceRoot?: string) {
   if (workspaceRoot) {
@@ -33,6 +34,19 @@ export async function moveEntriesToSystemTrash(relativePaths: string[], workspac
   if (paths.length > 0) {
     if (isMobileDevice()) {
       for (const path of paths) await platform.fs.remove(path, { recursive: true })
+    } else if (!checkIsTauri()) {
+      // Web mode (UTANG-UJI-10): POST /api/workspace/trash only
+      // accepts workspace-relative paths; the virtual absolute
+      // paths (/appdata/article/...) are rejected per item as
+      // path_escapes_workspace. Send the relative paths of the
+      // entries that exist, and treat any rejected item as a
+      // failure instead of reporting a silent success.
+      const existingRelativePaths = remaining.filter((_, index) => Boolean(resolvedPaths[index]))
+      const result = await platform.invoke.invoke<MovePathsToTrashResult>('move_paths_to_trash', { paths: existingRelativePaths })
+      if (result.rejected.length > 0) {
+        throw new Error(`Failed to move ${result.rejected.length} item(s) to trash.`)
+      }
+      return journaled + result.moved.length + result.notFound.length
     } else {
       await platform.invoke.invoke('move_paths_to_trash', { paths })
     }

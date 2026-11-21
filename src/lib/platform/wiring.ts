@@ -99,6 +99,8 @@ import { createWebFsAdapter, type WebFsAdapterDeps } from "./fs/fs.web";
 import { createWebHttpAdapter } from "./http/http.web";
 import { createWebChannelAdapter } from "./invoke/channel.web";
 import { createWebInvokeAdapter } from "./invoke/web";
+import { createHandlerRegistry } from "./invoke/handlers";
+import { createMovePathsToTrashHandler } from "./invoke/workspace-trash-handler";
 import { createWebNotificationAdapter } from "./notification/notification.web";
 import { createWebOpenerAdapter } from "./opener/opener.web";
 import { createWebOsAdapter } from "./os/os.web";
@@ -292,7 +294,18 @@ export function registerWebAdapters(
     ["web"],
   );
   registerPlatformAdapter("http", createWebHttpAdapter(), ["web"]);
-  registerPlatformAdapter("invoke", createWebInvokeAdapter(), ["web"]);
+  // Backend invoke handlers (UTANG-UJI-10): move_paths_to_trash is
+  // the first registered handler; without it the web adapter
+  // rejects the command with an explicit 501 and workspace file
+  // deletion can never work in web mode.
+  const invokeHandlers = createHandlerRegistry();
+  invokeHandlers.register(
+    "move_paths_to_trash",
+    createMovePathsToTrashHandler({
+      getCsrfToken: options.getFsCsrfToken,
+    }),
+  );
+  registerPlatformAdapter("invoke", createWebInvokeAdapter(invokeHandlers), ["web"]);
   registerPlatformAdapter(
     "notification",
     createWebNotificationAdapter(),
