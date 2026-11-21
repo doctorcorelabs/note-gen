@@ -863,6 +863,51 @@ describe("web dialog adapter", () => {
     assert.equal(await adapter.openFiles({}), null);
   });
 
+  test("openFiles falls back to the file input on a non-abort picker error", async () => {
+    // UTANG-UJI-06: a SecurityError/TypeError from the picker
+    // must not fail the whole pick; the input fallback in the
+    // same module takes over.
+    const file = makeFile("fallback.txt", "fallback.txt");
+    mockInputDocument([file]);
+    setGlobal("showOpenFilePicker", async () => {
+      const error = new Error("transient activation required");
+      error.name = "SecurityError";
+      throw error;
+    });
+    const adapter = createWebDialogAdapter();
+    const result = await adapter.openFiles({ multiple: false });
+    if (result === null || Array.isArray(result)) {
+      assert.fail("expected a single picked file from the input fallback");
+    }
+    assert.equal(result.name, "fallback.txt");
+    assert.equal(result.handle, undefined);
+  });
+
+  test("openFiles binds the picker to its host object", async () => {
+    // UTANG-UJI-06: Chrome throws TypeError "Illegal invocation"
+    // when window.showOpenFilePicker is called detached from
+    // window. The adapter must call it bound to its host.
+    const file = makeFile("bound.md", "bound.md", "content");
+    setGlobal("showOpenFilePicker", async function (this: unknown) {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+      return [
+        {
+          kind: "file",
+          name: "bound.md",
+          getFile: async () => file,
+        },
+      ];
+    });
+    const adapter = createWebDialogAdapter();
+    const result = await adapter.openFiles({ multiple: false });
+    if (result === null || Array.isArray(result)) {
+      assert.fail("expected a single picked file");
+    }
+    assert.equal(result.name, "bound.md");
+  });
+
   test("openFiles falls back to a file input and returns one file when multiple is false", async () => {
     const file = makeFile("a.txt", "a.txt");
     mockInputDocument([file]);

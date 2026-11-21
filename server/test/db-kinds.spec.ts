@@ -57,8 +57,8 @@ describe('kind mirror conformance with ops-catalog.ts', () => {
     expect([...DB_READ_OP_KINDS]).toEqual(parseKindArray(text, 'SQL_READ_OP_KINDS'));
     expect([...DB_WRITE_OP_KINDS]).toEqual(parseKindArray(text, 'SQL_WRITE_OP_KINDS'));
     expect(DB_READ_OP_KINDS).toHaveLength(34);
-    expect(DB_WRITE_OP_KINDS).toHaveLength(40);
-    expect(DB_OP_KINDS).toHaveLength(74);
+    expect(DB_WRITE_OP_KINDS).toHaveLength(42);
+    expect(DB_OP_KINDS).toHaveLength(76);
     expect(DB_READ_OP_KINDS).toContain('messages.get');
   });
 
@@ -73,7 +73,7 @@ describe('kind mirror conformance with ops-catalog.ts', () => {
 
   it('matches the catalog wave and exposure metadata', () => {
     const metadata = parseMetadata(catalogText());
-    expect(metadata.size).toBe(74);
+    expect(metadata.size).toBe(76);
     for (const kind of DB_OP_KINDS) {
       expect(metadata.has(kind)).toBe(true);
     }

@@ -219,6 +219,7 @@ const ALL_OPERATIONS: ReconciledOperation[] = [
   { kind: "marks.softDelete", id: 1 },
   { kind: "marks.restore", id: 1 },
   { kind: "marks.deletePermanent", id: 1 },
+  { kind: "marks.emptyTrash" },
   {
     kind: "marks.updateTags",
     id: 1,
@@ -290,6 +291,7 @@ const ALL_OPERATIONS: ReconciledOperation[] = [
     update: { status: "ready" },
   },
   { kind: "knowledge.removeSource", sourceKey: "record:1" },
+  { kind: "vector.clear" },
   {
     kind: "vector.replaceChunks",
     sourceType: VECTOR_SOURCE_TYPE,
@@ -396,8 +398,8 @@ describe("reconciled catalog membership", () => {
     expect(SQL_READ_OP_KINDS.length).toBe(
       catalogHasMessagesGet ? 34 : 33,
     );
-    expect(SQL_WRITE_OP_KINDS.length).toBe(40);
-    expect(SQL_OP_KINDS.length).toBe(catalogHasMessagesGet ? 74 : 73);
+    expect(SQL_WRITE_OP_KINDS.length).toBe(42);
+    expect(SQL_OP_KINDS.length).toBe(catalogHasMessagesGet ? 76 : 75);
     expect(new Set(SQL_OP_KINDS).size).toBe(SQL_OP_KINDS.length);
     const readSet = new Set<string>(SQL_READ_OP_KINDS);
     for (const kind of SQL_WRITE_OP_KINDS) {
@@ -415,7 +417,7 @@ describe("reconciled catalog membership", () => {
     const entries = Object.values(SQL_OP_METADATA);
     const w1 = entries.filter((entry) => entry.wave === "W1").length;
     const w2 = entries.filter((entry) => entry.wave === "W2").length;
-    expect(w1).toBe(catalogHasMessagesGet ? 62 : 61);
+    expect(w1).toBe(catalogHasMessagesGet ? 64 : 63);
     expect(w2).toBe(12);
     const serverOnly = Object.entries(SQL_OP_METADATA)
       .filter(([, entry]) => entry.exposure === "server-only")
@@ -430,9 +432,9 @@ describe("reconciled catalog membership", () => {
 
 describe("unified operation expressibility", () => {
   it("holds one fixture per unified kind, no duplicates, no extras", () => {
-    expect(ALL_OPERATIONS.length).toBe(74);
+    expect(ALL_OPERATIONS.length).toBe(76);
     const kinds = ALL_OPERATIONS.map((op) => op.kind);
-    expect(new Set(kinds).size).toBe(74);
+    expect(new Set(kinds).size).toBe(76);
     const expected = new Set<string>([
       ...SQL_OP_KINDS,
       "messages.get",
@@ -441,7 +443,7 @@ describe("unified operation expressibility", () => {
   });
 
   it("excludes the server-only kind from the client subset", () => {
-    expect(CLIENT_OPERATIONS.length).toBe(73);
+    expect(CLIENT_OPERATIONS.length).toBe(75);
     for (const op of CLIENT_OPERATIONS) {
       expect(op.kind).not.toBe("vector.replaceChunks");
     }

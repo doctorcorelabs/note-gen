@@ -31,8 +31,8 @@
  *    (D/G lock-in section 6.3). Its six ghost kinds and its
  *    divergent member shapes die with it; see
  *    `ContractMirrorGhostKind` and `ReconciledKindForMirror` below.
- * 3. Catalog: `src/lib/platform/sql/ops-catalog.ts`, 74 kinds
- *    (34 reads + 40 writes) including `messages.get` since the
+ * 3. Catalog: `src/lib/platform/sql/ops-catalog.ts`, 76 kinds
+ *    (34 reads + 42 writes) including `messages.get` since the
  *    V3-14 catalog amendment (wave 3B, AD-44), with row/input
  *    types, result maps, metadata, and type-level exhaustiveness
  *    checks. Verdict: SOURCE OF TRUTH. Every type below is built

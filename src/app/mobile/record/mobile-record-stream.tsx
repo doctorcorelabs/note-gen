@@ -380,7 +380,12 @@ export function MobileRecordStream({ preview = false }: MobileRecordStreamProps 
       kind: 'warning',
     })
     if (!accepted) return
-    await clearTrash()
+    try {
+      await clearTrash()
+    } catch {
+      toast({ title: t('record.trash.emptyFailed'), variant: 'destructive' })
+      return
+    }
     await fetchTrashMarkPreviews()
   }
 

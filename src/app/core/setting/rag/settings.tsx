@@ -60,9 +60,18 @@ export function Settings() {
   const [failedKnowledgeSources, setFailedKnowledgeSources] = useState<KnowledgeSource[]>([])
 
   const refreshKnowledgeStats = useCallback(async () => {
-    setKnowledgeStats(await getKnowledgeIndexStats())
-    setFailedKnowledgeSources(await getKnowledgeSources({ statuses: ['failed'] }))
-  }, [])
+    try {
+      setKnowledgeStats(await getKnowledgeIndexStats())
+      setFailedKnowledgeSources(await getKnowledgeSources({ statuses: ['failed'] }))
+    } catch {
+      // Honest failure state (BUG-02): stats stay null and the
+      // page says so, instead of an unhandled rejection on
+      // every open.
+      setKnowledgeStats(null)
+      setFailedKnowledgeSources([])
+      toast.error(t('knowledgeStatsFailed'))
+    }
+  }, [t])
 
   useEffect(() => {
     void initSettings()
@@ -85,7 +94,12 @@ export function Settings() {
 
   async function handleDeleteIndex() {
     if (!await platform.dialog.confirm(t('deleteVectorConfirm'))) return
-    await clearVectorDb()
+    try {
+      await clearVectorDb()
+    } catch {
+      toast.error(t('deleteVectorFailed'))
+      return
+    }
     // The vector table is server-owned now: there is no local
     // recreate step. Re-verify adapter readiness instead; the
     // vector module migration owns clear/recreate semantics.

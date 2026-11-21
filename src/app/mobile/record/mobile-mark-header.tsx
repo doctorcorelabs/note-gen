@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { useEffect } from 'react'
 import { clearTrash, initMarksDb, restoreMarks } from '@/db/marks'
+import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { FileText, Trash2, XCircle, RotateCcw } from 'lucide-react'
 import useMarkStore from '@/stores/mark'
@@ -31,7 +32,12 @@ export function MobileMarkHeader() {
       kind: 'warning',
     })
     if (!accepted) return
-    await clearTrash()
+    try {
+      await clearTrash()
+    } catch {
+      toast({ title: recordT('trash.emptyFailed'), variant: 'destructive' })
+      return
+    }
     setMarks([])
     await fetchAllTrashMarks()
   }

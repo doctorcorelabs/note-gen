@@ -750,6 +750,7 @@ export const SQL_WRITE_OP_KINDS = [
   "marks.softDelete",
   "marks.restore",
   "marks.deletePermanent",
+  "marks.emptyTrash",
   "marks.updateTags",
   "marks.saveTagIds",
   "tags.create",
@@ -772,6 +773,7 @@ export const SQL_WRITE_OP_KINDS = [
   "knowledge.upsertSource",
   "knowledge.updateStatus",
   "knowledge.removeSource",
+  "vector.clear",
   "vector.replaceChunks",
   "wiki.upsertSource",
   "wiki.commitRevision",
@@ -909,6 +911,11 @@ export type DbWriteOperation =
   // Permanent delete removes the row; `mark_tags` rows cascade. An
   // audit event is written in the same transaction.
   | { kind: "marks.deletePermanent"; id: number }
+  // Empty trash permanently deletes every soft-deleted mark in
+  // one transaction plus one activity event (BUG-01); the
+  // result `affected` is the purged count. Never emulated with
+  // per-record calls.
+  | { kind: "marks.emptyTrash" }
   // Full contract in design 4.4. `tagIds` is the desired set after
   // the operation, including the primary tag; unknown ids are
   // ignored unless the filtered set becomes empty (400). `newNames`
@@ -983,6 +990,9 @@ export type DbWriteOperation =
   // exposed to the web SqlAdapter and never called from a browser
   // client. Replaces ALL chunks of one source in one transaction;
   // an empty `chunks` array deletes all chunks of the source.
+  // Clears every vector chunk in the workspace (BUG-03); the
+  // result `affected` is the deleted chunk count.
+  | { kind: "vector.clear" }
   | { kind: "vector.replaceChunks"; sourceType: KnowledgeSourceType; sourceId: string; chunks: SqlVectorChunkInput[] }
   // Wiki (W2 handlers). `upsertSource`, `commitRevision`, and
   // `upsertPage` also set the dirty flag in `wiki_meta` in the same
@@ -1093,6 +1103,7 @@ export interface SqlWriteResultByKind {
   "marks.softDelete": SqlWriteResult;
   "marks.restore": SqlWriteResult;
   "marks.deletePermanent": SqlWriteResult;
+  "marks.emptyTrash": SqlWriteResult;
   "marks.updateTags": SqlWriteResult;
   "marks.saveTagIds": SqlWriteResult;
   "tags.create": SqlWriteResult;
@@ -1115,6 +1126,7 @@ export interface SqlWriteResultByKind {
   "knowledge.upsertSource": SqlWriteResult;
   "knowledge.updateStatus": SqlWriteResult;
   "knowledge.removeSource": SqlWriteResult;
+  "vector.clear": SqlWriteResult;
   "vector.replaceChunks": SqlWriteResult;
   "wiki.upsertSource": SqlWriteResult;
   "wiki.commitRevision": SqlWikiCommitResult;
@@ -1536,6 +1548,15 @@ export const SQL_OP_METADATA: Record<SqlOpKind, SqlOpMetadata> = {
       "A second execution finds no row; ids are never reused, so no duplicate can appear.",
     upstream: "delMarkForever",
   },
+  "marks.emptyTrash": {
+    wave: "W1",
+    exposure: "client",
+    touchedTables: ["marks", "mark_tags", "activity_events"],
+    idempotency: "conditional",
+    idempotencyNote:
+      "A repeat execution purges nothing further (affected 0) but writes one more activity event, matching the REST repository.",
+    upstream: "clearTrash",
+  },
   "marks.updateTags": {
     wave: "W1",
     exposure: "client",
@@ -1740,6 +1761,15 @@ export const SQL_OP_METADATA: Record<SqlOpKind, SqlOpMetadata> = {
     idempotencyNote:
       "Removing an absent source leaves the same state (affected 0). Chunk cleanup is a separate index-job concern.",
     upstream: "deleteKnowledgeSource",
+  },
+  "vector.clear": {
+    wave: "W1",
+    exposure: "client",
+    touchedTables: ["vector_chunks"],
+    idempotency: "idempotent",
+    idempotencyNote:
+      "Clearing an already empty index leaves the same state (affected 0).",
+    upstream: "clearVectorDb",
   },
   "vector.replaceChunks": {
     wave: "W2",

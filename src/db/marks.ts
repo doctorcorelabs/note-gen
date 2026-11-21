@@ -609,20 +609,20 @@ export async function delMarkForever(id: number) {
 }
 
 export async function clearTrash() {
-  // NOT migrated in wave 5 (D-DEMO-3): emptying the trash has no
-  // kind, and the kind client contract forbids emulating it with
-  // per-record calls (one transaction plus an activity event,
-  // which client-side looping cannot reproduce). It still fails
-  // loudly through `getDb` until the REST route lands (V3-25) or
-  // a kind is added, matching `emptyTrash` in the kind client.
-  const db = await getDb();
-  const marks = await db.select<Mark[]>("select id, type, url, content from marks where deleted = $1", [1])
+  // Migrated to kind `marks.emptyTrash` (BUG-01): one server
+  // transaction purges every soft-deleted mark plus one
+  // activity event, mirroring the REST repository. The trashed
+  // rows are read first for the client-side asset cleanup, as
+  // upstream and as delMarkForever does; the kind result
+  // `affected` is the purged count.
+  const rows = await listAllMarkRows('deleted')
+  const marks = rows.map(toMark)
   await queueRecordAssetRemoteDeletions(marks)
   await deleteMarkLocalAssets(marks)
-  const result = await db.execute("delete from marks where deleted = $1", [1])
+  const result = await getSqlAdapter().execute({ kind: 'marks.emptyTrash' })
   enqueueRecordsAutoSync('mark:clear-trash')
   await Promise.all(marks.map(mark => removeMarkKnowledgeIndex(mark.id)))
-  return result
+  return toLegacyWriteResult(result)
 }
 
 export async function updateMarks(marks: Mark[]) {

@@ -5,7 +5,7 @@
 // Server-side mirror of the typed SQL operation catalog.
 //
 // The canonical catalog lives at src/lib/platform/sql/ops-catalog.ts
-// (74 kinds: 34 reads + 40 writes; V2-24, merged at K1 under AD-35,
+// (76 kinds: 34 reads + 42 writes; V2-24, merged at K1 under AD-35,
 // plus the V3-14 catalog amendment adding messages.get). The server
 // cannot import it directly: the catalog imports types through the
 // "@/types/..." path alias, which the server tsconfig (NodeNext,
@@ -86,6 +86,7 @@ export const DB_WRITE_OP_KINDS = [
   'marks.softDelete',
   'marks.restore',
   'marks.deletePermanent',
+  'marks.emptyTrash',
   'marks.updateTags',
   'marks.saveTagIds',
   'tags.create',
@@ -108,6 +109,7 @@ export const DB_WRITE_OP_KINDS = [
   'knowledge.upsertSource',
   'knowledge.updateStatus',
   'knowledge.removeSource',
+  'vector.clear',
   'vector.replaceChunks',
   'wiki.upsertSource',
   'wiki.commitRevision',

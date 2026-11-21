@@ -15,8 +15,8 @@
 //
 // Port contract (kontrak-api-kanonis.md section 3.9, V1-14 section 8):
 // - Matching: every query term must occur (AND), case-insensitive,
-//   over record desc, content, and fileName, and over file name,
-//   relative path, and Markdown content. Containment only: no
+//   over record desc, content, fileName, and url, and over file
+//   name, relative path, and Markdown content. Containment only: no
 //   partial-word substring matching in the middle of a word, no
 //   stemming, no embedding, no vector, no fuzzy scoring in MVP.
 // - Ranking: a title or name match weighs more than a content match,
@@ -360,6 +360,10 @@ function scoreCandidate(item: FakeSearchItem, terms: readonly string[]): ScoredC
           { weight: 'title', text: item.title },
           { weight: 'other', text: item.content },
           { weight: 'other', text: item.fileName },
+          // Link records keep their URL only in `url` (the
+          // control-link path stores the page title in desc), so
+          // the URL is a matched field too (UTANG-UJI-03b).
+          { weight: 'other', text: item.url },
         ]
       : [
           { weight: 'title', text: item.path.split('/').pop() ?? item.path },

@@ -158,8 +158,10 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
   // with refreshMarks, but this inbox keeps its own state and
   // never heard the event, so the list and tag counts went
   // stale until a filter change or reload. Reload on the
-  // event (same mechanism tag-manage uses). This inbox never
-  // emits refreshMarks itself, so there is no loop.
+  // event (same mechanism tag-manage uses). Since BUG-04 this
+  // inbox also emits the event after its own mutations so the
+  // other record surfaces stay fresh; the listener below only
+  // reloads and never emits, so there is no loop.
   useEffect(() => {
     const refresh = () => { void reloadAll() }
     emitter.on(EmitterRecordEvents.refreshMarks, refresh)
@@ -187,8 +189,16 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
     setSelectedTagId(tagId);
   }
 
+  // BUG-04: announce inbox mutations on the shared event so
+  // tag-manage counts and the mark store stay fresh. Only
+  // called after a mutation actually changed records.
+  function emitRefreshMarks() {
+    emitter.emit(EmitterRecordEvents.refreshMarks);
+  }
+
   async function handleTagsChanged() {
     await reloadAll();
+    emitRefreshMarks();
   }
 
   function handleToggleSelect(id: number, checked: boolean) {
@@ -232,6 +242,7 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
       prev.filter((id) => !result.succeeded.includes(id)),
     );
     await reloadAll();
+    if (result.succeeded.length > 0) emitRefreshMarks();
   }
 
   async function handleMoveSelected(targetTagId: number, ids: number[]) {
@@ -254,6 +265,7 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
       prev.filter((id) => !result.succeeded.includes(id)),
     );
     await reloadAll();
+    if (result.succeeded.length > 0) emitRefreshMarks();
   }
 
   async function handleTrashToggleOne(record: ApiRecord) {
@@ -269,10 +281,12 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
       return;
     }
     await reloadAll();
+    emitRefreshMarks();
   }
 
   function handleRecordCreated() {
     void reloadAll();
+    emitRefreshMarks();
   }
 
   function handleRecordChanged(record: ApiRecord) {
@@ -281,12 +295,14 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
       prev.map((entry) => (entry.id === record.id ? record : entry)),
     );
     void loadTags();
+    emitRefreshMarks();
   }
 
   function handleRecordDeleted(id: number) {
     setDetailRecord(null);
     setRecords((prev) => prev.filter((entry) => entry.id !== id));
     void loadTags();
+    emitRefreshMarks();
   }
 
   return (

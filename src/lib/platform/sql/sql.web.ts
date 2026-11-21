@@ -52,7 +52,7 @@
  * design and this implementation differ:
  *
  * - D-1 `messages.get`: CLOSED. The catalog amendment (AD-44,
- *   G-04) has landed, so the catalog lists 74 kinds and this
+ *   G-04) has landed, so the catalog lists 76 kinds and this
  *   adapter admits `messages.get` with no code change here, as
  *   designed. The spec still pins the catalog-following behavior.
  * - D-2 Read chunking vs one snapshot: design 3.2 says `queryMany`

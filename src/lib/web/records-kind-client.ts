@@ -770,13 +770,15 @@ export class KindRecordsApi implements RecordsApiPort {
   }
 
   /**
-   * Empty the trash. No kind exists for this operation, so the
-   * call is honestly unavailable until the REST route lands
-   * (V3-25) or a kind is added. Never emulated per record: the
-   * contract defines one transaction plus an activity event.
+   * Empty the trash via kind `marks.emptyTrash` (BUG-01): one
+   * server transaction plus one activity event; the result
+   * `affected` is the purged count. Never emulated per record.
    */
   async emptyTrash(): Promise<EmptyTrashResult> {
-    throw capabilityUnavailableError("marks.emptyTrash");
+    const result = await this.call(() =>
+      this.sql.execute({ kind: "marks.emptyTrash" }),
+    );
+    return { purged: result.affected, purgedAt: Date.now() };
   }
 
   // -- Tags ----------------------------------------------------------------

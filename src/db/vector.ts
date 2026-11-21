@@ -471,9 +471,10 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
 
 // 清空向量数据库
 export async function clearVectorDb() {
-  await db.execute(`
-    delete from vector_documents
-  `);
+  // Migrated to kind `vector.clear` (BUG-03): the server owns
+  // vector_chunks; the legacy `db` facade always rejects in
+  // web mode. Cache cleanup below stays client-side.
+  await getSqlAdapter().execute({ kind: 'vector.clear' });
 
   // 清空缓存
   await vectorCache.update();

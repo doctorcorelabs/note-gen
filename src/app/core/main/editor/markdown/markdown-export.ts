@@ -34,6 +34,7 @@ export interface MarkdownExportOptions {
 }
 
 const IMAGE_LOAD_TIMEOUT_MS = 5000
+const EXPORT_ASSET_FETCH_TIMEOUT_MS = 10000
 const PRINT_FRAME_CLEANUP_DELAY_MS = 60000
 const PRINT_EXPORT_STORE = 'print-export.json'
 const PRINT_WINDOW_START_TIMEOUT_MS = 15000
@@ -302,6 +303,16 @@ function sanitizeExportHtml(html: string) {
   return template.innerHTML
 }
 
+// Race a promise against a timeout that yields the fallback
+// value, so a hung asset load degrades the export instead of
+// stalling it forever (UTANG-UJI-07).
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    waitForTimeout(timeoutMs).then(() => fallback),
+  ])
+}
+
 async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
   const template = document.createElement('template')
   template.innerHTML = html
@@ -315,12 +326,21 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
 
     if (sourcePath && shouldTransformImageSrcToWorkspaceAsset(src)) {
       const fullRelativePath = resolveImagePathFromMarkdown(sourcePath, src)
-      image.setAttribute('src', await convertImageByWorkspace(fullRelativePath))
+      image.setAttribute(
+        'src',
+        await withTimeout(
+          convertImageByWorkspace(fullRelativePath),
+          EXPORT_ASSET_FETCH_TIMEOUT_MS,
+          src,
+        ),
+      )
       return
     }
 
     try {
-      const response = await fetch(new URL(src, document.baseURI))
+      const response = await fetch(new URL(src, document.baseURI), {
+        signal: AbortSignal.timeout(EXPORT_ASSET_FETCH_TIMEOUT_MS),
+      })
       if (response.ok) {
         image.setAttribute('src', await blobToDataUrl(await response.blob()))
       }
@@ -362,7 +382,14 @@ async function waitForImage(image: HTMLImageElement) {
 
 async function waitForDocumentResources(frameDocument: Document) {
   await Promise.all(Array.from(frameDocument.images).map(waitForImage))
-  await frameDocument.fonts?.ready
+  // fonts.ready can stay pending forever on a broken font load;
+  // race it like the images above (UTANG-UJI-07).
+  if (frameDocument.fonts?.ready) {
+    await Promise.race([
+      frameDocument.fonts.ready,
+      waitForTimeout(IMAGE_LOAD_TIMEOUT_MS),
+    ])
+  }
 }
 
 export async function renderMarkdownToHtml(markdown: string, sourcePath?: string) {
@@ -414,7 +441,9 @@ async function inlineCssAssetUrls(
 
     let dataUrlPromise = assetCache.get(absoluteUrl)
     if (!dataUrlPromise) {
-      dataUrlPromise = fetch(absoluteUrl)
+      dataUrlPromise = fetch(absoluteUrl, {
+        signal: AbortSignal.timeout(EXPORT_ASSET_FETCH_TIMEOUT_MS),
+      })
         .then((response) => {
           if (!response.ok) {
             throw new Error(`Unable to load export asset: ${absoluteUrl}`)
@@ -626,7 +655,22 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
   }
 
   await notifyPdfRenderStart(options)
-  const html = await buildMarkdownExportDocument(source, options)
+  // Overall deadline for the web branch, mirroring the Tauri
+  // DIRECT_PDF_EXPORT_TIMEOUT_MS: a stalled build or resource
+  // wait fails with a typed error the caller can surface,
+  // instead of hanging after the "Preparing PDF" toast
+  // (UTANG-UJI-07).
+  let deadlineTimer: number | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    deadlineTimer = window.setTimeout(
+      () => reject(new Error('PDF export timed out')),
+      DIRECT_PDF_EXPORT_TIMEOUT_MS,
+    )
+  })
+  const html = await Promise.race([
+    buildMarkdownExportDocument(source, options),
+    deadline,
+  ])
 
   const iframe = createPrintFrame(html)
 
@@ -637,7 +681,8 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
       throw new Error('The current platform does not support system PDF printing')
     }
 
-    await waitForDocumentResources(frameDocument)
+    await Promise.race([waitForDocumentResources(frameDocument), deadline])
+    window.clearTimeout(deadlineTimer)
     await waitForAnimationFrame()
 
     let cleanedUp = false

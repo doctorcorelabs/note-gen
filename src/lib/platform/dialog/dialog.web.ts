@@ -126,21 +126,29 @@ function getPickers(): PickerFunctions {
       : undefined;
   const read = (name: string): unknown =>
     globals[name] ?? windowRecord?.[name];
+  // Bind each picker to its host object: calling a Window method
+  // detached from window throws TypeError "Illegal invocation"
+  // in Chrome (UTANG-UJI-06). The host is the window record when
+  // present, else the globals object the function was read from.
+  const bind = (value: unknown): unknown =>
+    typeof value === "function"
+      ? (value as (...args: unknown[]) => unknown).bind(windowRecord ?? globals)
+      : value;
   const pickers: PickerFunctions = {};
   const openPicker = read("showOpenFilePicker");
   if (typeof openPicker === "function") {
     pickers.showOpenFilePicker =
-      openPicker as PickerFunctions["showOpenFilePicker"];
+      bind(openPicker) as PickerFunctions["showOpenFilePicker"];
   }
   const savePicker = read("showSaveFilePicker");
   if (typeof savePicker === "function") {
     pickers.showSaveFilePicker =
-      savePicker as PickerFunctions["showSaveFilePicker"];
+      bind(savePicker) as PickerFunctions["showSaveFilePicker"];
   }
   const directoryPicker = read("showDirectoryPicker");
   if (typeof directoryPicker === "function") {
     pickers.showDirectoryPicker =
-      directoryPicker as PickerFunctions["showDirectoryPicker"];
+      bind(directoryPicker) as PickerFunctions["showDirectoryPicker"];
   }
   return pickers;
 }
@@ -205,7 +213,11 @@ async function pickFilesWithFileSystemAccess(
     if (isAbortError(error)) {
       return null;
     }
-    throw error;
+    // Non-abort picker failures (SecurityError after transient
+    // activation is lost, Illegal invocation on unbound hosts)
+    // fall back to the input element instead of failing the
+    // whole pick (UTANG-UJI-06).
+    return pickWithInput(options);
   }
   const picked: DialogPickedFile[] = [];
   for (const handle of handles) {
@@ -277,7 +289,8 @@ async function pickDirectoryWithFileSystemAccess(): Promise<DialogOpenResult> {
     if (isAbortError(error)) {
       return null;
     }
-    throw error;
+    // Same non-abort fallback as the file picker (UTANG-UJI-06).
+    return pickWithInput({ directory: true });
   }
   const collected: DialogPickedFile[] = [];
   await collectDirectoryFiles(handle, "", 0, collected);

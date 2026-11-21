@@ -549,6 +549,8 @@
       "settingsDesc": "By adjusting parameters, you can more precisely control the retrieval effect of the knowledge base.",
       "deleteVectorConfirm": "Clear the vector and BM25 indexes? Your notes will not be deleted, and local fuzzy retrieval will remain available.",
       "deleteVectorSuccess": "Retrieval indexes cleared",
+      "deleteVectorFailed": "Failed to clear retrieval indexes",
+      "knowledgeStatsFailed": "Failed to load knowledge index statistics",
       "enable": "Enable knowledge base search",
       "enableDesc": "Enabling it will make AI search your notes when answering questions, providing more accurate answers.",
       "chunkSize": "Chunk size",
@@ -4371,6 +4373,7 @@
       "records": "{count} records can be restored",
       "syncWarning": "This operation will sync to other devices.",
       "empty": "Empty",
+      "emptyFailed": "Failed to empty the trash",
       "restoreAll": "Restore All",
       "close": "Close Trash"
     },

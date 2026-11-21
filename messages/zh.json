@@ -549,6 +549,8 @@
       "settingsDesc": "通过调解参数，可以更加精确的控制知识库的检索效果。",
       "deleteVectorConfirm": "确定清空向量和 BM25 索引吗？笔记不会被删除，本地模糊检索仍然可用。",
       "deleteVectorSuccess": "检索索引已清空",
+      "deleteVectorFailed": "\u6e05\u9664\u68c0\u7d22\u7d22\u5f15\u5931\u8d25",
+      "knowledgeStatsFailed": "\u52a0\u8f7d\u77e5\u8bc6\u7d22\u5f15\u7edf\u8ba1\u5931\u8d25",
       "enable": "启用知识库检索",
       "enableDesc": "启用后，AI 将在回答问题时检索你的笔记内容，提供更准确的回答。",
       "topPDesc": "Top P 参数控制模型生成文本的多样性，值越小生成的文本越确定，值越大生成的文本越多样。",
@@ -4371,6 +4373,7 @@
       "records": "共 {count} 条记录可还原",
       "syncWarning": "该操作会同步到其他设备。",
       "empty": "清空",
+      "emptyFailed": "\u6e05\u7a7a\u56de\u6536\u7ad9\u5931\u8d25",
       "restoreAll": "全部还原",
       "close": "关闭回收站"
     },

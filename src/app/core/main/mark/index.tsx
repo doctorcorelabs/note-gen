@@ -8,12 +8,27 @@ import useMarkStore from "@/stores/mark"
 import { Button } from "@/components/ui/button"
 import { clearTrash } from "@/db/marks"
 import { platform } from '@/lib/platform';
+import emitter from '@/lib/emitter'
+import { EmitterRecordEvents } from '@/config/emitters'
+import { toast } from 'sonner'
 import { filterMarks, getTrashRecordFilters } from "./mark-filters";
 
 export function NoteSidebar() {
   const t = useTranslations();
-  const { trashState, marks, setMarks } = useMarkStore()
+  const { trashState, marks, setMarks, fetchMarks, fetchAllTrashMarks } = useMarkStore()
   const visibleTrashMarks = React.useMemo(() => filterMarks(marks, getTrashRecordFilters()), [marks])
+
+  // BUG-04: this sidebar reads the mark store, which the
+  // upstream completion path refreshes itself, but WebInbox
+  // mutations never touched the store. Refetch on the shared
+  // refreshMarks event (same mechanism tag-manage uses).
+  React.useEffect(() => {
+    const refresh = () => {
+      void (trashState ? fetchAllTrashMarks() : fetchMarks())
+    }
+    emitter.on(EmitterRecordEvents.refreshMarks, refresh)
+    return () => { emitter.off(EmitterRecordEvents.refreshMarks, refresh) }
+  }, [trashState, fetchMarks, fetchAllTrashMarks])
 
   async function handleClearTrash() {
     const res = await platform.dialog.confirm(`${t('record.trash.confirm')}\n${t('record.trash.syncWarning')}`, {
@@ -21,8 +36,14 @@ export function NoteSidebar() {
       kind: 'warning',
     })
     if (res) {
-      await clearTrash()
+      try {
+        await clearTrash()
+      } catch {
+        toast.error(t('record.trash.emptyFailed'))
+        return
+      }
       setMarks([])
+      emitter.emit(EmitterRecordEvents.refreshMarks)
     }
   }
 

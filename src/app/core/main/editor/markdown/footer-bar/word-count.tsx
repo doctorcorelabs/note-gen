@@ -24,11 +24,20 @@ const EMPTY_STATISTICS: EditorStatistics = {
 const SOURCE_STATISTICS_DEBOUNCE_MS = 600
 const SOURCE_STATISTICS_IDLE_TIMEOUT_MS = 1_500
 
+// Visual-mode text basis: block-separated text so the count
+// matches the source-mode basis (markdownToPlainText inserts a
+// newline between blocks). doc.textContent joins blocks with no
+// separator, which undercounts and merges words at block
+// boundaries (UTANG-UJI-08).
+function visualText(editor: Editor): string {
+  return editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n')
+}
+
 export function WordCount({ editor, sourceMarkdown, compact = false }: WordCountProps) {
   const t = useTranslations('settings.editor.stats')
   const [statistics, setStatistics] = useState<EditorStatistics>(() => (
     sourceMarkdown === undefined
-      ? getEditorStatistics(editor.state.doc.textContent)
+      ? getEditorStatistics(visualText(editor))
       : EMPTY_STATISTICS
   ))
 
@@ -70,19 +79,25 @@ export function WordCount({ editor, sourceMarkdown, compact = false }: WordCount
 
       updateTimer = setTimeout(() => {
         updateTimer = null
-        setStatistics(getEditorStatistics(editor.state.doc.textContent))
+        setStatistics(getEditorStatistics(visualText(editor)))
       }, 400)
     }
 
-    setStatistics(getEditorStatistics(editor.state.doc.textContent))
-    editor.on('create', updateCharacters)
+    setStatistics(getEditorStatistics(visualText(editor)))
+    // 'create' never fires here (the editor exists before this
+    // component mounts), so the async content load was only
+    // caught when an 'update' happened to follow it. Listen to
+    // 'transaction' as well: the load's setContent transaction
+    // triggers the recount even without a user edit
+    // (UTANG-UJI-08).
+    editor.on('transaction', updateCharacters)
     editor.on('update', updateCharacters)
 
     return () => {
       if (updateTimer) {
         clearTimeout(updateTimer)
       }
-      editor.off('create', updateCharacters)
+      editor.off('transaction', updateCharacters)
       editor.off('update', updateCharacters)
     }
   }, [editor, sourceMarkdown])

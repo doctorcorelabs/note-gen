@@ -226,6 +226,16 @@ class FakeSqlAdapter {
         return this.softDelete(op.id, true);
       case "marks.restore":
         return this.softDelete(op.id, false);
+      case "marks.emptyTrash": {
+        let purged = 0;
+        for (const [id, row] of [...this.marks.entries()]) {
+          if (row.deleted) {
+            this.marks.delete(id);
+            purged += 1;
+          }
+        }
+        return { affected: purged };
+      }
       case "marks.deletePermanent": {
         if (!this.marks.has(op.id)) throw kindFailure("404", "not_found");
         this.marks.delete(op.id);
@@ -933,11 +943,21 @@ describe("tag sets", () => {
 });
 
 describe("unmigrated functions still fail loudly", () => {
-  it("insertMarks, clearTrash, and deleteAllMarks reject through getDb", async () => {
+  it("insertMarks and deleteAllMarks reject through getDb", async () => {
     await expect(insertMarks([{ tagId: 2, type: "text" }])).rejects.toBeInstanceOf(
       PlatformCapabilityError,
     );
-    await expect(clearTrash()).rejects.toBeInstanceOf(PlatformCapabilityError);
     await expect(deleteAllMarks()).rejects.toBeInstanceOf(PlatformCapabilityError);
+  });
+
+  it("clearTrash purges only trashed marks through marks.emptyTrash (BUG-01)", async () => {
+    fakeSql.seedMark({ tagId: 2, content: "keep", deleted: false });
+    fakeSql.seedMark({ tagId: 2, content: "gone-1", deleted: true });
+    fakeSql.seedMark({ tagId: 2, content: "gone-2", deleted: true });
+    const result = await clearTrash();
+    expect(result.rowsAffected).toBe(2);
+    expect(fakeSql.marks.size).toBe(1);
+    const empties = fakeSql.executes.filter((op) => op.kind === "marks.emptyTrash");
+    expect(empties).toHaveLength(1);
   });
 });

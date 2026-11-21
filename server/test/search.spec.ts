@@ -527,6 +527,40 @@ describe('keyword search', () => {
     await app.close();
   });
 
+  it('matches a link record by a term that occurs only in its url (UTANG-UJI-03b)', async () => {
+    const counter = countingPort([
+      {
+        kind: 'record',
+        id: 46,
+        title: 'Hypospadias overview article',
+        content: 'captured page text without the identifier',
+        fileName: '',
+        type: 'link',
+        tagIds: [],
+        url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC9995849/',
+        updatedAt: 1794660005000,
+        createdAt: 1794650005000,
+      },
+    ]);
+    const app = await searchApp(counter);
+    const res = await app.inject({
+      method: 'GET',
+      url: searchUrl({ q: 'PMC9995849' }),
+      headers: SESSION_HEADERS,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as SearchEnvelopeBody;
+    expect(body.data.results.length).toBe(1);
+    expect(body.data.results[0].kind).toBe('record');
+    const control = await app.inject({
+      method: 'GET',
+      url: searchUrl({ q: 'kata-tidak-ada-xyz' }),
+      headers: SESSION_HEADERS,
+    });
+    expect((control.json() as SearchEnvelopeBody).data.results.length).toBe(0);
+    await app.close();
+  });
+
   it('never returns trashed records or files', async () => {
     const counter = countingPort(fixtureItems());
     const app = await searchApp(counter);
