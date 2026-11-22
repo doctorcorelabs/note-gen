@@ -30,6 +30,7 @@ import { TodoForm, TodoFormData } from "./todo-form"
 import { useRecordCompletion } from './use-record-completion'
 import useSettingStore from '@/stores/setting'
 import { getRecordSaveTagIdFromTags } from '@/lib/record-save-target'
+import { toast } from '@/hooks/use-toast'
 
 export function ControlTodo() {
   const t = useTranslations();
@@ -49,6 +50,10 @@ export function ControlTodo() {
 
   async function handleSuccess() {
     if (creatingTag || !formData.title.trim()) {
+      return
+    }
+    if (!tags.some(tag => tag.id === selectedTagId)) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
       return
     }
 
@@ -110,13 +115,14 @@ export function ControlTodo() {
       if (!cancelled) {
         const tagState = useTagStore.getState()
         const settingState = useSettingStore.getState()
-        setSelectedTagId(getRecordSaveTagIdFromTags({
+        const resolvedTagId = getRecordSaveTagIdFromTags({
           mode: settingState.recordSaveTargetMode,
           currentTagId: tagState.currentTagId,
           lastTagId: settingState.lastRecordTagId,
           fixedTagId: settingState.fixedRecordTagId,
           tagIds: tagState.tags.map((tag) => tag.id),
-        }))
+        })
+        if (resolvedTagId !== null) setSelectedTagId(resolvedTagId)
       }
     }
 

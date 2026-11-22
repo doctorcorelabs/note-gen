@@ -148,6 +148,7 @@ async function buildHarness(options: {
   workspaceId?: string | null;
   idempotencyStore?: IdempotencyStore;
   globalBodyLimit?: number;
+  sweepAssets?: DbRouteDeps['sweepAssets'];
 } = {}): Promise<Harness> {
   const registry = createDbHandlerRegistry();
   const runner = new FakeRunner();
@@ -158,6 +159,7 @@ async function buildHarness(options: {
     resolveWorkspaceId: async () =>
       options.workspaceId === undefined ? WORKSPACE_ID : options.workspaceId,
     idempotencyStore: options.idempotencyStore ?? new MemoryIdempotencyStore(),
+    ...(options.sweepAssets !== undefined ? { sweepAssets: options.sweepAssets } : {}),
   };
   const app = Fastify({
     logger: false,
@@ -966,5 +968,102 @@ describe('db routes through buildApp', () => {
   it('exposes the drizzle idempotency store used by the default wiring', () => {
     expect(typeof drizzleIdempotencyStore.find).toBe('function');
     expect(typeof drizzleIdempotencyStore.store).toBe('function');
+  });
+});
+
+describe('post-commit asset sweep (F02-04b)', () => {
+  function assetStub(calls: Harness['calls'], assetKeys: string[]) {
+    return async (ctx: DbHandlerContext, op: DbOperationInput) => {
+      calls.push({ kind: op.kind, ctx, op });
+      return { affected: 1, id: 7, assetKeys };
+    };
+  }
+
+  it('sweeps internal assetKeys after commit and never renders them', async () => {
+    const sweeps: Array<{ workspaceId: string; assetKeys: readonly string[]; commits: number }> = [];
+    harness = await buildHarness({
+      sweepAssets: async (workspaceId, assetKeys) => {
+        sweeps.push({ workspaceId, assetKeys, commits: harness?.runner.commits ?? -1 });
+      },
+    });
+    harness.registry.registerWrite('marks.deletePermanent', assetStub(harness.calls, ['key-1', 'key-2']));
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: '/api/transactions',
+      headers: AUTHED_HEADERS,
+      payload: { operations: [{ kind: 'marks.deletePermanent', id: 7 }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { data: Record<string, unknown> };
+    expect(body.data['results']).toEqual([
+      { kind: 'marks.deletePermanent', affected: 1, id: 7 },
+    ]);
+    expect(sweeps).toEqual([
+      { workspaceId: WORKSPACE_ID, assetKeys: ['key-1', 'key-2'], commits: 1 },
+    ]);
+  });
+
+  it('does not sweep when the transaction rolls back', async () => {
+    const sweeps: string[] = [];
+    harness = await buildHarness({
+      sweepAssets: async (_workspaceId, assetKeys) => {
+        sweeps.push(...assetKeys);
+      },
+    });
+    harness.registry.registerWrite('marks.deletePermanent', assetStub(harness.calls, ['key-1']));
+    harness.registry.registerWrite('marks.create', async () => {
+      throw ApiError.notFound();
+    });
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: '/api/transactions',
+      headers: AUTHED_HEADERS,
+      payload: {
+        operations: [
+          { kind: 'marks.deletePermanent', id: 7 },
+          { kind: 'marks.create', mark: { content: 'boom' } },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(sweeps).toEqual([]);
+    expect(harness.runner.rollbacks).toBe(1);
+    expect(harness.runner.commits).toBe(0);
+  });
+
+  it('keeps the committed response when the sweep itself fails', async () => {
+    harness = await buildHarness({
+      sweepAssets: async () => {
+        throw new Error('sweep failed');
+      },
+    });
+    harness.registry.registerWrite('marks.deletePermanent', assetStub(harness.calls, ['key-1']));
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: '/api/transactions',
+      headers: AUTHED_HEADERS,
+      payload: { operations: [{ kind: 'marks.deletePermanent', id: 7 }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { data: Record<string, unknown> };
+    expect(body.data['results']).toEqual([
+      { kind: 'marks.deletePermanent', affected: 1, id: 7 },
+    ]);
+  });
+
+  it('answers normally when no sweep is wired', async () => {
+    harness = await buildHarness();
+    harness.registry.registerWrite('marks.deletePermanent', assetStub(harness.calls, ['key-1']));
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: '/api/transactions',
+      headers: AUTHED_HEADERS,
+      payload: { operations: [{ kind: 'marks.deletePermanent', id: 7 }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { data: Record<string, unknown> };
+    expect(body.data['results']).toEqual([
+      { kind: 'marks.deletePermanent', affected: 1, id: 7 },
+    ]);
   });
 });

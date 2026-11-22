@@ -10,7 +10,7 @@ export async function hideQuickRecordWindow(): Promise<void> {
 
 export interface QuickRecordContext {
   tags: Tag[]
-  selectedTagId: number
+  selectedTagId: number | null
   autoReadClipboard: boolean
   uiScale: number
   appFontFamily: string

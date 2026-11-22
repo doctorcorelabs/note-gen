@@ -86,6 +86,9 @@ export function WebRecordDetail({
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // F02-04(c): honest load failure for the detail image, bound to
+  // the src so switching records resets it without effect wiring.
+  const [failedAssetSrc, setFailedAssetSrc] = useState<string | null>(null);
   const [confirmPermanent, setConfirmPermanent] = useState(false);
   // DA-11-12: the parent hands this dialog a new record object on
   // every change (tag save, conflict reload). Resetting the edit
@@ -288,6 +291,7 @@ export function WebRecordDetail({
 
   const assetSrc =
     current.thumbnailUrl ?? recordAssetUrl(current.url);
+  const assetFailed = failedAssetSrc !== null && failedAssetSrc === assetSrc;
 
   return (
     <>
@@ -318,11 +322,18 @@ export function WebRecordDetail({
           )}
 
           {current.type === "image" && current.url !== "" && (
-            <img
-              src={assetSrc}
-              alt={current.desc}
-              className="max-h-96 w-full rounded object-contain bg-zinc-100"
-            />
+            assetFailed ? (
+              <p role="alert" className="text-sm text-red-600">
+                {t("assetNotFound")}
+              </p>
+            ) : (
+              <img
+                src={assetSrc}
+                alt={current.desc}
+                className="max-h-96 w-full rounded object-contain bg-zinc-100"
+                onError={() => setFailedAssetSrc(assetSrc)}
+              />
+            )
           )}
 
           {current.type === "link" && (

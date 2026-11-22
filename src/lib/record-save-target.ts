@@ -27,7 +27,7 @@ export function createRecordTag(name: string): Promise<Tag> {
   return create
 }
 
-export async function getDefaultRecordSaveTagId(): Promise<number> {
+export async function getDefaultRecordSaveTagId(): Promise<number | null> {
   const tags = await getTags()
   const currentTagId = useTagStore.getState().currentTagId
   const {
@@ -57,7 +57,7 @@ export function getRecordSaveTagIdFromTags({
   lastTagId: number | null
   fixedTagId: number | null
   tagIds: number[]
-}): number {
+}): number | null {
   return resolveRecordSaveTargetId({
     mode,
     currentTagId,

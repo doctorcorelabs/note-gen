@@ -167,13 +167,14 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
       if (!cancelled) {
         const tagState = useTagStore.getState()
         const settingState = useSettingStore.getState()
-        setSelectedTagId(getRecordSaveTagIdFromTags({
+        const resolvedTagId = getRecordSaveTagIdFromTags({
           mode: settingState.recordSaveTargetMode,
           currentTagId: tagState.currentTagId,
           lastTagId: settingState.lastRecordTagId,
           fixedTagId: settingState.fixedRecordTagId,
           tagIds: tagState.tags.map((tag) => tag.id),
-        }))
+        })
+        if (resolvedTagId !== null) setSelectedTagId(resolvedTagId)
       }
     }
 
@@ -200,6 +201,10 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
 
   async function handleSuccess() {
     if (!url || creatingTag) return
+    if (!tags.some(tag => tag.id === selectedTagId)) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
     let targetUrl = url.trim()
     if (!/^https?:\/\//i.test(targetUrl)) {
       targetUrl = `https://${targetUrl}`

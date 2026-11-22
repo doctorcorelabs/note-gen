@@ -9,11 +9,12 @@
 // the REST repository emptyTrash (drizzle-repository.ts): the
 // mark_tags rows go first, then the mark rows, then one
 // activity event records the purge. The result `affected` is
-// the purged count. Asset cleanup stays client-side: the
-// caller reads the trashed rows before calling (asset keys
-// never leave the handler, per the registry contract that a
-// handler must not touch the filesystem inside the
-// transaction).
+// the purged count. Asset cleanup is post-commit dispatch work:
+// the handler returns the purged rows' asset keys in the
+// internal-only `assetKeys` result field (never rendered to the
+// wire) and dispatch sweeps them after commit, mirroring the
+// REST repository emptyTrash. The handler itself still never
+// touches the filesystem inside the transaction.
 //
 // An empty trash is not an error: affected 0, and the activity
 // event still records the (empty) purge, matching the REST
@@ -29,6 +30,10 @@ import { ApiError } from '../../plugins/envelope.js';
 import { activityEvents, markTags, marks, type Database } from '../../db/index.js';
 
 export const HANDLER_KIND = 'marks.emptyTrash' as const;
+
+// Record types whose url column holds an asset key, mirroring
+// ASSET_TYPES in services/records/drizzle-repository.ts.
+const ASSET_TYPES: ReadonlySet<string> = new Set(['image', 'file', 'recording', 'scan']);
 
 export type DbTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -48,6 +53,9 @@ export interface WriteResult {
   affected: number;
   id?: number | string;
   version?: number;
+  // Internal-only (F02-04b): swept by dispatch after commit,
+  // never rendered to the wire.
+  assetKeys?: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,9 +85,16 @@ export function validate(op: unknown): asserts op is HandlerOperation {
 export async function handle(ctx: HandlerContext, op: unknown): Promise<WriteResult> {
   validate(op);
   const trashed = await ctx.tx
-    .select({ id: marks.id })
+    .select({ id: marks.id, type: marks.type, url: marks.url })
     .from(marks)
     .where(and(eq(marks.workspaceId, ctx.workspaceId), isNotNull(marks.deletedAt)));
+  const assetKeys = [
+    ...new Set(
+      trashed
+        .filter((row) => ASSET_TYPES.has(row.type) && row.url !== null && row.url !== '')
+        .map((row) => row.url as string),
+    ),
+  ];
   if (trashed.length > 0) {
     const ids = trashed.map((row) => row.id);
     await ctx.tx
@@ -98,5 +113,8 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<WriteRes
     dedupeKey: null,
     createdAt: new Date(),
   });
-  return { affected: trashed.length };
+  return {
+    affected: trashed.length,
+    ...(assetKeys.length > 0 ? { assetKeys } : {}),
+  };
 }

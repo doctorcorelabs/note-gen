@@ -120,6 +120,10 @@ export function ControlText() {
 
   async function handleSuccess() {
     if (creatingTag) return
+    if (!tags.some(tag => tag.id === selectedTagId)) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
     const resetText = text.replace(/'/g, '').trim()
 
     if (!resetText) {
@@ -187,13 +191,14 @@ export function ControlText() {
       if (!cancelled) {
         const tagState = useTagStore.getState()
         const settingState = useSettingStore.getState()
-        setSelectedTagId(getRecordSaveTagIdFromTags({
+        const resolvedTagId = getRecordSaveTagIdFromTags({
           mode: settingState.recordSaveTargetMode,
           currentTagId: tagState.currentTagId,
           lastTagId: settingState.lastRecordTagId,
           fixedTagId: settingState.fixedRecordTagId,
           tagIds: tagState.tags.map((tag) => tag.id),
-        }))
+        })
+        if (resolvedTagId !== null) setSelectedTagId(resolvedTagId)
       }
     }
 

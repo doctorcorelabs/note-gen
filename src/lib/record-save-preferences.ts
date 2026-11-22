@@ -28,8 +28,13 @@ export function resolveRecordSaveTargetId({
   lastTagId: number | null
   fixedTagId: number | null
   availableTagIds: number[]
-}): number {
+}): number | null {
   const availableIds = new Set(availableTagIds)
+  // F02-02: a workspace with no tags has no save target. Return
+  // null instead of the stale currentTagId so callers can stop
+  // with the honest noTagsExist notice instead of sending a dead
+  // tag id to the server.
+  if (availableIds.size === 0) return null
   const fallbackTagId = availableIds.has(currentTagId)
     ? currentTagId
     : availableTagIds[0] ?? currentTagId

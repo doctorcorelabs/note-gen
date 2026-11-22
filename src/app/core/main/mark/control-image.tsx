@@ -235,6 +235,11 @@ export function ControlImage() {
   async function uploadMobileFile(file: File) {
     const queueId = uuid()
     const tagId = await getDefaultRecordSaveTagId()
+    if (tagId === null) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
+
     
     try {
       addQueue({ queueId, tagId, progress: t('record.mark.progress.cacheImage'), type: 'image', startTime: Date.now() })
@@ -316,6 +321,11 @@ export function ControlImage() {
   async function upload(path: string) {
     const queueId = uuid()
     const tagId = await getDefaultRecordSaveTagId()
+    if (tagId === null) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
+
     try {
       addQueue({ queueId, tagId, progress: t('record.mark.progress.cacheImage'), type: 'image', startTime: Date.now() })
       const isImageFolderExists = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData})

@@ -4879,6 +4879,7 @@
           "clearSelection": "清除选择",
           "movePartial": "部分记录未能更新，请刷新列表后重试。",
           "errorLoading": "记录加载失败，请重试。",
+          "errorLoadingTags": "Tags could not be loaded. Tag counts and filters may be out of date.",
           "retry": "重试",
           "sessionExpired": "会话已过期，请重新登录后继续。",
           "errorGeneric": "出现错误，请重试。"
@@ -4930,6 +4931,7 @@
         "tagsEmpty": "Select at least one tag.",
           "openLink": "打开链接",
           "viewAsset": "打开文件",
+          "assetNotFound": "This image could not be loaded. The stored file may be missing.",
           "delete": "移入废纸篓",
           "restore": "恢复",
           "deleteForever": "永久删除"

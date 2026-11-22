@@ -39,6 +39,7 @@ async function getScreenshotSaveTarget(sessionId: string) {
 
   await useTagStore.getState().initTags()
   const tagId = await getDefaultRecordSaveTagId()
+  if (tagId === null) throw new Error('No record tags are available')
   // Keep the first save target across file/DB retries and pending-result recovery.
   await store.set(sessionId, tagId)
   await store.save()

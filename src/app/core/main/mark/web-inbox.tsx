@@ -91,6 +91,7 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<InboxLoadError | null>(null);
+  const [tagsLoadError, setTagsLoadError] = useState<InboxLoadError | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -98,9 +99,18 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const loadSeqRef = useRef(0);
 
+  // F02-06: tag load failures used to be swallowed by empty catch
+  // blocks at every call site, leaving tag counts and filters
+  // stale with no indication. The failure now lands in
+  // tagsLoadError and the header shows it with a retry.
   const loadTags = useCallback(async () => {
-    const { tags: fresh } = await api.listTags();
-    setTags(fresh);
+    setTagsLoadError(null);
+    try {
+      const { tags: fresh } = await api.listTags();
+      setTags(fresh);
+    } catch (error) {
+      setTagsLoadError(isSessionError(error) ? "session" : "generic");
+    }
   }, [api]);
 
   const loadRecords = useCallback(
@@ -147,10 +157,7 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
 
   const reloadAll = useCallback(async () => {
     setActionNotice(null);
-    await loadTags().catch(() => {
-      // Tag reload failure surfaces on the next record load or the
-      // next tag interaction; the record list is the primary view.
-    });
+    await loadTags();
     await loadRecords({ append: false });
   }, [loadTags, loadRecords]);
 
@@ -170,11 +177,7 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
   }, [reloadAll])
 
   useEffect(() => {
-    void loadTags().catch(() => {
-      // Tags load again with the record list below; a tags-only
-      // failure leaves the tag filter empty rather than blocking
-      // the list.
-    });
+    void loadTags();
   }, [loadTags]);
 
   useEffect(() => {
@@ -321,6 +324,25 @@ export function WebInbox({ api: apiOverride }: WebInboxProps) {
         <p role="alert" className="shrink-0 border-b p-2 text-sm text-red-600">
           {actionNotice}
         </p>
+      )}
+      {tagsLoadError && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center gap-2 border-b p-2 text-sm text-red-600"
+        >
+          <p>
+            {tagsLoadError === "session"
+              ? tList("sessionExpired")
+              : tList("errorLoadingTags")}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void loadTags()}
+          >
+            {tList("retry")}
+          </Button>
+        </div>
       )}
       <div className="max-h-[45%] shrink-0 overflow-y-auto border-b">
         <WebTagSidebar

@@ -14,6 +14,7 @@ import { CheckCircle, CircleX } from "lucide-react";
 import { convertBytesToSize } from "@/lib/utils";
 import { getImageRecognitionProgressText } from "@/lib/image-recognition-progress";
 import { getDefaultRecordSaveTagId } from '@/lib/record-save-target'
+import { toast } from '@/hooks/use-toast'
 import { useRecordCompletion } from './use-record-completion'
 
 export function Clipboard() {
@@ -53,10 +54,14 @@ export function Clipboard() {
   }
 
   async function handleInset() {
+    const tagId = await getDefaultRecordSaveTagId()
+    if (tagId === null) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
     await platform.clipboard.clear()
     setImage('')
     const queueId = uuid()
-    const tagId = await getDefaultRecordSaveTagId()
     // 获取文件后缀
     addQueue({ queueId, tagId, progress: t('record.mark.progress.saveImage'), type: 'image', startTime: Date.now() })
     const isImageFolderExists = await platform.fs.exists('image', { baseDir: BaseDirectory.AppData})
@@ -120,9 +125,13 @@ export function Clipboard() {
   }
 
   async function handleTextInset() {
+    const tagId = await getDefaultRecordSaveTagId()
+    if (tagId === null) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
     await platform.clipboard.clear()
     setText('')
-    const tagId = await getDefaultRecordSaveTagId()
     const mark: Partial<Mark> = {
       tagId,
       type: 'text',

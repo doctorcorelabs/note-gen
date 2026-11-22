@@ -49,6 +49,11 @@ export interface DbDispatchDeps {
   runner: DbTransactionRunner;
   resolveWorkspaceId: WorkspaceResolver;
   idempotencyStore: IdempotencyStore;
+  // F02-04(b): post-commit sweep for internal assetKeys returned
+  // by delete handlers, mirroring the REST route sweep. Optional:
+  // without it, deleted rows' assets are left in place (the
+  // pre-IM-4 behavior).
+  sweepAssets?: (workspaceId: string, assetKeys: readonly string[]) => Promise<void>;
 }
 
 export interface TransactionResultEntry {
@@ -174,12 +179,15 @@ export async function runTransactionRequest(
 ): Promise<TransactionResponseData> {
   preflightWrites(deps.registry, input.operations);
   const transactionId = randomUUID();
+  let sweepWorkspaceId: string | null = null;
+  const pendingSweeps: string[] = [];
   try {
-    return await deps.runner.runWrite(async (tx) => {
+    const data = await deps.runner.runWrite(async (tx) => {
       const workspaceId = await deps.resolveWorkspaceId(tx, input.userId);
       if (workspaceId === null) {
         throw ApiError.notFound();
       }
+      sweepWorkspaceId = workspaceId;
       const scope = idempotencyScope(workspaceId);
       if (input.idempotencyKey !== null) {
         const stored = await deps.idempotencyStore.find(tx, {
@@ -223,6 +231,17 @@ export async function runTransactionRequest(
         } catch (error) {
           throw withOperationContext(error, index, op.kind);
         }
+        // F02-04(b): collect internal asset keys for the
+        // post-commit sweep. normalizeWriteResult drops the
+        // field, so it never reaches the wire.
+        if (typeof raw === 'object' && raw !== null && 'assetKeys' in raw) {
+          const keys = (raw as { assetKeys?: unknown }).assetKeys;
+          if (Array.isArray(keys)) {
+            for (const key of keys) {
+              if (typeof key === 'string' && key !== '') pendingSweeps.push(key);
+            }
+          }
+        }
         const normalized = normalizeWriteResult(raw, op.kind, index);
         results.push({ kind: op.kind, ...normalized });
       }
@@ -236,6 +255,24 @@ export async function runTransactionRequest(
       }
       return data;
     });
+    // F02-04(b): the transaction has committed; sweep deleted
+    // rows' assets now, mirroring the REST route. Best effort:
+    // a sweep failure must not fail a committed delete. The
+    // idempotent-replay path returns inside the transaction
+    // without running handlers, so it collects nothing and
+    // sweeps nothing (the original execution already swept).
+    if (
+      deps.sweepAssets !== undefined &&
+      sweepWorkspaceId !== null &&
+      pendingSweeps.length > 0
+    ) {
+      try {
+        await deps.sweepAssets(sweepWorkspaceId, pendingSweeps);
+      } catch {
+        // Best effort: the records are already gone.
+      }
+    }
+    return data;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;

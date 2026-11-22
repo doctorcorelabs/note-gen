@@ -47,6 +47,7 @@ import {
   type ApiRecord,
   type ApiTag,
   type RecordsApiPort,
+  type UploadedAsset,
 } from "@/lib/web/records-client";
 import { isNoTagsExistError } from "@/lib/web/records-kind-client";
 import { TagChecklist } from "./web-inbox-shared";
@@ -60,6 +61,15 @@ const FLOW_TITLES: Record<CreateFlow, "textTitle" | "linkTitle" | "imageTitle" |
   file: "fileTitle",
   todo: "todoTitle",
 };
+
+// F02-04(a): one uploaded asset per draft file. A retry after a
+// failed create reuses the cached assetKey instead of uploading a
+// fresh copy, so a draft leaks at most one orphan asset, not one
+// per attempt. The key covers name, size, and lastModified;
+// picking a different file clears the cache.
+function draftFileKey(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
 
 export interface WebRecordCreateProps {
   api: RecordsApiPort;
@@ -98,6 +108,7 @@ export function WebRecordCreate({
   // One sourceId per draft: retries of the same save reuse it, so a
   // retry answers duplicate instead of creating a second record.
   const sourceIdRef = useRef<string | null>(null);
+  const uploadedAssetRef = useRef<{ key: string; asset: UploadedAsset } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -105,6 +116,7 @@ export function WebRecordCreate({
       setNotice(null);
       setPasteNote(null);
       sourceIdRef.current = null;
+      uploadedAssetRef.current = null;
     }
   }, [open, initialFlow]);
 
@@ -113,6 +125,11 @@ export function WebRecordCreate({
     setNotice(null);
     setPasteNote(null);
     sourceIdRef.current = null;
+  }
+
+  function selectFile(next: File | null) {
+    uploadedAssetRef.current = null;
+    setFile(next);
   }
 
   function resetDraft() {
@@ -127,6 +144,7 @@ export function WebRecordCreate({
     setNotice(null);
     setPasteNote(null);
     sourceIdRef.current = null;
+    uploadedAssetRef.current = null;
   }
 
   function getSourceId(kind: "paste" | "upload", seed: string): string {
@@ -155,7 +173,7 @@ export function WebRecordCreate({
     );
     if (item) {
       event.preventDefault();
-      setFile(item);
+      selectFile(item);
     }
   }
 
@@ -229,7 +247,14 @@ export function WebRecordCreate({
           setNotice(t("noFile"));
           return;
         }
-        const uploaded = await api.uploadAsset(file, file.name);
+        const cacheKey = draftFileKey(file);
+        let uploaded: UploadedAsset;
+        if (uploadedAssetRef.current?.key === cacheKey) {
+          uploaded = uploadedAssetRef.current.asset;
+        } else {
+          uploaded = await api.uploadAsset(file, file.name);
+          uploadedAssetRef.current = { key: cacheKey, asset: uploaded };
+        }
         const seed = `${file.name}:${file.size}`;
         const body =
           flow === "image"
@@ -387,7 +412,7 @@ export function WebRecordCreate({
               className="hidden"
               aria-label={flow === "image" ? t("chooseImage") : t("chooseFile")}
               onChange={(event) =>
-                setFile(event.target.files?.[0] ?? null)
+                selectFile(event.target.files?.[0] ?? null)
               }
             />
             <div className="flex items-center gap-2">

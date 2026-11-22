@@ -325,6 +325,7 @@ function havePersistentEdgesChanged(previous: Edge[], current: Edge[]) {
 
 function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: CanvasEditorProps) {
   const t = useTranslations('canvas')
+  const tCreate = useTranslations('record.mark.inbox.create')
   const { resolvedTheme } = useTheme()
   const document = useCanvasStore(state => state.documents[canvasId])
   const updateDocument = useCanvasStore(state => state.updateDocument)
@@ -1972,6 +1973,11 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
   const exportCanvasAsRecord = useCallback(async () => {
     setIsExporting(true)
     try {
+      const tagId = await getDefaultRecordSaveTagId()
+      if (tagId === null) {
+        toast.error(tCreate('noTagsExist'))
+        return
+      }
       const bytes = await renderCanvasImage('png', 2)
       const fileName = `canvas-${crypto.randomUUID()}.png`
       if (!await platform.fs.exists('image', { baseDir: BaseDirectory.AppData })) {
@@ -1979,7 +1985,6 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
       }
       await platform.fs.writeFile(`image/${fileName}`, bytes, { baseDir: BaseDirectory.AppData })
       const projectTitle = projects.find(project => project.id === canvasId)?.title || t('untitled')
-      const tagId = await getDefaultRecordSaveTagId()
       await insertMark({
         tagId,
         type: 'image',
@@ -2002,7 +2007,7 @@ function CanvasEditorInner({ canvasId, mobile = false, isActive = true }: Canvas
     } finally {
       setIsExporting(false)
     }
-  }, [canvasId, projects, renderCanvasImage, t])
+  }, [canvasId, projects, renderCanvasImage, t, tCreate])
 
   const getCurrentDocument = useCallback((): CanvasDocument => ({
     ...document,

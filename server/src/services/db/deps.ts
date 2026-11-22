@@ -37,7 +37,10 @@
 // stub workspace resolver construct DbRouteDeps directly instead of
 // calling this factory.
 
-import { createDb } from '../../db/index.js';
+import { createDb, type DbHandle } from '../../db/index.js';
+import { AssetService } from '../assets/service.js';
+import { FilesystemAssetStore } from '../assets/store.js';
+import { createDrizzleRecordsRepository } from '../records/drizzle-repository.js';
 import { drizzleIdempotencyStore, type IdempotencyStore } from './idempotency.js';
 import { createDbHandlerRegistry, type DbHandlerRegistry } from './registry.js';
 import { createDrizzleDbRunner, createUnavailableDbRunner, type DbTransactionRunner } from './runner.js';
@@ -48,17 +51,52 @@ export interface DbRouteDeps {
   runner: DbTransactionRunner;
   resolveWorkspaceId: WorkspaceResolver;
   idempotencyStore: IdempotencyStore;
+  // F02-04(b): post-commit asset sweep for the kind path; see
+  // DbDispatchDeps in dispatch.ts.
+  sweepAssets?: (workspaceId: string, assetKeys: readonly string[]) => Promise<void>;
 }
 
-export function createDefaultDbRouteDeps(config: { databaseUrl: string | undefined }): DbRouteDeps {
-  return {
+export function createDefaultDbRouteDeps(config: {
+  databaseUrl: string | undefined;
+  assetRoot?: string | undefined;
+}): DbRouteDeps {
+  const handle = config.databaseUrl !== undefined ? createDb(config.databaseUrl) : undefined;
+  const deps: DbRouteDeps = {
     registry: createDbHandlerRegistry(),
-    runner:
-      config.databaseUrl !== undefined
-        ? createDrizzleDbRunner(createDb(config.databaseUrl))
-        : createUnavailableDbRunner(),
+    runner: handle !== undefined ? createDrizzleDbRunner(handle) : createUnavailableDbRunner(),
     resolveWorkspaceId: resolveDefaultWorkspaceId,
     idempotencyStore: drizzleIdempotencyStore,
+  };
+  const sweepAssets = buildSweepAssets(handle, config.assetRoot);
+  if (sweepAssets !== undefined) deps.sweepAssets = sweepAssets;
+  return deps;
+}
+
+// F02-04(b): the kind-path twin of sweepAssets in
+// routes/records-marks.ts, wired over the same asset store and
+// the same hasUrlReference check. Undefined when no database or
+// no asset root is configured: the sweep is then a no-op by
+// absence, exactly like the REST port without ASSET_ROOT.
+function buildSweepAssets(
+  handle: DbHandle | undefined,
+  assetRoot: string | undefined,
+): DbRouteDeps['sweepAssets'] {
+  if (handle === undefined || assetRoot === undefined) return undefined;
+  const repository = createDrizzleRecordsRepository(handle.db);
+  const service = new AssetService({ store: new FilesystemAssetStore(assetRoot) });
+  return async (workspaceId, assetKeys) => {
+    for (const assetKey of assetKeys) {
+      try {
+        if (await repository.hasUrlReference(workspaceId, assetKey)) {
+          continue;
+        }
+        await service.deleteAsset(workspaceId, assetKey);
+      } catch {
+        // Best effort: the record is already gone. A leaked
+        // asset file is recoverable; a failed response after a
+        // committed delete would lie about the outcome.
+      }
+    }
   };
 }
 

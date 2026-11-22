@@ -169,7 +169,9 @@ dbDescribe('marks lifecycle handlers against Postgres', () => {
     });
   }
 
-  async function makeMark(options: { ws?: string; tag?: number; deleted?: boolean } = {}): Promise<number> {
+  async function makeMark(
+    options: { ws?: string; tag?: number; deleted?: boolean; type?: string; url?: string } = {},
+  ): Promise<number> {
     const ws = options.ws ?? workspaceId;
     const tag = options.tag ?? tagId;
     const past = new Date('2026-01-01T00:00:00.000Z');
@@ -178,7 +180,8 @@ dbDescribe('marks lifecycle handlers against Postgres', () => {
       .values({
         workspaceId: ws,
         tagId: tag,
-        type: 'text',
+        type: options.type ?? 'text',
+        url: options.url ?? null,
         content: 'lifecycle',
         deletedAt: options.deleted === true ? past : null,
         createdAt: past,
@@ -306,6 +309,15 @@ dbDescribe('marks lifecycle handlers against Postgres', () => {
     await expectNotFound(run(marksDeletePermanent, { kind: 'marks.deletePermanent', id: foreign }));
     expect(await readMark(foreign)).toBeDefined();
     expect(await readTagIds(foreign)).toEqual([otherTagId]);
+  });
+
+  it('deletePermanent returns internal assetKeys for asset-bearing rows only (F02-04b)', async () => {
+    const imageId = await makeMark({ type: 'image', url: 'asset-key-image-1' });
+    const imageResult = await run(marksDeletePermanent, { kind: 'marks.deletePermanent', id: imageId });
+    expect(imageResult).toEqual({ affected: 1, id: imageId, assetKeys: ['asset-key-image-1'] });
+    const textId = await makeMark();
+    const textResult = await run(marksDeletePermanent, { kind: 'marks.deletePermanent', id: textId });
+    expect(textResult).toEqual({ affected: 1, id: textId });
   });
 
   it('runs the full lifecycle: softDelete, restore, softDelete, deletePermanent', async () => {

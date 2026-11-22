@@ -35,7 +35,10 @@
 // - A read handler returns the rows array for its kind. A write
 //   handler returns { affected, id?, version? } and, only for
 //   wiki.commitRevision, { committed } as well. Dispatch validates
-//   the shape and renders the contract result entry.
+//   the shape and renders the contract result entry. A handler
+//   that deletes asset-bearing rows may also return the
+//   internal-only { assetKeys } field; dispatch sweeps those keys
+//   after commit and never renders them (F02-04b).
 // - A handler must not run DDL, touch the filesystem, or call an AI
 //   provider inside the transaction (V1-03 section 4.3 rule 8).
 
@@ -69,6 +72,10 @@ export interface DbWriteResultInput {
   // Only meaningful for wiki.commitRevision: a guard miss returns
   // committed false with HTTP 200 instead of throwing (V1-03 4.5).
   committed?: boolean;
+  // Internal-only (F02-04b): asset keys of rows deleted by this
+  // operation, swept by dispatch after commit. Never rendered to
+  // the wire; normalizeWriteResult drops the field.
+  assetKeys?: readonly string[];
 }
 
 export type DbReadHandler = (ctx: DbHandlerContext, op: DbOperationInput) => Promise<readonly unknown[]>;

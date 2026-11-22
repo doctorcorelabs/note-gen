@@ -4879,6 +4879,7 @@
           "clearSelection": "Clear selection",
           "movePartial": "Some records were not updated. Reload the list and try again.",
           "errorLoading": "Records could not be loaded. Try again.",
+          "errorLoadingTags": "Tags could not be loaded. Tag counts and filters may be out of date.",
           "retry": "Retry",
           "sessionExpired": "Your session expired. Sign in again to continue.",
           "errorGeneric": "Something went wrong. Try again."
@@ -4930,6 +4931,7 @@
         "tagsEmpty": "Select at least one tag.",
           "openLink": "Open link",
           "viewAsset": "Open file",
+          "assetNotFound": "This image could not be loaded. The stored file may be missing.",
           "delete": "Move to trash",
           "restore": "Restore",
           "deleteForever": "Delete forever"

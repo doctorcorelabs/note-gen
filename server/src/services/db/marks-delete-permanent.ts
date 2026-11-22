@@ -22,9 +22,12 @@
 //
 // Asset note: upstream deleted local assets referenced by the
 // mark, but a kind handler must not touch the filesystem inside
-// the transaction (registry contract). Removing referenced local
-// assets is REST route work (kontrak 3.5 DELETE
-// /api/marks/:markId/permanent), outside this handler.
+// the transaction (registry contract). The handler therefore
+// returns the deleted row's asset key in the internal-only
+// `assetKeys` result field; dispatch sweeps it after commit,
+// mirroring the REST route (kontrak 3.5 DELETE
+// /api/marks/:markId/permanent). The field never reaches the
+// wire: normalizeWriteResult drops it.
 //
 // A missing row, including a row owned by another workspace,
 // answers the generic 404 not_found, indistinguishable from a
@@ -42,6 +45,10 @@ import { ApiError } from '../../plugins/envelope.js';
 import { marks, type Database } from '../../db/index.js';
 
 export const HANDLER_KIND = 'marks.deletePermanent' as const;
+
+// Record types whose url column holds an asset key, mirroring
+// ASSET_TYPES in services/records/drizzle-repository.ts.
+const ASSET_TYPES: ReadonlySet<string> = new Set(['image', 'file', 'recording', 'scan']);
 
 export type DbTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -62,6 +69,9 @@ export interface WriteResult {
   affected: number;
   id?: number | string;
   version?: number;
+  // Internal-only (F02-04b): swept by dispatch after commit,
+  // never rendered to the wire.
+  assetKeys?: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -98,10 +108,18 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<WriteRes
   const rows = await ctx.tx
     .delete(marks)
     .where(and(eq(marks.workspaceId, ctx.workspaceId), eq(marks.id, op.id)))
-    .returning({ id: marks.id });
+    .returning({ id: marks.id, type: marks.type, url: marks.url });
   const deleted = rows[0];
   if (deleted === undefined) {
     throw ApiError.notFound();
   }
-  return { affected: 1, id: deleted.id };
+  const assetKeys =
+    ASSET_TYPES.has(deleted.type) && deleted.url !== null && deleted.url !== ''
+      ? [deleted.url]
+      : [];
+  return {
+    affected: 1,
+    id: deleted.id,
+    ...(assetKeys.length > 0 ? { assetKeys } : {}),
+  };
 }

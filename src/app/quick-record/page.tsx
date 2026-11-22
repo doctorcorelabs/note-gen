@@ -76,7 +76,7 @@ export default function QuickRecordPage() {
       setContext(next)
       setAutoRead(next.autoReadClipboard)
       if (!pendingRef.current && (!textRef.current || !next.tags.some(tag => tag.id === tagRef.current))) {
-        tagRef.current = next.selectedTagId
+        tagRef.current = next.selectedTagId ?? 0
       }
       setTagId(tagRef.current)
       persistDraft()

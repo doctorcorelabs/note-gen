@@ -61,6 +61,11 @@ export function ControlFile() {
 
   async function readFileByPath(path: string) {
     const tagId = await getDefaultRecordSaveTagId()
+    if (tagId === null) {
+      toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+      return
+    }
+
     const fileName = getDocumentFileName(path)
     const desc = fileName
     let content = ''

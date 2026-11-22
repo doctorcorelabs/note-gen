@@ -91,6 +91,10 @@ export function ControlRecording() {
       // 创建队列ID
       const queueId = `recording-${Date.now()}`
       const tagId = await getDefaultRecordSaveTagId()
+      if (tagId === null) {
+        toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+        return
+      }
       
       // 添加到队列中显示识别中的状态
       addQueue({
@@ -267,6 +271,10 @@ export function ControlRecording() {
       // 创建队列ID
       const queueId = `recording-${Date.now()}`
       const tagId = await getDefaultRecordSaveTagId()
+      if (tagId === null) {
+        toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+        return
+      }
       
       // 添加到队列中显示识别中的状态
       addQueue({
@@ -299,6 +307,10 @@ export function ControlRecording() {
       // 创建队列ID
       const queueId = `recording-${Date.now()}`
       const tagId = await getDefaultRecordSaveTagId()
+      if (tagId === null) {
+        toast({ title: t('record.mark.inbox.create.noTagsExist'), variant: 'destructive' })
+        return
+      }
       
       // 添加到队列中显示识别中的状态
       addQueue({
