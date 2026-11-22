@@ -126,6 +126,14 @@ function setHealthHeaders(reply: FastifyReply): void {
   reply.header('Content-Type', 'application/json; charset=utf-8');
 }
 
+// Log level for a failed readiness check. pgvector is non-blocking
+// through Fase 1 (see health/checks.ts header): its failure is an
+// expected state, so it is logged at info instead of warn to keep the
+// warn stream meaningful for real readiness failures.
+export function healthCheckFailLogLevel(checkName: string): 'info' | 'warn' {
+  return checkName === 'pgvector' ? 'info' : 'warn';
+}
+
 export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRouteDeps): Promise<void> {
   app.get(
     HEALTH_LIVE_PATH,
@@ -151,7 +159,12 @@ export async function registerHealthRoutes(app: FastifyInstance, deps: HealthRou
         if (check.status === 'fail') {
           // Log only the check name, the machine error code, and the
           // latency. Never the raw driver message or any config value.
-          request.log.warn({ check: name, error: check.error, latencyMs: check.latencyMs }, 'health check failed');
+          // pgvector failures log at info (non-blocking through Fase 1).
+          if (healthCheckFailLogLevel(name) === 'info') {
+            request.log.info({ check: name, error: check.error, latencyMs: check.latencyMs }, 'health check failed');
+          } else {
+            request.log.warn({ check: name, error: check.error, latencyMs: check.latencyMs }, 'health check failed');
+          }
         }
       }
       reply.code(ok ? 200 : 503);

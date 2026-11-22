@@ -20,6 +20,14 @@
 //   ok and migrations is not failed. A pgvector failure is reported
 //   honestly but does not block readiness in Fase 0 (it becomes hard in
 //   Fase 2). Skipped migrations/worker do not block.
+// - pgvector stays non-blocking through Fase 1 by decision (IM-7 F10-01
+//   option B): no Fase 1 feature depends on the vector extension
+//   (embeddings are stored as JSON text, see db/schema/m5-knowledge.ts),
+//   so its absence is a known, accepted state, not an incident. The
+//   ready handler therefore logs a pgvector failure at info level
+//   instead of warn. The swap to a pgvector image and CREATE EXTENSION
+//   is deferred to Fase 2 activation, when semantic search is built
+//   and this check becomes blocking.
 
 import { randomBytes } from 'node:crypto';
 import {

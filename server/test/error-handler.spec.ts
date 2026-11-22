@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { ServerConfig } from '../src/config.js';
-import { pathMatchesRoutePattern } from '../src/plugins/error-handler.js';
+import { pathMatchesRoutePattern, requestFailLogLevel } from '../src/plugins/error-handler.js';
 
 describe('pathMatchesRoutePattern', () => {
   it('matches exact literal paths only', () => {
@@ -53,6 +53,23 @@ describe('pathMatchesRoutePattern', () => {
   it('decodes percent-encoded segments before comparing', () => {
     expect(pathMatchesRoutePattern('/api/auth/sessions/:id', '/api/auth/sessions/a%20b')).toBe(true);
     expect(pathMatchesRoutePattern('/api/workspace/list', '/api/workspace/list')).toBe(true);
+  });
+});
+
+describe('requestFailLogLevel', () => {
+  it('logs server errors at error regardless of code', () => {
+    expect(requestFailLogLevel('internal_error', 500)).toBe('error');
+    expect(requestFailLogLevel('revision_conflict', 500)).toBe('error');
+  });
+
+  it('logs an expected revision_conflict at info (IM-7 F10-03)', () => {
+    expect(requestFailLogLevel('revision_conflict', 409)).toBe('info');
+    expect(requestFailLogLevel('revision_conflict', 412)).toBe('info');
+  });
+
+  it('keeps other client errors at warn', () => {
+    expect(requestFailLogLevel('not_found', 404)).toBe('warn');
+    expect(requestFailLogLevel('validation_failed', 400)).toBe('warn');
   });
 });
 

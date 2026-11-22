@@ -35,7 +35,9 @@
 // - Logs carry only the machine error code and the status code. The
 //   request id is attached by the logger itself. Error messages are not
 //   logged: a driver or library message can carry host, path, or
-//   credential fragments.
+//   credential fragments. An expected revision_conflict from the
+//   optimistic-concurrency guards logs at info instead of warn
+//   (IM-7 F10-03).
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildEmergencyEnvelope, HEALTH_PATHS } from '../routes/health.js';
@@ -99,6 +101,18 @@ export function pathMatchesRoutePattern(pattern: string, path: string): boolean 
     }
   }
   return patternSegments.length === pathSegments.length;
+}
+
+// Log level for a handled request failure. revision_conflict is the
+// expected answer of the optimistic-concurrency guards (a stale read
+// losing to a newer write), so it is logged at info instead of warn:
+// a warn per conflict drowns real failures whenever a client retries
+// against a moving target (IM-7 F10-03). Server errors stay error.
+export function requestFailLogLevel(code: string, statusCode: number): 'error' | 'warn' | 'info' {
+  if (statusCode >= 500) {
+    return 'error';
+  }
+  return code === 'revision_conflict' ? 'info' : 'warn';
 }
 
 export function registerErrorHandling(app: FastifyInstance, deps: ErrorHandlingDeps): void {
@@ -168,8 +182,11 @@ export function registerErrorHandling(app: FastifyInstance, deps: ErrorHandlingD
       return;
     }
     const { statusCode, envelope } = toErrorEnvelope(error, request.id, bodyTooLarge);
-    if (statusCode >= 500) {
+    const failLevel = requestFailLogLevel(envelope.error.code, statusCode);
+    if (failLevel === 'error') {
       request.log.error({ code: envelope.error.code, statusCode }, 'unhandled error');
+    } else if (failLevel === 'info') {
+      request.log.info({ code: envelope.error.code, statusCode }, 'request failed');
     } else {
       request.log.warn({ code: envelope.error.code, statusCode }, 'request failed');
     }

@@ -5834,7 +5834,7 @@
     }
   },
   "search": {
-    "placeholder": "搜索笔记、记录和画布...",
+    "placeholder": "Search notes and records...",
     "results": "{count} 个搜索结果",
     "loadMore": "加载更多结果",
     "loadingMore": "正在加载更多结果...",

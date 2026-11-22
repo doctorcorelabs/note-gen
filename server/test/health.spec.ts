@@ -33,6 +33,7 @@ import {
   runReadyChecks,
   type WorkspaceFs,
 } from '../src/health/checks.js';
+import { healthCheckFailLogLevel } from '../src/routes/health.js';
 import { readServerVersion } from '../src/server.js';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -539,5 +540,18 @@ describe('http routes', () => {
     const checks = body['checks'] as Record<string, Record<string, unknown>>;
     expect(checks['db']?.['error']).toBe('DB_AUTH_FAILED');
     await app.close();
+  });
+});
+
+describe('healthCheckFailLogLevel', () => {
+  it('logs a pgvector failure at info (non-blocking through Fase 1)', () => {
+    expect(healthCheckFailLogLevel('pgvector')).toBe('info');
+  });
+
+  it('keeps blocking check failures at warn', () => {
+    expect(healthCheckFailLogLevel('db')).toBe('warn');
+    expect(healthCheckFailLogLevel('workspace')).toBe('warn');
+    expect(healthCheckFailLogLevel('migrations')).toBe('warn');
+    expect(healthCheckFailLogLevel('worker')).toBe('warn');
   });
 });
