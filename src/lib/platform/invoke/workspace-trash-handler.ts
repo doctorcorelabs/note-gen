@@ -95,3 +95,120 @@ export function createMovePathsToTrashHandler(
     return merged;
   };
 }
+
+/**
+ * Workspace file trash panel handlers (F-05-01): list, restore,
+ * purge one entry, and empty all trash, on the existing server
+ * routes (GET /api/workspace/trash, POST /api/workspace/trash/:id/
+ * restore, DELETE /api/workspace/trash/:id, DELETE /api/workspace/
+ * trash). Same seam as move_paths_to_trash above: the handler owns
+ * the HTTP call, forwards the routed method/path/query/body, and
+ * unwraps the canonical envelope. No server change.
+ *
+ * The result types mirror server/src/services/workspace/trash.ts
+ * (TrashEntry, ListTrashResult, RestoreResult, PurgeResult,
+ * PurgeAllResult) so the panel renders exactly what the server
+ * reports, including per-entry purge failures from purgeAll.
+ */
+
+export interface WorkspaceTrashEntry {
+  id: string;
+  originalPath: string;
+  name: string;
+  kind: "file" | "folder";
+  size: number;
+  entryCount: number;
+  revision: string | null;
+  deletedAt: string;
+}
+
+export interface ListWorkspaceTrashResult {
+  entries: WorkspaceTrashEntry[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+  totalSize: number;
+}
+
+export interface RestoreWorkspaceTrashEntryResult {
+  id: string;
+  originalPath: string;
+  restoredPath: string;
+  kind: "file" | "folder";
+  revision: string | null;
+  size: number;
+  restoredAt: string;
+}
+
+export interface PurgeWorkspaceTrashEntryResult {
+  id: string;
+  purged: true;
+  purgedAt: string;
+}
+
+export interface EmptyWorkspaceTrashResult {
+  purged: number;
+  failed: number;
+  failures: Array<{ id: string; code: "trash_blob_missing" | "internal_error" }>;
+  purgedAt: string;
+}
+
+function createWorkspaceTrashRequestHandler<T>(
+  deps: WorkspaceTrashHandlerDeps = {},
+): InvokeHandler {
+  return async (context) => {
+    const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
+    const token = deps.getCsrfToken ? await deps.getCsrfToken() : undefined;
+    const query = new URLSearchParams(context.request.query).toString();
+    const url = query ? `${context.request.path}?${query}` : context.request.path;
+    const hasBody = context.request.method !== "GET";
+    const response = await fetchImpl(url, {
+      method: context.request.method,
+      credentials: "same-origin",
+      headers: {
+        ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { "X-CSRF-Token": token } : {}),
+      },
+      ...(hasBody ? { body: JSON.stringify(context.request.body ?? {}) } : {}),
+      signal: AbortSignal.timeout(TRASH_REQUEST_TIMEOUT_MS),
+    });
+    let parsed: unknown = null;
+    try {
+      parsed = await response.json();
+    } catch {
+      parsed = null;
+    }
+    const envelope = isRecord(parsed) ? parsed : null;
+    if (!response.ok || envelope?.ok !== true) {
+      const serverError = isRecord(envelope?.error) ? envelope.error : null;
+      const code = typeof serverError?.code === "string" ? serverError.code : `http_${response.status}`;
+      const message = typeof serverError?.message === "string" ? serverError.message : "Workspace trash request failed.";
+      throw new Error(`Workspace trash request failed (${code}): ${message}`);
+    }
+    return envelope.data as T;
+  };
+}
+
+export function createListWorkspaceTrashHandler(
+  deps: WorkspaceTrashHandlerDeps = {},
+): InvokeHandler {
+  return createWorkspaceTrashRequestHandler<ListWorkspaceTrashResult>(deps);
+}
+
+export function createRestoreWorkspaceTrashEntryHandler(
+  deps: WorkspaceTrashHandlerDeps = {},
+): InvokeHandler {
+  return createWorkspaceTrashRequestHandler<RestoreWorkspaceTrashEntryResult>(deps);
+}
+
+export function createPurgeWorkspaceTrashEntryHandler(
+  deps: WorkspaceTrashHandlerDeps = {},
+): InvokeHandler {
+  return createWorkspaceTrashRequestHandler<PurgeWorkspaceTrashEntryResult>(deps);
+}
+
+export function createEmptyWorkspaceTrashHandler(
+  deps: WorkspaceTrashHandlerDeps = {},
+): InvokeHandler {
+  return createWorkspaceTrashRequestHandler<EmptyWorkspaceTrashResult>(deps);
+}

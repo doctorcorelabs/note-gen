@@ -228,10 +228,10 @@ test("backend routes without a handler reject with an explicit 501", async () =>
   );
 });
 
-test("route table holds 56 dedicated endpoints and no generic path", () => {
-  assert.equal(BACKEND_ROUTES.length, 56);
+test("route table holds 60 dedicated endpoints and no generic path", () => {
+  assert.equal(BACKEND_ROUTES.length, 60);
   const commands = BACKEND_ROUTES.map((route) => route.command);
-  assert.equal(new Set(commands).size, 56);
+  assert.equal(new Set(commands).size, 60);
   for (const route of BACKEND_ROUTES) {
     assert.ok(route.path.startsWith("/api/"), route.path);
     assert.ok(!route.path.startsWith("/api/invoke"), route.path);

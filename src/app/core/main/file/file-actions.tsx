@@ -1,7 +1,7 @@
 "use client"
 
 import { TooltipButton } from "@/components/tooltip-button"
-import { FilePlus, FolderPlus, RefreshCw } from "lucide-react"
+import { FilePlus, FolderPlus, RefreshCw, Trash2 } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useState } from "react"
 import useArticleStore from "@/stores/article"
@@ -11,6 +11,7 @@ import { useMarkdownImport } from './use-markdown-import'
 import { checkIsTauri } from '@/lib/check'
 import { toast } from '@/hooks/use-toast'
 import { DocumentToMarkdownDialog } from './document-to-markdown-dialog'
+import { TrashPanel } from './trash-panel'
 
 export function FileActions() {
   const { newFolder, newFile, loadFileTree, loadRemoteSyncFiles, fileTreeLoading } = useArticleStore()
@@ -18,6 +19,7 @@ export function FileActions() {
   const { isImporting, importMarkdown, importNotionZip, convertDocumentsToMarkdown } = useMarkdownImport()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [convertDialogOpen, setConvertDialogOpen] = useState(false)
+  const [trashPanelOpen, setTrashPanelOpen] = useState(false)
 
   const debounceNewFile = debounce(newFile, 200)
   const debounceNewFolder = debounce(newFolder, 200)
@@ -78,6 +80,17 @@ export function FileActions() {
           disabled={fileTreeLoading || isRefreshing}
           side="bottom"
         />
+        {/* Workspace file trash panel (F-05-01): web only, the trash
+            routes exist only behind the web backend. Desktop keeps
+            the OS trash through move_paths_to_trash. */}
+        {!checkIsTauri() ? (
+          <TooltipButton
+            icon={<Trash2 className="h-4 w-4" />}
+            tooltipText={t('openTrash')}
+            onClick={() => setTrashPanelOpen(true)}
+            side="bottom"
+          />
+        ) : null}
         <FileMoreMenu
           isImporting={isImporting}
           onImportMarkdown={() => void importMarkdown()}
@@ -91,6 +104,7 @@ export function FileActions() {
         onOpenChange={setConvertDialogOpen}
         onSelect={() => void convertDocumentsToMarkdown()}
       />
+      <TrashPanel open={trashPanelOpen} onOpenChange={setTrashPanelOpen} />
     </>
   )
 }

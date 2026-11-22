@@ -100,7 +100,11 @@ import { createWebHttpAdapter } from "./http/http.web";
 import { createWebChannelAdapter } from "./invoke/channel.web";
 import { createWebInvokeAdapter } from "./invoke/web";
 import { createHandlerRegistry } from "./invoke/handlers";
-import { createMovePathsToTrashHandler } from "./invoke/workspace-trash-handler";
+import { createEmptyWorkspaceTrashHandler,
+  createListWorkspaceTrashHandler,
+  createMovePathsToTrashHandler,
+  createPurgeWorkspaceTrashEntryHandler,
+  createRestoreWorkspaceTrashEntryHandler } from "./invoke/workspace-trash-handler";
 import { createWebNotificationAdapter } from "./notification/notification.web";
 import { createWebOpenerAdapter } from "./opener/opener.web";
 import { createWebOsAdapter } from "./os/os.web";
@@ -304,6 +308,25 @@ export function registerWebAdapters(
     createMovePathsToTrashHandler({
       getCsrfToken: options.getFsCsrfToken,
     }),
+  );
+  // Workspace file trash panel (F-05-01): the four read/manage
+  // commands behind the Trash dialog in Files.
+  const trashHandlerDeps = { getCsrfToken: options.getFsCsrfToken };
+  invokeHandlers.register(
+    "list_workspace_trash",
+    createListWorkspaceTrashHandler(trashHandlerDeps),
+  );
+  invokeHandlers.register(
+    "restore_workspace_trash_entry",
+    createRestoreWorkspaceTrashEntryHandler(trashHandlerDeps),
+  );
+  invokeHandlers.register(
+    "purge_workspace_trash_entry",
+    createPurgeWorkspaceTrashEntryHandler(trashHandlerDeps),
+  );
+  invokeHandlers.register(
+    "empty_workspace_trash",
+    createEmptyWorkspaceTrashHandler(trashHandlerDeps),
   );
   registerPlatformAdapter("invoke", createWebInvokeAdapter(invokeHandlers), ["web"]);
   registerPlatformAdapter(

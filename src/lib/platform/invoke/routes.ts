@@ -235,6 +235,26 @@ export const BACKEND_ROUTES: readonly BackendRoute[] = Object.freeze([
 
   // Trash (phase 1). Workspace-relative paths only.
   { command: "move_paths_to_trash", method: "POST", path: "/api/workspace/trash", group: "workspace", phase: "1" },
+  // Workspace file trash panel (F-05-01): list, restore, purge one,
+  // and empty all, on the existing server trash routes. No server
+  // change; the panel is web-only because these routes exist only
+  // behind the web backend.
+  { command: "list_workspace_trash", method: "GET", path: "/api/workspace/trash", group: "workspace", phase: "1" },
+  {
+    command: "restore_workspace_trash_entry",
+    method: "POST",
+    path: "/api/workspace/trash/{id}/restore",
+    group: "workspace",
+    phase: "1",
+  },
+  {
+    command: "purge_workspace_trash_entry",
+    method: "DELETE",
+    path: "/api/workspace/trash/{id}",
+    group: "workspace",
+    phase: "1",
+  },
+  { command: "empty_workspace_trash", method: "DELETE", path: "/api/workspace/trash", group: "workspace", phase: "1" },
 
   // Clipper (phase 3e, conditional on the clipper service decision).
   {
