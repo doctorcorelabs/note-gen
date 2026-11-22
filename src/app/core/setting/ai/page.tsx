@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from 'next-intl';
 import { useLocalStorage } from 'react-use';
@@ -103,7 +105,7 @@ function ProviderTitle({ config, template, modelCount }: { config: AiConfig; tem
 }
 
 
-export default function AiPage({ mobile = false }: { mobile?: boolean }) {
+function AiPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations('settings.ai');
   const userErrorMessage = useUserErrorMessage();
   const {
@@ -930,4 +932,16 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       </div>
     </SettingType>
   )
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedAiPage({ mobile = false }: { mobile?: boolean }) {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="ai" />
+  }
+  return <AiPage mobile={mobile} />
 }

@@ -4313,7 +4313,7 @@
     "disabled": {
       "canvas": "Canvas is available in Phase 2. This section is disabled in this version.",
       "sync": "Sync is available in a later phase. The server is the single source of truth in this version. No sync credentials can be entered here.",
-      "backup": "Backups are managed by the server. Local backup folders are not used in the web version.",
+      "backup": "Backups are available in a later phase. This section is disabled in this version.",
       "imageHosting": "Image hosting is available in Phase 2. Assets in this version are handled through the workspace media and record asset endpoints. No image hosting credentials can be entered here.",
       "ai": "AI providers and models are available in Phase 2. No API keys can be entered here.",
       "webSearch": "Web search is available in Phase 2, as part of AI providers. No API keys can be entered here.",
@@ -4560,6 +4560,7 @@
       "link": {
         "title": "链接记录",
         "description": "输入网页链接，系统将自动爬取页面内容并保存",
+        "descriptionWeb": "Enter a webpage link. The link will be saved; automatically fetching the page content is available in Phase 2.",
         "save": "保存",
         "autoReadClipboard": "自动读取剪贴板链接",
         "searchExcerpt": "以下内容来自网络搜索摘要，并非完整网页正文：",
@@ -6555,6 +6556,8 @@
         "newArticle": "新建笔记",
         "newFolder": "新建文件夹",
         "refresh": "刷新",
+        "importUnavailableWeb": "Not available in the web version",
+        "importUnavailableWebDesc": "Document conversion and Notion import are available in a later phase. This action is disabled in this version.",
         "toggleFolders": "文件夹展开折叠",
         "expandAll": "全部展开",
         "collapseAll": "全部折叠",
@@ -7550,6 +7553,14 @@
       "canvas": {
         "title": "Canvas is not available yet",
         "message": "Canvas is not available yet in the web version. Your existing canvas files are kept unchanged."
+      },
+      "browserPanel": {
+        "title": "Browser panel is not available",
+        "message": "The browser panel is not available in the web version. External links open in a new browser tab instead."
+      },
+      "fileInsert": {
+        "title": "File link insertion is not available",
+        "message": "Inserting a link to a local file is not available in the web version because the browser has no access to local file paths."
       },
       "fileHistory": {
         "title": "File history is not available yet",

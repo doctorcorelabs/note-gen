@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -273,7 +275,7 @@ function SortableProviderField({
   )
 }
 
-export default function WebSearchSettingPage({ mobile = false }: { mobile?: boolean }) {
+function WebSearchSettingPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations('settings.webSearch')
   const [settings, setSettings] = useState<WebSearchSettings>()
   const [visibleKeys, setVisibleKeys] = useState<Partial<Record<WebSearchApiProvider, boolean>>>({})
@@ -558,4 +560,16 @@ export default function WebSearchSettingPage({ mobile = false }: { mobile?: bool
       </div>
     </SettingType>
   )
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedWebSearchSettingPage({ mobile = false }: { mobile?: boolean }) {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="webSearch" />
+  }
+  return <WebSearchSettingPage mobile={mobile} />
 }

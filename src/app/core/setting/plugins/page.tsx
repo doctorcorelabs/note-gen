@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -19,7 +21,7 @@ import { InstalledPluginsTab } from './installed-plugins-tab'
 import { MarketplaceTab } from './marketplace-tab'
 import { UpdatesTab } from './updates-tab'
 
-export default function PluginsSettingPage({ mobile = false }: { mobile?: boolean }) {
+function PluginsSettingPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations('settings.plugins')
   const locale = useLocale()
   const initialized = usePluginStore((state) => state.initialized)
@@ -139,4 +141,16 @@ export default function PluginsSettingPage({ mobile = false }: { mobile?: boolea
       )}
     </SettingType>
   )
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedPluginsSettingPage({ mobile = false }: { mobile?: boolean }) {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="plugins" />
+  }
+  return <PluginsSettingPage mobile={mobile} />
 }

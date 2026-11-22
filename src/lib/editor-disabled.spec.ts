@@ -54,13 +54,24 @@ describe("editorDisabledMessageKeys", () => {
     }
   });
 
-  it("covers exactly the twelve surfaced features plus the flag-only one", () => {
-    expect(ALL_EDITOR_DISABLED_FEATURES).toHaveLength(13);
+  it("covers exactly the fourteen surfaced features plus the flag-only one", () => {
+    expect(ALL_EDITOR_DISABLED_FEATURES).toHaveLength(15);
     const surfaced = ALL_EDITOR_DISABLED_FEATURES.filter(
       (feature) => EDITOR_DISABLED_FEATURES[feature].catalogSegment !== null,
     );
-    expect(surfaced).toHaveLength(12);
+    expect(surfaced).toHaveLength(14);
     expect(EDITOR_DISABLED_FEATURES.staticAssetSync.catalogSegment).toBeNull();
+  });
+
+  it("maps the DA-4 browserPanel and fileInsert features to their catalog keys", () => {
+    expect(editorDisabledMessageKeys("browserPanel")).toEqual({
+      titleKey: "browserPanel.title",
+      messageKey: "browserPanel.message",
+    });
+    expect(editorDisabledMessageKeys("fileInsert")).toEqual({
+      titleKey: "fileInsert.title",
+      messageKey: "fileInsert.message",
+    });
   });
 });
 

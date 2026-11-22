@@ -33,6 +33,7 @@ import emitter from '@/lib/emitter'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { isMobileDevice as checkIsMobileDevice } from '@/lib/check'
 import { platform } from '@/lib/platform'
+import { isTauri } from '@/lib/platform/detect'
 import { toast } from '@/hooks/use-toast'
 import { RecordSaveTarget } from './record-save-target'
 import useSettingStore from '@/stores/setting'
@@ -300,7 +301,7 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
             <DrawerHeader>
               <DrawerTitle>{t('record.mark.link.title') || 'Record Link'}</DrawerTitle>
               <DrawerDescription>
-                {t('record.mark.link.description') || 'Enter a webpage link, and the system will automatically crawl the page content and save it'}
+                {isTauri() ? t('record.mark.link.description') : t('record.mark.link.descriptionWeb')}
               </DrawerDescription>
             </DrawerHeader>
             <div className="space-y-4 px-4">
@@ -388,7 +389,7 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
             <DialogHeader>
               <DialogTitle>{t('record.mark.link.title') || 'Record Link'}</DialogTitle>
               <DialogDescription>
-                {t('record.mark.link.description') || 'Enter a webpage link, and the system will automatically crawl the page content and save it'}
+                {isTauri() ? t('record.mark.link.description') : t('record.mark.link.descriptionWeb')}
               </DialogDescription>
             </DialogHeader>
             <RecordSaveTarget

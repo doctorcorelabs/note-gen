@@ -14,6 +14,8 @@ import { isPluginEnabledInWorkspace } from '@/lib/plugins/internal-types'
 import { usePluginStore } from '@/stores/plugins'
 import { useLocale, useTranslations } from 'next-intl'
 import { resolvePluginViewTitle } from '@/app/core/setting/plugins/plugin-display'
+import { AiChatDisabledPanel } from '@/components/web-chrome/disabled-feature-panels'
+import { useFeatureFlag } from '@/components/web-chrome/use-feature-flag'
 
 export function PluginRightSidebar() {
   const locale = useLocale()
@@ -23,6 +25,13 @@ export function PluginRightSidebar() {
   usePluginLocalization(installed, locale)
   const workspaceId = usePluginStore((state) => state.currentWorkspaceId)
   const workspaceStates = usePluginStore((state) => state.workspaceStates)
+  // Web fork (Fase 1, A23-01): the AI chat surface has no web
+  // transport in this phase, so gate its mount on the ai-chat
+  // feature flag and render the disabled panel instead of mounting
+  // Chat (whose store init rejects in web mode). Wiring per
+  // disabled-feature-panels.tsx; the Chat import stays so the
+  // surface returns unchanged when the flag turns on.
+  const { enabled: aiChatEnabled } = useFeatureFlag('ai-chat')
   const active = usePluginUiStore((state) => state.activeRightView)
   const setActive = usePluginUiStore((state) => state.setActiveRightView)
   const contributions = installed.flatMap((plugin) => {
@@ -33,7 +42,7 @@ export function PluginRightSidebar() {
   useEffect(() => {
     if (active && !contributions.some(item => item.key === active)) setActive(null)
   }, [active, contributions, setActive])
-  if (contributions.length === 0) return <Chat />
+  if (contributions.length === 0) return aiChatEnabled ? <Chat /> : <AiChatDisabledPanel />
   const selected = contributions.find((item) => item.key === active)
   return (
     <Tabs value={selected?.key ?? '@chat'} onValueChange={key => setActive(key === '@chat' ? null : key)} className="h-full min-h-0 min-w-0 gap-0">
@@ -48,7 +57,7 @@ export function PluginRightSidebar() {
           ))}
         </TabsList>
       </div>
-      <TabsContent forceMount value="@chat" className="min-h-0 overflow-hidden data-[state=inactive]:hidden"><Chat /></TabsContent>
+      <TabsContent forceMount value="@chat" className="min-h-0 overflow-hidden data-[state=inactive]:hidden">{aiChatEnabled ? <Chat /> : <AiChatDisabledPanel />}</TabsContent>
       {selected ? <TabsContent key={selected.key} value={selected.key} className="min-h-0 overflow-hidden"><PluginViewSurface viewKey={selected.key} /></TabsContent> : null}
     </Tabs>
   )

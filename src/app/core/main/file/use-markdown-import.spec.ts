@@ -7,6 +7,9 @@
 //
 // Run: `pnpm vitest run --project unit src/app/core/main/file/use-markdown-import.spec.ts`
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -109,5 +112,40 @@ describe("markdown import copy (IMP-02)", () => {
     const result = await copyMarkdownFilesRecursively("src", "target");
     expect(result.copied).toBe(2);
     expect(result.failures).toEqual(["bad.md"]);
+  });
+});
+
+// DA-4 (IMP-03) static pins: document conversion and Notion
+// import must not reach the path-shaped dialog in web mode; the
+// file-actions handlers show the explicit marker and the hook
+// callbacks guard themselves as defense in depth. Runtime proof
+// belongs to the post-deploy browser rerun.
+describe("markdown import web gate (IMP-03)", () => {
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const HOOK = readFileSync(join(HERE, "use-markdown-import.ts"), "utf8");
+  const ACTIONS = readFileSync(join(HERE, "file-actions.tsx"), "utf8");
+  const EN = JSON.parse(readFileSync(join(HERE, "..", "..", "..", "..", "..", "messages", "en.json"), "utf8"));
+  const ZH = JSON.parse(readFileSync(join(HERE, "..", "..", "..", "..", "..", "messages", "zh.json"), "utf8"));
+
+  it("both hook callbacks return before the dialog in web mode", () => {
+    for (const marker of ["const importNotionZip", "const convertDocumentsToMarkdown"]) {
+      const start = HOOK.indexOf(marker);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const fn = HOOK.slice(start, HOOK.indexOf("platform.dialog.open", start));
+      expect(fn).toContain("if (!checkIsTauri())");
+    }
+  });
+
+  it("the file-actions handlers gate with the explicit marker", () => {
+    expect(ACTIONS).toContain("onConvertDocuments={handleConvertDocuments}");
+    expect(ACTIONS).toContain("onImportNotion={handleImportNotion}");
+    expect(ACTIONS).toContain("t('importUnavailableWeb')");
+  });
+
+  it("the marker copy exists in both catalogs", () => {
+    expect(EN.article.file.toolbar.importUnavailableWeb).toBeTruthy();
+    expect(EN.article.file.toolbar.importUnavailableWebDesc).toBeTruthy();
+    expect(ZH.article.file.toolbar.importUnavailableWeb).toBeTruthy();
+    expect(ZH.article.file.toolbar.importUnavailableWebDesc).toBeTruthy();
   });
 });

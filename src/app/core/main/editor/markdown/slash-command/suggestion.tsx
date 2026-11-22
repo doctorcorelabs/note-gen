@@ -347,6 +347,8 @@ export interface SlashCommandTranslations {
   }
   fileInsert: {
     failed: string
+    unavailableTitle: string
+    unavailableMessage: string
   }
   // DA-2 (BUG-07): shared user error formatter supplied by the
   // hook-owning caller; returns null for silent aborts.
@@ -448,6 +450,8 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
     },
     fileInsert: {
       failed: 'Failed to insert file link',
+      unavailableTitle: 'File link insertion is not available',
+      unavailableMessage: 'Inserting a link to a local file is not available in the web version because the browser has no access to local file paths.',
     },
   }
 
@@ -700,6 +704,22 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       command: async ({ editor, range }: { editor: Editor; range: Range }) => {
         const rangeStart = range.from
         editor.chain().focus().deleteRange(range).run()
+
+        // Web fork (Fase 1, A07-01): this command inserts a link
+        // to a local file path, which a browser cannot provide;
+        // the path-shaped dialog always rejects in web mode. Show
+        // the disabled marker (editor.disabled.fileInsert) instead
+        // of failing after the slash text was deleted. The slash
+        // text is already cleaned above, so no orphan "/file"
+        // remains. Desktop behavior is unchanged.
+        if (!checkIsTauri()) {
+          toast({
+            title: tr.fileInsert.unavailableTitle,
+            description: tr.fileInsert.unavailableMessage,
+          })
+          document.dispatchEvent(new CustomEvent('slash-command-hide'))
+          return
+        }
 
         try {
           const selected = await platform.dialog.open({

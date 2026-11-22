@@ -1,4 +1,6 @@
 'use client';
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 import { Eye, ImageIcon } from "lucide-react"
 import { useTranslations } from 'next-intl';
 import { SettingType } from '../components/setting-base';
@@ -8,7 +10,7 @@ import useSettingStore from "@/stores/setting";
 import { Switch } from "@/components/ui/switch";
 import { Item, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemActions } from '@/components/ui/item';
 
-export default function ImageMethod() {
+function ImageMethod() {
   const t = useTranslations('settings.imageMethod');
   const { enableImageRecognition, setEnableImageRecognition } = useSettingStore()
   
@@ -33,4 +35,16 @@ export default function ImageMethod() {
       </div>
     </SettingType>
   )
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedImageMethod() {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="imageMethod" />
+  }
+  return <ImageMethod />
 }

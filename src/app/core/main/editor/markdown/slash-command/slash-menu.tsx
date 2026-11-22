@@ -148,9 +148,11 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
     },
     fileInsert: {
       failed: t('fileInsert.failed'),
+      unavailableTitle: tDisabled(editorDisabledMessageKeys('fileInsert').titleKey),
+      unavailableMessage: tDisabled(editorDisabledMessageKeys('fileInsert').messageKey),
     },
     errorMessage: userErrorMessage,
-  }), [t, userErrorMessage])
+  }), [t, tDisabled, userErrorMessage])
 
   // 分组顺序
   const groupOrder = useMemo(() => [

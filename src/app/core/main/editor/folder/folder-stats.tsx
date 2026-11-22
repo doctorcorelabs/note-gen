@@ -12,6 +12,8 @@ import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { KnowledgeSettingCard } from '@/components/wiki/knowledge-setting-card'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { useWikiData } from '@/components/wiki/use-wiki-data'
 import { useWikiErrorMessage } from '@/components/wiki/use-wiki-error-message'
 import { getVectorIndexStatsForFiles } from '@/db/vector'
@@ -39,6 +41,11 @@ function isWithinFolder(path: string, folder: string) { return !folder || path =
 
 export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProps) {
   const t = useTranslations('article.file.folderView')
+  // Web fork (Fase 1, WIKI-18-01): wiki write controls (source
+  // toggle, organize) run through wiki write kinds that are
+  // Phase 2 stubs in web mode; show the marker instead of controls
+  // that always fail. Read statistics stay visible.
+  const wikiDisabled = isEditorFeatureDisabled('wiki')
   const wiki = useTranslations('wiki')
   const rag = useTranslations('settings.rag')
   const locale = useLocale()
@@ -248,11 +255,11 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
           : loading || !data || !selection ? <p className="text-sm text-muted-foreground">{t('loadingFolder')}</p>
           : !data.settings.enabled ? <div className="flex flex-col items-start gap-3"><p className="text-sm text-muted-foreground">{t('wikiGlobalDisabled')}</p>{openSettingsButton}</div>
             : <>
-              <ItemGroup><Item variant="muted"><ItemContent><ItemTitle>{t('wikiSourceToggle')}</ItemTitle><ItemDescription>{t('subfoldersIncluded')}{selection.inheritedFrom !== null ? ` · ${t('wikiInherited', { path: selection.inheritedFrom || '/' })}` : ''}</ItemDescription></ItemContent><ItemActions><Switch aria-label={t('wikiSourceToggle')} checked={selection.included} disabled={busy} onCheckedChange={included => void runWiki(() => setWikiFolderEnabled(path, included, data.context.id), t('folderSelectionSaved'))} /></ItemActions></Item></ItemGroup>
+              {wikiDisabled ? <EditorDisabledNotice feature="wiki" /> : <ItemGroup><Item variant="muted"><ItemContent><ItemTitle>{t('wikiSourceToggle')}</ItemTitle><ItemDescription>{t('subfoldersIncluded')}{selection.inheritedFrom !== null ? ` · ${t('wikiInherited', { path: selection.inheritedFrom || '/' })}` : ''}</ItemDescription></ItemContent><ItemActions><Switch aria-label={t('wikiSourceToggle')} checked={selection.included} disabled={busy} onCheckedChange={included => void runWiki(() => setWikiFolderEnabled(path, included, data.context.id), t('folderSelectionSaved'))} /></ItemActions></Item></ItemGroup>}
               {selection.hasOverrides ? <p className="text-xs text-muted-foreground">{t('wikiOverrides')}</p> : null}
               {selection.included || selection.hasOverrides ? <>
                 <dl className="grid grid-cols-3 gap-3">{[[t('wikiReady'), wikiReady], [t('wikiPending'), wikiPending], [t('wikiFailed'), wikiFailed]].map(([label, count]) => <div key={label} className="flex flex-col gap-1 rounded-xl bg-muted/40 p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="text-lg font-medium tabular-nums">{count}</dd></div>)}</dl>
-                <div className="flex flex-wrap items-center gap-3"><Button disabled={busy || !selection.included || !knownFiles.length || runningWikiJobs} onClick={() => void runWiki(() => startWikiFolderCompilation(path, data.context.id), t('organizeQueued'))}>{busy || runningWikiJobs ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Sparkles data-icon="inline-start" />}{wikiReady ? t('updateFolder') : t('organizeFolder')}</Button><span className="text-xs text-muted-foreground">{data.settings.started ? wiki('foregroundNotice') : t('startMaintenanceHint')}</span></div>
+                {wikiDisabled ? null : <div className="flex flex-wrap items-center gap-3"><Button disabled={busy || !selection.included || !knownFiles.length || runningWikiJobs} onClick={() => void runWiki(() => startWikiFolderCompilation(path, data.context.id), t('organizeQueued'))}>{busy || runningWikiJobs ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Sparkles data-icon="inline-start" />}{wikiReady ? t('updateFolder') : t('organizeFolder')}</Button><span className="text-xs text-muted-foreground">{data.settings.started ? wiki('foregroundNotice') : t('startMaintenanceHint')}</span></div>}
               </> : null}
             </>}
       </KnowledgeSettingCard>

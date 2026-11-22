@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { KnowledgeSettingCard } from '@/components/wiki/knowledge-setting-card'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { useWikiData } from '@/components/wiki/use-wiki-data'
 import { useWikiErrorMessage } from '@/components/wiki/use-wiki-error-message'
 import { WikiFolderIcon } from '@/components/wiki/wiki-folder-icon'
@@ -21,6 +23,11 @@ import { useWikiActionScope } from '@/components/wiki/use-wiki-action-scope'
 /** Wiki directories present the shared knowledge space, rather than a source-folder dashboard. */
 export function WikiFolderView({ folderPath }: { folderPath: string }) {
   const t = useTranslations('wiki.folder')
+  // Web fork (Fase 1, WIKI-18-01): the maintenance write controls
+  // (enabled switch, pause/resume) run through wiki write kinds
+  // that are Phase 2 stubs in web mode; show the marker instead.
+  // The overview read statistics stay visible.
+  const wikiDisabled = isEditorFeatureDisabled('wiki')
   const wiki = useTranslations('wiki')
   const errorMessage = useWikiErrorMessage()
   const { data, loading, error, refresh } = useWikiData()
@@ -67,8 +74,8 @@ export function WikiFolderView({ folderPath }: { folderPath: string }) {
       </KnowledgeSettingCard>
 
       <KnowledgeSettingCard title={t('maintenanceTitle')} description={t('maintenanceDescription')} icon={RefreshCw} label={wiki('defaultMode')} enabled={enabled}
-        actions={<Switch aria-label={t('enabled')} checked={enabled} disabled={loading || !data || busy} onCheckedChange={value => { if (data) void run(() => updateWikiSettings({ enabled: value }, data.context.id)) }} />}>
-        {data && enabled ? <>
+        actions={wikiDisabled ? undefined : <Switch aria-label={t('enabled')} checked={enabled} disabled={loading || !data || busy} onCheckedChange={value => { if (data) void run(() => updateWikiSettings({ enabled: value }, data.context.id)) }} />}>
+        {wikiDisabled ? <EditorDisabledNotice feature="wiki" /> : data && enabled ? <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-col gap-1"><p className="text-sm font-medium">{t('enabled')}</p><p className="text-sm text-muted-foreground">{t('enabledDescription')}</p></div>
             <Badge variant="secondary">{t(state)}</Badge>

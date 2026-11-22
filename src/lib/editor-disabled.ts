@@ -51,6 +51,8 @@ export type EditorDisabledFeature =
   | "quickRecordWindow"
   | "screenshot"
   | "globalShortcuts"
+  | "browserPanel"
+  | "fileInsert"
   | "staticAssetSync";
 
 /** Features with catalog copy and therefore with a UI marker. */
@@ -81,6 +83,8 @@ export const EDITOR_DISABLED_FEATURES: Readonly<
   quickRecordWindow: { target: "Never as a Tauri window; record form in main window instead", catalogSegment: "quickRecordWindow" },
   screenshot: { target: "Never in a browser; OS screenshot tool instead", catalogSegment: "screenshot" },
   globalShortcuts: { target: "Never in a browser; in-app shortcuts only", catalogSegment: "globalShortcuts" },
+  browserPanel: { target: "Never in a browser; external links open in a new browser tab instead", catalogSegment: "browserPanel" },
+  fileInsert: { target: "Never in a browser; no local file paths", catalogSegment: "fileInsert" },
   staticAssetSync: { target: "Post-MVP, web sync runtime", catalogSegment: null },
 };
 

@@ -94,6 +94,11 @@ export default function QuickRecordPage() {
   }, [persistDraft, readClipboard, t])
 
   useEffect(() => {
+    // Web fork (Fase 1, A30-06): the render below is already gated
+    // in web mode; do not run the desktop window setup either
+    // (window.onCloseRequested and window.listen reject in web).
+    // Same early-return shape as print/page.tsx.
+    if (isEditorFeatureDisabled('quickRecordWindow')) return
     let disposed = false
     const cleanup: (() => void)[] = []
     try {

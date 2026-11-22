@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 
 import { useTranslations } from 'next-intl'
 import { BookOpen, Layers } from 'lucide-react'
@@ -18,7 +20,7 @@ import { Switch } from '@/components/ui/switch'
 import { assertWikiContextCurrent } from '@/lib/wiki/context'
 import { useWikiActionScope } from '@/components/wiki/use-wiki-action-scope'
 
-export default function KnowledgeSetting() {
+function KnowledgeSetting() {
   const t = useTranslations('settings.rag')
   const wiki = useTranslations('wiki')
   const errorMessage = useWikiErrorMessage()
@@ -53,4 +55,16 @@ export default function KnowledgeSetting() {
     </KnowledgeSettingCard>
     <WikiKnowledgePreferences />
   </SettingType>
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedKnowledgeSetting() {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="rag" />
+  }
+  return <KnowledgeSetting />
 }

@@ -196,6 +196,10 @@ export default function EditorWindowPage() {
   }, [])
 
   useEffect(() => {
+    // Web fork (Fase 1, A30-06): the render below is already gated
+    // in web mode; keep every effect inert there too, same
+    // early-return shape as print/page.tsx.
+    if (isEditorFeatureDisabled('editorWindow')) return
     let disposed = false
     let removeListener: (() => void) | undefined
     void platform.event.listen<boolean>(DEVELOPER_MODE_CHANGED_EVENT, (event) => {
@@ -218,6 +222,10 @@ export default function EditorWindowPage() {
   }, [])
 
   useEffect(() => {
+    // Web fork (Fase 1, A30-06): no session read, file read, store
+    // mutation, or onCloseRequested registration in web mode (the
+    // last one rejected unhandled there).
+    if (isEditorFeatureDisabled('editorWindow')) return
     const id = new URLSearchParams(window.location.search).get('session')
     setIsMacOS(platform.os.platform() === 'macos')
     if (!id) {
@@ -265,6 +273,7 @@ export default function EditorWindowPage() {
   }, [closeWindow, t])
 
   useEffect(() => {
+    if (isEditorFeatureDisabled('editorWindow')) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return
       event.preventDefault()
@@ -275,6 +284,7 @@ export default function EditorWindowPage() {
   }, [queueSave])
 
   useEffect(() => {
+    if (isEditorFeatureDisabled('editorWindow')) return
     if (!session) return
     const status = saving ? ` · ${t('saving')}` : dirty ? ` · ${t('unsaved')}` : ''
     void platform.window.getCurrentWindow().setTitle(`${session.tab.name}${status}`).catch(error => {

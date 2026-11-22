@@ -52,6 +52,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { canvasDocumentToSvg } from '@/lib/canvas/static-export'
+import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { isAutoDataSyncProviderConfigured } from '@/lib/sync/auto-data-sync-queue'
 import useCanvasStore from '@/stores/canvas'
 import useChatStore from '@/stores/chat'
@@ -106,6 +108,10 @@ interface MobileCanvasPageProps {
 export function MobileCanvasPage({ preview = false }: MobileCanvasPageProps = {}) {
   const router = useRouter()
   const t = useTranslations('canvas')
+  // Web fork (Fase 1, CANVAS-01): same gate as the canvas editor
+  // page. In web mode loadProjects rejects through getDb() and
+  // left this page in a permanent loading state.
+  const canvasDisabled = isEditorFeatureDisabled('canvas')
   const projects = useCanvasStore(state => state.projects)
   const loading = useCanvasStore(state => state.loading)
   const loadProjects = useCanvasStore(state => state.loadProjects)
@@ -124,11 +130,11 @@ export function MobileCanvasPage({ preview = false }: MobileCanvasPageProps = {}
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (preview) return
+    if (preview || canvasDisabled) return
     setActiveCanvasId(null)
     useChatStore.getState().setMobileActiveContexts({ canvasId: null })
     void loadProjects()
-  }, [loadProjects, preview, setActiveCanvasId])
+  }, [canvasDisabled, loadProjects, preview, setActiveCanvasId])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -170,6 +176,25 @@ export function MobileCanvasPage({ preview = false }: MobileCanvasPageProps = {}
     if (!editingProject) return
     await renameProject(editingProject.id, editingTitle.trim())
     setEditingProject(null)
+  }
+
+  // Web fork (Fase 1, CANVAS-01): in web mode render the marker
+  // under the same header instead of the project list; the list
+  // and its create/open actions stay unreachable. The preview
+  // shell used as the editor backdrop is unchanged.
+  if (canvasDisabled && !preview) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col bg-background">
+        <header className="mobile-page-header flex w-full shrink-0 items-center gap-2 border-b bg-background px-2">
+          <MobileMeSheet />
+        </header>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
+          <div className="w-full max-w-md">
+            <EditorDisabledNotice feature="canvas" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -10,6 +10,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, FileLock, FilePlus2, FileText, Folder, Globe2, LockKeyholeOpen, Maximize2, MessageSquareText, MoreHorizontal, PackageOpen, Palette, PanelBottom, PanelLeft, PanelRight, PanelTop, Pin, PinOff, Plus, Redo2, RotateCw, Undo2, X } from 'lucide-react'
 import { platform } from '@/lib/platform'
 import { checkIsTauri } from '@/lib/check'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
@@ -265,6 +266,10 @@ export function TabBar({
 }: TabBarProps) {
   const { showEditorUndoRedo } = useSettingStore()
   const t = useTranslations('tabContext')
+  // Web fork (Fase 1, A30-02): no New Browser entry in web mode
+  // (same hide-the-action precedent as CanvasActions); restored
+  // browser tabs render the disabled marker in editor-layout.
+  const browserPanelDisabled = isEditorFeatureDisabled('browserPanel')
   const locale = useLocale()
   const installedPlugins = usePluginStore(state => state.installed)
   const workspaceId = usePluginStore(state => state.currentWorkspaceId)
@@ -452,7 +457,7 @@ export function TabBar({
                 <DropdownMenuItem onClick={onNewNote}><FileText />{t('newNote')}</DropdownMenuItem>
                 <DropdownMenuItem onClick={onNewRecord}><MessageSquareText />{t('newRecord')}</DropdownMenuItem>
                 <DropdownMenuItem onClick={onNewCanvas}><Palette />{t('newCanvas')}</DropdownMenuItem>
-                <DropdownMenuItem onClick={onNewBrowser}><Globe2 />{t('newBrowser')}</DropdownMenuItem>
+                {browserPanelDisabled ? null : <DropdownMenuItem onClick={onNewBrowser}><Globe2 />{t('newBrowser')}</DropdownMenuItem>}
                 {pluginTabViews.length > 0 && <DropdownMenuSeparator />}
                 {pluginTabViews.map(({ plugin, view, title }) => <DropdownMenuItem key={`${plugin.manifest.id}:${view.id}`} onClick={() => {
                   void openPluginView(plugin.manifest.id, view.id, undefined, true).catch(error => toast.error(error instanceof Error ? error.message : String(error)))

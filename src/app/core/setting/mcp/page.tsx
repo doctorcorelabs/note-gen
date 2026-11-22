@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 
 import { useEffect } from 'react'
 import { useTranslations } from 'next-intl'
@@ -11,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMcpStore } from '@/stores/mcp'
 import { isMobileDevice } from '@/lib/check'
 
-export default function McpSettingPage() {
+function McpSettingPage() {
   const t = useTranslations('settings.mcp')
   const { initMcpData } = useMcpStore()
   const isMobile = isMobileDevice()
@@ -41,4 +43,16 @@ export default function McpSettingPage() {
       )}
     </SettingType>
   )
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedMcpSettingPage() {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="mcp" />
+  }
+  return <McpSettingPage />
 }

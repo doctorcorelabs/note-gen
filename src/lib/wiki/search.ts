@@ -9,6 +9,7 @@ import { getWikiSettings, isWikiSourceSelected, normalizeWikiScopeId } from './s
 import { resolveWikiSourceReference, isWikiSourceDocumentAllowed, wikiHash } from './sources'
 import { wikiSourceWithEvidence } from './compiler'
 import { refreshWikiFileCache } from './files'
+import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 
 function matchesOptions(source: WikiSourceReference, options: KnowledgeSearchOptions) {
   if (options.sourceMode === 'only' && options.sourceTypes?.length
@@ -43,7 +44,15 @@ async function currentRevisions(pageId?: string) {
   if (!configured.enabled) return { context, settings: configured, revisions: [] as WikiSourceRevision[], page: null }
   // Markdown is authoritative. Refresh before reading the disposable cache so
   // user edits and deleted files are reflected in the very next query.
-  await refreshWikiFileCache(context)
+  // Web fork (Fase 1, WIKI-18-03A): the refresh writes through wiki
+  // write kinds that are Phase 2 stubs in web mode, so it would fail
+  // before the W1 reads below ever run. In web mode read the W1
+  // cache directly; the cache can lag file edits until the wiki
+  // engine activates (accepted Fase 1 debt). Desktop refreshes as
+  // before.
+  if (!isEditorFeatureDisabled('wiki')) {
+    await refreshWikiFileCache(context)
+  }
   const [settings, knowledge, allRevisions, page] = await Promise.all([
     getWikiSettings(context.id), getKnowledgeSettings(), getActiveWikiRevisions(context.id),
     pageId ? getWikiPage(context.id, pageId) : Promise.resolve(null),

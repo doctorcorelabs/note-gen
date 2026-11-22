@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 
 import { useEffect, useState } from 'react'
 import {
@@ -83,7 +85,7 @@ const IMAGE_HOSTING_ICONS: Record<ImageHostingType, LucideIcon> = {
   upyun: UploadCloud,
 }
 
-export default function ImageHostingPage({ mobile = false }: { mobile?: boolean }) {
+function ImageHostingPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations()
   const pathname = usePathname()
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
@@ -522,4 +524,16 @@ function ProviderStatusBadge({
   }
 
   return <Badge variant="destructive">{t('disconnected')}</Badge>
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedImageHostingPage({ mobile = false }: { mobile?: boolean }) {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="imageHosting" />
+  }
+  return <ImageHostingPage mobile={mobile} />
 }

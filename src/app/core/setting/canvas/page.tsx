@@ -1,4 +1,6 @@
 'use client'
+import { DisabledSettingSection } from '../components/setting-disabled-notice'
+import { isTauri } from '@/lib/platform/detect'
 
 import { useEffect, useState } from 'react'
 import {
@@ -45,7 +47,7 @@ const insertBehaviorOptions: CanvasInsertBehavior[] = ['keep', 'select']
 const viewModeOptions: CanvasManagerViewMode[] = ['grid', 'list']
 const sortModeOptions: CanvasManagerSortMode[] = ['updated', 'created', 'name']
 
-export default function CanvasSettingPage({ mobile = false }: { mobile?: boolean }) {
+function CanvasSettingPage({ mobile = false }: { mobile?: boolean }) {
   const t = useTranslations('settings.canvas')
   const {
     canvasGridVisible,
@@ -373,4 +375,16 @@ export default function CanvasSettingPage({ mobile = false }: { mobile?: boolean
       </SettingSection>
     </SettingType>
   )
+}
+
+// Web fork (Fase 1, A30-01): same self-gate as sync/backup
+// (S-P0-07, AD-20). The settings dialog already renders the
+// disabled marker for this section, but the direct route mounted
+// the full upstream page in web mode. The upstream page stays in
+// the tree for later phases; desktop behavior is unchanged.
+export default function GatedCanvasSettingPage({ mobile = false }: { mobile?: boolean }) {
+  if (!isTauri()) {
+    return <DisabledSettingSection section="canvas" />
+  }
+  return <CanvasSettingPage mobile={mobile} />
 }

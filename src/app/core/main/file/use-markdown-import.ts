@@ -248,6 +248,14 @@ export function useMarkdownImport() {
   }, [isImporting, loadFileTree, t, userErrorMessage])
 
   const importNotionZip = useCallback(async () => {
+    // Web fork (Fase 1, IMP-03): the path-shaped dialog rejects in
+    // web mode and the Notion import endpoint does not exist yet,
+    // so this can never succeed there. The file-actions handler
+    // shows the explicit marker; this guard keeps any other caller
+    // from reaching the dialog. Desktop behavior is unchanged.
+    if (!checkIsTauri()) {
+      return
+    }
     if (isImporting) {
       return
     }
@@ -291,6 +299,12 @@ export function useMarkdownImport() {
   }, [isImporting, loadFileTree, t, userErrorMessage])
 
   const convertDocumentsToMarkdown = useCallback(async () => {
+    // Web fork (Fase 1, IMP-03): same web guard as importNotionZip
+    // above (path-shaped dialog rejects; parse_document is a
+    // Phase 2 stub). The file-actions handler owns the marker.
+    if (!checkIsTauri()) {
+      return
+    }
     if (isImporting) {
       return
     }

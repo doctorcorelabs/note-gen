@@ -79,6 +79,11 @@ export default function RootLayout({
       if (typeof request.pluginId === 'string') openPluginInstall(request.pluginId)
     }
     const registerPluginInstallListener = async () => {
+      // Web fork (Fase 1, A30-03): window.listen is a desktop-only
+      // capability that always rejects in web mode, so registering
+      // it here only produced an unhandled rejection on every boot.
+      // The drain below returns [] in web mode anyway.
+      if (!isTauri()) return
       const window = platform.window.getCurrentWindow()
       unlistenPluginInstall = await window.listen<{ pluginId: string }>('plugin-install-request', (event) => handlePluginInstall(event.payload))
       const pending = await platform.invoke.invoke<Array<{ pluginId: string }>>('drain_pending_plugin_install_requests')
@@ -127,6 +132,9 @@ export default function RootLayout({
     }
 
     const registerOpenFileListener = async () => {
+      // Web fork (Fase 1, A30-03): same desktop-only listener as
+      // above; skip it in web mode instead of rejecting every boot.
+      if (!isTauri()) return
       const window = platform.window.getCurrentWindow()
       const unlisten = await window.listen<string[]>('open-files', (event) => {
         void openMarkdownFiles(event.payload)
@@ -591,8 +599,12 @@ export default function RootLayout({
           <SettingsDialog />
           <SyncConfirmDialog />
           <MemoryAutoNotifications />
-          <WebClipperBridge />
-          <DesktopScreenshotBridge ready={pluginsReady} />
+          {/* Web fork (Fase 1, A30-03): both bridges invoke
+              desktop-only commands that are disabled in web mode;
+              mounting them only produced a rejection and a console
+              error on every boot. Desktop behavior is unchanged. */}
+          {isTauri() ? <WebClipperBridge /> : null}
+          {isTauri() ? <DesktopScreenshotBridge ready={pluginsReady} /> : null}
           <LocalMcpBridge />
           <PluginHostBridge ready={pluginsReady} locale={currentLocale} />
           <PluginCommandPalette />

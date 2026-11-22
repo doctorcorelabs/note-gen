@@ -8,6 +8,8 @@ import useArticleStore from "@/stores/article"
 import { debounce } from "lodash-es"
 import { FileMoreMenu } from './file-more-menu'
 import { useMarkdownImport } from './use-markdown-import'
+import { checkIsTauri } from '@/lib/check'
+import { toast } from '@/hooks/use-toast'
 import { DocumentToMarkdownDialog } from './document-to-markdown-dialog'
 
 export function FileActions() {
@@ -19,6 +21,28 @@ export function FileActions() {
 
   const debounceNewFile = debounce(newFile, 200)
   const debounceNewFolder = debounce(newFolder, 200)
+
+  // Web fork (Fase 1, IMP-03): document conversion and Notion
+  // import need the path-shaped dialog plus desktop-only backends
+  // (parse_document is a Phase 2 stub; the Notion import endpoint
+  // does not exist yet), so both always fail in web mode. Show the
+  // explicit marker instead; the menu entries stay visible and
+  // the convert dialog never opens. Desktop behavior is unchanged.
+  function handleConvertDocuments() {
+    if (!checkIsTauri()) {
+      toast({ title: t('importUnavailableWeb'), description: t('importUnavailableWebDesc') })
+      return
+    }
+    setConvertDialogOpen(true)
+  }
+
+  function handleImportNotion() {
+    if (!checkIsTauri()) {
+      toast({ title: t('importUnavailableWeb'), description: t('importUnavailableWebDesc') })
+      return
+    }
+    void importNotionZip()
+  }
 
   async function handleRefresh() {
     if (isRefreshing) return
@@ -57,8 +81,8 @@ export function FileActions() {
         <FileMoreMenu
           isImporting={isImporting}
           onImportMarkdown={() => void importMarkdown()}
-          onConvertDocuments={() => setConvertDialogOpen(true)}
-          onImportNotion={() => void importNotionZip()}
+          onConvertDocuments={handleConvertDocuments}
+          onImportNotion={handleImportNotion}
         />
       </div>
       <DocumentToMarkdownDialog

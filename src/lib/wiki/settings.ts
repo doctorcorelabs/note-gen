@@ -7,6 +7,13 @@ import { WIKI_ROOT_FOLDER, type WikiScope, type WikiScopeKind, type WikiSettings
 import { LANGUAGE_STORAGE_KEY } from '@/i18n/config'
 import { endWikiActivity, useWikiActivityStore } from '@/stores/wiki-activity'
 
+// Web fork (Fase 1, WIKI-18-02): structural check for the
+// SqlAdapterError code, same shape as user-error-message.ts.
+function isUnavailableError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null
+    && (error as { code?: unknown }).code === 'UNAVAILABLE'
+}
+
 const SETTINGS_KEY = 'wikiSettingsByContext'
 let initialization: Promise<void> | null = null
 let mutationQueue: Promise<void> = Promise.resolve()
@@ -122,7 +129,18 @@ async function writeSettings(patch: Partial<WikiSettings>, contextId: string, sy
     if (active?.contextId === contextId) endWikiActivity(active.token)
   }
   if (sync) {
-    await setWikiMeta(contextId, 'dirty', true)
+    try {
+      await setWikiMeta(contextId, 'dirty', true)
+    } catch (error) {
+      // Web fork (Fase 1, WIKI-18-02): wiki write kinds are Phase 2
+      // stubs in web mode (UNAVAILABLE). The local settings save
+      // above already succeeded, so a stub rejection must not fail
+      // the whole update or suppress the change events below. The
+      // dirty flag stays unsent until the write kinds activate
+      // (recorded Fase 2 sync debt); every other error still throws.
+      if (!isUnavailableError(error)) throw error
+      console.warn('Wiki dirty flag not sent: write kinds unavailable in this phase', { contextId })
+    }
     void import('./sync').then(({ notifyWikiChanged }) => notifyWikiChanged())
       .catch(error => console.error('Failed to schedule Wiki settings sync:', error))
   }

@@ -358,6 +358,7 @@ export function EditorLayout() {
   const tGroups = useTranslations('tabContext')
   const tDisabled = useTranslations('editor.disabled')
   const canvasDisabled = isEditorFeatureDisabled('canvas')
+  const browserPanelDisabled = isEditorFeatureDisabled('browserPanel')
 
   const tabContentsRef = useRef<Record<string, string>>({})
   const tabContentsWorkspacePathRef = useRef(workspacePath)
@@ -1294,6 +1295,11 @@ export function EditorLayout() {
   }, [activateTab, addTab, canDeactivateActiveEditor, setLayout, tGroups])
 
   const handleNewBrowser = useCallback((groupId: string, initialUrl?: string) => {
+    // Web fork (Fase 1, A30-02): no browser tabs in web mode; the
+    // menu item is hidden and restored tabs render the marker, so
+    // this also stops programmatic callers (handleNewBrowserRef)
+    // from creating a dead tab.
+    if (browserPanelDisabled) return
     if (!canDeactivateActiveEditor()) return
     const id = `browser-${crypto.randomUUID()}`
     const tab: TabInfo = {
@@ -1319,7 +1325,7 @@ export function EditorLayout() {
       }
     })
     void activateTab(groupId, tab)
-  }, [activateTab, addTab, canDeactivateActiveEditor, setLayout, tGroups])
+  }, [activateTab, addTab, browserPanelDisabled, canDeactivateActiveEditor, setLayout, tGroups])
 
   const handleNewBrowserRef = useRef(handleNewBrowser)
   handleNewBrowserRef.current = handleNewBrowser
@@ -1796,6 +1802,12 @@ export function EditorLayout() {
 
   const renderContentPanel = useCallback((tab: TabInfo, active: boolean, groupId: string) => {
     if (isBrowserEditorTab(tab)) {
+      // Web fork (Fase 1, A30-02): the browser panel never creates
+      // its native view in web mode; a restored browser tab shows
+      // the marker instead of a dead panel. Desktop is unchanged.
+      if (browserPanelDisabled) {
+        return <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-8"><div className="w-full max-w-md"><EditorDisabledNotice feature="browserPanel" /></div></div>
+      }
       const visible = layout.groups[groupId]?.activeTabId === tab.id
         && (!layout.maximizedGroupId || layout.maximizedGroupId === groupId)
         && !dragging
@@ -1835,7 +1847,7 @@ export function EditorLayout() {
         </div>
       </TabContentErrorBoundary>
     )
-  }, [layout.activeGroupId, layout.groups, layout.maximizedGroupId, dragging, detachingTabId, getItemType, getRecordIdForTab, handleCloseTab, isCanvasEditorTab, isRecordEditorTab, isPluginEditorTab, isBrowserEditorTab, pluginTabRevisions, workspacePath, canvasDisabled])
+  }, [layout.activeGroupId, layout.groups, layout.maximizedGroupId, dragging, detachingTabId, getItemType, getRecordIdForTab, handleCloseTab, isCanvasEditorTab, isRecordEditorTab, isPluginEditorTab, isBrowserEditorTab, pluginTabRevisions, workspacePath, canvasDisabled, browserPanelDisabled])
 
   const onboardingAgentPrompt = getOnboardingAgentPrompt({
     intro: tOnboarding('agentPrompt.intro'),
