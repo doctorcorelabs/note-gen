@@ -14,7 +14,7 @@ import {
 } from '@/lib/editor-deactivation'
 import { moveFileManagerPaths } from '../file-dnd'
 
-import { getPasteTargetDirectory } from './paste-target'
+import { getPasteTargetDirectory, isSameParentCut } from './paste-target'
 
 type ClipboardOperation = 'copy' | 'cut' | 'none'
 
@@ -132,6 +132,8 @@ export async function pasteIntoFolder({
       itemsToPaste.map(item => item.path),
     )
   ) {
+    // F-14: a refused editor mutation must not fail silently.
+    toast({ title: pasteFailedToastTitle, variant: 'destructive' })
     return false
   }
 
@@ -144,11 +146,18 @@ export async function pasteIntoFolder({
         if (item.isDirectory && (targetDir === item.path || targetDir.startsWith(`${item.path}/`))) {
           throw new Error('A directory cannot be moved into itself')
         }
+        // F-05: pasting a cut back into its own parent is a no-op,
+        // not a rename to `<name>_copy`.
+        if (isSameParentCut(item.path, targetDir, item.name)) {
+          continue
+        }
         const name = item.isDirectory ? await generateCopyFoldername(targetDir, item.name)
           : await generateCopyFilename(targetDir, item.name)
         pathMoves.push({ sourcePath: item.path, targetPath: targetDir ? `${targetDir}/${name}` : name })
       }
-      await moveFileManagerPaths(pathMoves)
+      if (pathMoves.length > 0) {
+        await moveFileManagerPaths(pathMoves)
+      }
       setClipboardItem(null, 'none')
       await loadFileTree()
       toast({ title: pastedToastTitle })

@@ -2,6 +2,9 @@ import { platform } from "@/lib/platform";
 import type { DirTree } from "@/stores/article";
 import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from "@/types/sync";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";
+import { removeFolderFromTree } from "./remove-folder-from-tree";
+
+export { removeFolderFromTree };
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace";
 import { getSyncRepoName } from "@/lib/sync/repo-utils";
 import { getDirectoryFiles as getGithubDirectoryFiles } from "@/lib/sync/github";
@@ -145,29 +148,6 @@ export async function deleteLocalFolderIfExists(folderPath: string) {
   }
 
   return true;
-}
-
-export function removeFolderFromTree(tree: DirTree[], folderPath: string) {
-  const currentFolder = getCurrentFolder(folderPath, tree);
-  if (!currentFolder) {
-    return;
-  }
-
-  const parentFolder = currentFolder?.parent;
-
-  if (parentFolder?.children) {
-    const index = parentFolder.children.findIndex(child => child.name === currentFolder.name);
-    if (index !== -1) {
-      parentFolder.children.splice(index, 1);
-    }
-    return;
-  }
-
-  const rootName = folderPath.split("/")[0];
-  const index = tree.findIndex(child => child.name === rootName);
-  if (index !== -1) {
-    tree.splice(index, 1);
-  }
 }
 
 export function clearFolderRemoteState(tree: DirTree[], folderPath: string) {

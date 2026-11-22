@@ -350,6 +350,9 @@ export interface SlashCommandTranslations {
     unavailableTitle: string
     unavailableMessage: string
   }
+  // A07-05: generic failure title for commands that are not image
+  // uploads (shared with slash-menu reportFailure).
+  commandFailed: string
   // DA-2 (BUG-07): shared user error formatter supplied by the
   // hook-owning caller; returns null for silent aborts.
   errorMessage?: (error: unknown) => string | null
@@ -367,6 +370,15 @@ export function filterItems(items: SlashCommandItem[], query: string): SlashComm
       item.searchTerms?.some((term) => term.toLowerCase().includes(search)) ||
       item.description?.toLowerCase().includes(search)
   )
+}
+
+// A07-02: chain run() always dispatches the transaction (the slash
+// text is deleted) and returns the combined boolean. A
+// schema-rejected block action used to fail silently; surface it.
+function runBlockCommand(chain: { run: () => boolean }, failedTitle: string) {
+  if (!chain.run()) {
+    toast({ title: failedTitle, variant: 'destructive' })
+  }
 }
 
 export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[] => {
@@ -453,6 +465,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       unavailableTitle: 'File link insertion is not available',
       unavailableMessage: 'Inserting a link to a local file is not available in the web version because the browser has no access to local file paths.',
     },
+    commandFailed: 'Failed to run command',
   }
 
   const tr = t || defaultT
@@ -498,7 +511,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.heading,
       searchTerms: ['heading', 'h1', 'header'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 1 }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setNode('heading', { level: 1 }), tr.commandFailed)
       },
     },
     {
@@ -508,7 +521,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.heading,
       searchTerms: ['heading', 'h2', 'header'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 2 }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setNode('heading', { level: 2 }), tr.commandFailed)
       },
     },
     {
@@ -518,7 +531,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.heading,
       searchTerms: ['heading', 'h3', 'header'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 3 }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setNode('heading', { level: 3 }), tr.commandFailed)
       },
     },
     {
@@ -528,7 +541,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.heading,
       searchTerms: ['heading', 'h4', 'header'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 4 }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setNode('heading', { level: 4 }), tr.commandFailed)
       },
     },
     {
@@ -538,7 +551,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.heading,
       searchTerms: ['heading', 'h5', 'header'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 5 }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setNode('heading', { level: 5 }), tr.commandFailed)
       },
     },
     {
@@ -548,7 +561,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.heading,
       searchTerms: ['heading', 'h6', 'header'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 6 }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setNode('heading', { level: 6 }), tr.commandFailed)
       },
     },
 
@@ -560,7 +573,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.list,
       searchTerms: ['bullet', 'ul', 'list'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).toggleBulletList().run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).toggleBulletList(), tr.commandFailed)
       },
     },
     {
@@ -570,7 +583,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.list,
       searchTerms: ['ordered', 'ol', 'numbered', 'list'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).toggleOrderedList().run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).toggleOrderedList(), tr.commandFailed)
       },
     },
     {
@@ -580,7 +593,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.list,
       searchTerms: ['task', 'todo', 'checkbox', 'checklist'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).toggleTaskList().run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).toggleTaskList(), tr.commandFailed)
       },
     },
 
@@ -764,7 +777,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.block,
       searchTerms: ['table', 'grid', 'matrix'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }), tr.commandFailed)
       },
     },
     {
@@ -774,7 +787,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.block,
       searchTerms: ['blockquote', 'quote', 'citation'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).toggleBlockquote().run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).toggleBlockquote(), tr.commandFailed)
       },
     },
     {
@@ -784,7 +797,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.block,
       searchTerms: ['code', 'pre', 'programming'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).toggleCodeBlock().run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).toggleCodeBlock(), tr.commandFailed)
       },
     },
     {
@@ -794,7 +807,7 @@ export const suggestionItems = (t?: SlashCommandTranslations): SlashCommandItem[
       group: tr.groups.block,
       searchTerms: ['hr', 'horizontal', 'divider', 'line'],
       command: ({ editor, range }: { editor: Editor; range: Range }) => {
-        editor.chain().focus().deleteRange(range).setHorizontalRule().run()
+        runBlockCommand(editor.chain().focus().deleteRange(range).setHorizontalRule(), tr.commandFailed)
       },
     },
 
@@ -900,6 +913,18 @@ function findSlashMatch(config: {
   const parent = $pos.parent
   if (!parent?.isTextblock) {
     return null
+  }
+
+  // A07-03: block commands cannot run inside code blocks or table
+  // cells; do not offer the menu in those contexts.
+  if (parent.type.name === 'codeBlock') {
+    return null
+  }
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    const ancestorName = $pos.node(depth).type.name
+    if (ancestorName === 'tableCell' || ancestorName === 'tableHeader') {
+      return null
+    }
   }
 
   const text = parent.textBetween(0, $pos.parentOffset, undefined, '\uFFFC')

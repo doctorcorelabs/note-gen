@@ -5,7 +5,7 @@ import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
 import useArticleStore, { DirTree } from "@/stores/article";
 import { computedParentPath } from "@/lib/path";
-import { collectMarkdownFiles } from "@/lib/files";
+import { collectMarkdownFilesWithReport } from "@/lib/files";
 import { calculateFolderVectors } from "@/lib/folder-vector";
 import { WikiMenuItems } from '@/components/wiki/wiki-menu-items'
 import { platform } from "@/lib/platform";
@@ -40,7 +40,13 @@ export function FolderVectorMenu({ item }: FolderVectorMenuProps) {
     setVectorCalcStatus(path, 'calculating');
 
     try {
-      const markdownFiles = await collectMarkdownFiles(path);
+      const { files: markdownFiles, failedDirs } = await collectMarkdownFilesWithReport(path);
+      if (failedDirs.length > 0) {
+        toast({
+          title: t('context.partialFolderRead', { count: failedDirs.length }),
+          variant: 'destructive'
+        });
+      }
 
       if (markdownFiles.length === 0) {
         toast({
@@ -116,7 +122,13 @@ export function FolderVectorMenu({ item }: FolderVectorMenuProps) {
     if (isDeleting) return;
 
     try {
-      const markdownFiles = await collectMarkdownFiles(path);
+      const { files: markdownFiles, failedDirs } = await collectMarkdownFilesWithReport(path);
+      if (failedDirs.length > 0) {
+        toast({
+          title: t('context.partialFolderRead', { count: failedDirs.length }),
+          variant: 'destructive'
+        });
+      }
 
       if (markdownFiles.length === 0) {
         toast({

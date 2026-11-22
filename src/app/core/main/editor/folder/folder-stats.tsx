@@ -17,7 +17,7 @@ import { isEditorFeatureDisabled } from '@/lib/editor-disabled'
 import { useWikiData } from '@/components/wiki/use-wiki-data'
 import { useWikiErrorMessage } from '@/components/wiki/use-wiki-error-message'
 import { getVectorIndexStatsForFiles } from '@/db/vector'
-import { collectMarkdownFiles } from '@/lib/files'
+import { collectMarkdownFilesWithReport } from '@/lib/files'
 import { calculateFolderVectors } from '@/lib/folder-vector'
 import { cn } from '@/lib/utils'
 import { isWritingAssetsFolder } from '@/lib/writing-assets-path'
@@ -66,7 +66,7 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
   activeView.current = viewKey
   const mounted = useRef(true)
   const statRequest = useRef(0)
-  const [discovered, setDiscovered] = useState<{ key: string; files: string[] } | null>(null)
+  const [discovered, setDiscovered] = useState<{ key: string; files: string[]; partial: boolean } | null>(null)
   const [indexStats, setIndexStats] = useState<{ key: string; stats: FolderIndexStats } | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)
@@ -90,9 +90,9 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
 
   useEffect(() => {
     let active = true
-    void collectMarkdownFiles(path).then(files => {
+    void collectMarkdownFilesWithReport(path).then(({ files, failedDirs }) => {
       if (active && mounted.current && activeView.current === viewKey) {
-        setDiscovered({ key: viewKey, files: files.map(file => normalizePath(file.path)) })
+        setDiscovered({ key: viewKey, files: files.map(file => normalizePath(file.path)), partial: failedDirs.length > 0 })
       }
     }).catch(cause => console.error('Failed to read folder notes:', cause))
     return () => { active = false }
@@ -245,7 +245,7 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
           <h2 className="truncate text-xl font-semibold tracking-tight">{folderName}</h2>
           <p className="break-all text-xs text-muted-foreground">{path || '/'}</p>
           <p className="text-sm text-muted-foreground">{t('detailsDescription')}</p>
-          <div className="flex flex-wrap gap-2"><Badge variant="secondary"><FileText data-icon="inline-start" />{t('markdownCount', { count: knownFiles.length })}</Badge><Badge variant="outline">{t('subfoldersIncluded')}</Badge></div>
+          <div className="flex flex-wrap gap-2"><Badge variant="secondary"><FileText data-icon="inline-start" />{t('markdownCount', { count: knownFiles.length })}</Badge><Badge variant="outline">{t('subfoldersIncluded')}</Badge>{discovered?.key === viewKey && discovered.partial ? <Badge variant="destructive">{t('partialFolderRead')}</Badge> : null}</div>
         </div>
       </header>
 

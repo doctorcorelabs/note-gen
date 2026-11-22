@@ -280,6 +280,11 @@ export const MermaidDiagram = Node.create({
     return {
       code: {
         default: '',
+        // P1-2: round-trip through data-code; fallbacks keep pre-fix
+        // HTML (plain code=) and external pre[data-mermaid] text readable.
+        renderHTML: (attrs: { code?: string }) => ({ 'data-code': attrs.code ?? '' }),
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-code') ?? element.getAttribute('code') ?? element.textContent?.trim() ?? '',
       },
       type: {
         default: 'flowchart',
@@ -294,8 +299,9 @@ export const MermaidDiagram = Node.create({
     ]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'mermaid-diagram' })]
+  renderHTML({ node, HTMLAttributes }) {
+    // P1-2: text fallback so pasting into other apps keeps the diagram source.
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'mermaid-diagram' }), node.attrs.code ?? '']
   },
 
   addNodeView() {

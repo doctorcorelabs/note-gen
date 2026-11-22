@@ -6749,6 +6749,7 @@
         "batchDeletePartial": "删除完成：成功 {success} 个，失败 {failed} 个",
         "batchDeleteFailed": "批量删除向量失败",
         "noMarkdownFiles": "文件夹中没有 Markdown 文件",
+        "partialFolderRead": "{count} subfolder(s) could not be read; results may be partial",
         "includedInKB": "已包含在知识库中",
         "excludedFromKB": "已从知识库中排除",
         "autoCalcEnabled": "已启用自动向量计算",
@@ -6775,6 +6776,7 @@
         "recalculateVectors": "重新计算向量",
         "detailsDescription": "管理此文件夹及子文件夹的知识整理与检索。",
         "markdownCount": "{count} 篇已知 Markdown",
+        "partialFolderRead": "Some subfolders could not be read",
         "subfoldersIncluded": "包含子文件夹",
         "wikiSourceToggle": "加入 LLM Wiki",
         "wikiSourceDescription": "整理这个文件夹中的笔记，并在内容变化后自动更新。",
@@ -6813,6 +6815,8 @@
       },
       "error": {
         "fileExists": "名称已存在",
+        "editorBusy": "The editor is busy; try again in a moment",
+        "renameBusy": "Another rename is in progress; try again in a moment",
         "invalidName": "名称不能包含斜杠、反斜杠或控制字符",
         "selectExistingMarkdown": "请选择存在的 Markdown 文件"
       },
@@ -7499,6 +7503,7 @@
       "fileInsert": {
         "failed": "插入文件链接失败"
       },
+      "commandFailed": "Failed to run command",
       "customPrompt": {
         "ariaLabel": "自定义 AI 指令",
         "placeholder": "输入 AI 指令",
@@ -7598,6 +7603,7 @@
     "scrollbarLabel": "编辑器滚动条",
     "fileDrop": {
       "noFilePath": "无法获取文件路径",
+      "mixedUnsupported": "{count} file(s) could not be linked and were skipped",
       "noFilePathDescription": "当前拖拽来源没有提供真实文件路径，无法生成可打开的链接。"
     },
     "aiGenerate": {

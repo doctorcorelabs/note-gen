@@ -369,3 +369,57 @@ describe("render configuration guards", () => {
     expect(source).toContain("Compartment");
   });
 });
+
+describe("math and mermaid HTML round-trip (P1-2)", () => {
+  it("writes data-latex on math attribute render and reads it back", () => {
+    const source = readEditorFile("math-extension.tsx");
+    expect(source.match(/'data-latex': attrs\.latex/g)).toHaveLength(2);
+    expect(source).toContain("getAttribute('data-latex')");
+    expect(source).toContain("getAttribute('latex')");
+  });
+
+  it("writes data-code on mermaid attribute render with text fallback", () => {
+    const source = readEditorFile("mermaid-extension.tsx");
+    expect(source).toContain("'data-code': attrs.code");
+    expect(source).toContain("getAttribute('data-code')");
+    expect(source).toContain("textContent?.trim()");
+  });
+
+  it("shares one inline-math guard between tokenizer and input rule (P1-3)", () => {
+    const math = readEditorFile("math-extension.tsx");
+    expect(math).toContain("INLINE_MATH_INPUT_RULE_RE");
+    expect(math).not.toContain("find: /(?<!");
+    const tokenizers = readEditorFile("markdown-tokenizers.ts");
+    expect(tokenizers).toContain("INLINE_MATH_DOLLAR_SOURCE");
+  });
+});
+
+describe("paste and drop honesty (M-03/M-04/M-06/M-07)", () => {
+  const source = readEditorFile("tiptap-editor.tsx");
+
+  it("uploads every pasted image, not just the first (M-06)", () => {
+    expect(source).not.toContain("const imageFile = imageFiles[0]");
+    expect(source).toContain("Promise.all(imageFiles.map(");
+  });
+
+  it("stops paste propagation on the handled-image branch (M-07)", () => {
+    const start = source.indexOf("const handlePaste = (event: ClipboardEvent)");
+    const region = source.slice(start, start + 1600);
+    expect(region).toContain("event.stopPropagation()");
+    expect(region).toContain("event.stopImmediatePropagation()");
+  });
+
+  it("uploads dropped images in mixed drops and never inserts bare filenames (M-03)", () => {
+    expect(source).not.toContain("droppedImageFiles.length === droppedFiles.length");
+    expect(source).not.toContain("droppedFileNames.map(escapeMarkdownText)");
+    expect(source).toContain("fileDrop.mixedUnsupported");
+  });
+
+  it("gates file:// handling to desktop (M-04)", () => {
+    const urlsStart = source.indexOf("function getFileUrlsFromDataTransfer");
+    expect(source.slice(urlsStart, urlsStart + 400)).toContain("if (!checkIsTauri())");
+    const hrefStart = source.indexOf("async function getMarkdownHrefForDroppedPath");
+    const hrefRegion = source.slice(hrefStart, hrefStart + 900);
+    expect(hrefRegion.indexOf("if (!checkIsTauri())")).toBeLessThan(hrefRegion.indexOf("return toFileUrl"));
+  });
+});

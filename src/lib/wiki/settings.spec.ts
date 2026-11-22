@@ -53,7 +53,8 @@ vi.mock("./sync", () => ({
   notifyWikiChanged: mocks.notifyWikiChanged,
 }));
 
-import { updateWikiSettings } from "./settings";
+import { rewriteFolderScopes, updateWikiSettings } from "./settings";
+import type { WikiScope } from "@/types/wiki";
 
 describe("wiki settings update (WIKI-18-02)", () => {
   beforeEach(() => {
@@ -84,5 +85,64 @@ describe("wiki settings update (WIKI-18-02)", () => {
     await expect(updateWikiSettings({ modelId: "model-x" })).resolves.toBeUndefined();
     expect(mocks.setWikiMeta).toHaveBeenCalledWith("ctx-1", "dirty", true);
     expect(mocks.emitWikiUpdated).toHaveBeenCalled();
+  });
+});
+
+
+describe("rewriteFolderScopes (F-07)", () => {
+  const scope = (kind: WikiScope["kind"], id: string): WikiScope => ({
+    key: `${kind}:${id}`,
+    kind,
+    id,
+    label: id,
+    enabled: true,
+    effect: "include",
+    clock: { "device-1": 3 },
+  });
+
+  it("rewrites the exact folder scope and descendant article scopes", () => {
+    const scopes = [
+      scope("article-folder", "docs"),
+      scope("article", "docs/note.md"),
+      scope("article-folder", "docs/sub"),
+    ];
+
+    const next = rewriteFolderScopes(scopes, "docs", "guides", "device-1");
+
+    expect(next.map((item) => item.id)).toEqual([
+      "guides",
+      "guides/note.md",
+      "guides/sub",
+    ]);
+    expect(next.map((item) => item.key)).toEqual([
+      "article-folder:guides",
+      "article:guides/note.md",
+      "article-folder:guides/sub",
+    ]);
+    expect(next.map((item) => item.label)).toEqual([
+      "guides",
+      "guides/note.md",
+      "guides/sub",
+    ]);
+    expect(next[0].clock["device-1"]).toBe(4);
+    expect(next[0].effect).toBe("include");
+  });
+
+  it("does not touch sibling prefixes or non-path scopes", () => {
+    const scopes = [
+      scope("article-folder", "docs2"),
+      scope("article", "docs2/note.md"),
+      scope("record-tag", "docs"),
+    ];
+
+    const next = rewriteFolderScopes(scopes, "docs", "guides", "device-1");
+
+    expect(next).toBe(scopes);
+  });
+
+  it("is a no-op for empty or unchanged paths", () => {
+    const scopes = [scope("article-folder", "docs")];
+    expect(rewriteFolderScopes(scopes, "docs", "docs", "device-1")).toBe(scopes);
+    expect(rewriteFolderScopes(scopes, "", "guides", "device-1")).toBe(scopes);
   });
 });

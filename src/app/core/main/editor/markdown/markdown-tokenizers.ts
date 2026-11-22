@@ -7,18 +7,35 @@ import { wikiMetadataTokenizer } from './wiki-metadata-tokenizer'
 import { Lexer, type Marked, type MarkedOptions, type Token, type TokenizerExtension } from 'marked'
 import { createCjkMarkdownLexer } from '@/lib/markdown/cjk-emphasis'
 
+// Shared inline-math dollar guard (P1-3): content must not start or
+// end with whitespace and the closer must not be followed by a
+// digit, so plain-text amounts like "harga $5 dan $10" stay text.
+// The tokenizer and the editor input rule share this one pattern.
+export const INLINE_MATH_DOLLAR_SOURCE = String.raw`\$([^\s$\n](?:[^$\n]*?[^\s$\n])?)\$(?!\d)`
+
+export const INLINE_MATH_INPUT_RULE_RE = new RegExp(
+  String.raw`(?<![\\$])${INLINE_MATH_DOLLAR_SOURCE}$`,
+)
+
+const INLINE_MATH_TOKENIZE_RE = new RegExp(
+  String.raw`^(?:${INLINE_MATH_DOLLAR_SOURCE}|\\\(([^\n]+?)\\\))`,
+)
+
 export const inlineMathTokenizer: MarkdownTokenizer = {
   name: 'inline_math',
   level: 'inline',
   start: src => {
-    const dollarIndex = src.indexOf('$')
+    let dollarIndex = src.indexOf('$')
+    while (dollarIndex > 0 && src[dollarIndex - 1] === '\\') {
+      dollarIndex = src.indexOf('$', dollarIndex + 1)
+    }
     const bracketIndex = src.indexOf('\\(')
     if (dollarIndex === -1) return bracketIndex
     if (bracketIndex === -1) return dollarIndex
     return Math.min(dollarIndex, bracketIndex)
   },
   tokenize: src => {
-    const match = /^(?:\$([^\$\n]+?)\$|\\\(([^\n]+?)\\\))/.exec(src)
+    const match = INLINE_MATH_TOKENIZE_RE.exec(src)
     if (!match) return undefined
     return {
       type: 'inline_math',

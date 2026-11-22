@@ -29,6 +29,23 @@ export function decodeSyncText(path: string, bytes: Uint8Array): string | undefi
   }
 }
 
+/** True when the final path segment has no dot at all (N-02). */
+export function isExtensionlessPath(path: string): boolean {
+  const name = path.replace(/\\/g, '/').split('/').pop() || ''
+  return name.length > 0 && !name.includes('.')
+}
+
+/** Extensionless files may still be notes: accept only a clean
+ * fatal UTF-8 decode without NUL bytes (N-02). */
+export function decodeExtensionlessText(bytes: Uint8Array): string | undefined {
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return text.includes('\0') ? undefined : text
+  } catch {
+    return undefined
+  }
+}
+
 export function syncContentBytes(content: string | Uint8Array): Uint8Array {
   return typeof content === 'string' ? new TextEncoder().encode(content) : content
 }

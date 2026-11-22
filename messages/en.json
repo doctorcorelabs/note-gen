@@ -6749,6 +6749,7 @@
         "batchDeletePartial": "Deletion completed: {success} succeeded, {failed} failed",
         "batchDeleteFailed": "Batch vector deletion failed",
         "noMarkdownFiles": "No Markdown files in folder",
+        "partialFolderRead": "{count} subfolder(s) could not be read; results may be partial",
         "includedInKB": "Included in Knowledge Base",
         "excludedFromKB": "Excluded from Knowledge Base",
         "autoCalcEnabled": "Auto vector calculation enabled",
@@ -6775,6 +6776,7 @@
         "recalculateVectors": "Recalculate Vectors",
         "detailsDescription": "Manage knowledge organization and retrieval for this folder and its subfolders.",
         "markdownCount": "{count} known Markdown notes",
+        "partialFolderRead": "Some subfolders could not be read",
         "subfoldersIncluded": "Includes subfolders",
         "wikiSourceToggle": "Include in LLM Wiki",
         "wikiSourceDescription": "Organize notes in this folder and keep them up to date as content changes.",
@@ -6813,6 +6815,8 @@
       },
       "error": {
         "fileExists": "That name already exists",
+        "editorBusy": "The editor is busy; try again in a moment",
+        "renameBusy": "Another rename is in progress; try again in a moment",
         "invalidName": "Names cannot contain slashes, backslashes, or control characters",
         "selectExistingMarkdown": "Please select an existing Markdown file"
       },
@@ -7499,6 +7503,7 @@
       "fileInsert": {
         "failed": "Failed to insert file link"
       },
+      "commandFailed": "Failed to run command",
       "customPrompt": {
         "ariaLabel": "Custom AI instruction",
         "placeholder": "Enter AI instruction",
@@ -7598,6 +7603,7 @@
     "scrollbarLabel": "Editor scrollbar",
     "fileDrop": {
       "noFilePath": "Unable to get the file path",
+      "mixedUnsupported": "{count} file(s) could not be linked and were skipped",
       "noFilePathDescription": "The current drag source did not provide a real file path, so an openable link cannot be generated."
     },
     "aiGenerate": {

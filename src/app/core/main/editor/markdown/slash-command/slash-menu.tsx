@@ -151,6 +151,7 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
       unavailableTitle: tDisabled(editorDisabledMessageKeys('fileInsert').titleKey),
       unavailableMessage: tDisabled(editorDisabledMessageKeys('fileInsert').messageKey),
     },
+    commandFailed: t('commandFailed'),
     errorMessage: userErrorMessage,
   }), [t, tDisabled, userErrorMessage])
 
@@ -257,18 +258,24 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
           document.dispatchEvent(new CustomEvent('slash-command-hide'))
           return
         }
+        // Surface command failures as a toast instead of letting
+        // them vanish as unhandled rejections (UTANG-UJI-06).
+        // A07-05: generic title - not every failure is an image upload.
+        const reportFailure = (error: unknown) => {
+          toast({
+            title: translations.commandFailed,
+            description: userErrorMessage(error) ?? undefined,
+            variant: 'destructive',
+          })
+        }
         if (onSelectItem) {
-          onSelectItem(item)
-        } else {
-          // Surface command failures as a toast instead of letting
-          // them vanish as unhandled rejections (UTANG-UJI-06).
-          const reportFailure = (error: unknown) => {
-            toast({
-              title: translations.imageUpload.failed,
-              description: userErrorMessage(error) ?? undefined,
-              variant: 'destructive',
-            })
+          // A07-06: a synchronous throw must not hang the menu.
+          try {
+            onSelectItem(item)
+          } catch (error) {
+            reportFailure(error)
           }
+        } else {
           try {
             const result = item.command({ editor, range }) as unknown
             if (result instanceof Promise) {
@@ -280,7 +287,7 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, ran
         }
       }
     },
-    [aiDisabled, editor, onSelectItem, range, tDisabled, translations.groups.ai, translations.imageUpload.failed]
+    [aiDisabled, editor, onSelectItem, range, tDisabled, translations.groups.ai, translations.commandFailed]
   )
 
   const selectVisibleItem = useCallback(

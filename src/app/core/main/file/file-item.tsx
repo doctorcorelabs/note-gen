@@ -18,6 +18,7 @@ import { useUserErrorMessage } from "@/lib/use-user-error-message";
 import useClipboardStore from "@/stores/clipboard";
 import { generateUniqueFilename } from "@/lib/default-filename";
 import { MobileActionMenu, MobileMenuItem, MobileSeparator } from "./mobile-action-menu";
+import { buildFileRenamePlan } from "./file-rename-plan";
 import { useIsMobile } from "@/hooks/use-mobile";
 import useSettingStore from "@/stores/setting";
 import { VectorKnowledgeMenu } from "./vector-knowledge-menu";
@@ -50,28 +51,6 @@ type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
 
 function shouldAutoSyncOnInitialRead(options?: { isNewFile?: boolean }) {
   return options?.isNewFile !== true
-}
-
-function buildFileRenamePlan({
-  originalName,
-  currentPath,
-  enteredName,
-}: {
-  originalName: string
-  currentPath: string
-  enteredName: string
-}) {
-  const needsMarkdownSuffix =
-    !enteredName.endsWith('.md') && (originalName === '' || originalName.endsWith('.md'))
-  const displayName = needsMarkdownSuffix ? `${enteredName}.md` : enteredName
-  const parentPath = currentPath.split('/').slice(0, -1).join('/')
-  const targetRelativePath = parentPath ? `${parentPath}/${displayName}` : displayName
-
-  return {
-    operation: originalName === '' ? 'create' : 'rename',
-    displayName,
-    targetRelativePath,
-  } as const
 }
 
 function showPdfExportStartToast() {
@@ -404,6 +383,8 @@ export function FileItem({
       })
       const { displayName, operation, targetRelativePath } = renamePlan
       if (!await prepareActiveEditorDeactivationDurably(activeFilePath)) {
+        // N-07: say why the rename did not happen.
+        setRenameError(t('error.editorBusy'))
         setTimeout(() => inputRef.current?.focus(), 0)
         return
       }
@@ -411,6 +392,7 @@ export function FileItem({
         operation === 'rename'
         && !await prepareActiveEditorPathMutationDurably(activeFilePath, [path])
       ) {
+        setRenameError(t('error.editorBusy'))
         setTimeout(() => inputRef.current?.focus(), 0)
         return
       }
@@ -447,7 +429,8 @@ export function FileItem({
         // 根据工作区类型执行重命名操作
         const renameOperationId = useArticleStore.getState().beginFileTreeRename(path, targetRelativePath)
         if (!renameOperationId) {
-          setRenameError(tCommon('loading'))
+          // N-07: a specific busy error, not a loading label.
+          setRenameError(t('error.renameBusy'))
           return
         }
         try {

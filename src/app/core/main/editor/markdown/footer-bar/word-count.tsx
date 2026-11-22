@@ -18,10 +18,6 @@ interface WordCountProps {
   compact?: boolean
 }
 
-const EMPTY_STATISTICS: EditorStatistics = {
-  characters: 0,
-  readingMinutes: 0,
-}
 const SOURCE_STATISTICS_DEBOUNCE_MS = 600
 const SOURCE_STATISTICS_IDLE_TIMEOUT_MS = 1_500
 
@@ -38,10 +34,14 @@ function visualText(editor: Editor): string {
 
 export function WordCount({ editor, sourceMarkdown, compact = false }: WordCountProps) {
   const t = useTranslations('settings.editor.stats')
+  // Source mode counts synchronously at mount too (STAT-07): the
+  // debounced effect below runs the same parse 600 ms later for
+  // subsequent changes, so opening a note directly in source mode
+  // no longer flashes "0 characters" first.
   const [statistics, setStatistics] = useState<EditorStatistics>(() => (
     sourceMarkdown === undefined
       ? getEditorStatistics(visualText(editor))
-      : EMPTY_STATISTICS
+      : getEditorStatistics(markdownToPlainText(sourceMarkdown))
   ))
 
   useEffect(() => {

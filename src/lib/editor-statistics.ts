@@ -30,9 +30,11 @@ export function getEditorStatistics(text: string): EditorStatistics {
 // Leaf text for the visual-mode character basis (UTANG-UJI-08):
 // atom/leaf nodes carry their countable text in attributes, not in
 // node text. The source basis (markdownToPlainText) counts fence
-// contents and image alt text, so the visual basis must count the
-// same: mermaid code (attrs.code) and image alt (attrs.alt). Every
-// other leaf counts 0.
+// contents, image alt text, math source including its $ delimiters,
+// and hard breaks as newlines, so the visual basis must count the
+// same: mermaid code (attrs.code), image alt (attrs.alt), math
+// (attrs.latex wrapped in the delimiters the serializer writes),
+// and hardBreak as a newline. Every other leaf counts 0.
 export function editorLeafText(node: {
   type: { name: string }
   attrs?: Record<string, unknown>
@@ -42,6 +44,15 @@ export function editorLeafText(node: {
   }
   if (node.type.name === "image") {
     return typeof node.attrs?.alt === "string" ? node.attrs.alt : ""
+  }
+  if (node.type.name === "inlineMath") {
+    return typeof node.attrs?.latex === "string" ? `$${node.attrs.latex}$` : ""
+  }
+  if (node.type.name === "blockMath") {
+    return typeof node.attrs?.latex === "string" ? `$$\n${node.attrs.latex}\n$$` : ""
+  }
+  if (node.type.name === "hardBreak") {
+    return "\n"
   }
   return ""
 }

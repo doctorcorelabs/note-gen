@@ -437,7 +437,7 @@ export const createFileTool: Tool = {
       }
 
       const articleStore = useArticleStore.getState()
-      const activatesCreatedFile = filePath.endsWith('.md')
+      const activatesCreatedFile = filePath.toLowerCase().endsWith('.md')
       if (
         activatesCreatedFile
         && !await prepareActiveEditorDeactivationDurably(articleStore.activeFilePath)
@@ -1333,7 +1333,7 @@ export const renameFileTool: Tool = {
 
       // 验证新文件名以 .md 结尾
       let newName = params.newName
-      if (!newName.endsWith('.md')) {
+      if (!newName.toLowerCase().endsWith('.md')) {
         newName += '.md'
       }
 
@@ -1673,7 +1673,7 @@ export const copyFileTool: Tool = {
 
       // 确定新文件名
       let newFileName = params.newName || originalFileName
-      if (!newFileName.endsWith('.md')) {
+      if (!newFileName.toLowerCase().endsWith('.md')) {
         newFileName += '.md'
       }
 
@@ -1948,7 +1948,7 @@ export const copyFilesBatchTool: Tool = {
 
           // 确定新文件名
           let newFileName = newName || originalFileName
-          if (!newFileName.endsWith('.md')) {
+          if (!newFileName.toLowerCase().endsWith('.md')) {
             newFileName += '.md'
           }
 
@@ -2090,7 +2090,7 @@ export const renameFilesBatchTool: Tool = {
           let newName = file.newName
 
           // 验证新文件名以 .md 结尾
-          if (!newName.endsWith('.md')) {
+          if (!newName.toLowerCase().endsWith('.md')) {
             newName += '.md'
           }
 

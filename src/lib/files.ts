@@ -35,8 +35,15 @@ export function isLinkedFolder(resource: LinkedResource): resource is LinkedFold
 }
 
 // 收集文件夹下的所有 Markdown 文件
-export async function collectMarkdownFiles(folderPath: string): Promise<Array<{path: string, name: string}>> {
+export interface CollectMarkdownFilesReport {
+  files: Array<{path: string, name: string}>;
+  /** Directories that could not be read (F-08): results are partial. */
+  failedDirs: string[];
+}
+
+export async function collectMarkdownFilesWithReport(folderPath: string): Promise<CollectMarkdownFilesReport> {
   const files: Array<{path: string, name: string}> = [];
+  const failedDirs: string[] = [];
   
   const processDirectory = async (dirPath: string) => {
     try {
@@ -61,7 +68,7 @@ export async function collectMarkdownFiles(folderPath: string): Promise<Array<{p
         if (entry.isDirectory) {
           // 递归处理子目录
           await processDirectory(entryPath);
-        } else if (entry.name.endsWith('.md')) {
+        } else if (entry.name.endsWith('.md') || entry.name.endsWith('.markdown')) {
           // 添加 Markdown 文件
           files.push({
             path: entryPath,
@@ -71,10 +78,16 @@ export async function collectMarkdownFiles(folderPath: string): Promise<Array<{p
       }
     } catch (error) {
       console.error(`读取目录 ${dirPath} 失败:`, error);
+      failedDirs.push(dirPath);
     }
   };
-  
+
   await processDirectory(folderPath);
+  return { files, failedDirs };
+}
+
+export async function collectMarkdownFiles(folderPath: string): Promise<Array<{path: string, name: string}>> {
+  const { files } = await collectMarkdownFilesWithReport(folderPath);
   return files;
 }
 

@@ -34,6 +34,17 @@ function emptyState(scope: WikiDataScope): WikiDataState {
   return { scope, data: null, error: null, loading: true }
 }
 
+// F-10: a hung wiki read must reach the terminal error state instead
+// of loading forever. The underlying promises keep running, but the
+// request counter (isCurrent) discards their stale results.
+const WIKI_DATA_DEADLINE_MS = 30_000
+
+function wikiDataDeadline(): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('WIKI_DATA_TIMEOUT')), WIKI_DATA_DEADLINE_MS)
+  })
+}
+
 export function useWikiData() {
   const workspacePath = useSettingStore(state => state.workspacePath)
   const settingsReady = useSettingsHydrationStore(state => state.status === 'ready')
@@ -62,7 +73,7 @@ export function useWikiData() {
     setState(previous => previous.scope === target
       ? { ...previous, error: null, loading: previous.data === null }
       : emptyState(target))
-    try {
+    const load = async () => {
       await initAllDatabases()
       if (!isCurrent()) return
       const context = await getWikiContext()
@@ -81,6 +92,9 @@ export function useWikiData() {
       if (!isCurrent() || latestContext.id !== context.id) return
       setState({ scope: target, data: { context, settings, pages, jobs, sources, usage, syncStatus },
         error: null, loading: false })
+    }
+    try {
+      await Promise.race([load(), wikiDataDeadline()])
     } catch (cause) {
       if (isCurrent()) {
         setState(previous => ({ ...(previous.scope === target ? previous : emptyState(target)),

@@ -1,5 +1,5 @@
 import { platform } from "@/lib/platform";
-import { collectMarkdownFiles } from "@/lib/files";
+import { collectMarkdownFilesWithReport } from "@/lib/files";
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace";
 import { checkEmbeddingModelAvailable, processMarkdownFile } from "@/lib/rag";
 import { getKnowledgeSettings } from '@/lib/knowledge-settings'
@@ -24,6 +24,8 @@ interface CalculateFolderVectorsResult {
   success: number;
   failed: number;
   skipped: number;
+  /** Subfolders that could not be read during collection (F-08). */
+  unreadableDirs: number;
   embeddingModelAvailable: boolean;
   semanticSearchEnabled: boolean;
 }
@@ -44,9 +46,9 @@ export async function calculateFolderVectors({
     if (!await workspaceIsCurrent()) throw new Error('WIKI_CONTEXT_CHANGED');
   };
   if (!(await getKnowledgeSettings()).semanticSearchEnabled) {
-    return { total: 0, success: 0, failed: 0, skipped: 0, embeddingModelAvailable: true, semanticSearchEnabled: false }
+    return { total: 0, success: 0, failed: 0, skipped: 0, unreadableDirs: 0, embeddingModelAvailable: true, semanticSearchEnabled: false }
   }
-  const markdownFiles = await collectMarkdownFiles(folderPath);
+  const { files: markdownFiles, failedDirs } = await collectMarkdownFilesWithReport(folderPath);
   await assertWorkspace();
 
   if (markdownFiles.length === 0) {
@@ -55,6 +57,7 @@ export async function calculateFolderVectors({
       success: 0,
       failed: 0,
       skipped: 0,
+      unreadableDirs: failedDirs.length,
       embeddingModelAvailable: true,
       semanticSearchEnabled: true,
     };
@@ -68,6 +71,7 @@ export async function calculateFolderVectors({
       success: 0,
       failed: 0,
       skipped: 0,
+      unreadableDirs: failedDirs.length,
       embeddingModelAvailable: false,
       semanticSearchEnabled: true,
     };
@@ -146,6 +150,7 @@ export async function calculateFolderVectors({
     success,
     failed,
     skipped,
+    unreadableDirs: failedDirs.length,
     embeddingModelAvailable: true,
     semanticSearchEnabled,
   };

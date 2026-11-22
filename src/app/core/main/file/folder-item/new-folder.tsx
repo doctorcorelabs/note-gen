@@ -18,11 +18,13 @@ export function NewFolder({ item }: NewFolderProps) {
 
   const path = computedParentPath(item);
 
-  function newFolderHandler(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
+  async function newFolderHandler(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     e.stopPropagation();
     // 如果当前文件夹未展开，则先展开
     if (!collapsibleList.includes(path)) {
-      setCollapsibleList(path, true);
+      // F-11: expansion loads the folder children; wait for it so
+      // the placeholder insert below is not racing the load.
+      await setCollapsibleList(path, true);
     }
     newFolderInFolder(path);
   }

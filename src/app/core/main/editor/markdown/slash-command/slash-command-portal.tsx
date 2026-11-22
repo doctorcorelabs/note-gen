@@ -334,8 +334,13 @@ export const SlashCommandPortal = ({ editor }: { editor: Editor }) => {
             query={state.query}
             onSelectItem={state.onSelectItem
               ? (item) => {
-                  state.onSelectItem?.(item)
-                  hideMenu()
+                  // A07-06: always close the menu, even when the
+                  // selection handler throws synchronously.
+                  try {
+                    state.onSelectItem?.(item)
+                  } finally {
+                    hideMenu()
+                  }
                 }
               : undefined}
           />

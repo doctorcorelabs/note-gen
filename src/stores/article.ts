@@ -11,7 +11,7 @@ import { androidCloudFolderWorkspaceList, supportsCloudFolderWorkspace, type Clo
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
 import { hasNetworkConnection, ensureDirectoryExists } from '@/lib/sync/auto-sync'
 import { getSyncManager, isSyncConfigured, syncOnOpen } from '@/lib/sync/sync-manager'
-import { isSyncTextPath } from '@/lib/sync/file-content'
+import { decodeExtensionlessText, isExtensionlessPath, isSyncTextPath } from '@/lib/sync/file-content'
 import { sanitizeFilePath, hasInvalidFileNameChars } from '@/lib/sync/filename-utils'
 import { getCurrentFolder, computedParentPath } from '@/lib/path'
 import useVectorStore from './vector'
@@ -859,7 +859,15 @@ function mergeRefreshedLocalEntries(
     .filter(entry => !matchedKeys.has(`${entry.isDirectory ? 'directory' : 'file'}:${entry.name}`))
     .map(entry => copyCachedEntry(entry, parent))
 
-  return [...mergedLocalEntries, ...remoteOnlyEntries]
+  // F-11: a new-folder placeholder being edited (empty name, local,
+  // isEditing) exists only in the cached tree; a children refresh
+  // must not drop it mid-edit.
+  const editingPlaceholders = cachedEntries
+    .filter(entry => entry.isLocale && entry.isEditing && entry.name === '')
+    .filter(entry => !matchedKeys.has(`${entry.isDirectory ? 'directory' : 'file'}:${entry.name}`))
+    .map(entry => copyCachedEntry(entry, parent))
+
+  return [...editingPlaceholders, ...mergedLocalEntries, ...remoteOnlyEntries]
 }
 
 export interface Article {
@@ -1295,7 +1303,7 @@ interface NoteState {
   loadFolderRemoteFiles: (folderName: string) => Promise<void>
   newFolder: () => void
   newFile: () => void
-  newFileOnFolder: (path: string) => Promise<void>
+  newFileOnFolder: (path: string) => Promise<boolean>
   newFolderInFolder: (path: string) => void
 
   collapsibleList: string[]
@@ -3351,7 +3359,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
 
   newFileOnFolder: async (path: string) => {
     if (!await prepareActiveEditorDeactivationDurably(get().activeFilePath)) {
-      return
+      // N-07: report the refusal instead of silently doing nothing.
+      return false
     }
 
     // 获取 parent folder
@@ -3402,6 +3411,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
       )
     } catch {
     }
+    return true
   },
   newFolderInFolder: async (path: string) => {
     // 获取 parent folder
@@ -3428,7 +3438,13 @@ const useArticleStore = create<NoteState>((set, get) => ({
     }
 
     try {
-      currentFolder?.children?.unshift(node as DirTree)
+      // F-11: children may be undefined for a folder whose listing
+      // has not loaded yet; initialize before inserting so the
+      // placeholder is not silently dropped.
+      if (currentFolder) {
+        currentFolder.children ??= []
+        currentFolder.children.unshift(node as DirTree)
+      }
       set({ fileTree: cacheTree })
     } catch {
     }
@@ -3663,7 +3679,24 @@ const useArticleStore = create<NoteState>((set, get) => ({
       && !isFileDeletionPending(actualPath)
       )
 
-    if (!isSyncTextPath(actualPath)) {
+    // N-02: an extensionless file may still be a note. Give it one
+    // chance to prove it is text with a clean fatal UTF-8 decode;
+    // binary content keeps the binary viewer below.
+    let extensionlessIsText = false
+    if (!isSyncTextPath(actualPath) && isExtensionlessPath(actualPath)) {
+      try {
+        const probeOptions = await getFilePathOptions(actualPath)
+        const bytes = probeOptions.baseDir
+          ? await platform.fs.readFile(probeOptions.path, { baseDir: probeOptions.baseDir })
+          : await platform.fs.readFile(probeOptions.path)
+        extensionlessIsText = decodeExtensionlessText(bytes) !== undefined
+      } catch {
+        extensionlessIsText = false
+      }
+      if (!isCurrentArticleRead()) return
+    }
+
+    if (!isSyncTextPath(actualPath) && !extensionlessIsText) {
       // Images and other binary files have their own viewers. They may pull
       // original bytes on open, but must never enter Markdown/text recovery,
       // empty-file creation, tokenization, or editor-content events.
@@ -3798,7 +3831,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
 
       // 检查是否是"文件不存在"错误（兼容不同平台的大小写）
       const errorMsg = error instanceof Error ? error.message : String(error)
-      const isFileNotFound = errorMsg.toLowerCase().includes('no such file') ||
+      const isFileNotFound = isNotFoundError(error) ||
+                            errorMsg.toLowerCase().includes('no such file') ||
                             errorMsg.toLowerCase().includes('not found') ||
                             errorMsg.toLowerCase().includes('系统找不到指定的路径')
 
@@ -4134,7 +4168,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
   saveCurrentArticle: async (content: string, pathOverride?: string) => {
     const path = pathOverride ?? get().activeFilePath
     if (isFileDeletionPending(path)) return
-    if (path && !isSyncTextPath(path)) {
+    if (path && !isSyncTextPath(path) && !isExtensionlessPath(path)) {
       throw new Error('Binary files cannot be saved through the article text editor')
     }
     const justPulled = get().justPulledFile

@@ -261,7 +261,10 @@ export function FolderItem({
         sha: '',
         children: []
       };
-      currentFolder.children?.unshift(newFolder);
+      // F-11: initialize children for folders whose listing has
+      // not loaded yet, so the placeholder is not silently dropped.
+      currentFolder.children ??= [];
+      currentFolder.children.unshift(newFolder);
       setFileTree(cacheTree);
     }
   }
@@ -460,6 +463,15 @@ export function FolderItem({
         })
         const { renameVectorDocumentsByPrefix } = await import('@/db/vector')
         await renameVectorDocumentsByPrefix(path, targetRelativePath)
+        // F-07: wiki folder scopes are keyed by path; follow the
+        // rename. A scope-migration failure must not fail the disk
+        // rename that already succeeded.
+        try {
+          const { renameWikiFolderScope } = await import('@/lib/wiki/settings')
+          await renameWikiFolderScope(path, targetRelativePath)
+        } catch (scopeError) {
+          console.error('Failed to migrate wiki folder scope after rename', scopeError)
+        }
       } catch (error) {
         setRenameError(userErrorMessage(error) ?? '')
         setTimeout(() => inputRef.current?.focus(), 0)
@@ -501,16 +513,22 @@ export function FolderItem({
           }
           
           // 更新缓存树
+          // F-13: guard index -1 like the cancel branch below; the
+          // placeholder may be gone if the tree reloaded mid-edit.
           if (parentFolder && parentFolder.children) {
             const index = parentFolder.children?.findIndex(item => item.name === '')
-            parentFolder.children[index].name = nextName
-            parentFolder.children[index].isEditing = false
-            parentFolder.children[index].childrenLoaded = true
+            if (index !== undefined && index !== -1) {
+              parentFolder.children[index].name = nextName
+              parentFolder.children[index].isEditing = false
+              parentFolder.children[index].childrenLoaded = true
+            }
           } else {
             const index = cacheTree?.findIndex(item => item.name === '')
-            cacheTree[index].name = nextName
-            cacheTree[index].isEditing = false
-            cacheTree[index].childrenLoaded = true
+            if (index !== undefined && index !== -1) {
+              cacheTree[index].name = nextName
+              cacheTree[index].isEditing = false
+              cacheTree[index].childrenLoaded = true
+            }
           }
         }
       } else {

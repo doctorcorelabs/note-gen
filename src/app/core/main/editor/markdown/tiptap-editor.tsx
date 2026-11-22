@@ -1374,9 +1374,6 @@ function escapeMarkdownLinkText(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]')
 }
 
-function escapeMarkdownText(text: string): string {
-  return text.replace(/\\/g, '\\\\')
-}
 
 function createMarkdownLink(href: string, label: string): string {
   return `[${escapeMarkdownLinkText(label)}](${href})`
@@ -1429,6 +1426,12 @@ async function getMarkdownHrefForDroppedPath(path: string, currentFilePath: stri
       return encodeLocalLinkHref(toMarkdownRelativePath(currentFilePath, workspaceRelativePath))
     }
 
+    // M-04: never mint file:// hrefs in the web build; an empty
+    // href drops the link so the caller can toast honestly.
+    if (!checkIsTauri()) {
+      return ''
+    }
+
     return toFileUrl(normalizedPath)
   }
 
@@ -1436,15 +1439,22 @@ async function getMarkdownHrefForDroppedPath(path: string, currentFilePath: stri
 }
 
 async function createMarkdownLinksForDroppedPaths(files: DroppedFileLink[], currentFilePath: string): Promise<string[]> {
-  return await Promise.all(
+  const links = await Promise.all(
     files.map(async (file) => {
       const href = await getMarkdownHrefForDroppedPath(file.path, currentFilePath)
-      return createMarkdownLink(href, file.label)
+      return href ? createMarkdownLink(href, file.label) : ''
     })
   )
+  return links.filter(Boolean)
 }
 
 function getFileUrlsFromDataTransfer(dataTransfer: DataTransfer): string[] {
+  // M-04: file:// URLs from a drag are desktop-only; in the web
+  // build they would become dead links, so treat them as absent.
+  if (!checkIsTauri()) {
+    return []
+  }
+
   const uriList = dataTransfer.getData('text/uri-list')
 
   if (uriList) {
@@ -1788,9 +1798,12 @@ const PasteMarkdown = Extension.create({
               return true
             }
 
-            const table = parseStandaloneMarkdownTable(text)
-            if (table) {
-              editor.commands.insertContent(table)
+            // P2-1: parseStandaloneMarkdownTable is only a detector
+            // here. Insert through the markdown parser so inline
+            // formatting and column alignment survive the paste
+            // (MarkdownTable.parseMarkdown handles both).
+            if (parseStandaloneMarkdownTable(text)) {
+              editor.commands.insertContent(text, { contentType: 'markdown' })
               return true
             }
 
@@ -5448,30 +5461,38 @@ export function TipTapEditor({
       const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'))
       if (imageFiles.length === 0) return
 
-      const imageFile = imageFiles[0]
-
-      // Prevent default to avoid base64 image being inserted
+      // Prevent default to avoid base64 image being inserted.
+      // M-07: also stop propagation so ProseMirror does not paste
+      // the same clipboard content a second time (mirrors handleDrop).
       event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
 
       const placeholder = createUploadPlaceholder(editor, editor.state.selection.from)
       editorOperationCleanupsRef.current.add(placeholder.remove)
 
-      handleImageUpload(imageFile, targetFilePath)
-        .then(result => {
+      // M-06: upload every pasted image, not just the first.
+      Promise.all(imageFiles.map(async imageFile => ({
+        imageFile,
+        result: await handleImageUpload(imageFile, targetFilePath),
+      })))
+        .then(uploadedImages => {
           if (!isCurrentOperation()) return
           const position = placeholder.position()
           if (position === undefined) return
           placeholder.remove()
-          // Insert the actual image
           editor.chain()
-            .insertContentAt(position, {
-              type: 'image',
-              attrs: {
-                src: result.src,
-                alt: imageFile.name,
-                relativeSrc: result.relativePath,
-              },
-            })
+            .insertContentAt(
+              position,
+              uploadedImages.map(({ imageFile, result }) => ({
+                type: 'image',
+                attrs: {
+                  src: result.src,
+                  alt: imageFile.name,
+                  relativeSrc: result.relativePath,
+                },
+              }))
+            )
             .run()
         })
         .catch(error => {
@@ -5554,18 +5575,31 @@ export function TipTapEditor({
           return
         }
 
-        if (droppedImageFiles.length > 0 && droppedImageFiles.length === droppedFiles.length) {
-          const uploadedImages = await Promise.all(
-            droppedImageFiles.map(async file => ({
-              file,
-              result: await handleImageUpload(file, targetFilePath),
-            }))
-          )
+        // M-03: upload dropped images even when the drop also
+        // contains other files; the rest fall through to link
+        // handling (desktop) or an honest toast (web).
+        const uploadedImages = droppedImageFiles.length > 0
+          ? await Promise.all(
+              droppedImageFiles.map(async file => ({
+                file,
+                result: await handleImageUpload(file, targetFilePath),
+              }))
+            )
+          : []
+        if (!isCurrentOperation()) return
 
-          if (!isCurrentOperation()) return
-          const position = placeholder.position()
-          if (position === undefined) return
-          placeholder.remove()
+        const hasNonImageFiles = droppedFiles.length > droppedImageFiles.length
+        const links = hasNonImageFiles || droppedImageFiles.length === 0
+          ? await getDroppedFileMarkdownLinks(dataTransfer, targetFilePath)
+          : []
+        if (!isCurrentOperation()) return
+        const position = placeholder.position()
+        if (position === undefined) return
+        placeholder.remove()
+
+        let linksPosition = position
+        if (uploadedImages.length > 0) {
+          const sizeBefore = editor.state.doc.content.size
           editor.chain()
             .insertContentAt(
               position,
@@ -5579,33 +5613,17 @@ export function TipTapEditor({
               }))
             )
             .run()
-          return
+          linksPosition = position + (editor.state.doc.content.size - sizeBefore)
+          if (!hasNonImageFiles) return
         }
 
-        const links = await getDroppedFileMarkdownLinks(dataTransfer, targetFilePath)
-        if (!isCurrentOperation()) return
-        const position = placeholder.position()
-        if (position === undefined) return
-        placeholder.remove()
-        const droppedFileNames = droppedFiles
-          .map(file => file.name.trim())
-          .filter(Boolean)
-
         if (links.length === 0) {
-          if (droppedFileNames.length > 0) {
-            editor.chain()
-              .focus()
-              .insertContentAt(
-                position,
-                droppedFileNames.map(escapeMarkdownText).join('\n'),
-                { contentType: 'markdown' }
-              )
-              .run()
-            return
-          }
-
+          // M-03: never insert bare filenames as if they were links.
+          const skippedCount = droppedFiles.length - droppedImageFiles.length
           toast({
-            title: t('fileDrop.noFilePath'),
+            title: skippedCount > 0
+              ? t('fileDrop.mixedUnsupported', { count: skippedCount })
+              : t('fileDrop.noFilePath'),
             description: t('fileDrop.noFilePathDescription'),
             variant: 'destructive',
           })
@@ -5616,7 +5634,7 @@ export function TipTapEditor({
 
         editor.chain()
           .focus()
-          .insertContentAt(position, markdown, { contentType: 'markdown' })
+          .insertContentAt(linksPosition, markdown, { contentType: 'markdown' })
           .run()
       })().catch(error => {
         if (!isCurrentOperation()) return

@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useViewportActivation } from './viewport-activation'
 import { createViewportWorkQueue } from './viewport-work-scheduler'
 import { updateNodeViewOnMarkupChange } from './node-view-update'
-import { blockMathTokenizer, inlineMathTokenizer } from './markdown-tokenizers'
+import { blockMathTokenizer, INLINE_MATH_INPUT_RULE_RE, inlineMathTokenizer } from './markdown-tokenizers'
 
 type KatexApi = (typeof import('katex'))['default']
 
@@ -257,6 +257,11 @@ export const InlineMath = Node.create({
     return {
       latex: {
         default: '',
+        // P1-2: round-trip through data-latex (plain latex= from
+        // pre-fix HTML still parses as fallback).
+        renderHTML: (attrs: { latex?: string }) => ({ 'data-latex': attrs.latex ?? '' }),
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-latex') ?? element.getAttribute('latex') ?? '',
       },
     }
   },
@@ -274,8 +279,9 @@ export const InlineMath = Node.create({
     ]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'inline-math' })]
+  renderHTML({ node, HTMLAttributes }) {
+    // P1-2: text fallback so pasting into other apps keeps the formula visible.
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'inline-math' }), `$${node.attrs.latex ?? ''}$`]
   },
 
   addNodeView() {
@@ -286,7 +292,9 @@ export const InlineMath = Node.create({
     return [
       nodeInputRule({
         // Convert `$...$` to an inline math node as soon as the closing `$` is typed.
-        find: /(?<!\$)\$[^\$\n]+\$$/,
+        // Shared guard with the markdown tokenizer (P1-3): plain-text
+        // amounts like "harga $5 dan $10" must stay text.
+        find: INLINE_MATH_INPUT_RULE_RE,
         type: this.type,
         getAttributes: (match) => ({
           latex: match[0].slice(1, -1),
@@ -333,6 +341,11 @@ export const BlockMath = Node.create({
     return {
       latex: {
         default: '',
+        // P1-2: round-trip through data-latex (plain latex= from
+        // pre-fix HTML still parses as fallback).
+        renderHTML: (attrs: { latex?: string }) => ({ 'data-latex': attrs.latex ?? '' }),
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-latex') ?? element.getAttribute('latex') ?? '',
       },
     }
   },
@@ -350,8 +363,9 @@ export const BlockMath = Node.create({
     ]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'block-math' })]
+  renderHTML({ node, HTMLAttributes }) {
+    // P1-2: text fallback so pasting into other apps keeps the formula visible.
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'block-math' }), `$$${node.attrs.latex ?? ''}$$`]
   },
 
   addNodeView() {

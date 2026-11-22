@@ -250,6 +250,58 @@ export async function setWikiFolderScope(path: string, included: boolean, contex
   })
 }
 
+/** Rewrite path-keyed wiki scopes after a folder/file rename (F-07).
+ * Pure: folder scopes for the renamed path and article scopes under
+ * it follow the rename; sibling prefixes (docs vs docs2) and
+ * non-path scopes are untouched. Returns the original array when
+ * nothing matches. */
+export function rewriteFolderScopes(
+  scopes: WikiScope[],
+  oldPath: string,
+  newPath: string,
+  device: string,
+): WikiScope[] {
+  const oldId = normalizeWikiScopeId(oldPath)
+  const newId = normalizeWikiScopeId(newPath)
+  if (!oldId || oldId === newId) return scopes
+  let changed = false
+  const next = scopes.map(scope => {
+    if (scope.kind !== 'article-folder' && scope.kind !== 'article') return scope
+    if (scope.id !== oldId && !scope.id.startsWith(`${oldId}/`)) return scope
+    changed = true
+    const id = newId + scope.id.slice(oldId.length)
+    const label = scope.label === scope.id || scope.label.startsWith(`${scope.id}/`)
+      ? newId + scope.label.slice(oldId.length)
+      : scope.label
+    return {
+      ...scope,
+      id,
+      key: `${scope.kind}:${id}`,
+      label,
+      clock: { ...scope.clock, [device]: (scope.clock[device] ?? 0) + 1 },
+    }
+  })
+  return changed ? next : scopes
+}
+
+/** Migrate wiki scopes after a folder (or file) rename/move (F-07). */
+export async function renameWikiFolderScope(oldPath: string, newPath: string, contextId?: string) {
+  const { id, assertCurrent } = await currentMutation(contextId)
+  const oldId = normalizeWikiScopeId(oldPath)
+  const newId = normalizeWikiScopeId(newPath)
+  if (!oldId || oldId === newId) return
+  assertWikiScopePath(oldId, true)
+  assertWikiScopePath(newId, true)
+  const device = await getWikiDeviceId()
+  await serializeMutation(async () => {
+    const settings = await getWikiSettings(id)
+    const scopes = rewriteFolderScopes(settings.scopes, oldId, newId, device)
+    if (scopes !== settings.scopes) {
+      await writeSettings({ scopes }, id, true, assertCurrent)
+    }
+  })
+}
+
 /** Most specific article/folder rule wins; broad source-type rules are the fallback. */
 export function getWikiArticleRule(path: string, settings: WikiSettings): WikiScope | null {
   const normalized = normalizeWikiScopeId(path)

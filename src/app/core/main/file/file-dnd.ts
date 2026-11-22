@@ -160,6 +160,16 @@ async function moveFileManagerPath(sourcePath: string, targetPath: string, journ
 
     const { renameVectorDocumentsByPrefix } = await import('@/db/vector')
     await renameVectorDocumentsByPrefix(sourcePath, targetPath)
+
+    // F-07: wiki folder scopes are keyed by path; follow the move.
+    // A scope-migration failure must not fail the disk move that
+    // already succeeded.
+    try {
+      const { renameWikiFolderScope } = await import('@/lib/wiki/settings')
+      await renameWikiFolderScope(sourcePath, targetPath)
+    } catch (scopeError) {
+      console.error('Failed to migrate wiki folder scope after move', scopeError)
+    }
   }
   if (journalMove) await withWorkspacePathMove(sourcePath, targetPath, move)
   else await move()

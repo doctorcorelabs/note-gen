@@ -75,6 +75,8 @@ export function markdownToPlainText(markdown: string): string {
   let result = ''
   let pendingCellSeparators = 0
   let generatedTrailingBreak = false
+  let pendingTaskItem = false
+  let lastContentEndLine = -1
   const append = (text: string) => {
     if (!text) return
     result += '\t'.repeat(pendingCellSeparators)
@@ -83,6 +85,13 @@ export function markdownToPlainText(markdown: string): string {
     generatedTrailingBreak = false
   }
   const lineBreak = () => {
+    // Empty trailing cells leave surplus pending separators: the last
+    // one is the row break itself (the newline below), the rest are
+    // real cell separators the visual basis counts (STAT-05).
+    if (pendingCellSeparators > 1 && result) {
+      result += '\t'.repeat(pendingCellSeparators - 1)
+      generatedTrailingBreak = false
+    }
     pendingCellSeparators = 0
     if (result && !result.endsWith('\n')) {
       result += '\n'
@@ -91,8 +100,41 @@ export function markdownToPlainText(markdown: string): string {
   }
 
   for (const token of parser.parse(markdown, {})) {
-    if (token.type === 'inline') {
-      append(inlineText(token.children ?? []))
+    // Surplus blank lines between top-level blocks are empty
+    // paragraphs in the visual basis; reconstruct them from the
+    // block line ranges (STAT-03). Container ranges (lists,
+    // blockquotes) swallow trailing blank lines, so the gap is
+    // measured from the last content token, not the container.
+    if (token.level === 0 && token.map && token.nesting !== -1) {
+      const startLine = token.map[0]
+      if (lastContentEndLine >= 0 && result) {
+        const surplusBlankLines = startLine - lastContentEndLine - 1
+        if (surplusBlankLines > 0) {
+          lineBreak()
+          result += '\n'.repeat(surplusBlankLines)
+          generatedTrailingBreak = false
+        }
+      }
+    }
+    if (
+      token.map
+      && (token.type === 'inline' || token.type === 'fence'
+        || token.type === 'code_block' || token.type === 'html_block'
+        || token.type === 'hr')
+    ) {
+      lastContentEndLine = Math.max(lastContentEndLine, token.map[1])
+    }
+    if (token.type === 'list_item_open') {
+      pendingTaskItem = true
+    } else if (token.type === 'inline') {
+      let text = inlineText(token.children ?? [])
+      if (pendingTaskItem) {
+        // Task list checkbox syntax is markdown syntax, not content;
+        // the visual basis counts only the item text (STAT-04).
+        text = text.replace(/^\[(?: |x|X)\] /, '')
+        pendingTaskItem = false
+      }
+      append(text)
     } else if (token.type === 'fence' || token.type === 'code_block') {
       lineBreak()
       append(token.content)
