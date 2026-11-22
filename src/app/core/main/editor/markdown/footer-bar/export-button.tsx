@@ -15,7 +15,6 @@ import { useTranslations } from 'next-intl'
 import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import {
   exportMarkdownSource,
-  getMarkdownExportBaseName,
   type MarkdownExportFormat,
   type MarkdownExportWarning,
 } from '../markdown-export'
@@ -52,7 +51,10 @@ export function ExportButton({ editor, markdown, getMarkdown }: ExportButtonProp
       const exported = await exportMarkdownSource(
         format,
         {
-          baseName: getMarkdownExportBaseName(activeFilePath),
+          // IM-3 EXP4-04: pass the raw path; exportMarkdownSource
+          // strips the extension exactly once. Pre-stripping here
+          // cut two extensions ("notes.v2.md" became "notes").
+          baseName: activeFilePath ?? 'document',
           markdown: () => getMarkdown?.() ?? markdown ?? editor.getMarkdown(),
           sourcePath: activeFilePath,
         },

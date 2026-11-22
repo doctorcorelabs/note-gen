@@ -399,7 +399,51 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
   ])
 }
 
-async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
+// IM-3 EXP4-06: byte estimate for a data: URL using the same math
+// as the advanced export path (export-document.ts): base64 payload
+// length * 3/4 minus padding; non-base64 payloads use their encoded
+// length as the estimate.
+function estimateDataUrlBytes(src: string) {
+  const commaIndex = src.indexOf(',')
+  if (commaIndex === -1) {
+    return src.length
+  }
+  const header = src.slice(0, commaIndex).toLowerCase()
+  const payload = src.slice(commaIndex + 1)
+  if (!header.endsWith(';base64')) {
+    return payload.length
+  }
+  return payload.length / 4 * 3 - (payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0)
+}
+
+// IM-3 EXP4-05: combine the caller deadline signal with a per-asset
+// timeout so an aborted export cancels in-flight fetches instead of
+// only racing them at the surface.
+function combineAbortSignals(callerSignal: AbortSignal | undefined, timeoutMs: number) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  if (!callerSignal) {
+    return timeoutSignal
+  }
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([callerSignal, timeoutSignal])
+  }
+  const controller = new AbortController()
+  const abortFrom = (source: AbortSignal) => {
+    if (!controller.signal.aborted) {
+      controller.abort(source.reason)
+    }
+  }
+  for (const source of [callerSignal, timeoutSignal]) {
+    if (source.aborted) {
+      abortFrom(source)
+      break
+    }
+    source.addEventListener('abort', () => abortFrom(source), { once: true })
+  }
+  return controller.signal
+}
+
+async function resolveMarkdownImageSources(html: string, sourcePath?: string, signal?: AbortSignal) {
   const template = document.createElement('template')
   template.innerHTML = html
   const images = Array.from(template.content.querySelectorAll('img'))
@@ -411,7 +455,8 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
   // arrives in data-notegen-export-src and the img has no src yet.
   // Read the deferred source first; fall back to src for fragments
   // rendered without deferral.
-  interface PendingImage {
+  interface FetchEntry {
+    kind: 'fetch'
     image: HTMLImageElement
     src: string
     fallbackSrc: string
@@ -419,25 +464,46 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
     fetchFailed: boolean
   }
 
-  const pending: PendingImage[] = []
+  interface DataEntry {
+    kind: 'data'
+    image: HTMLImageElement
+    src: string
+    bytes: number
+  }
+
+  type ImageEntry = FetchEntry | DataEntry
+
+  const entries: ImageEntry[] = []
   for (const image of images) {
     const deferredSrc = image.getAttribute('data-notegen-export-src')
     image.removeAttribute('data-notegen-export-src')
     const src = deferredSrc ?? image.getAttribute('src')
-    if (!src || /^(?:data:|blob:)/i.test(src)) {
-      if (src) {
-        image.setAttribute('src', src)
-      }
+    if (!src) {
       continue
     }
-    pending.push({ image, src, fallbackSrc: src, blob: null, fetchFailed: false })
+    // IM-3 EXP4-06: data: URLs are already embedded, so they skip
+    // the fetch phase, but their bytes count against the same
+    // per-image and total limits as fetched images (applied in
+    // document order below) instead of passing through unchecked.
+    if (/^data:/i.test(src)) {
+      entries.push({ kind: 'data', image, src, bytes: estimateDataUrlBytes(src) })
+      continue
+    }
+    // IM-3 EXP4-06: blob: URLs are bound to this tab session and
+    // would be dead references in the exported file, so route them
+    // through the fetch path below and embed their bytes under the
+    // same limits; a failed fetch keeps the URL plus the existing
+    // asset-not-embedded warning.
+    entries.push({ kind: 'fetch', image, src, fallbackSrc: src, blob: null, fetchFailed: false })
   }
+
+  const fetchEntries = entries.filter((entry): entry is FetchEntry => entry.kind === 'fetch')
 
   // PB2 PERF-01: fetch image bytes with bounded concurrency
   // instead of one image at a time. Results are applied below in
   // document order, so size-limit accounting and warning order
   // stay deterministic.
-  const fetchImage = async (entry: PendingImage) => {
+  const fetchImage = async (entry: FetchEntry) => {
     try {
       let url = entry.src
       if (sourcePath && shouldTransformImageSrcToWorkspaceAsset(entry.src)) {
@@ -456,7 +522,7 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
         url = new URL(entry.src, document.baseURI).href
       }
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(EXPORT_ASSET_FETCH_TIMEOUT_MS),
+        signal: combineAbortSignals(signal, EXPORT_ASSET_FETCH_TIMEOUT_MS),
       })
       if (!response.ok) {
         throw new Error('Export asset fetch failed')
@@ -467,16 +533,42 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
     }
   }
 
-  for (let offset = 0; offset < pending.length; offset += EXPORT_IMAGE_EMBED_CONCURRENCY) {
-    await Promise.all(pending.slice(offset, offset + EXPORT_IMAGE_EMBED_CONCURRENCY).map(fetchImage))
+  for (let offset = 0; offset < fetchEntries.length; offset += EXPORT_IMAGE_EMBED_CONCURRENCY) {
+    // IM-3 EXP4-05: stop starting new batches once the caller
+    // deadline aborted; the remaining images degrade through the
+    // existing asset-not-embedded warning below instead of being
+    // fetched in the background.
+    if (signal?.aborted) {
+      for (const entry of fetchEntries.slice(offset)) {
+        entry.fetchFailed = true
+      }
+      break
+    }
+    await Promise.all(fetchEntries.slice(offset, offset + EXPORT_IMAGE_EMBED_CONCURRENCY).map(fetchImage))
   }
 
   // DA-6 EXP-03 (area 13) + EXP-05 (area 12): embed image bytes as a
   // data URL with per-image and total size limits so the exported
   // HTML is self-contained; on failure keep the URL and record a
   // warning instead of degrading silently.
-  for (const entry of pending) {
-    const { image, fallbackSrc } = entry
+  for (const entry of entries) {
+    const { image } = entry
+    if (entry.kind === 'data') {
+      image.setAttribute('src', entry.src)
+      if (
+        entry.bytes > EXPORT_IMAGE_EMBED_LIMIT_BYTES
+        || embeddedTotalBytes + entry.bytes > EXPORT_IMAGE_EMBED_TOTAL_LIMIT_BYTES
+      ) {
+        warnings.push({
+          code: 'asset-not-embedded',
+          message: 'An image was too large to embed in the exported file',
+        })
+        continue
+      }
+      embeddedTotalBytes += entry.bytes
+      continue
+    }
+    const { fallbackSrc } = entry
     if (entry.fetchFailed || !entry.blob) {
       image.setAttribute('src', fallbackSrc)
       warnings.push({
@@ -587,7 +679,7 @@ export async function renderMarkdownToHtmlDetailed(
       }
     },
   })
-  const resolved = await resolveMarkdownImageSources(sanitizeExportHtml(html), sourcePath)
+  const resolved = await resolveMarkdownImageSources(sanitizeExportHtml(html), sourcePath, signal)
   const warnings = [...resolved.warnings]
   // DA-6 EXP-05 (area 12): highlightFallback used to be discarded.
   if (highlightFallback) {
@@ -1005,6 +1097,14 @@ export async function exportMarkdownSource(
     // Round-tripping markdown is lossy for attributes that never
     // serialize to markdown; that bound is pinned in the spec.
     const jsonContent = getMarkdownManager().parse(await getValue(source.markdown))
+
+    // IM-3 EXP4-11: surface the lossy bound to the user through the
+    // same warning channel as other export degradations instead of
+    // reporting a plain success.
+    options?.onWarnings?.([{
+      code: 'unsupported-content',
+      message: 'JSON export is parsed from markdown, so attributes that do not serialize to markdown may be lost',
+    }])
 
     return await saveTextExport(
       JSON.stringify(jsonContent, null, 2),

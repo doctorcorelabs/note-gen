@@ -220,6 +220,32 @@ describe("HTML export deadline (DA-6 EXP-01/04)", () => {
   });
 });
 
+describe("export file name extension (IM-3 EXP4-04)", () => {
+  it("strips only one extension: notes.v2.md exports as notes.v2.html", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: () => "blob:test",
+      revokeObjectURL: vi.fn(),
+    });
+    const link = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: (tag: string) => (tag === "a" ? link : makeTemplate()),
+      body: { appendChild: vi.fn() },
+      styleSheets: [],
+      baseURI: "http://localhost/",
+    });
+
+    const promise = exportMarkdownSource("html", {
+      baseName: "notes.v2.md",
+      markdown: "# Halo",
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(promise).resolves.toBe(true);
+    expect(link.download).toBe("notes.v2.html");
+    expect(link.click).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("sanitize scheme guard (DA-6 EXP-06)", () => {
   it("flags javascript: and data:text/html URLs, including obfuscated ones", () => {
     expect(isDangerousExportUrl("javascript:alert(1)")).toBe(true);
@@ -302,6 +328,30 @@ describe("JSON export single basis (DA-6 EXP-03 area 12)", () => {
     expect(blobs).toHaveLength(1);
     const parsed = JSON.parse(await blobs[0].text()) as { content?: Array<{ type?: string }> };
     expect(parsed.content?.[0]?.type).toBe("heading");
+  });
+
+  it("warns that JSON export from markdown is lossy (IM-3 EXP4-11)", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: () => "blob:test",
+      revokeObjectURL: vi.fn(),
+    });
+    const link = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: () => link,
+      body: { appendChild: vi.fn() },
+      styleSheets: [],
+      baseURI: "http://localhost/",
+    });
+    const onWarnings = vi.fn();
+
+    await expect(
+      exportMarkdownSource("json", { baseName: "catatan", markdown: "# Halo" }, { onWarnings }),
+    ).resolves.toBe(true);
+
+    expect(onWarnings).toHaveBeenCalledTimes(1);
+    expect(onWarnings).toHaveBeenCalledWith([
+      expect.objectContaining({ code: "unsupported-content" }),
+    ]);
   });
 });
 
@@ -433,5 +483,90 @@ describe("main-path image deferral (PB2 BUG2-01/02, PERF-01)", () => {
     );
 
     expect(warnings.filter((warning) => warning.code === "unsupported-content")).toHaveLength(0);
+  });
+
+  it("does not start image fetches after the caller signal aborted (IM-3 EXP4-05)", async () => {
+    fakeImages = [0, 1].map((index) => makeFakeImage({
+      alt: `img-${index}`,
+      "data-notegen-export-src": `img-${index}.png`,
+    }));
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>gambar</p>",
+      highlightFallback: false,
+    });
+    const fetchMock = vi.fn(async () => ({ ok: true, blob: async () => new Blob(["x"]) }));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    controller.abort();
+
+    const { warnings } = await renderMarkdownToHtmlDetailed("dua gambar", undefined, controller.signal);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warnings.filter((warning) => warning.code === "asset-not-embedded")).toHaveLength(2);
+    expect(fakeImages[0].getAttribute("src")).toBe("img-0.png");
+    expect(fakeImages[1].getAttribute("src")).toBe("img-1.png");
+  });
+
+  it("forwards an abort signal to image fetches (IM-3 EXP4-05)", async () => {
+    fakeImages = [makeFakeImage({
+      alt: "img",
+      "data-notegen-export-src": "img.png",
+    })];
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>gambar</p>",
+      highlightFallback: false,
+    });
+    let seenSignal: unknown;
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: { signal?: unknown }) => {
+      seenSignal = init?.signal;
+      return { ok: true, blob: async () => new Blob(["x"]) };
+    }));
+    const controller = new AbortController();
+
+    await renderMarkdownToHtmlDetailed("satu gambar", undefined, controller.signal);
+
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("counts data: image bytes against the embed limits (IM-3 EXP4-06)", async () => {
+    const small = "data:image/png;base64,AAAA";
+    // 3 MiB of base64 decodes to about 2.25 MiB, over the 2 MiB
+    // per-image limit.
+    const oversized = `data:image/png;base64,${"A".repeat(3 * 1024 * 1024)}`;
+    fakeImages = [
+      makeFakeImage({ alt: "small", "data-notegen-export-src": small }),
+      makeFakeImage({ alt: "big", "data-notegen-export-src": oversized }),
+    ];
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>gambar</p>",
+      highlightFallback: false,
+    });
+
+    const { warnings } = await renderMarkdownToHtmlDetailed("dua gambar data");
+
+    expect(fakeImages[0].getAttribute("src")).toBe(small);
+    expect(fakeImages[1].getAttribute("src")).toBe(oversized);
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: "asset-not-embedded",
+        message: expect.stringContaining("too large"),
+      }),
+    ]);
+  });
+
+  it("embeds blob: images through the fetch path (IM-3 EXP4-06)", async () => {
+    fakeImages = [makeFakeImage({
+      alt: "blob",
+      "data-notegen-export-src": "blob:http://localhost/abc",
+    })];
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>gambar</p>",
+      highlightFallback: false,
+    });
+
+    const { warnings } = await renderMarkdownToHtmlDetailed("gambar blob");
+
+    expect(fakeImages[0].getAttribute("src")).toMatch(/^data:/);
+    expect(warnings.filter((warning) => warning.code === "asset-not-embedded")).toHaveLength(0);
   });
 });
