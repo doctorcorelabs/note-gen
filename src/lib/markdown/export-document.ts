@@ -98,16 +98,31 @@ function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
-function nextFrame(signal?: AbortSignal) {
+// DA-6 EXP-02: race the frame wait against a short timer, mirroring
+// waitForAnimationFrame in markdown-export.ts. A hidden page or
+// suppressed rendering never fires requestAnimationFrame, which used
+// to stall the whole export until the outer render timeout aborted
+// it. The abort signal still rejects, and the outer timeout in
+// renderMarkdownExportFragment remains the hard bound.
+const NEXT_FRAME_TIMER_MS = 250
+
+export function nextFrame(signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     const cancelled = () => {
       cancelAnimationFrame(frame)
+      clearTimeout(timer)
       reject(signal ? abortError(signal) : new PluginError('Cancelled', 'HTML export was cancelled'))
     }
     const frame = requestAnimationFrame(() => {
+      clearTimeout(timer)
       signal?.removeEventListener('abort', cancelled)
       resolve()
     })
+    const timer = setTimeout(() => {
+      cancelAnimationFrame(frame)
+      signal?.removeEventListener('abort', cancelled)
+      resolve()
+    }, NEXT_FRAME_TIMER_MS)
     signal?.addEventListener('abort', cancelled, { once: true })
     if (signal?.aborted) cancelled()
   })

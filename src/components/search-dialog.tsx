@@ -76,31 +76,39 @@ export function SearchDialog({ open, onOpenChange, mobile = false }: SearchDialo
   function highlightText(text: string, query: string) {
     if (!query.trim() || !text) return text
 
-    const parts: React.ReactNode[] = []
+    // DA-6 F-15-08: highlight per term, matching the server AND
+    // semantics; a whole-phrase search missed titles where the
+    // terms are spread apart.
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+    if (terms.length === 0) return text
     const lowerText = text.toLowerCase()
-    const lowerQuery = query.toLowerCase().trim()
-
-    let lastIndex = 0
-    let index = lowerText.indexOf(lowerQuery)
-
-    while (index !== -1) {
-      // 添加匹配前的文本
-      if (index > lastIndex) {
-        parts.push(text.substring(lastIndex, index))
+    const ranges: Array<{ start: number; end: number }> = []
+    for (const term of terms) {
+      let from = 0
+      for (;;) {
+        const at = lowerText.indexOf(term, from)
+        if (at === -1) break
+        ranges.push({ start: at, end: at + term.length })
+        from = at + term.length
       }
+    }
+    if (ranges.length === 0) return text
+    ranges.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start))
 
-      // 添加高亮的匹配文本
+    const parts: React.ReactNode[] = []
+    let lastIndex = 0
+    for (const range of ranges) {
+      if (range.start < lastIndex) continue
+      if (range.start > lastIndex) {
+        parts.push(text.substring(lastIndex, range.start))
+      }
       parts.push(
-        <mark key={index} className="rounded bg-primary/15 px-0.5 text-foreground">
-          {text.substring(index, index + lowerQuery.length)}
+        <mark key={range.start} className="rounded bg-primary/15 px-0.5 text-foreground">
+          {text.substring(range.start, range.end)}
         </mark>
       )
-
-      lastIndex = index + lowerQuery.length
-      index = lowerText.indexOf(lowerQuery, lastIndex)
+      lastIndex = range.end
     }
-
-    // 添加剩余文本
     if (lastIndex < text.length) {
       parts.push(text.substring(lastIndex))
     }

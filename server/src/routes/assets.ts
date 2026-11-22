@@ -107,7 +107,19 @@ export async function registerAssetRoutes(app: FastifyInstance, deps: AssetRoute
 
     scoped.post(
       ASSETS_PATH,
-      { config: { requiresAuth: true }, bodyLimit: deps.service.limitBytes + 64 * 1024 },
+      {
+        config: {
+          requiresAuth: true,
+          // DA-6 A17-01: parser-cap 413s answer with the service
+          // code and limit, like service-level rejections.
+          bodyTooLarge: {
+            code: 'asset_too_large',
+            limitBytes: deps.service.limitBytes,
+            message: 'Asset is too large.',
+          },
+        },
+        bodyLimit: deps.service.limitBytes + 64 * 1024,
+      },
       async (request: FastifyRequest, reply: FastifyReply) => {
         const workspaceId = await workspaceIdOf(request);
         const boundary = multipartBoundary(request.headers['content-type']);

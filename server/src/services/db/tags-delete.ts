@@ -153,7 +153,9 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<WriteRes
         409,
         'tag_in_use',
         'The tag is still in use. Reassign its records first.',
-        { details: { recordCount: usedMarkIds.length } },
+        // DA-6 TAG-04: notes count as in-use too, so the details
+        // carry both counts instead of records alone.
+        { details: { recordCount: usedMarkIds.length, noteCount: noteRows.length } },
       );
     }
     await ctx.tx

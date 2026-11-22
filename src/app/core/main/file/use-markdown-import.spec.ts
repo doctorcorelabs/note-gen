@@ -113,6 +113,29 @@ describe("markdown import copy (IMP-02)", () => {
     expect(result.copied).toBe(2);
     expect(result.failures).toEqual(["bad.md"]);
   });
+
+  it("picked files: .MD imports as markdown and skipped files are counted (DA-6 IMP-04/05)", async () => {
+    mocks.exists.mockResolvedValue(false);
+    const result = await copyPickedMarkdownFiles(
+      [picked("Catatan.MD"), picked("lain.Md"), picked("dokumen.pdf"), picked(".hidden.md")],
+      "target",
+    );
+    expect(result.copied).toBe(2);
+    expect(result.failures).toEqual([]);
+    expect(result.skipped).toBe(2);
+  });
+
+  it("recursive copy: hidden and unsupported entries count as skipped (DA-6 IMP-05)", async () => {
+    mocks.readDir.mockResolvedValue([
+      { name: "ok.md", isDirectory: false, isFile: true, isSymlink: false },
+      { name: ".secret.md", isDirectory: false, isFile: true, isSymlink: false },
+      { name: "arsip.zip", isDirectory: false, isFile: true, isSymlink: false },
+    ]);
+    mocks.exists.mockResolvedValue(false);
+    const result = await copyMarkdownFilesRecursively("src", "target");
+    expect(result.copied).toBe(1);
+    expect(result.skipped).toBe(2);
+  });
 });
 
 // DA-4 (IMP-03) static pins: document conversion and Notion

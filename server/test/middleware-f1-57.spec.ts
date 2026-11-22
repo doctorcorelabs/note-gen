@@ -14,7 +14,8 @@
 //   when this suite runs against a tree where a real route already
 //   exists, the real route is used for the denial assertions and only
 //   the positive controls are limited to test-registered routes.
-// - The 11-route no-session allowlist from amandemen D3 is pinned as
+// - The 10-route no-session allowlist from amandemen D3 (11 before
+//   DA-6 A26-04 removed the backup-download exemption) is pinned as
 //   an exact set, with the mechanism split made explicit: 5 routes
 //   are exempt in the hook itself, 6 pre-session auth routes are
 //   exempt by route config plus the Origin preHandler.
@@ -401,7 +402,8 @@ describe('F1-57: data endpoints reject without a session [real hook, representat
   });
 });
 
-// The D3 no-session allowlist, exactly 11 routes. The mechanism split
+// The D3 no-session allowlist, exactly 10 routes (DA-6 A26-04 removed
+// the backup-download exemption). The mechanism split
 // is part of the pin: hook-exempt routes are skipped by
 // isPublicNoSessionRequest, while the six pre-session auth routes are
 // exempt by route config (requiresAuth: false) plus the Origin
@@ -416,7 +418,6 @@ const NO_SESSION_ROUTES: ReadonlyArray<{
   { method: 'GET', path: '/api/health/ready', mechanism: 'hook-exempt' },
   { method: 'GET', path: '/api/health', mechanism: 'hook-exempt' },
   { method: 'POST', path: '/api/csp-reports', mechanism: 'hook-exempt' },
-  { method: 'GET', path: '/api/backups/downloads/:downloadToken', mechanism: 'hook-exempt' },
   { method: 'POST', path: '/api/auth/setup', mechanism: 'route-config' },
   { method: 'POST', path: '/api/auth/login', mechanism: 'route-config' },
   { method: 'POST', path: '/api/auth/login/totp', mechanism: 'route-config' },
@@ -443,15 +444,15 @@ const SESSION_ROUTES_SAMPLE: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'DELETE', path: '/api/marks/trash' },
 ];
 
-describe('D3: the no-session allowlist is exactly 11 routes', () => {
-  it('contains exactly 11 routes with no duplicates', () => {
-    expect(NO_SESSION_ROUTES).toHaveLength(11);
+describe('D3: the no-session allowlist is exactly 10 routes', () => {
+  it('contains exactly 10 routes with no duplicates', () => {
+    expect(NO_SESSION_ROUTES).toHaveLength(10);
     const keys = NO_SESSION_ROUTES.map((route) => `${route.method} ${route.path}`);
-    expect(new Set(keys).size).toBe(11);
+    expect(new Set(keys).size).toBe(10);
   });
 
-  it('splits into 5 hook-exempt routes and 6 route-config routes', () => {
-    expect(NO_SESSION_ROUTES.filter((route) => route.mechanism === 'hook-exempt')).toHaveLength(5);
+  it('splits into 4 hook-exempt routes and 6 route-config routes', () => {
+    expect(NO_SESSION_ROUTES.filter((route) => route.mechanism === 'hook-exempt')).toHaveLength(4);
     expect(NO_SESSION_ROUTES.filter((route) => route.mechanism === 'route-config')).toHaveLength(6);
   });
 
@@ -460,7 +461,9 @@ describe('D3: the no-session allowlist is exactly 11 routes', () => {
     expect(isPublicNoSessionRequest('GET', '/api/health/ready')).toBe(true);
     expect(isPublicNoSessionRequest('GET', '/api/health')).toBe(true);
     expect(isPublicNoSessionRequest('POST', '/api/csp-reports')).toBe(true);
-    expect(isPublicNoSessionRequest('GET', '/api/backups/downloads/token-1')).toBe(true);
+    // DA-6 A26-04: the backup-download exemption is gone; downloads
+    // require a session like every other route.
+    expect(isPublicNoSessionRequest('GET', '/api/backups/downloads/token-1')).toBe(false);
   });
 
   it('route-config entries are NOT hook-exempt: their exemption comes from route config plus the Origin preHandler', () => {
@@ -564,12 +567,13 @@ describe('hook exemptions are method-scoped [real hook, test-only routes]', () =
     expect(errorOf(res).code).toBe('unauthenticated');
   });
 
-  it('GET /api/backups/downloads/:token passes without a session', async () => {
+  it('GET /api/backups/downloads/:token without a session answers 401 (DA-6 A26-04)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/backups/downloads/token-1' });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(401);
+    expect(errorOf(res).code).toBe('unauthenticated');
   });
 
-  it('POST /api/backups/downloads/:token without a session answers 401: the exemption is GET-only', async () => {
+  it('POST /api/backups/downloads/:token without a session answers 401', async () => {
     const res = await app.inject({ method: 'POST', url: '/api/backups/downloads/token-1' });
     expect(res.statusCode).toBe(401);
     expect(errorOf(res).code).toBe('unauthenticated');

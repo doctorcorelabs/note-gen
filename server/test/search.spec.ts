@@ -820,6 +820,39 @@ describe('keyword search', () => {
     await app.close();
   });
 
+  it('returns the url as snippet when only the url matches (DA-6 F-15-05)', async () => {
+    const counter = countingPort([
+      {
+        kind: 'record',
+        id: 7,
+        title: 'Tautan artikel',
+        content: 'ringkasan tanpa kata kunci',
+        fileName: '',
+        type: 'link',
+        tagIds: [],
+        url: 'https://example.com/gagal-jantung-akut',
+        updatedAt: 1000,
+        createdAt: 900,
+      },
+    ]);
+    const app = await searchApp(counter);
+    const res = await app.inject({
+      method: 'GET',
+      url: searchUrl({ q: 'gagal-jantung' }),
+      headers: SESSION_HEADERS,
+    });
+    const body = res.json() as SearchEnvelopeBody;
+    const hit = body.data.results.find((r) => r.kind === 'record' && r.id === 7);
+    expect(hit).toBeDefined();
+    expect(hit?.snippetField).toBe('url');
+    expect(hit?.snippet).toContain('gagal-jantung');
+    expect(hit?.snippetMatches.length).toBeGreaterThan(0);
+    for (const match of hit?.snippetMatches ?? []) {
+      expect(hit?.snippet.slice(match.start, match.end).toLowerCase()).toBe('gagal-jantung');
+    }
+    await app.close();
+  });
+
   it('centers long snippets on the first match', async () => {
     const longContent = `${'x'.repeat(500)} gagal jantung ${'y'.repeat(500)}`;
     const counter = countingPort([

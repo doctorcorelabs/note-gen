@@ -117,6 +117,9 @@ async function loadRecordItems(db: Database, workspaceId: string): Promise<FakeS
       id: row.id,
       title: row.desc ?? '',
       content: searchableContent(row.type, content),
+      // DA-6 F-15-02 (option C): Fase 1 stores no original file
+      // name for records (file records keep the asset key in url),
+      // so fileName stays empty and is not a matched field.
       fileName: '',
       type: row.type,
       tagIds,

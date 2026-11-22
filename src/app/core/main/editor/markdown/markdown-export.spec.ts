@@ -18,8 +18,12 @@ vi.mock("@/lib/check", () => ({
   checkIsTauri: () => false,
 }));
 
+const renderMocks = vi.hoisted(() => ({
+  renderMarkdownExportFragment: vi.fn(async () => ({ html: "<p>halo</p>", highlightFallback: false })),
+}));
+
 vi.mock("@/lib/markdown/export-document", () => ({
-  renderMarkdownExportFragment: async () => ({ html: "<p>halo</p>" }),
+  renderMarkdownExportFragment: renderMocks.renderMarkdownExportFragment,
 }));
 
 const exportFileMocks = vi.hoisted(() => ({
@@ -52,7 +56,12 @@ vi.mock("@/lib/platform", async (importOriginal) => {
   };
 });
 
-import { exportMarkdownFile, exportMarkdownSource } from "./markdown-export";
+import {
+  exportMarkdownFile,
+  exportMarkdownSource,
+  isDangerousExportUrl,
+  parseMarkdownToJson,
+} from "./markdown-export";
 
 type RafCallback = () => void;
 
@@ -195,5 +204,102 @@ describe("file-tree export flush guard (EXP-04)", () => {
     ).resolves.toBe(true);
     expect(order).toEqual(["flush", "read"]);
     expect(link.click).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("HTML export deadline (DA-6 EXP-01/04)", () => {
+  it("rejects with a timeout when the render never settles", async () => {
+    renderMocks.renderMarkdownExportFragment.mockImplementationOnce(
+      () => new Promise<never>(() => {}),
+    );
+    const promise = exportMarkdownSource("html", source);
+    const assertion = expect(promise).rejects.toThrow("HTML export timed out");
+    await vi.advanceTimersByTimeAsync(75000);
+    await assertion;
+  });
+});
+
+describe("sanitize scheme guard (DA-6 EXP-06)", () => {
+  it("flags javascript: and data:text/html URLs, including obfuscated ones", () => {
+    expect(isDangerousExportUrl("javascript:alert(1)")).toBe(true);
+    expect(isDangerousExportUrl("JaVaScRiPt:alert(1)")).toBe(true);
+    expect(isDangerousExportUrl("java\tscript:alert(1)")).toBe(true);
+    expect(isDangerousExportUrl("data:text/html;base64,PHNjcmlwdD4=")).toBe(true);
+  });
+
+  it("allows ordinary URLs", () => {
+    expect(isDangerousExportUrl("https://example.com/x")).toBe(false);
+    expect(isDangerousExportUrl("nested/deep-note.md")).toBe(false);
+    expect(isDangerousExportUrl("data:image/png;base64,AAAA")).toBe(false);
+  });
+});
+
+describe("JSON export single basis (DA-6 EXP-03 area 12)", () => {
+  it("parses editor nodes for tables, math, mermaid, images, and tasks", () => {
+    const markdown = [
+      "# Judul",
+      "",
+      "| A | B |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+      "",
+      "Rumus $x^2$ dan blok:",
+      "",
+      "$$",
+      "y = x + 1",
+      "$$",
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A --> B",
+      "```",
+      "",
+      "![alt](gambar.png)",
+      "",
+      "- [x] selesai",
+    ].join("\n");
+    const json = parseMarkdownToJson(markdown);
+    const types = new Set<string>();
+    const walk = (node: { type?: string; content?: unknown[] }) => {
+      if (node.type) types.add(node.type);
+      for (const child of node.content ?? []) {
+        walk(child as { type?: string; content?: unknown[] });
+      }
+    };
+    walk(json as { type?: string; content?: unknown[] });
+    expect(types.has("table")).toBe(true);
+    expect(types.has("inlineMath")).toBe(true);
+    expect(types.has("blockMath")).toBe(true);
+    expect(types.has("mermaidDiagram")).toBe(true);
+    expect(types.has("image")).toBe(true);
+    expect(types.has("taskItem")).toBe(true);
+  });
+
+  it("ignores a caller-provided json and always parses from markdown", async () => {
+    const blobs: Blob[] = [];
+    vi.stubGlobal("URL", {
+      createObjectURL: (blob: Blob) => {
+        blobs.push(blob);
+        return "blob:test";
+      },
+      revokeObjectURL: vi.fn(),
+    });
+    const link = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: () => link,
+      body: { appendChild: vi.fn() },
+      styleSheets: [],
+      baseURI: "http://localhost/",
+    });
+    await expect(
+      exportMarkdownSource("json", {
+        baseName: "catatan",
+        markdown: "# Halo",
+        json: { type: "doc", content: [] },
+      }),
+    ).resolves.toBe(true);
+    expect(blobs).toHaveLength(1);
+    const parsed = JSON.parse(await blobs[0].text()) as { content?: Array<{ type?: string }> };
+    expect(parsed.content?.[0]?.type).toBe("heading");
   });
 });

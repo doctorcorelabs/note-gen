@@ -279,6 +279,18 @@ class FakeKindSql implements KindSqlAdapter {
         this.marks.delete(op.id);
         return { affected: 1, id: op.id };
       }
+      case "marks.emptyTrash": {
+        // DA-6 F3: the kind exists since BUG-01; purge every
+        // soft-deleted mark in one step.
+        let purged = 0;
+        for (const [id, row] of [...this.marks.entries()]) {
+          if (row.deleted) {
+            this.marks.delete(id);
+            purged += 1;
+          }
+        }
+        return { affected: purged };
+      }
       case "marks.updateTags": {
         const row = this.marks.get(op.id);
         if (row === undefined || row.deleted) {
@@ -910,12 +922,20 @@ describe("KindRecordsApi tags", () => {
     expect(moved.deleted).toBe(false);
   });
 
-  it("reports empty-trash as honestly unavailable", async () => {
+  it("empties the trash through the marks.emptyTrash kind", async () => {
+    // DA-6 F3: this spec used to pin the pre-BUG-01 behavior
+    // (capability_unavailable 410) and failed every gate since.
     const { api } = makeApi();
-    await expect(api.emptyTrash()).rejects.toMatchObject({
-      wireCode: "capability_unavailable",
-      status: 410,
+    const kept = await api.createRecord(buildTextCreateBody("kept", { tagIds: [1] }));
+    const trashed = await api.createRecord(buildTextCreateBody("trashed", { tagIds: [1] }));
+    await api.softDeleteRecord(trashed.id);
+    const result = await api.emptyTrash();
+    expect(result.purged).toBe(1);
+    await expect(api.getRecord(trashed.id)).rejects.toMatchObject({
+      wireCode: "not_found",
+      status: 404,
     });
+    expect((await api.getRecord(kept.id)).id).toBe(kept.id);
   });
 
   it("delegates asset upload to the injected uploader", async () => {

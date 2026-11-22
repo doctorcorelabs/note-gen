@@ -21,7 +21,7 @@
 
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
-import { markTags, marks, tags, type Database } from '../../db/index.js';
+import { markTags, marks, notes, tags, type Database } from '../../db/index.js';
 
 export const HANDLER_KIND = 'tags.list' as const;
 
@@ -46,6 +46,14 @@ export interface TagRow {
   isPin: boolean;
   sortOrder: number;
   total: number;
+  // DA-6 TAG-04: direct usage for the delete dialog - distinct
+  // marks referencing this tag itself (membership or primary,
+  // soft-deleted included, mirroring the tags.delete in-use rule)
+  // and notes referencing this tag. `total` above stays the
+  // subtree badge count; the two definitions answer different
+  // questions and are no longer conflated.
+  directTotal: number;
+  noteCount: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,6 +100,33 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<readonly
     .select({ markId: markTags.markId, tagId: markTags.tagId })
     .from(markTags)
     .where(eq(markTags.workspaceId, ctx.workspaceId));
+  // DA-6 TAG-04: direct counts include soft-deleted marks, exactly
+  // like the tags.delete in-use rule, so all marks are read here
+  // (the live-only set above stays the badge `total` basis).
+  const allMarks = await ctx.tx
+    .select({ id: marks.id, tagId: marks.tagId })
+    .from(marks)
+    .where(eq(marks.workspaceId, ctx.workspaceId));
+  const directByTag = new Map<number, Set<number>>();
+  const addDirect = (tagId: number, markId: number): void => {
+    const members = directByTag.get(tagId) ?? new Set<number>();
+    members.add(markId);
+    directByTag.set(tagId, members);
+  };
+  for (const row of allMarks) {
+    addDirect(row.tagId, row.id);
+  }
+  for (const row of linkRows) {
+    addDirect(row.tagId, row.markId);
+  }
+  const noteRows = await ctx.tx
+    .select({ tagId: notes.tagId })
+    .from(notes)
+    .where(eq(notes.workspaceId, ctx.workspaceId));
+  const notesByTag = new Map<number, number>();
+  for (const row of noteRows) {
+    notesByTag.set(row.tagId, (notesByTag.get(row.tagId) ?? 0) + 1);
+  }
   const membersByTag = new Map<number, Set<number>>();
   const addMember = (tagId: number, markId: number): void => {
     const members = membersByTag.get(tagId) ?? new Set<number>();
@@ -125,6 +160,8 @@ export async function handle(ctx: HandlerContext, op: unknown): Promise<readonly
       isPin: tag.isPin,
       sortOrder: tag.sortOrder,
       total: counted.size,
+      directTotal: directByTag.get(tag.id)?.size ?? 0,
+      noteCount: notesByTag.get(tag.id) ?? 0,
     };
   });
 }

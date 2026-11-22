@@ -2,10 +2,17 @@
 
 import { platform } from '@/lib/platform'
 import type { JSONContent } from '@tiptap/core'
-import TaskItem from '@tiptap/extension-task-item'
 import TaskList from '@tiptap/extension-task-list'
+import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
+import { TableRow } from '@tiptap/extension-table-row'
 import { MarkdownManager } from '@tiptap/markdown'
 import { WikiMetadata } from './wiki-metadata-extension'
+import { MarkdownParagraph } from './markdown-paragraph'
+import { MarkdownListItem, MarkdownTaskItem } from './markdown-list-item'
+import { MarkdownTable, MarkdownTableCell, MarkdownTableHeader } from './markdown-table-extension'
+import { InlineMath, BlockMath } from './math-extension'
+import { MermaidDiagram } from './mermaid-extension'
 import StarterKit from '@tiptap/starter-kit'
 import { renderMarkdownExportFragment } from '@/lib/markdown/export-document'
 import { checkIsTauri } from '@/lib/check'
@@ -23,12 +30,29 @@ export type MarkdownExportFormat = 'markdown' | 'html' | 'json' | 'pdf'
 export interface MarkdownExportSource {
   baseName: string
   markdown: string | (() => string | Promise<string>)
+  // DA-6 EXP-03 (area 12): JSON export always parses from markdown
+  // with the editor-aligned extension set, so the result no longer
+  // depends on the entry point. This field is kept for caller
+  // compatibility and is ignored.
   json?: JSONContent | (() => JSONContent | Promise<JSONContent>)
   sourcePath?: string
 }
 
+export interface MarkdownExportWarning {
+  code: 'asset-not-embedded' | 'highlight-fallback' | 'styles-truncated'
+  message: string
+}
+
 export interface MarkdownExportOptions {
   onPdfRenderStart?: () => void
+  // DA-6 EXP-01/EXP-04 (area 13): caller deadline signal, forwarded
+  // to the fragment renderer so a timeout cancels background work
+  // instead of only racing it at the surface.
+  signal?: AbortSignal
+  // DA-6 EXP-05 (area 12): non-blocking export degradations (image
+  // not embedded, highlight fallback, styles truncated) are reported
+  // here so callers can surface them after a successful export.
+  onWarnings?: (warnings: MarkdownExportWarning[]) => void
   /** Explicit export locale. When omitted, the active UI locale is used (D-6). */
   locale?: string
   // DA-2 (EXP-04): flush pending editor saves before a file-tree
@@ -43,6 +67,10 @@ const PRINT_FRAME_CLEANUP_DELAY_MS = 60000
 const PRINT_EXPORT_STORE = 'print-export.json'
 const PRINT_WINDOW_START_TIMEOUT_MS = 15000
 const DIRECT_PDF_EXPORT_TIMEOUT_MS = 75000
+const HTML_EXPORT_TIMEOUT_MS = 75000
+const EXPORT_IMAGE_EMBED_LIMIT_BYTES = 2 * 1024 * 1024
+const EXPORT_IMAGE_EMBED_TOTAL_LIMIT_BYTES = 10 * 1024 * 1024
+const EXPORT_STYLES_BYTE_LIMIT = 10 * 1024 * 1024
 const ANIMATION_FRAME_TIMEOUT_MS = 250
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g
 
@@ -227,7 +255,10 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(link)
   link.click()
   link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  // DA-6 EXP-07: revoking on a 0 ms timer can cancel the download in
+  // some browsers before it starts; keep the object URL alive for
+  // the same grace period as the print frame cleanup.
+  window.setTimeout(() => URL.revokeObjectURL(url), PRINT_FRAME_CLEANUP_DELAY_MS)
 }
 
 async function saveTextExport(
@@ -260,12 +291,32 @@ function getMarkdownManager() {
   if (!markdownManager) {
     markdownManager = new MarkdownManager({
       marked: createIsolatedMarkdownLexer() as unknown as NonNullable<ConstructorParameters<typeof MarkdownManager>[0]>['marked'],
+      // DA-6 EXP-03 (area 12): align with the editor schema so JSON
+      // export keeps tables, math, mermaid, images, and task items
+      // instead of dropping or reshaping them on the parse path.
       extensions: [
         GitHubAlertBlockquote,
-        StarterKit.configure({ blockquote: false, orderedList: false }),
+        StarterKit.configure({
+          blockquote: false,
+          orderedList: false,
+          listItem: false,
+          paragraph: false,
+          link: false,
+        }),
+        MarkdownParagraph,
+        MarkdownListItem,
         MarkdownOrderedList,
         TaskList,
-        TaskItem.configure({ nested: true }),
+        MarkdownTaskItem.configure({ nested: true }),
+        Link,
+        Image,
+        MarkdownTable,
+        TableRow,
+        MarkdownTableHeader,
+        MarkdownTableCell,
+        InlineMath,
+        BlockMath,
+        MermaidDiagram,
         WikiMetadata,
       ],
       indentation: {
@@ -290,16 +341,35 @@ async function getValue<T>(value: T | (() => T | Promise<T>)) {
   return value
 }
 
+// DA-6 EXP-06: scheme check for URL attributes in exported HTML.
+// Control characters and whitespace are stripped first because URL
+// parsers ignore them before reading the scheme, so an obfuscated
+// "java\tscript:" must still match.
+export function isDangerousExportUrl(value: string) {
+  const compacted = value.replace(/[\u0000-\u0020\u007F]/g, '').toLowerCase()
+  return compacted.startsWith('javascript:') || compacted.startsWith('data:text/html')
+}
+
 function sanitizeExportHtml(html: string) {
   const template = document.createElement('template')
   template.innerHTML = html
+  // DA-6 EXP-06: same element list as the advanced export path in
+  // export-document.ts. src/srcset/poster are NOT stripped here
+  // (unlike advanced) because the main path resolves images after
+  // sanitizing; only dangerous URL schemes are removed.
   template.content
-    .querySelectorAll('script, style, link, iframe, object, embed')
+    .querySelectorAll('script, style, link, iframe, object, embed, audio, video, source, base, meta, form')
     .forEach((element) => element.remove())
 
   template.content.querySelectorAll<Element>('*').forEach((element) => {
     Array.from(element.attributes).forEach((attribute) => {
-      if (attribute.name.toLowerCase().startsWith('on')) {
+      const name = attribute.name.toLowerCase()
+      if (name.startsWith('on')) {
+        element.removeAttribute(attribute.name)
+      } else if (
+        (name === 'href' || name === 'src' || name === 'xlink:href')
+        && isDangerousExportUrl(attribute.value)
+      ) {
         element.removeAttribute(attribute.name)
       }
     })
@@ -322,39 +392,68 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
   const template = document.createElement('template')
   template.innerHTML = html
   const images = Array.from(template.content.querySelectorAll('img'))
+  const warnings: MarkdownExportWarning[] = []
+  let embeddedTotalBytes = 0
 
-  await Promise.all(images.map(async (image) => {
+  // DA-6 EXP-03 (area 13) + EXP-05 (area 12): embed image bytes as a
+  // data URL with per-image and total size limits so the exported
+  // HTML is self-contained; on failure keep the URL and record a
+  // warning instead of degrading silently.
+  const embedImage = async (image: HTMLImageElement, url: string, fallbackSrc: string) => {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(EXPORT_ASSET_FETCH_TIMEOUT_MS),
+      })
+      if (!response.ok) {
+        throw new Error('Export asset fetch failed')
+      }
+      const blob = await response.blob()
+      if (
+        blob.size > EXPORT_IMAGE_EMBED_LIMIT_BYTES
+        || embeddedTotalBytes + blob.size > EXPORT_IMAGE_EMBED_TOTAL_LIMIT_BYTES
+      ) {
+        image.setAttribute('src', fallbackSrc)
+        warnings.push({
+          code: 'asset-not-embedded',
+          message: 'An image was too large to embed in the exported file',
+        })
+        return
+      }
+      embeddedTotalBytes += blob.size
+      image.setAttribute('src', await blobToDataUrl(blob))
+    } catch {
+      image.setAttribute('src', fallbackSrc)
+      warnings.push({
+        code: 'asset-not-embedded',
+        message: 'An image could not be embedded in the exported file',
+      })
+    }
+  }
+
+  for (const image of images) {
     const src = image.getAttribute('src')
     if (!src || /^(?:data:|blob:)/i.test(src)) {
-      return
+      continue
     }
 
     if (sourcePath && shouldTransformImageSrcToWorkspaceAsset(src)) {
       const fullRelativePath = resolveImagePathFromMarkdown(sourcePath, src)
-      image.setAttribute(
-        'src',
-        await withTimeout(
-          convertImageByWorkspace(fullRelativePath),
-          EXPORT_ASSET_FETCH_TIMEOUT_MS,
-          src,
-        ),
+      const resolvedSrc = await withTimeout(
+        convertImageByWorkspace(fullRelativePath),
+        EXPORT_ASSET_FETCH_TIMEOUT_MS,
+        src,
       )
-      return
+      // In web mode resolvedSrc is an authenticated same-origin media
+      // URL; fetch its bytes and embed them. On desktop the asset
+      // URL fetch may fail, in which case the URL is kept as before.
+      await embedImage(image, resolvedSrc, resolvedSrc)
+      continue
     }
 
-    try {
-      const response = await fetch(new URL(src, document.baseURI), {
-        signal: AbortSignal.timeout(EXPORT_ASSET_FETCH_TIMEOUT_MS),
-      })
-      if (response.ok) {
-        image.setAttribute('src', await blobToDataUrl(await response.blob()))
-      }
-    } catch {
-      // Keep remote images when CORS or the network prevents embedding them.
-    }
-  }))
+    await embedImage(image, new URL(src, document.baseURI).href, src)
+  }
 
-  return template.innerHTML
+  return { html: template.innerHTML, warnings }
 }
 
 function waitForAnimationFrame() {
@@ -405,9 +504,26 @@ async function waitForDocumentResources(frameDocument: Document) {
   }
 }
 
+export async function renderMarkdownToHtmlDetailed(
+  markdown: string,
+  sourcePath?: string,
+  signal?: AbortSignal,
+) {
+  const { html, highlightFallback } = await renderMarkdownExportFragment(markdown, { signal })
+  const resolved = await resolveMarkdownImageSources(sanitizeExportHtml(html), sourcePath)
+  const warnings = [...resolved.warnings]
+  // DA-6 EXP-05 (area 12): highlightFallback used to be discarded.
+  if (highlightFallback) {
+    warnings.push({
+      code: 'highlight-fallback',
+      message: 'Code highlighting fell back to plain text in the exported file',
+    })
+  }
+  return { html: resolved.html, warnings }
+}
+
 export async function renderMarkdownToHtml(markdown: string, sourcePath?: string) {
-  const { html } = await renderMarkdownExportFragment(markdown)
-  return await resolveMarkdownImageSources(sanitizeExportHtml(html), sourcePath)
+  return (await renderMarkdownToHtmlDetailed(markdown, sourcePath)).html
 }
 
 function blobToDataUrl(blob: Blob) {
@@ -478,25 +594,39 @@ async function inlineCssAssetUrls(
   return output + css.slice(offset)
 }
 
+// DA-6 EXP-05 (area 13): cache inlined CSS assets across exports
+// (fonts were re-downloaded on every export) and cap the total
+// style bytes; beyond the cap the base export styles still apply
+// and the caller is warned instead of silently ballooning the file.
+const exportStyleAssetCache = new Map<string, Promise<string>>()
+
 async function collectExportStyles() {
-  const assetCache = new Map<string, Promise<string>>()
   const styleChunks: string[] = []
+  let totalBytes = 0
+  let truncated = false
 
   for (const styleSheet of Array.from(document.styleSheets)) {
     try {
       const css = Array.from(styleSheet.cssRules).map((rule) => rule.cssText).join('\n')
-      styleChunks.push(await inlineCssAssetUrls(
+      const inlined = await inlineCssAssetUrls(
         css,
         styleSheet.href || document.baseURI,
-        assetCache,
-      ))
+        exportStyleAssetCache,
+      )
+      const bytes = new TextEncoder().encode(inlined).byteLength
+      if (totalBytes + bytes > EXPORT_STYLES_BYTE_LIMIT) {
+        truncated = true
+        continue
+      }
+      totalBytes += bytes
+      styleChunks.push(inlined)
     } catch {
       // Cross-origin stylesheets cannot expose cssRules. Streamdown's local styles remain available.
     }
   }
 
   styleChunks.push(EXPORT_DOCUMENT_STYLES)
-  return styleChunks.join('\n')
+  return { styles: styleChunks.join('\n'), truncated }
 }
 
 function getExportDocumentLang(explicitLocale?: string | null) {
@@ -527,12 +657,23 @@ ${body}
 export async function buildMarkdownExportDocument(source: MarkdownExportSource, options?: MarkdownExportOptions) {
   const fileName = getMarkdownExportBaseName(source.baseName)
   const markdown = await getValue(source.markdown)
-  const [body, styles] = await Promise.all([
-    renderMarkdownToHtml(markdown, source.sourcePath),
+  const [rendered, collected] = await Promise.all([
+    renderMarkdownToHtmlDetailed(markdown, source.sourcePath, options?.signal),
     collectExportStyles(),
   ])
 
-  return buildHtmlDocument(fileName, body, styles, getExportDocumentLang(options?.locale))
+  const warnings = [...rendered.warnings]
+  if (collected.truncated) {
+    warnings.push({
+      code: 'styles-truncated',
+      message: 'Some application styles were omitted from the exported file because of the size limit',
+    })
+  }
+  if (warnings.length > 0) {
+    options?.onWarnings?.(warnings)
+  }
+
+  return buildHtmlDocument(fileName, rendered.html, collected.styles, getExportDocumentLang(options?.locale))
 }
 
 function createPrintFrame(html: string) {
@@ -674,16 +815,23 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
   // (UTANG-UJI-07). The deadline starts before the render-start
   // notification and stays armed until just before print(), so
   // every await in between is covered (UTANG-UJI-07 putaran 2).
+  // DA-6 EXP-04 (area 13): the deadline now also aborts the
+  // background render via the signal instead of only rejecting the
+  // race at the surface.
+  const controller = new AbortController()
   let deadlineTimer: number | undefined
   const deadline = new Promise<never>((_resolve, reject) => {
     deadlineTimer = window.setTimeout(
-      () => reject(new Error('PDF export timed out')),
+      () => {
+        controller.abort()
+        reject(new Error('PDF export timed out'))
+      },
       DIRECT_PDF_EXPORT_TIMEOUT_MS,
     )
   })
   await Promise.race([notifyPdfRenderStart(options), deadline])
   const html = await Promise.race([
-    buildMarkdownExportDocument(source, options),
+    buildMarkdownExportDocument(source, { ...options, signal: controller.signal }),
     deadline,
   ])
 
@@ -736,19 +884,40 @@ export async function exportMarkdownSource(
   }
 
   if (format === 'html') {
-    return await saveTextExport(
-      await buildMarkdownExportDocument(source, options),
-      `${fileName}.html`,
-      'html',
-      'text/html',
-      'HTML Files',
-    )
+    // DA-6 EXP-01 (area 13): the HTML branch gets the same overall
+    // deadline discipline as PDF; the abort signal cancels the
+    // background render and style collection work.
+    const controller = new AbortController()
+    let deadlineTimer: number | undefined
+    const deadline = new Promise<never>((_resolve, reject) => {
+      deadlineTimer = window.setTimeout(() => {
+        controller.abort()
+        reject(new Error('HTML export timed out'))
+      }, HTML_EXPORT_TIMEOUT_MS)
+    })
+    try {
+      const html = await Promise.race([
+        buildMarkdownExportDocument(source, { ...options, signal: controller.signal }),
+        deadline,
+      ])
+      return await saveTextExport(
+        html,
+        `${fileName}.html`,
+        'html',
+        'text/html',
+        'HTML Files',
+      )
+    } finally {
+      window.clearTimeout(deadlineTimer)
+    }
   }
 
   if (format === 'json') {
-    const jsonContent = source.json
-      ? await getValue(source.json)
-      : getMarkdownManager().parse(await getValue(source.markdown))
+    // DA-6 EXP-03 (area 12): one basis for every entry point - always
+    // parse from markdown with the editor-aligned extension set.
+    // Round-tripping markdown is lossy for attributes that never
+    // serialize to markdown; that bound is pinned in the spec.
+    const jsonContent = getMarkdownManager().parse(await getValue(source.markdown))
 
     return await saveTextExport(
       JSON.stringify(jsonContent, null, 2),

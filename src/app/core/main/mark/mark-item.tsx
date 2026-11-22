@@ -906,15 +906,30 @@ export const MarkItem = React.memo(({
     e?.stopPropagation()
     if (isMultiSelectMode && selectedMarkIds.size > 0) {
       // 多选转移 - 只处理选中的记录
+      // DA-6 T-02-04: isolate per-item failures so one bad record
+      // no longer stops the rest silently; report the summary.
       const selectedMarks = Array.from(selectedMarkIds)
+      let movedCount = 0
+      let failedCount = 0
       for (const markId of selectedMarks) {
         // 获取完整的mark对象并更新tagId
         const existingMark = marks.find((m: Mark) => m.id === markId)
-        if (existingMark) {
+        if (!existingMark) continue
+        try {
           await updateMark({ ...existingMark, tagId })
+          movedCount += 1
+        } catch (error) {
+          failedCount += 1
+          console.error(`Transfer failed for record ${markId}:`, error)
         }
       }
       clearSelection()
+      if (failedCount > 0) {
+        toast({
+          title: t('record.mark.transferPartial', { moved: movedCount, failed: failedCount }),
+          variant: 'destructive',
+        })
+      }
     } else {
       // 单个转移
       await updateMark({ ...mark, tagId })

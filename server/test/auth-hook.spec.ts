@@ -82,10 +82,10 @@ describe('public path list', () => {
     expect(PUBLIC_HEALTH_PATHS).toContain('/api/health');
   });
 
-  it('exempts CSP reports only for POST and download tokens only for single-segment GET', () => {
+  it('exempts CSP reports only for POST; backup downloads are not exempt (DA-6 A26-04)', () => {
     expect(isPublicNoSessionRequest('POST', '/api/csp-reports')).toBe(true);
     expect(isPublicNoSessionRequest('GET', '/api/csp-reports')).toBe(false);
-    expect(isPublicNoSessionRequest('GET', '/api/backups/downloads/token-1')).toBe(true);
+    expect(isPublicNoSessionRequest('GET', '/api/backups/downloads/token-1')).toBe(false);
     expect(isPublicNoSessionRequest('GET', '/api/backups/downloads/')).toBe(false);
     expect(isPublicNoSessionRequest('GET', '/api/backups/downloads/a/b')).toBe(false);
     expect(isPublicNoSessionRequest('POST', '/api/backups/downloads/token-1')).toBe(false);
@@ -429,11 +429,11 @@ describe('no-session exemptions as wiring', () => {
     await app.close();
   });
 
-  it('lets a test-only backup download route pass without a session', async () => {
+  it('requires a session for a test-only backup download route (DA-6 A26-04)', async () => {
     const app = await buildApp({ config: testConfig(), pool: null, version: '0.39.2-fork.1' });
     app.get('/api/backups/downloads/:token', async () => successEnvelope({ ok: true }));
     const res = await app.inject({ method: 'GET', url: '/api/backups/downloads/token-1' });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(401);
     await app.close();
   });
 });

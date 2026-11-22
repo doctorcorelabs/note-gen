@@ -74,6 +74,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  access,
   constants as fsConstants,
   cp,
   link,
@@ -194,6 +195,13 @@ export interface WorkspaceTrashDeps {
   // events are published. A throwing callback never fails the
   // operation that emitted the event.
   onEvent?: (event: TrashEvent) => void;
+  // DA-6 F4: warn sink for per-item move failures that the batch
+  // endpoint reports as rejected move_failed inside a 200. Without
+  // it those failures were visible only as a client toast and the
+  // server log stayed clean. Receives the path and the cause
+  // message, never file content. A throwing sink never fails the
+  // operation.
+  onWarn?: (message: string, details: { path: string; cause: string }) => void;
 }
 
 export interface MoveToTrashOptions {
@@ -913,6 +921,16 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
         } else if (error instanceof ApiError && error.code === 'service_unavailable') {
           throw error;
         } else {
+          // DA-6 F4: log the cause server-side; the wire answer
+          // stays the generic move_failed reason.
+          try {
+            deps.onWarn?.('workspace trash move failed', {
+              path: validated.path,
+              cause: error instanceof Error ? error.message : String(error),
+            });
+          } catch {
+            // Best effort: logging never fails the operation.
+          }
           rejected.push({ path: validated.path, reason: 'move_failed' });
         }
       }
@@ -1124,7 +1142,35 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
     return { purged, failed: failures.length, failures, purgedAt: new Date().toISOString() };
   }
 
-  return { moveToTrash, moveBatch, list, restore, purge, purgeAll, maxBatchPaths };
+
+  // DA-6 F4: boot-time writability probe for the trash root. A
+  // trash root that cannot be created or written (the live
+  // UTANG-UJI-10 root cause) now warns at startup instead of
+  // failing the first delete. The probe checks write access on
+  // the root, or on the nearest existing ancestor when the root
+  // does not exist yet, so listing an empty trash still creates
+  // nothing. Never throws.
+  async function probeTrashRoot(): Promise<boolean> {
+    try {
+      const rootReal = await requireRoot();
+      let candidate = trashRootFor(rootReal);
+      for (;;) {
+        try {
+          await access(candidate, fsConstants.W_OK);
+          return true;
+        } catch (cause) {
+          if ((cause as { code?: string }).code !== 'ENOENT') return false;
+          const parent = dirname(candidate);
+          if (parent === candidate) return false;
+          candidate = parent;
+        }
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return { moveToTrash, moveBatch, list, restore, purge, purgeAll, maxBatchPaths, probeTrashRoot };
 }
 
 export type WorkspaceTrash = ReturnType<typeof createWorkspaceTrash>;

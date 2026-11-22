@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dayjs from "dayjs"
 import {
   CheckCircle2,
@@ -78,6 +78,38 @@ import { TipTapEditor } from "@/app/core/main/editor/markdown/tiptap-editor"
 import { isLargeMarkdownDocument } from "@/app/core/main/editor/markdown/large-markdown"
 import { RecordTagEditor } from './record-tag-editor'
 import { recordTagIds } from '@/lib/record-tags'
+import emitter from "@/lib/emitter"
+import { EmitterRecordEvents } from "@/config/emitters"
+
+// DA-6 T-02-05: debounce per-keystroke panel writes. Local state
+// updates immediately; the guarded store write is scheduled and
+// flushed on blur or unmount, so typing no longer amplifies into
+// one write (and one version race) per keystroke.
+function useDebouncedPanelWrite(delayMs = 400) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingRef = useRef<(() => Promise<void>) | null>(null)
+  const flush = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    const pending = pendingRef.current
+    pendingRef.current = null
+    if (pending) void pending()
+  }, [])
+  const schedule = useCallback((write: () => Promise<void>) => {
+    pendingRef.current = write
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      const pending = pendingRef.current
+      pendingRef.current = null
+      if (pending) void pending()
+    }, delayMs)
+  }, [delayMs])
+  useEffect(() => flush, [flush])
+  return { schedule, flush }
+}
 
 const getMarkTitle = (mark: Mark, fallback: string) => {
   const title = mark.desc?.trim() || mark.content?.trim() || mark.url?.trim()
@@ -422,11 +454,12 @@ function MarkDetailToolbar({
     }, panelActionDeps)
   }, [fetchTags, getCurrentTag, mark, markTagIds, panelActionDeps, refreshMarks, updateMark])
 
-  const handleTitleChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const { schedule: scheduleTitleWrite, flush: flushTitleWrite } = useDebouncedPanelWrite()
+  const handleTitleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const nextTitle = event.target.value
     setTitleValue(nextTitle)
 
-    await runPanelAction(async () => {
+    scheduleTitleWrite(() => runPanelAction(async () => {
       if (mark.type === 'todo') {
         const todoData = parseTodoMarkContent(mark)
         await updateMark({
@@ -453,8 +486,8 @@ function MarkDetailToolbar({
         ...mark,
         desc: nextTitle,
       })
-    }, panelActionDeps)
-  }, [mark, panelActionDeps, updateMark])
+    }, panelActionDeps))
+  }, [mark, panelActionDeps, scheduleTitleWrite, updateMark])
 
   const handleTodoMetaChange = useCallback(async (nextTodoData: TodoData) => {
     if (mark.type !== 'todo') {
@@ -549,6 +582,9 @@ function MarkDetailToolbar({
   const handleRestore = useCallback(async () => {
     await runPanelAction(async () => {
       await restoreMark(mark.id)
+      // DA-6 A1-01: restore/delete bypass the mark store, so emit
+      // here for the web inbox listener.
+      emitter.emit(EmitterRecordEvents.refreshMarks)
       await fetchAllTrashMarks()
       await removeTab(getRecordTabPath(mark.id))
       if (nextMark) {
@@ -586,6 +622,8 @@ function MarkDetailToolbar({
       deleted = true
     }, panelActionDeps, () => setDestructiveAction(null))
     if (!deleted) return
+    // DA-6 A1-01: see handleRestore.
+    emitter.emit(EmitterRecordEvents.refreshMarks)
 
     await removeTab(getRecordTabPath(mark.id))
 
@@ -740,6 +778,7 @@ function MarkDetailToolbar({
                 <input
                   value={titleValue}
                   onChange={(event) => void handleTitleChange(event)}
+                  onBlur={flushTitleWrite}
                   disabled={isTrashMark}
                   aria-label={fallbackTitle}
                   className="h-5 w-full min-w-0 bg-transparent p-0 text-xs font-normal leading-5 text-muted-foreground outline-none placeholder:text-muted-foreground/40 focus:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
@@ -832,9 +871,10 @@ function TodoDetailEditor({ mark, isActive }: { mark: Mark; isActive: boolean })
     setTodoData(parseTodoMarkContent(mark))
   }, [mark])
 
-  const persistTodoData = useCallback(async (nextTodoData: TodoData) => {
+  const { schedule: scheduleTodoWrite } = useDebouncedPanelWrite()
+  const persistTodoData = useCallback((nextTodoData: TodoData) => {
     setTodoData(nextTodoData)
-    await runPanelAction(async () => {
+    scheduleTodoWrite(() => runPanelAction(async () => {
       await updateMark({
         ...mark,
         desc: nextTodoData.title.trim(),
@@ -842,8 +882,8 @@ function TodoDetailEditor({ mark, isActive }: { mark: Mark; isActive: boolean })
       })
       await fetchTags()
       getCurrentTag()
-    }, panelActionDeps)
-  }, [fetchTags, getCurrentTag, mark, panelActionDeps, updateMark])
+    }, panelActionDeps))
+  }, [fetchTags, getCurrentTag, mark, panelActionDeps, scheduleTodoWrite, updateMark])
 
   const handleDescriptionChange = useCallback((description: string) => {
     void persistTodoData({ ...todoData, description })
@@ -918,9 +958,10 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
     setDetailImagePreviewSrc(isHttpUrl(mark.url) ? mark.url : '')
   }, [mark.url])
 
-  const handleContentChange = useCallback(async (nextContent: string) => {
+  const { schedule: scheduleContentWrite } = useDebouncedPanelWrite()
+  const handleContentChange = useCallback((nextContent: string) => {
     setValue(nextContent)
-    await runPanelAction(async () => {
+    scheduleContentWrite(() => runPanelAction(async () => {
       await updateMark({
         ...mark,
         content: nextContent,
@@ -930,8 +971,8 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
             ? nextContent.trim().slice(0, 100)
             : mark.desc,
       })
-    }, panelActionDeps)
-  }, [mark, panelActionDeps, updateMark])
+    }, panelActionDeps))
+  }, [mark, panelActionDeps, scheduleContentWrite, updateMark])
 
   const handleRecognizeImage = useCallback(async () => {
     if (mark.type !== 'image' && mark.type !== 'scan') {

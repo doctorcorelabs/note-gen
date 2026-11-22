@@ -79,7 +79,20 @@ export async function registerWorkspaceTrashRoutes(
   app: FastifyInstance,
   deps: WorkspaceTrashRouteDeps,
 ): Promise<void> {
-  const trash = createWorkspaceTrash(deps);
+  const trash = createWorkspaceTrash({
+    ...deps,
+    // DA-6 F4: surface per-item move failures in the server log.
+    onWarn: deps.onWarn ?? ((message, details) => {
+      app.log.warn(details, message);
+    }),
+  });
+  // DA-6 F4: warn at boot when the trash root is not writable
+  // instead of failing the first delete (UTANG-UJI-10 lesson).
+  void trash.probeTrashRoot().then((writable) => {
+    if (!writable) {
+      app.log.warn('workspace trash root is not writable; deletes to trash will fail');
+    }
+  });
 
   // DELETE /api/workspace/file?path=<relatif>: move one file to
   // trash. A folder at the path answers 409 wrong_kind; a repeat

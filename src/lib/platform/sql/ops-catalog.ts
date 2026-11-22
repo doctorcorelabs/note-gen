@@ -220,6 +220,12 @@ export interface SqlTagRow {
   isPin: boolean;
   sortOrder: number;
   total?: number;
+  // DA-6 TAG-04: direct usage counts set by tags.list only -
+  // distinct marks referencing the tag itself (soft-deleted
+  // included) and notes referencing it, mirroring the
+  // tags.delete in-use rule for the delete dialog.
+  directTotal?: number;
+  noteCount?: number;
 }
 
 // ---------------------------------------------------------------------------

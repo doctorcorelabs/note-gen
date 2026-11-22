@@ -39,7 +39,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildEmergencyEnvelope, HEALTH_PATHS } from '../routes/health.js';
-import { errorEnvelope, toErrorEnvelope } from './envelope.js';
+import { errorEnvelope, toErrorEnvelope, type BodyTooLargeMapping } from './envelope.js';
 
 export interface ErrorHandlingDeps {
   version: string;
@@ -139,6 +139,11 @@ export function registerErrorHandling(app: FastifyInstance, deps: ErrorHandlingD
   });
 
   app.setErrorHandler((error, request, reply) => {
+    // DA-6 A17-01: routes may declare a bodyTooLarge mapping in
+    // their route config (assets, workspace media).
+    const bodyTooLarge = (
+      request.routeOptions?.config as { bodyTooLarge?: BodyTooLargeMapping } | undefined
+    )?.bodyTooLarge;
     if (HEALTH_PATHS.includes(requestPath(request))) {
       const { statusCode, envelope } = toErrorEnvelope(error, request.id);
       if (statusCode === 401 || statusCode === 403) {
@@ -162,7 +167,7 @@ export function registerErrorHandling(app: FastifyInstance, deps: ErrorHandlingD
       }
       return;
     }
-    const { statusCode, envelope } = toErrorEnvelope(error, request.id);
+    const { statusCode, envelope } = toErrorEnvelope(error, request.id, bodyTooLarge);
     if (statusCode >= 500) {
       request.log.error({ code: envelope.error.code, statusCode }, 'unhandled error');
     } else {

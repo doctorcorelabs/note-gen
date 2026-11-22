@@ -1379,7 +1379,7 @@
           "sequence": "sequenceDiagram\n    participant Alice\n    participant Bob\n    Alice->>Bob: 你好\n    Bob-->>Alice: 回复",
           "classDiagram": "classDiagram\n    Animal <|-- Duck\n    Animal <|-- Fish\n    Animal : +int age\n    Animal : +String gender",
           "stateDiagram": "stateDiagram-v2\n    [*] --> Active\n    Active --> [*]",
-          "er": "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    CUSTOMER ||--o{ DELIVERY-ADDRESS : uses",
+          "er": "erDiagram\n    CUSTOMER ||--o'{' ORDER : places\n    CUSTOMER ||--o'{' DELIVERY-ADDRESS : uses",
           "gantt": "gantt\n    title 项目计划\n    dateFormat YYYY-MM-DD\n    section 第一阶段\n    任务1 :a1, 2024-01-01, 30d\n    section 第二阶段\n    任务2 :after a1, 20d",
           "pie": "pie title 资源分配\n    \"CPU\" : 45\n    \"内存\" : 30\n    \"存储\" : 25",
           "journey": "journey\n    title 我的日常工作\n    section 上午\n    通勤 : 7:00, 5\n    工作 : 9:00, 8"
@@ -4373,6 +4373,7 @@
       "saveDestination": "新记录保存到 {name}",
       "retry": "重试",
       "deleteTagHelp": "删除标签“{name}”？记录不会删除，子标签仍保留在原有路径下。",
+      "reassignLabel": "Move records to",
       "underParent": "在“{name}”下创建或编辑子标签。",
       "rootTagHelp": "创建顶层标签，也可以使用 / 创建多级路径。",
       "tagName": "标签名称",
@@ -4484,6 +4485,7 @@
     },
     "mark": {
       "empty": "暂无记录",
+      "transferPartial": "Moved {moved} record(s), {failed} failed",
       "conflict": {
         "title": "保存冲突",
         "description": "该记录已在其他位置更改，您的修改未保存。重新加载以查看最新版本。",
@@ -4950,6 +4952,7 @@
           "tagNameTooLong": "标签名称最多 100 个字符。",
           "tagNameInvalid": "标签名称不能包含控制字符。",
           "deleteTagAffected": "{count} 条记录正在使用此标签。",
+          "deleteTagAffectedDirect": "{records} record(s) and {notes} note(s) use this tag directly.",
           "deleteUnavailable": "标签删除暂不支持。"
         }
       }
@@ -6586,6 +6589,11 @@
         "convertSuccessDesc": "已生成 {count} 个 Markdown 文件",
         "convertPartialDesc": "成功 {success} 个，失败 {failed} 个",
         "importPartialDesc": "成功 {success} 个，失败 {failed} 个",
+        "importSkippedDesc": "Successfully imported {count} files, {skipped} skipped",
+        "importNoneDesc": "No Markdown or image files were found to import",
+        "dropUnsupportedDesc": "Skipped unsupported file(s): {names}. Only Markdown and image files can be dropped here.",
+        "dropFolderUnsupported": "Folders cannot be dropped here. Use Import to add a folder.",
+        "dropFailedDesc": "Could not import: {names}",
         "convertError": "导入失败",
         "importNotion": "导入 Notion（.zip）",
         "importing": "正在导入...",
@@ -6858,6 +6866,7 @@
       "pdfSaveHint": "请在系统打印窗口中选择“另存为 PDF”。",
       "pdfPrintWindowOpened": "已打开 PDF 打印窗口",
       "exportSuccess": "导出成功",
+      "exportWarnings": "Exported with {count} warning(s): some content was simplified.",
       "exportFailed": "导出失败",
       "exportDialogTitle": "导出",
       "pdfPageCreateFailed": "无法创建 PDF 打印页面",
@@ -7418,7 +7427,7 @@
         "sequence": "sequenceDiagram\n    participant Alice\n    participant Bob\n    Alice->>Bob: 你好\n    Bob-->>Alice: 回复",
         "classDiagram": "classDiagram\n    Animal <|-- Duck\n    Animal <|-- Fish\n    Animal : +int age\n    Animal : +String gender",
         "stateDiagram": "stateDiagram-v2\n    [*] --> Active\n    Active --> [*]",
-        "er": "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    CUSTOMER ||--o{ DELIVERY-ADDRESS : uses",
+        "er": "erDiagram\n    CUSTOMER ||--o'{' ORDER : places\n    CUSTOMER ||--o'{' DELIVERY-ADDRESS : uses",
         "gantt": "gantt\n    title 项目计划\n    dateFormat YYYY-MM-DD\n    section 第一阶段\n    任务1 :a1, 2024-01-01, 30d\n    section 第二阶段\n    任务2 :after a1, 20d",
         "pie": "pie title 资源分配\n    \"CPU\" : 45\n    \"内存\" : 30\n    \"存储\" : 25",
         "journey": "journey\n    title 我的日常工作\n    section 上午\n    通勤 : 7:00, 5\n    工作 : 9:00, 8"

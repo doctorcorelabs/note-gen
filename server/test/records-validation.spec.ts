@@ -313,6 +313,16 @@ const BASE_QUERY: ListQuery = {
 };
 
 describe('scanList', () => {
+  it('matches q against the record url (DA-6 F-15-01)', () => {
+    const rows = [
+      scanRow({ id: 1, type: 'link', desc: 'Artikel', url: 'https://example.com/gagal-jantung' }),
+      scanRow({ id: 2, type: 'text', content: 'tidak terkait' }),
+      scanRow({ id: 3, type: 'todo', content: JSON.stringify({ title: 'Baca', description: 'nanti' }), url: 'https://example.com/gagal-jantung' }),
+    ];
+    const page = scanList(rows, { ...BASE_QUERY, q: 'gagal-jantung' }, new Map([[1, 'Idea']]));
+    expect(page.items.map((item) => item.id).sort()).toEqual([1, 3]);
+  });
+
   it('sorts created_desc with id descending as the tiebreak', () => {
     const rows = [
       scanRow({ id: 1, createdAt: 1000 }),

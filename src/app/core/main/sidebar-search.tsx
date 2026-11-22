@@ -50,25 +50,38 @@ function searchTypeOf(result: KeywordSearchResult): SearchType {
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  if (!normalizedQuery || !text) return <>{text}</>
+  // DA-6 F-15-08: highlight per term, matching the server AND
+  // semantics; a whole-phrase search missed titles where the
+  // terms are spread apart.
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0 || !text) return <>{text}</>
+
+  const normalizedText = text.toLocaleLowerCase()
+  const ranges: Array<{ start: number; end: number }> = []
+  for (const term of terms) {
+    let from = 0
+    for (;;) {
+      const at = normalizedText.indexOf(term, from)
+      if (at === -1) break
+      ranges.push({ start: at, end: at + term.length })
+      from = at + term.length
+    }
+  }
+  if (ranges.length === 0) return <>{text}</>
+  ranges.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start))
 
   const parts: React.ReactNode[] = []
-  const normalizedText = text.toLocaleLowerCase()
   let cursor = 0
-  let matchIndex = normalizedText.indexOf(normalizedQuery)
-
-  while (matchIndex !== -1) {
-    if (matchIndex > cursor) parts.push(text.slice(cursor, matchIndex))
+  for (const range of ranges) {
+    if (range.start < cursor) continue
+    if (range.start > cursor) parts.push(text.slice(cursor, range.start))
     parts.push(
-      <mark key={`${matchIndex}-${cursor}`} className="rounded bg-primary/15 px-0.5 text-foreground">
-        {text.slice(matchIndex, matchIndex + normalizedQuery.length)}
+      <mark key={`${range.start}-${cursor}`} className="rounded bg-primary/15 px-0.5 text-foreground">
+        {text.slice(range.start, range.end)}
       </mark>
     )
-    cursor = matchIndex + normalizedQuery.length
-    matchIndex = normalizedText.indexOf(normalizedQuery, cursor)
+    cursor = range.end
   }
-
   if (cursor < text.length) parts.push(text.slice(cursor))
   return <>{parts}</>
 }

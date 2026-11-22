@@ -62,6 +62,15 @@ async function getAvailableCopyPath(targetDir: string, fileName: string) {
 export interface MarkdownCopyResult {
   copied: number
   failures: string[]
+  // DA-6 IMP-05: files skipped by policy (hidden, unsupported
+  // type) are counted instead of vanishing silently.
+  skipped: number
+}
+
+// DA-6 IMP-04: extension checks are case-insensitive; a .MD or
+// .Md file imports as markdown instead of being skipped.
+export function isMarkdownFileName(fileName: string) {
+  return fileName.toLowerCase().endsWith('.md')
 }
 
 // DA-2 (IMP-02): per-file failures are collected and reported
@@ -72,11 +81,12 @@ export async function copyMarkdownFilesRecursively(
   targetDir: string,
   relativePath = ''
 ): Promise<MarkdownCopyResult> {
-  const result: MarkdownCopyResult = { copied: 0, failures: [] }
+  const result: MarkdownCopyResult = { copied: 0, failures: [], skipped: 0 }
   const entries = await platform.fs.readDir(sourceDir)
 
   for (const entry of entries) {
     if (entry.name.startsWith('.')) {
+      result.skipped += 1
       continue
     }
 
@@ -88,16 +98,19 @@ export async function copyMarkdownFilesRecursively(
         const nested = await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath)
         result.copied += nested.copied
         result.failures.push(...nested.failures)
+        result.skipped += nested.skipped
         continue
       }
 
       if (!entry.isFile) {
+        result.skipped += 1
         continue
       }
 
-      const isMarkdown = entry.name.endsWith('.md')
+      const isMarkdown = isMarkdownFileName(entry.name)
       const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(entry.name)
       if (!isMarkdown && !isImage) {
+        result.skipped += 1
         continue
       }
 
@@ -122,7 +135,7 @@ export async function copyPickedMarkdownFiles(
   picked: DialogPickedFile[],
   targetDir: string,
 ): Promise<MarkdownCopyResult> {
-  const result: MarkdownCopyResult = { copied: 0, failures: [] }
+  const result: MarkdownCopyResult = { copied: 0, failures: [], skipped: 0 }
 
   for (const entry of picked) {
     // Directory picks report paths relative to the picked directory
@@ -136,18 +149,21 @@ export async function copyPickedMarkdownFiles(
       : reported.split('/').slice(1).join('/') || entry.name
     const parts = relativePath.split('/').filter(part => part !== '' && part !== '.')
     if (parts.length === 0 || parts.some(part => part === '..')) {
+      result.skipped += 1
       continue
     }
 
     // Hidden files and hidden directories are skipped, matching the
     // desktop recursive copy.
     if (parts.some(part => part.startsWith('.'))) {
+      result.skipped += 1
       continue
     }
     const fileName = parts[parts.length - 1]
-    const isMarkdown = fileName.endsWith('.md')
+    const isMarkdown = isMarkdownFileName(fileName)
     const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(fileName)
     if (!isMarkdown && !isImage) {
+      result.skipped += 1
       continue
     }
 
@@ -226,12 +242,23 @@ export function useMarkdownImport() {
           title: t('importSuccess'),
           description: copyResult.failures.length > 0
             ? t('importPartialDesc', { success: copyResult.copied, failed: copyResult.failures.length })
-            : t('importSuccessDesc', { count: copyResult.copied }),
+            : copyResult.skipped > 0
+              ? t('importSkippedDesc', { count: copyResult.copied, skipped: copyResult.skipped })
+              : t('importSuccessDesc', { count: copyResult.copied }),
         })
       } else if (copyResult.failures.length > 0) {
         toast({
           title: t('importError'),
           description: copyResult.failures.join(', '),
+          variant: 'destructive',
+        })
+      } else if (copyResult.skipped > 0) {
+        // DA-6 IMP-05: everything was skipped by policy; say so
+        // instead of staying silent. (An empty folder and a
+        // cancelled pick still look alike here - recorded bound.)
+        toast({
+          title: t('importError'),
+          description: t('importNoneDesc'),
           variant: 'destructive',
         })
       }

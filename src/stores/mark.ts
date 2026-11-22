@@ -23,6 +23,8 @@ import { S3Config } from '@/types/sync'
 import { normalizeRecordFilters } from '@/app/core/main/mark/mark-filters'
 import { setAutoDataSyncApplyingRemote } from '@/lib/sync/auto-data-sync-queue'
 import useArticleStore from './article'
+import emitter from '@/lib/emitter'
+import { EmitterRecordEvents } from '@/config/emitters'
 
 // DATA2D-5 (AD-800): improved conflict toast for the legacy record
 // surfaces. Clear message plus a one-tap reload action; no full dialog.
@@ -204,12 +206,17 @@ const useMarkStore = create<MarkState>((set, get) => ({
     const previousAllMarks = get().allMarks
     set((state) => {
       return {
+        // DA-6 T-02-03: a caller-provided tagIds wins; the
+        // recomputed set is only the fallback. Overriding it
+        // unconditionally discarded the transfer target set and
+        // flickered the old primary away until refetch (BUG-09
+        // residue; server union semantics unchanged).
         marks: state.marks.map(item => {
           if (item.id === guarded.id) {
             return {
               ...item,
               ...guarded,
-              tagIds: recordTagIds({ tagId: guarded.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
+              tagIds: guarded.tagIds ?? recordTagIds({ tagId: guarded.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
               tagUpdatedAt: item.tagUpdatedAt,
             }
           }
@@ -220,7 +227,7 @@ const useMarkStore = create<MarkState>((set, get) => ({
             return {
               ...item,
               ...guarded,
-              tagIds: recordTagIds({ tagId: guarded.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
+              tagIds: guarded.tagIds ?? recordTagIds({ tagId: guarded.tagId, tagIds: recordTagIds(item).filter(id => id !== item.tagId) }),
               tagUpdatedAt: item.tagUpdatedAt,
             }
           }
@@ -242,6 +249,12 @@ const useMarkStore = create<MarkState>((set, get) => ({
           allMarks: state.allMarks.map(item => item.id === guarded.id ? { ...item, version: nextVersion } : item),
         }))
       }
+      // DA-6 A1-01: notify the web inbox (which keeps its own
+      // state and only listens for this event) that a record
+      // changed, so panel edits no longer leave it stale. The
+      // listeners only refetch, so the extra emit is harmless on
+      // desktop surfaces.
+      emitter.emit(EmitterRecordEvents.refreshMarks)
     } catch (error) {
       // DATA2D-5 (AD-800): a rejected guarded write must not leave the
       // optimistic state behind. Roll this record back to the loaded

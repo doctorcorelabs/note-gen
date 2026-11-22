@@ -477,54 +477,100 @@ export function FileManager({
         await moveEntriesToRoot(renamePaths)
       } else {
         const files = e.dataTransfer.files
-        for (let i = 0; i < files.length; i += 1) {
-          const file = files[i]
-          // 接受 markdown 和图片文件
-          if (file.name.endsWith('.md')) {
-            const text = await file.text()
-            const { getFilePathOptions } = await import('@/lib/workspace')
-            const sanitizedFileName = await writeDroppedFileToRoot({
-              fileName: file.name,
-              getFilePathOptions,
-              exists: platform.fs.exists,
-              writeTextFile: platform.fs.writeTextFile,
-            }, {
-              kind: 'text',
-              content: text,
-            })
-
-            addFile({
-              name: sanitizedFileName,
-              isEditing: false,
-              isLocale: true,
-              isDirectory: false,
-              isFile: true,
-              isSymlink: false
-            })
-          } else if (file.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
-            // 处理图片文件，同样需要处理文件名以保持一致性
-            const arrayBuffer = await file.arrayBuffer()
-            const uint8Array = new Uint8Array(arrayBuffer)
-            const { getFilePathOptions } = await import('@/lib/workspace')
-            const sanitizedImageFileName = await writeDroppedFileToRoot({
-              fileName: file.name,
-              getFilePathOptions,
-              exists: platform.fs.exists,
-              writeFile: platform.fs.writeFile,
-            }, {
-              kind: 'binary',
-              content: uint8Array,
-            })
-
-            addFile({
-              name: sanitizedImageFileName,
-              isEditing: false,
-              isLocale: true,
-              isDirectory: false,
-              isFile: true,
-              isSymlink: false
+        // DA-6 IMP-07: a dropped folder yields no files in the
+        // browser; say so instead of doing nothing.
+        if (files.length === 0) {
+          const items = Array.from(e.dataTransfer.items ?? [])
+          const hasDirectory = items.some((item) => {
+            const entry = (item as DataTransferItem & {
+              webkitGetAsEntry?: () => FileSystemEntry | null
+            }).webkitGetAsEntry?.()
+            return entry?.isDirectory === true
+          })
+          if (hasDirectory) {
+            toast({
+              title: t('toolbar.importError'),
+              description: t('toolbar.dropFolderUnsupported'),
+              variant: 'destructive',
             })
           }
+          return
+        }
+        // DA-6 IMP-07: isolate failures per file and report
+        // unsupported types instead of dropping them silently.
+        const unsupported: string[] = []
+        const failed: string[] = []
+        for (let i = 0; i < files.length; i += 1) {
+          const file = files[i]
+          try {
+            // DA-6 IMP-04: .MD and .Md count as markdown.
+            if (file.name.toLowerCase().endsWith('.md')) {
+              // DA-6 IMP-06: fatal UTF-8 decode like the folder
+              // import path; a Latin-1 file fails honestly instead
+              // of being stored as mojibake.
+              const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
+              const { getFilePathOptions } = await import('@/lib/workspace')
+              const sanitizedFileName = await writeDroppedFileToRoot({
+                fileName: file.name,
+                getFilePathOptions,
+                exists: platform.fs.exists,
+                writeTextFile: platform.fs.writeTextFile,
+              }, {
+                kind: 'text',
+                content: text,
+              })
+
+              addFile({
+                name: sanitizedFileName,
+                isEditing: false,
+                isLocale: true,
+                isDirectory: false,
+                isFile: true,
+                isSymlink: false
+              })
+            } else if (file.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
+              const arrayBuffer = await file.arrayBuffer()
+              const uint8Array = new Uint8Array(arrayBuffer)
+              const { getFilePathOptions } = await import('@/lib/workspace')
+              const sanitizedImageFileName = await writeDroppedFileToRoot({
+                fileName: file.name,
+                getFilePathOptions,
+                exists: platform.fs.exists,
+                writeFile: platform.fs.writeFile,
+              }, {
+                kind: 'binary',
+                content: uint8Array,
+              })
+
+              addFile({
+                name: sanitizedImageFileName,
+                isEditing: false,
+                isLocale: true,
+                isDirectory: false,
+                isFile: true,
+                isSymlink: false
+              })
+            } else {
+              unsupported.push(file.name)
+            }
+          } catch (error) {
+            console.error(`File manager drop failed for ${file.name}:`, error)
+            failed.push(file.name)
+          }
+        }
+        if (unsupported.length > 0) {
+          toast({
+            title: t('toolbar.importError'),
+            description: t('toolbar.dropUnsupportedDesc', { names: unsupported.join(', ') }),
+            variant: 'destructive',
+          })
+        }
+        if (failed.length > 0) {
+          toast({
+            title: t('toolbar.importError'),
+            description: t('toolbar.dropFailedDesc', { names: failed.join(', ') }),
+            variant: 'destructive',
+          })
         }
       }
     } catch (error) {

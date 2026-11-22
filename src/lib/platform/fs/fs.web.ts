@@ -546,7 +546,9 @@ function rootFileInfo(): FileInfo {
 }
 
 function isTextPath(relative: string): boolean {
-  return TEXT_EXTENSIONS.some((ext) => relative.endsWith(ext));
+  // DA-6 IMP-04: case-insensitive, so .MD is text like .md.
+  const lower = relative.toLowerCase();
+  return TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
 function defaultFetchImpl(): FetchLike {

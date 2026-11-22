@@ -419,7 +419,19 @@ export async function registerWorkspaceWriteRoutes(
   // Stale guards answer 412 (amended K-03).
   app.post(
     '/api/workspace/media',
-    { config: { requiresAuth: true }, bodyLimit: mediaLimitBytes + 64 * 1024 },
+    {
+      config: {
+        requiresAuth: true,
+        // DA-6 A17-01: parser-cap 413s answer media_too_large with
+        // the service limit, like service-level rejections.
+        bodyTooLarge: {
+          code: 'media_too_large',
+          limitBytes: mediaLimitBytes,
+          message: 'Media is too large.',
+        },
+      },
+      bodyLimit: mediaLimitBytes + 64 * 1024,
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const svc = requireService();
       const boundary = multipartBoundary(request.headers['content-type']);
@@ -471,7 +483,17 @@ export async function registerWorkspaceWriteRoutes(
   // 412 (amended K-03).
   app.put(
     '/api/workspace/media',
-    { config: { requiresAuth: true }, bodyLimit: mediaLimitBytes + 1024 * 1024 },
+    {
+      config: {
+        requiresAuth: true,
+        bodyTooLarge: {
+          code: 'media_too_large',
+          limitBytes: mediaLimitBytes,
+          message: 'Media is too large.',
+        },
+      },
+      bodyLimit: mediaLimitBytes + 1024 * 1024,
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const svc = requireService();
       const guard = parseHeaderGuard({

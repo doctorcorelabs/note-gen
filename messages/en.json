@@ -1379,7 +1379,7 @@
           "sequence": "sequenceDiagram\n    participant Alice\n    participant Bob\n    Alice->>Bob: Hello\n    Bob-->>Alice: Reply",
           "classDiagram": "classDiagram\n    Animal <|-- Duck\n    Animal <|-- Fish\n    Animal : +int age\n    Animal : +String gender",
           "stateDiagram": "stateDiagram-v2\n    [*] --> Active\n    Active --> [*]",
-          "er": "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    CUSTOMER ||--o{ DELIVERY-ADDRESS : uses",
+          "er": "erDiagram\n    CUSTOMER ||--o'{' ORDER : places\n    CUSTOMER ||--o'{' DELIVERY-ADDRESS : uses",
           "gantt": "gantt\n    title Project Plan\n    dateFormat YYYY-MM-DD\n    section Phase 1\n    Task1 :a1, 2024-01-01, 30d\n    section Phase 2\n    Task2 :after a1, 20d",
           "pie": "pie title Resource Allocation\n    \"CPU\" : 45\n    \"Memory\" : 30\n    \"Storage\" : 25",
           "journey": "journey\n    title My Daily Work\n    section Morning\n    Commute : 7:00, 5\n    Work : 9:00, 8"
@@ -3316,7 +3316,7 @@
         "endpointRequired": "Endpoint required",
         "endpointAutomaticDesc": "Leave empty to use {endpoint}; entering a value overrides the generated endpoint.",
         "endpointRequiredDetails": {
-          "cloudflare-r2": "Required. Use https://<ACCOUNT_ID>.r2.cloudflarestorage.com.",
+          "cloudflare-r2": "Required. Use https://'<ACCOUNT_ID>'.r2.cloudflarestorage.com.",
           "minio": "Required. Enter the MinIO API address and port, such as http://127.0.0.1:9000.",
           "custom": "Required. Enter the full URL of the S3-compatible API."
         },
@@ -4373,6 +4373,7 @@
       "saveDestination": "New records saved to {name}",
       "retry": "Retry",
       "deleteTagHelp": "Delete “{name}”? Records will be kept, and child tags will remain at their existing paths.",
+      "reassignLabel": "Move records to",
       "underParent": "Create or edit a child tag under “{name}”.",
       "rootTagHelp": "Create a top-level tag, or use / to create a nested path.",
       "tagName": "Tag name",
@@ -4484,6 +4485,7 @@
     },
     "mark": {
       "empty": "No records yet",
+      "transferPartial": "Moved {moved} record(s), {failed} failed",
       "conflict": {
         "title": "Save conflict",
         "description": "This record changed elsewhere, so your edit was not saved. Reload to see the latest version.",
@@ -4950,6 +4952,7 @@
           "tagNameTooLong": "Tag names can be at most 100 characters.",
           "tagNameInvalid": "Tag names cannot contain control characters.",
           "deleteTagAffected": "{count} records use this tag.",
+          "deleteTagAffectedDirect": "{records} record(s) and {notes} note(s) use this tag directly.",
           "deleteUnavailable": "Tag deletion is not available yet."
         }
       }
@@ -6586,6 +6589,11 @@
         "convertSuccessDesc": "Created {count} Markdown files",
         "convertPartialDesc": "{success} succeeded and {failed} failed",
         "importPartialDesc": "{success} succeeded and {failed} failed",
+        "importSkippedDesc": "Successfully imported {count} files, {skipped} skipped",
+        "importNoneDesc": "No Markdown or image files were found to import",
+        "dropUnsupportedDesc": "Skipped unsupported file(s): {names}. Only Markdown and image files can be dropped here.",
+        "dropFolderUnsupported": "Folders cannot be dropped here. Use Import to add a folder.",
+        "dropFailedDesc": "Could not import: {names}",
         "convertError": "Import failed",
         "importNotion": "Import Notion (.zip)",
         "importing": "Importing...",
@@ -6858,6 +6866,7 @@
       "pdfSaveHint": "In the system print window, choose \"Save as PDF\".",
       "pdfPrintWindowOpened": "PDF print window opened",
       "exportSuccess": "Export successful",
+      "exportWarnings": "Exported with {count} warning(s): some content was simplified.",
       "exportFailed": "Export failed",
       "exportDialogTitle": "Export",
       "pdfPageCreateFailed": "Unable to create the PDF print page",
@@ -7418,7 +7427,7 @@
         "sequence": "sequenceDiagram\n    participant Alice\n    participant Bob\n    Alice->>Bob: Hello\n    Bob-->>Alice: Reply",
         "classDiagram": "classDiagram\n    Animal <|-- Duck\n    Animal <|-- Fish\n    Animal : +int age\n    Animal : +String gender",
         "stateDiagram": "stateDiagram-v2\n    [*] --> Active\n    Active --> [*]",
-        "er": "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    CUSTOMER ||--o{ DELIVERY-ADDRESS : uses",
+        "er": "erDiagram\n    CUSTOMER ||--o'{' ORDER : places\n    CUSTOMER ||--o'{' DELIVERY-ADDRESS : uses",
         "gantt": "gantt\n    title Project Plan\n    dateFormat YYYY-MM-DD\n    section Phase 1\n    Task1 :a1, 2024-01-01, 30d\n    section Phase 2\n    Task2 :after a1, 20d",
         "pie": "pie title Resource Allocation\n    \"CPU\" : 45\n    \"Memory\" : 30\n    \"Storage\" : 25",
         "journey": "journey\n    title My Daily Work\n    section Morning\n    Commute : 7:00, 5\n    Work : 9:00, 8"

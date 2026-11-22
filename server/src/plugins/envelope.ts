@@ -369,7 +369,22 @@ interface FastifyLikeError {
 // Malformed JSON bodies become invalid_json. Oversized bodies become
 // payload_too_large. Anything unexpected becomes a generic
 // internal_error. retryable is true only for 429 and 503 outcomes.
-export function toErrorEnvelope(error: unknown, requestId: string): { statusCode: number; envelope: ApiErrorEnvelope } {
+// DA-6 A17-01: a route whose parser cap sits just above a service
+// limit (assets, workspace media) declares how a parser-level 413
+// must be reported, so the wire code and details.limitBytes match
+// the service-level 413 instead of the generic payload_too_large.
+export interface BodyTooLargeMapping {
+  code: ApiErrorCode;
+  limitBytes: number;
+  message: string;
+}
+
+
+export function toErrorEnvelope(
+  error: unknown,
+  requestId: string,
+  bodyTooLarge?: BodyTooLargeMapping,
+): { statusCode: number; envelope: ApiErrorEnvelope } {
   const id = ensureRequestId(requestId);
   if (error instanceof ApiError) {
     return {
@@ -404,6 +419,14 @@ export function toErrorEnvelope(error: unknown, requestId: string): { statusCode
       };
     }
     if (statusCode === 413 || code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+      if (bodyTooLarge !== undefined) {
+        return {
+          statusCode: 413,
+          envelope: errorEnvelope(bodyTooLarge.code, bodyTooLarge.message, id, {
+            details: { limitBytes: bodyTooLarge.limitBytes },
+          }),
+        };
+      }
       return {
         statusCode: 413,
         envelope: errorEnvelope('payload_too_large', 'Request payload is too large.', id),

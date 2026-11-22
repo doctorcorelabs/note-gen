@@ -15,8 +15,12 @@
 //
 // Port contract (kontrak-api-kanonis.md section 3.9, V1-14 section 8):
 // - Matching: every query term must occur (AND), case-insensitive,
-//   over record desc, content, fileName, and url, and over file
-//   name, relative path, and Markdown content. Containment only: no
+//   over record desc, content, and url, and over file name,
+//   relative path, and Markdown content. DA-6 F-15-02 (option C):
+//   record fileName is NOT a matched field in Fase 1 - the marks
+//   table stores no original file name (file records keep their
+//   asset key in url), so the loader always fills it empty and the
+//   contract no longer promises it. Containment only: no
 //   partial-word substring matching in the middle of a word, no
 //   stemming, no embedding, no vector, no fuzzy scoring in MVP.
 // - Ranking: a title or name match weighs more than a content match,
@@ -306,8 +310,9 @@ function decodeSearchCursor(cursor: string, input: KeywordSearchInput): SearchPo
 function buildSnippet(
   content: string,
   terms: readonly string[],
+  url = '',
 ): { snippet: string; snippetField: string; snippetMatches: SearchSnippetMatch[] } {
-  if (content === '') {
+  if (content === '' && url === '') {
     return { snippet: '', snippetField: 'content', snippetMatches: [] };
   }
   const lower = content.toLowerCase();
@@ -319,6 +324,34 @@ function buildSnippet(
     }
   }
   if (firstIndex === -1) {
+    // DA-6 F-15-05: when only the url matched (link records keep
+    // the keyword there), the snippet is the url itself with match
+    // ranges inside it, so the result shows why it matched.
+    const urlLower = url.toLowerCase();
+    if (url !== '' && terms.some((term) => urlLower.includes(term))) {
+      const urlSnippet = url.slice(0, SNIPPET_MAX_CHARS);
+      const urlSnippetLower = urlSnippet.toLowerCase();
+      const urlMatches: SearchSnippetMatch[] = [];
+      for (const term of terms) {
+        let from = 0;
+        for (;;) {
+          const at = urlSnippetLower.indexOf(term, from);
+          if (at === -1) break;
+          urlMatches.push({ start: at, end: at + term.length });
+          from = at + term.length;
+        }
+      }
+      urlMatches.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start));
+      const deduped: SearchSnippetMatch[] = [];
+      let lastEnd = 0;
+      for (const match of urlMatches) {
+        if (match.start >= lastEnd) {
+          deduped.push(match);
+          lastEnd = match.end;
+        }
+      }
+      return { snippet: urlSnippet, snippetField: 'url', snippetMatches: deduped };
+    }
     // Only the title matched: the snippet is the start of the
     // content, with no highlight ranges (V1-14 8.2).
     return { snippet: content.slice(0, SNIPPET_MAX_CHARS), snippetField: 'content', snippetMatches: [] };
@@ -364,7 +397,8 @@ function scoreCandidate(item: FakeSearchItem, terms: readonly string[]): ScoredC
       ? [
           { weight: 'title', text: item.title },
           { weight: 'other', text: item.content },
-          { weight: 'other', text: item.fileName },
+          // DA-6 F-15-02 (option C): fileName is not a matched field
+          // in Fase 1; no original file name is stored for records.
           // Link records keep their URL only in `url` (the
           // control-link path stores the page title in desc), so
           // the URL is a matched field too (UTANG-UJI-03b).
@@ -413,7 +447,7 @@ function scoreCandidate(item: FakeSearchItem, terms: readonly string[]): ScoredC
   if (matchingFields > 1) {
     score += 2 * (matchingFields - 1);
   }
-  const snippet = buildSnippet(item.content, terms);
+  const snippet = buildSnippet(item.content, terms, item.kind === 'record' ? item.url : '');
   if (item.kind === 'record') {
     const title =
       item.title !== '' ? item.title : item.content.slice(0, RECORD_TITLE_FALLBACK_CHARS);

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { apiErrorWireCode } from '@/lib/web/records-client'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -48,6 +50,10 @@ export function TagManage() {
   const [ready, setReady] = React.useState(false)
   const [loadError, setLoadError] = React.useState(false)
   const [action, setAction] = React.useState<TagAction | null>(null)
+  // DA-6 TAG-01: reassign target for the delete dialog; shown
+  // after a tag_in_use refusal (or when records use the tag).
+  const [reassignTo, setReassignTo] = React.useState('')
+  const [needsReassign, setNeedsReassign] = React.useState(false)
   const [name, setName] = React.useState('')
   const [error, setError] = React.useState('')
   const [saving, setSaving] = React.useState(false)
@@ -147,6 +153,8 @@ export function TagManage() {
     setAction(next)
     setName(next.kind === 'rename' ? leafName(next.tag.name) : '')
     setError('')
+    setReassignTo('')
+    setNeedsReassign(false)
   }
 
   React.useEffect(() => {
@@ -197,7 +205,9 @@ export function TagManage() {
       } else if (active.kind === 'rename') {
         await updateTag({ ...active.tag, name: path })
       } else {
-        await delTag(active.tag.id)
+        await delTag(active.tag.id, needsReassign && reassignTo
+          ? { reassignTo: Number(reassignTo) }
+          : {})
       }
       setAction(null)
       try {
@@ -214,7 +224,14 @@ export function TagManage() {
         report(t('savedRefreshFailed'))
         console.error(error)
       }
-    } catch (error) { setError(userErrorMessage(error) ?? '') }
+    } catch (error) {
+      // DA-6 TAG-01: an in-use refusal keeps the dialog open and
+      // reveals the reassign picker instead of dead-ending.
+      if (active.kind === 'delete' && apiErrorWireCode(error) === 'tag_in_use') {
+        setNeedsReassign(true)
+      }
+      setError(userErrorMessage(error) ?? '')
+    }
     finally { savingRef.current = false; setSaving(false) }
   }
 
@@ -424,10 +441,25 @@ export function TagManage() {
                 placeholder={old('newTagPlaceholder')} onChange={event => { setName(event.target.value); setError('') }} />
               {actionParent && name.trim() ? <FieldDescription className="break-all">{actionParent + '/' + name.trim()}</FieldDescription> : null}
             </Field></FieldGroup> : null}
+            {action?.kind === 'delete' && needsReassign ? (
+              <FieldGroup><Field>
+                <FieldLabel htmlFor={id + '-reassign'}>{t('reassignLabel')}</FieldLabel>
+                <Select value={reassignTo} onValueChange={setReassignTo}>
+                  <SelectTrigger id={id + '-reassign'}>
+                    <SelectValue placeholder={t('reassignLabel')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tags.filter(tag => tag.id !== action.tag.id).map(tag => (
+                      <SelectItem key={tag.id} value={String(tag.id)}>{tag.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field></FieldGroup>
+            ) : null}
             {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={saving} onClick={() => setAction(null)}>{common('cancel')}</Button>
-              <Button type="submit" variant={action?.kind === 'delete' ? 'destructive' : 'default'} disabled={saving || (action?.kind !== 'delete' && !name.trim())}>
+              <Button type="submit" variant={action?.kind === 'delete' ? 'destructive' : 'default'} disabled={saving || (action?.kind !== 'delete' && !name.trim()) || (needsReassign && !reassignTo)}>
                 {saving ? <Spinner data-icon="inline-start" /> : null}{action?.kind === 'delete' ? old('delete') : common('save')}
               </Button>
             </DialogFooter>

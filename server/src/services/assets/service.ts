@@ -22,7 +22,7 @@
 // Size limit (V1-14 A-5): 20 MiB by default, matching the media upload
 // default in kontrak section 6.2, overridable per service instance.
 // The limit is a service decision, documented here, and is returned in
-// details.limitBytes on every 413. The route parser cap is the limit
+// details.limitBytes on every 413 (DA-6 A17-01: the route declares a bodyTooLarge mapping so parser-cap 413s carry the same code and limit). The route parser cap is the limit
 // plus multipart framing headroom; the exact limit is enforced here.
 //
 // Serve (V1-14 4.2): a malformed key, an unknown key, and a key owned by

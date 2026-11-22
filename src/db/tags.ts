@@ -62,7 +62,7 @@ export async function updateTag(tag: Tag) {
   return { rowsAffected: result.affected, lastInsertId: result.id as number }
 }
 
-export async function delTag(id: number, options: { sync?: boolean } = {}) {
+export async function delTag(id: number, options: { sync?: boolean; reassignTo?: number } = {}) {
   // Migrated to kind `tags.delete` in wave 4 (W4-CODEMOD). The
   // upstream guards that the kind does not carry are checked
   // locally against `tags.list` first: a missing tag returns
@@ -80,7 +80,14 @@ export async function delTag(id: number, options: { sync?: boolean } = {}) {
   if (target.isLocked || tags.length < 2) throw new Error('Cannot delete the default or last tag')
   const fallback = tags.find(tag => tag.id !== id)!
   await invalidateLocalTagSyncIdentity([id])
-  const result = await getSqlAdapter().execute({ kind: 'tags.delete', id })
+  // DA-6 TAG-01: forward the caller's reassign target so the
+  // TagManage dialog can close the in-use dead end the same way
+  // the web sidebar already does.
+  const result = await getSqlAdapter().execute({
+    kind: 'tags.delete',
+    id,
+    ...(options.reassignTo !== undefined ? { reassignTo: options.reassignTo } : {}),
+  })
   if (result.affected !== 1) throw new Error('Tag could not be deleted; refresh and try again')
   const store = await platform.store.load('store.json')
   if (await store.get<number>('currentTagId') === id) {

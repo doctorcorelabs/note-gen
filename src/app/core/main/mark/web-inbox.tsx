@@ -21,9 +21,10 @@
 // integrator; this file is the worker's proposal in code.
 //
 // Honest limits, all inherited from the kind path and the port:
-// - Empty trash has no kind and no mounted control: KindRecordsApi
-//   throws capability_unavailable, and no child calls it. Wiring
-//   an empty-trash button waits on a kind or the REST route.
+// - Empty trash has a kind (marks.emptyTrash, BUG-01) and
+//   KindRecordsApi calls it, but this inbox still mounts no
+//   empty-trash control. Wiring the button is separate triage-B
+//   work (DA-6 F9: comment updated, button not added here).
 // - Trash lists never combine with a tag filter (contract A-12,
 //   enforced by the kind client); selecting trash ignores the
 //   selected tag until the active view returns.

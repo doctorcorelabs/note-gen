@@ -53,10 +53,13 @@ export const BACKEND_ROUTES: readonly BackendRoute[] = Object.freeze([
     phase: "2",
   },
 
-  // Backup and restore (phase 1 for create, list, and export).
-  { command: "create_managed_backup", method: "POST", path: "/api/backups", group: "backups", phase: "1" },
-  { command: "list_managed_backups", method: "GET", path: "/api/backups", group: "backups", phase: "1" },
-  { command: "export_app_data", method: "POST", path: "/api/backups/export", group: "backups", phase: "1" },
+  // Backup and restore. DA-6 (AD-114): the server registers none
+  // of these endpoints in Fase 1 (the backup-7 exclusion), so the
+  // create/list/export labels are phase "2" like restore; the old
+  // phase "1" label promised endpoints that answer 404.
+  { command: "create_managed_backup", method: "POST", path: "/api/backups", group: "backups", phase: "2" },
+  { command: "list_managed_backups", method: "GET", path: "/api/backups", group: "backups", phase: "2" },
+  { command: "export_app_data", method: "POST", path: "/api/backups/export", group: "backups", phase: "2" },
   { command: "restore_managed_backup", method: "POST", path: "/api/backups/restore", group: "backups", phase: "2" },
   { command: "import_app_data_from_file", method: "POST", path: "/api/backups/restore", group: "backups", phase: "2" },
   { command: "import_app_data", method: "POST", path: "/api/backups/restore", group: "backups", phase: "2" },

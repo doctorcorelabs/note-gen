@@ -301,6 +301,8 @@ function toApiTag(row: SqlTagRow): ApiTag {
     locked: row.isLocked,
     pinned: row.isPin,
     recordCount: row.total ?? 0,
+    directRecordCount: row.directTotal ?? 0,
+    noteCount: row.noteCount ?? 0,
     // Kind tag rows carry no timestamps. Zero marks unknown; the
     // UI must not display tag timestamps.
     createdAt: 0,

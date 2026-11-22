@@ -89,14 +89,29 @@ function ImageItem({ mark }: { mark: Mark }) {
   async function handleTransfer(tagId: number, e?: React.MouseEvent) {
     e?.stopPropagation()
     if (isBatchOperation) {
+      // DA-6 T-02-04: isolate per-item failures and report a
+      // summary instead of stopping silently mid-list.
       const selectedMarks = Array.from(selectedMarkIds)
+      let movedCount = 0
+      let failedCount = 0
       for (const markId of selectedMarks) {
         const existingMark = marks.find((item: Mark) => item.id === markId)
-        if (existingMark) {
+        if (!existingMark) continue
+        try {
           await updateMark({ ...existingMark, tagId })
+          movedCount += 1
+        } catch (error) {
+          failedCount += 1
+          console.error(`Transfer failed for record ${markId}:`, error)
         }
       }
       clearSelection()
+      if (failedCount > 0) {
+        toast({
+          title: t('record.mark.transferPartial', { moved: movedCount, failed: failedCount }),
+          variant: 'destructive',
+        })
+      }
     } else {
       await updateMark({ ...mark, tagId })
     }

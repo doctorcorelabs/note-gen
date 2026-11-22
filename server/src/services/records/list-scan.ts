@@ -22,10 +22,13 @@
 //   record's tags; any requires one. Exclude always wins.
 // - type: OR over the listed types. createdAfter/createdBefore:
 //   inclusive bounds on createdAt.
-// - q: one case-insensitive substring over desc and searchable
-//   content (todo content is title + description, the same
-//   extraction the search loader applies; fileName is always
-//   empty in MVP, so it contributes nothing).
+// - q: one case-insensitive substring over desc, url, and
+//   searchable content (todo content is title + description, the
+//   same extraction the search loader applies; fileName is always
+//   empty in MVP, so it contributes nothing). DA-6 F-15-01: url
+//   joined the haystack so a link record whose keyword lives only
+//   in its URL matches here exactly like global search
+//   (UTANG-UJI-03b).
 // - Sort: created_desc (createdAt desc), created_asc (createdAt
 //   asc), updated_desc (updatedAt desc), type (type asc, then
 //   createdAt desc); the final tiebreak is always id
@@ -198,7 +201,7 @@ function nameMatchesPath(tagName: string, path: string): boolean {
 
 function searchableText(row: ListScanRow): string {
   if (row.type !== 'todo') {
-    return `${row.desc}\n${row.content}`;
+    return `${row.desc}\n${row.url}\n${row.content}`;
   }
   try {
     const parsed: unknown = JSON.parse(row.content);
@@ -206,12 +209,12 @@ function searchableText(row: ListScanRow): string {
       const record = parsed as Record<string, unknown>;
       const title = typeof record['title'] === 'string' ? record['title'] : '';
       const description = typeof record['description'] === 'string' ? record['description'] : '';
-      return `${row.desc}\n${title}\n${description}`;
+      return `${row.desc}\n${row.url}\n${title}\n${description}`;
     }
   } catch {
     // Legacy non-JSON todo content: match the raw text.
   }
-  return `${row.desc}\n${row.content}`;
+  return `${row.desc}\n${row.url}\n${row.content}`;
 }
 
 function rowMatches(row: ListScanRow, query: ListQuery, tagNameById: ReadonlyMap<number, string>): boolean {

@@ -88,8 +88,11 @@ const useTagStore = create<TagState>((set, get) => ({
 
   deleteTag: async (id: number) => {
     await delTag(id)
+    // DA-6 TAG-06: fetchTags already re-selects the current tag
+    // when it disappeared; forcing tags[0] here hijacked the
+    // selection after deleting any other tag and threw when the
+    // list became empty.
     await get().fetchTags()
-    await get().setCurrentTagId(get().tags[0].id)
   },
 
   // 同步
@@ -102,119 +105,124 @@ const useTagStore = create<TagState>((set, get) => ({
     set({ lastSyncTime })
   },
   uploadTags: async (condition, tagsOverride) => {
-    set({ syncState: true })
-    const path = '.data'
-    const filename = 'tags.json'
-    const tags = tagsOverride ?? await getTags()
-    const store = await platform.store.load('store.json');
-    const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github';
-    let result = false
-    let res;
-    let files: any;
-    const fullPath = `${path}/${filename}`;
-    switch (primaryBackupMethod) {
-      case 'github':
-        const githubRepo = await getDataSyncRepoName('github')
-        files = await githubGetFiles({ path: fullPath, repo: githubRepo })
-        res = await uploadGithubFile({
-          file: JSON.stringify(tags),
-          repo: githubRepo,
-          path: fullPath,
-          sha: files?.sha,
-        })
-        break;
-      case 'gitee':
-        const giteeRepo = await getDataSyncRepoName('gitee')
-        files = await giteeGetFiles({ path: fullPath, repo: giteeRepo })
-        res = await uploadGiteeFile({
-          file: JSON.stringify(tags),
-          repo: giteeRepo,
-          path: fullPath,
-          sha: files?.sha,
-        })
-        break;
-      case 'gitlab': {
-        const gitlabRepo = await getDataSyncRepoName('gitlab')
-        files = await gitlabGetFiles({ path, repo: gitlabRepo })
-
-        // 如果目录不存在（files 为 null），先创建目录标记文件
-        if (!files) {
-          try {
-            await uploadGitlabFile({
-              file: '',
-              repo: gitlabRepo,
-              path,
-              filename: '.gitkeep',
-              sha: '',
-            })
-          } catch {
-            // Ignore .gitkeep creation failures; the main upload path reports errors below.
-          }
-          // 重新获取文件列表
+    try {
+      set({ syncState: true })
+      const path = '.data'
+      const filename = 'tags.json'
+      const tags = tagsOverride ?? await getTags()
+      const store = await platform.store.load('store.json');
+      const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github';
+      let result = false
+      let res;
+      let files: any;
+      const fullPath = `${path}/${filename}`;
+      switch (primaryBackupMethod) {
+        case 'github':
+          const githubRepo = await getDataSyncRepoName('github')
+          files = await githubGetFiles({ path: fullPath, repo: githubRepo })
+          res = await uploadGithubFile({
+            file: JSON.stringify(tags),
+            repo: githubRepo,
+            path: fullPath,
+            sha: files?.sha,
+          })
+          break;
+        case 'gitee':
+          const giteeRepo = await getDataSyncRepoName('gitee')
+          files = await giteeGetFiles({ path: fullPath, repo: giteeRepo })
+          res = await uploadGiteeFile({
+            file: JSON.stringify(tags),
+            repo: giteeRepo,
+            path: fullPath,
+            sha: files?.sha,
+          })
+          break;
+        case 'gitlab': {
+          const gitlabRepo = await getDataSyncRepoName('gitlab')
           files = await gitlabGetFiles({ path, repo: gitlabRepo })
-        }
 
-        const tagFile = Array.isArray(files)
-          ? files.find(file => file.name === filename)
-          : (files?.name === filename ? files : undefined)
-        res = await uploadGitlabFile({
-          file: JSON.stringify(tags),
-          repo: gitlabRepo,
-          path,
-          filename,
-          sha: tagFile?.sha || '',
-        })
-        break;
-      }
-      case 'gitea':
-        const giteaRepo = await getDataSyncRepoName('gitea')
-        files = await giteaGetFiles({ path, repo: giteaRepo })
-        const giteaTagFile = Array.isArray(files)
-          ? files.find(file => file.name === filename)
-          : (files?.name === filename ? files : undefined)
-        res = await uploadGiteaFile({
-          file: JSON.stringify(tags),
-          repo: giteaRepo,
-          path,
-          filename,
-          sha: giteaTagFile?.sha || '',
-        })
-        break;
-      case 's3': {
-        const s3Config = await store.get<S3Config>('s3SyncConfig')
-        if (s3Config) {
-          const s3Key = `${path}/${filename}`
-          const existingFile = await s3HeadObject(s3Config, s3Key)
-          if (existingFile) {
-            await s3Delete(s3Config, s3Key)
+          // 如果目录不存在（files 为 null），先创建目录标记文件
+          if (!files) {
+            try {
+              await uploadGitlabFile({
+                file: '',
+                repo: gitlabRepo,
+                path,
+                filename: '.gitkeep',
+                sha: '',
+              })
+            } catch {
+              // Ignore .gitkeep creation failures; the main upload path reports errors below.
+            }
+            // 重新获取文件列表
+            files = await gitlabGetFiles({ path, repo: gitlabRepo })
           }
-          res = await s3Upload(s3Config, s3Key, JSON.stringify(tags))
+
+          const tagFile = Array.isArray(files)
+            ? files.find(file => file.name === filename)
+            : (files?.name === filename ? files : undefined)
+          res = await uploadGitlabFile({
+            file: JSON.stringify(tags),
+            repo: gitlabRepo,
+            path,
+            filename,
+            sha: tagFile?.sha || '',
+          })
+          break;
         }
-        break;
-      }
-      case 'webdav': {
-        const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
-        if (webdavConfig) {
-          const webdavKey = `${path}/${filename}`
-          const existingFile = await webdavHeadObject(webdavConfig, webdavKey)
-          if (existingFile) {
-            await webdavDelete(webdavConfig, webdavKey)
+        case 'gitea':
+          const giteaRepo = await getDataSyncRepoName('gitea')
+          files = await giteaGetFiles({ path, repo: giteaRepo })
+          const giteaTagFile = Array.isArray(files)
+            ? files.find(file => file.name === filename)
+            : (files?.name === filename ? files : undefined)
+          res = await uploadGiteaFile({
+            file: JSON.stringify(tags),
+            repo: giteaRepo,
+            path,
+            filename,
+            sha: giteaTagFile?.sha || '',
+          })
+          break;
+        case 's3': {
+          const s3Config = await store.get<S3Config>('s3SyncConfig')
+          if (s3Config) {
+            const s3Key = `${path}/${filename}`
+            const existingFile = await s3HeadObject(s3Config, s3Key)
+            if (existingFile) {
+              await s3Delete(s3Config, s3Key)
+            }
+            res = await s3Upload(s3Config, s3Key, JSON.stringify(tags))
           }
-          res = await webdavUpload(webdavConfig, webdavKey, JSON.stringify(tags))
+          break;
         }
-        break;
+        case 'webdav': {
+          const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
+          if (webdavConfig) {
+            const webdavKey = `${path}/${filename}`
+            const existingFile = await webdavHeadObject(webdavConfig, webdavKey)
+            if (existingFile) {
+              await webdavDelete(webdavConfig, webdavKey)
+            }
+            res = await webdavUpload(webdavConfig, webdavKey, JSON.stringify(tags))
+          }
+          break;
+        }
+        case 'cloudFolder': {
+          const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+          if (config?.path) res = await cloudFolderUpload(config, fullPath, JSON.stringify(tags), condition)
+          break
+        }
       }
-      case 'cloudFolder': {
-        const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-        if (config?.path) res = await cloudFolderUpload(config, fullPath, JSON.stringify(tags), condition)
-        break
+      if (res) {
+        result = true
       }
+      return result
+    } finally {
+      // DA-6 TAG-07: always clear the sync flag, even when an
+      // upload step throws mid-way (downloadTags already did).
+      set({ syncState: false })
     }
-    if (res) {
-      result = true
-    }
-    set({ syncState: false })
-    return result
   },
   downloadTags: async (options: RecordDataDownloadOptions = {}) => {
     const path = '.data'

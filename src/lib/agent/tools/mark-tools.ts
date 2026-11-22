@@ -323,7 +323,9 @@ export const searchMarksTool: Tool = {
       let results = marks.filter(mark =>
         mark.deleted === 0 &&
         (mark.content?.toLowerCase().includes(params.query.toLowerCase()) ||
-         mark.desc?.toLowerCase().includes(params.query.toLowerCase()))
+         mark.desc?.toLowerCase().includes(params.query.toLowerCase()) ||
+         // DA-6 F-15-01: link records keep the keyword in url only.
+         mark.url?.toLowerCase().includes(params.query.toLowerCase()))
       )
 
       if (params.type) {
@@ -383,8 +385,12 @@ export const searchAllMarksTool: Tool = {
         const descMatch = params.mode === 'exact'
           ? mark.desc?.toLowerCase() === queryLower
           : mark.desc?.toLowerCase().includes(queryLower)
+        // DA-6 F-15-01: link records keep the keyword in url only.
+        const urlMatch = params.mode === 'exact'
+          ? mark.url?.toLowerCase() === queryLower
+          : mark.url?.toLowerCase().includes(queryLower)
 
-        return contentMatch || descMatch
+        return contentMatch || descMatch || urlMatch
       })
 
       if (params.type) {

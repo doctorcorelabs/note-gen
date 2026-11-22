@@ -89,6 +89,11 @@ export interface ApiTag {
   locked: boolean;
   pinned: boolean;
   recordCount: number;
+  // DA-6 TAG-04: direct usage for the delete dialog (records on
+  // this tag itself, soft-deleted included, plus notes). Absent
+  // on rows that did not come from tags.list.
+  directRecordCount?: number;
+  noteCount?: number;
   createdAt: number;
   updatedAt: number;
 }

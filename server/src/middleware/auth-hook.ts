@@ -66,6 +66,8 @@ declare module 'fastify' {
   interface FastifyContextConfig {
     requiresAuth?: boolean;
     requiresCsrf?: boolean;
+    // DA-6 A17-01: per-route 413 mapping read by the error handler.
+    bodyTooLarge?: import('../plugins/envelope.js').BodyTooLargeMapping;
   }
 }
 
@@ -124,10 +126,14 @@ export const denyByDefaultVerifyCsrf: VerifyCsrfTokenFn = async () => false;
 export const PUBLIC_HEALTH_PATHS: readonly string[] = HEALTH_PATHS;
 
 // No-session paths beyond health (wiring only, see the header comment).
-// The CSP report path is exact and POST-only; the backup download path
-// is a GET prefix with a single non-empty token segment.
+// The CSP report path is exact and POST-only.
+// DA-6 A26-04: the former GET /api/backups/downloads/<token>
+// exemption was removed. No route serves that prefix (backup
+// endpoints are excluded by AD-114), so the exemption only let a
+// future download route inherit token-in-path no-session access
+// without a new decision. Reintroduce it together with the route
+// and its own token validation when backups are built.
 export const CSP_REPORT_PATH = '/api/csp-reports';
-export const BACKUP_DOWNLOAD_PREFIX = '/api/backups/downloads/';
 
 export function isPublicNoSessionRequest(method: string, path: string): boolean {
   if (PUBLIC_HEALTH_PATHS.includes(path)) {
@@ -135,10 +141,6 @@ export function isPublicNoSessionRequest(method: string, path: string): boolean 
   }
   if (method === 'POST' && path === CSP_REPORT_PATH) {
     return true;
-  }
-  if (method === 'GET' && path.startsWith(BACKUP_DOWNLOAD_PREFIX)) {
-    const token = path.slice(BACKUP_DOWNLOAD_PREFIX.length);
-    return token !== '' && !token.includes('/');
   }
   return false;
 }

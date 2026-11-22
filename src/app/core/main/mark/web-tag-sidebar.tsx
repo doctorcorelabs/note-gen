@@ -338,8 +338,12 @@ export function WebTagSidebar({
           </AlertDialogHeader>
           {pendingDelete && (
             <p className="text-sm text-zinc-600">
-              {t("deleteTagAffected", {
-                count: pendingDelete.recordCount,
+              {/* DA-6 TAG-04: direct counts (this tag itself,
+                  soft-deleted included, plus notes) instead of
+                  the subtree badge total. */}
+              {t("deleteTagAffectedDirect", {
+                records: pendingDelete.directRecordCount ?? pendingDelete.recordCount,
+                notes: pendingDelete.noteCount ?? 0,
               })}
             </p>
           )}

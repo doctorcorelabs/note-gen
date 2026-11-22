@@ -17,6 +17,7 @@ import {
   exportMarkdownSource,
   getMarkdownExportBaseName,
   type MarkdownExportFormat,
+  type MarkdownExportWarning,
 } from '../markdown-export'
 
 interface ExportButtonProps {
@@ -43,19 +44,31 @@ export function ExportButton({ editor, markdown, getMarkdown }: ExportButtonProp
       setExporting(format)
 
       const activeFilePath = useArticleStore.getState().activeFilePath
+      // DA-6 EXP-03 (area 12): JSON export no longer passes
+      // editor.getJSON(); every path parses from markdown.
+      // DA-6 EXP-05 (area 12): collect degradations and surface them
+      // as a non-blocking description on the success toast.
+      let exportWarnings: MarkdownExportWarning[] = []
       const exported = await exportMarkdownSource(
         format,
         {
           baseName: getMarkdownExportBaseName(activeFilePath),
           markdown: () => getMarkdown?.() ?? markdown ?? editor.getMarkdown(),
-          json: getMarkdown || markdown !== undefined ? undefined : () => editor.getJSON(),
           sourcePath: activeFilePath,
         },
-        { onPdfRenderStart: showPdfExportStart },
+        {
+          onPdfRenderStart: showPdfExportStart,
+          onWarnings: (warnings) => { exportWarnings = warnings },
+        },
       )
 
       if (exported) {
-        toast({ title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess') })
+        toast({
+          title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess'),
+          description: exportWarnings.length > 0
+            ? t('exportWarnings', { count: exportWarnings.length })
+            : undefined,
+        })
       }
     } catch (error) {
       console.error(`${format} export failed:`, error)
