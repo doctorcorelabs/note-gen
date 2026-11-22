@@ -174,6 +174,15 @@ function notTextFile(): ApiError {
   return new ApiError(415, 'not_text_file', 'The file is not a text file. Use the media endpoint.');
 }
 
+// N-02 putaran ketiga: extensionless names (final segment without a
+// dot) are read candidates in readFile only. isTextFilePath stays the
+// .md/.txt contract for dotted names; extensionless candidates pass
+// the name gate and the fatal decode + NUL probe below decides.
+function isExtensionlessFilePath(path: string): boolean {
+  const name = path.split('/').pop() || '';
+  return name.length > 0 && !name.includes('.');
+}
+
 function invalidTextEncoding(): ApiError {
   return new ApiError(422, 'invalid_text_encoding', 'The file is not valid UTF-8 text.');
 }
@@ -653,7 +662,9 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
     if (stats.isSymbolicLink() || !stats.isFile()) {
       throw ApiError.notFound();
     }
-    if (!isTextFilePath(validated.path)) {
+    const knownText = isTextFilePath(validated.path);
+    const extensionless = !knownText && isExtensionlessFilePath(validated.path);
+    if (!knownText && !extensionless) {
       throw notTextFile();
     }
     const bytes = await readFileNoFollow(fsPath);
@@ -662,7 +673,18 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
     }
     const revision = buildRevision(workspaceKey, validated.path, bytes);
     const version = resolveVersion === undefined ? null : await resolveVersion(validated.path);
-    const contentType = textContentTypeForPath(validated.path) as string;
+    const contentType = textContentTypeForPath(validated.path) ?? 'text/plain; charset=utf-8';
+    let probedText: string | null = null;
+    if (extensionless) {
+      try {
+        probedText = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+      } catch {
+        throw invalidTextEncoding();
+      }
+      if (probedText.includes('\0')) {
+        throw invalidTextEncoding();
+      }
+    }
     if (ifNoneMatchMatches(ifNoneMatch, revision)) {
       return {
         notModified: true,
@@ -675,13 +697,17 @@ export function createWorkspaceReader(deps: WorkspaceReaderDeps) {
       };
     }
     let text: string;
-    try {
-      // ignoreBOM keeps a leading byte order mark as U+FEFF in the
-      // text, so re-encoding the text reproduces the stored bytes
-      // exactly and the revision stays stable across read and write.
-      text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-    } catch {
-      throw invalidTextEncoding();
+    if (probedText !== null) {
+      text = probedText;
+    } else {
+      try {
+        // ignoreBOM keeps a leading byte order mark as U+FEFF in the
+        // text, so re-encoding the text reproduces the stored bytes
+        // exactly and the revision stays stable across read and write.
+        text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+      } catch {
+        throw invalidTextEncoding();
+      }
     }
     return {
       notModified: false,

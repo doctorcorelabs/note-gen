@@ -213,6 +213,90 @@ describe('workspace read routes', () => {
     expectError(bad, 422, 'invalid_text_encoding');
   });
 
+  it('GET extensionless text returns 200 with revision headers (N-02)', async () => {
+    await writeFile(join(dir, 'plainnote'), 'hello noext\n');
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'plainnote' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('hello noext\n');
+    expect(res.headers['content-type']).toBe('text/plain; charset=utf-8');
+    const revision = expectedRevision('plainnote', 'hello noext\n');
+    expect(res.headers['etag']).toBe(`"${revision}"`);
+    expect(res.headers['x-revision']).toBe(revision);
+  });
+
+  it('GET extensionless in a dotted folder returns 200 (N-02)', async () => {
+    await mkdir(join(dir, 'dot.folder'), { recursive: true });
+    await writeFile(join(dir, 'dot.folder', 'innernote'), 'inner');
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'dot.folder/innernote' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('inner');
+  });
+
+  it('GET extensionless binary (NUL) returns 422 without revision (N-02)', async () => {
+    const bytes = Buffer.from([0x41, 0x00, 0x42]);
+    await writeFile(join(dir, 'binnote'), bytes);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'binnote' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(res, 422, 'invalid_text_encoding');
+    expect(res.headers['x-revision']).toBeUndefined();
+    const revision = expectedRevision('binnote', bytes);
+    const cached = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'binnote' })}`,
+      headers: { cookie: VALID_COOKIE, 'if-none-match': `"${revision}"` },
+    });
+    expectError(cached, 422, 'invalid_text_encoding');
+  });
+
+  it('GET extensionless invalid UTF-8 returns 422 (N-02)', async () => {
+    await writeFile(join(dir, 'badnote'), Buffer.from([0x41, 0xff, 0xfe, 0x42]));
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'badnote' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(res, 422, 'invalid_text_encoding');
+  });
+
+  it('GET unknown dotted extension still returns 415 (N-02)', async () => {
+    await writeFile(join(dir, 'weird.xyz'), 'x');
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'weird.xyz' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expectError(res, 415, 'not_text_file');
+  });
+
+  it('GET .md and .txt behavior unchanged (N-02)', async () => {
+    const md = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'read.md' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(md.statusCode).toBe(200);
+    expect(md.headers['content-type']).toBe('text/markdown; charset=utf-8');
+    const txt = await app.inject({
+      method: 'GET',
+      url: `/api/workspace/file${q({ path: 'notes.txt' })}`,
+      headers: { cookie: VALID_COOKIE },
+    });
+    expect(txt.statusCode).toBe(200);
+    expect(txt.headers['content-type']).toBe('text/plain; charset=utf-8');
+    expect(txt.body).toBe('plain');
+  });
+
   it('GET needs only the session: a wrong Origin header is ignored', async () => {
     const res = await app.inject({
       method: 'GET',
