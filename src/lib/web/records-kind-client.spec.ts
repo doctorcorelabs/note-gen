@@ -49,6 +49,7 @@ import {
   type UploadedAsset,
 } from "./records-client";
 import {
+  isNoTagsExistError,
   KindRecordsApi,
   translateKindError,
   type KindSqlAdapter,
@@ -88,7 +89,13 @@ class FakeKindSql implements KindSqlAdapter {
   private nextMarkId = 100;
   private clock = 1_700_000_000_000;
 
-  constructor(withLockedDefault = true) {
+  constructor(withLockedDefault = true, seedTags?: FakeTagState[]) {
+    if (seedTags !== undefined) {
+      for (const tag of seedTags) {
+        this.tags.set(tag.id, { ...tag });
+      }
+      return;
+    }
     if (withLockedDefault) {
       this.tags.set(1, {
         id: 1,
@@ -397,7 +404,7 @@ class FakeKindSql implements KindSqlAdapter {
   }
 }
 
-function makeApi(withLockedDefault = true): {
+function makeApi(withLockedDefault = true, seedTags?: FakeTagState[]): {
   api: KindRecordsApi;
   uploads: Array<{ file: Blob; fileName: string | undefined }>;
 } {
@@ -419,7 +426,7 @@ function makeApi(withLockedDefault = true): {
     },
   };
   const api = new KindRecordsApi({
-    sql: new FakeKindSql(withLockedDefault),
+    sql: new FakeKindSql(withLockedDefault, seedTags),
     assets,
   });
   return { api, uploads };
@@ -570,11 +577,46 @@ describe("KindRecordsApi create", () => {
     expect(record.tagIds).toEqual([1]);
   });
 
-  it("fails honestly when no tag is selected and no locked tag exists", async () => {
-    const { api } = makeApi(false);
+  it("lands on the lowest-id tag in a 13-tag workspace without Idea", async () => {
+    const seed = Array.from({ length: 13 }, (_, index) => ({
+      id: index + 2,
+      name: `Tag ${index + 2}`,
+      isLocked: false,
+      isPin: false,
+      sortOrder: index,
+    }));
+    const { api } = makeApi(true, seed);
+    const record = await api.createRecord(buildTextCreateBody("No tag picked", {}));
+    expect(record.tagId).toBe(2);
+    expect(record.tagIds).toEqual([2]);
+  });
+
+  it("prefers a tag named Idea over the lowest-id tag", async () => {
+    const { api } = makeApi(true, [
+      { id: 2, name: "Research", isLocked: false, isPin: false, sortOrder: 1 },
+      { id: 5, name: "Idea", isLocked: false, isPin: false, sortOrder: 2 },
+    ]);
+    const record = await api.createRecord(buildTextCreateBody("No tag picked", {}));
+    expect(record.tagId).toBe(5);
+  });
+
+  it("prefers the locked tag over a tag named Idea", async () => {
+    const { api } = makeApi(true, [
+      { id: 2, name: "Idea", isLocked: false, isPin: false, sortOrder: 1 },
+      { id: 9, name: "Locked", isLocked: true, isPin: true, sortOrder: 0 },
+    ]);
+    const record = await api.createRecord(buildTextCreateBody("No tag picked", {}));
+    expect(record.tagId).toBe(9);
+  });
+
+  it("fails with NoTagsExistError only when the workspace has no tags", async () => {
+    const { api } = makeApi(true, []);
     await expect(
       api.createRecord(buildTextCreateBody("No tag picked", {})),
-    ).rejects.toThrow(/no locked default tag/);
+    ).rejects.toThrow(/has no tags/);
+    await expect(
+      api.createRecord(buildTextCreateBody("No tag picked", {})),
+    ).rejects.toSatisfy((error: unknown) => isNoTagsExistError(error));
   });
 
   it("rejects tag combinations and per-type url violations", async () => {

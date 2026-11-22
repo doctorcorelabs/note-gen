@@ -45,6 +45,7 @@ import {
   type ApiTag,
   type RecordsApiPort,
 } from "@/lib/web/records-client";
+import { isNoTagsExistError } from "@/lib/web/records-kind-client";
 import { TagChecklist } from "./web-inbox-shared";
 
 type CreateFlow = "text" | "link" | "image" | "file" | "todo";
@@ -158,6 +159,8 @@ export function WebRecordCreate({
   function reportSaveError(error: unknown) {
     if (apiErrorWireCode(error) === "unauthenticated") {
       setNotice(tList("sessionExpired"));
+    } else if (isNoTagsExistError(error)) {
+      setNotice(t("noTagsExist"));
     } else {
       setNotice(t("saveFailed"));
     }

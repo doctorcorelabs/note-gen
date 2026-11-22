@@ -4906,6 +4906,7 @@
           "fileCaptionLabel": "Description (optional)",
           "tagsLabel": "Tags",
           "saveFailed": "The record could not be saved. Try again.",
+          "noTagsExist": "This workspace has no tags yet. Create a tag first, then save the record.",
           "invalidUrl": "Enter a valid http or https URL.",
           "emptyText": "Enter some text first.",
           "noFile": "Choose a file first.",

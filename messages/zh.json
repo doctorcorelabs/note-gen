@@ -4906,6 +4906,7 @@
           "fileCaptionLabel": "描述（可选）",
           "tagsLabel": "标签",
           "saveFailed": "记录保存失败，请重试。",
+          "noTagsExist": "This workspace has no tags yet. Create a tag first, then save the record.",
           "invalidUrl": "请输入有效的 http 或 https 链接。",
           "emptyText": "请先输入一些文本。",
           "noFile": "请先选择一个文件。",

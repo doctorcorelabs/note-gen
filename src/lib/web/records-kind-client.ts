@@ -64,8 +64,10 @@
 //    from listTags, which carries real counts.
 // 4. Create without tags: REST resolves the default save target
 //    server-side. Kinds require a primary tag, so the adapter
-//    reads tags.list and uses the locked tag; with no locked tag
-//    it fails honestly instead of guessing a tag.
+//    mirrors the REST order over tags.list (locked tag, then a
+//    tag named "Idea", then the lowest-id tag) without the REST
+//    tag-creation step, which the kind path cannot do. Only a
+//    workspace with no tags at all fails, with NoTagsExistError.
 // 5. Tag rename on a locked tag: the kind allows pin-only changes
 //    on locked tags, but the contract forbids changing pin on a
 //    locked tag (except re-sending the same value). The adapter
@@ -238,6 +240,23 @@ export function translateKindError(error: unknown): unknown {
     requestId,
     details: details === null ? {} : { ...details },
   });
+}
+
+/** Thrown when a record is saved without a tag in a workspace
+ * that has no tags at all, so no default save target exists.
+ * The create dialog branches on this to show a specific message
+ * instead of the generic save failure. */
+export class NoTagsExistError extends Error {
+  constructor() {
+    super(
+      "No tag was selected and this workspace has no tags; create a tag to save the record.",
+    );
+    this.name = "NoTagsExistError";
+  }
+}
+
+export function isNoTagsExistError(error: unknown): boolean {
+  return error instanceof Error && error.name === "NoTagsExistError";
 }
 
 function notFoundError(): ApiError {
@@ -564,13 +583,25 @@ export class KindRecordsApi implements RecordsApiPort {
 
   private async resolveDefaultTagId(): Promise<number> {
     const tags = await this.call(() => this.sql.query({ kind: "tags.list" }));
-    const locked = tags.find((tag) => tag.isLocked);
+    // Mirror the REST default-save-target order (server
+    // resolveDefaultTag) minus tag creation, which the kind
+    // path cannot do: lowest-id locked tag, then a tag named
+    // "Idea", then the lowest-id tag. Only a workspace with
+    // no tags at all has no save target.
+    const byId = [...tags].sort((a, b) => a.id - b.id);
+    const locked = byId.find((tag) => tag.isLocked);
     if (locked !== undefined) {
       return locked.id;
     }
-    throw new Error(
-      "No tag was selected and no locked default tag exists; select a tag to save the record.",
-    );
+    const idea = byId.find((tag) => tag.name === "Idea");
+    if (idea !== undefined) {
+      return idea.id;
+    }
+    const first = byId[0];
+    if (first !== undefined) {
+      return first.id;
+    }
+    throw new NoTagsExistError();
   }
 
   async createRecord(body: CreateRecordBody): Promise<ApiRecord> {
