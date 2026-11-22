@@ -45,6 +45,13 @@ const SPECIFIC_WIRE_KEYS: Readonly<Record<string, string>> = Object.freeze({
   revision_conflict: "errors.revision_conflict",
 });
 
+/** Exact local error messages with dedicated, actionable user text. */
+const SPECIFIC_MESSAGE_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  // PB2 R5 (EXP-04): the export flush guard throws this bare code;
+  // map it to actionable text instead of errors.unknown.
+  UNSAVED_CHANGES: "errors.unsaved_changes",
+});
+
 const LOCAL_CODES: ReadonlySet<string> = new Set<LocalApiErrorCode>([
   "CAPABILITY_UNAVAILABLE",
   "CAPABILITY_GATED",
@@ -120,6 +127,9 @@ export function userErrorMessageKey(error: unknown): string | null {
     const wiki = /^(WIKI_[A-Z0-9_]+)/.exec(message);
     if (wiki) {
       return `wiki.errors.${wiki[1]}`;
+    }
+    if (message in SPECIFIC_MESSAGE_KEYS) {
+      return SPECIFIC_MESSAGE_KEYS[message];
     }
     const local = /^([A-Z][A-Z0-9_]+)/.exec(message);
     if (local && LOCAL_CODES.has(local[1])) {

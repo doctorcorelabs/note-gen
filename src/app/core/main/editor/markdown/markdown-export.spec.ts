@@ -61,6 +61,7 @@ import {
   exportMarkdownSource,
   isDangerousExportUrl,
   parseMarkdownToJson,
+  renderMarkdownToHtmlDetailed,
 } from "./markdown-export";
 
 type RafCallback = () => void;
@@ -301,5 +302,119 @@ describe("JSON export single basis (DA-6 EXP-03 area 12)", () => {
     expect(blobs).toHaveLength(1);
     const parsed = JSON.parse(await blobs[0].text()) as { content?: Array<{ type?: string }> };
     expect(parsed.content?.[0]?.type).toBe("heading");
+  });
+});
+
+describe("main-path image deferral (PB2 BUG2-01/02, PERF-01)", () => {
+  interface FakeImage {
+    getAttribute: (name: string) => string | null;
+    setAttribute: (name: string, value: string) => void;
+    removeAttribute: (name: string) => void;
+  }
+
+  function makeFakeImage(attrs: Record<string, string>): FakeImage {
+    const store = new Map(Object.entries(attrs));
+    return {
+      getAttribute: (name) => store.get(name) ?? null,
+      setAttribute: (name, value) => { store.set(name, value); },
+      removeAttribute: (name) => { store.delete(name); },
+    };
+  }
+
+  class FakeFileReader {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    error: unknown = null;
+    result: string | null = null;
+    readAsDataURL() {
+      this.result = "data:image/png;base64,AAAA";
+      this.onload?.();
+    }
+  }
+
+  let fakeImages: FakeImage[] = [];
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    fakeImages = [];
+    activeFetches = 0;
+    maxActiveFetches = 0;
+    vi.stubGlobal("document", {
+      createElement: (tag: string) => tag === "template"
+        ? {
+            innerHTML: "",
+            content: {
+              querySelectorAll: (selector: string) => selector === "img" ? fakeImages : [],
+            },
+          }
+        : makeTemplate(),
+      body: { appendChild: vi.fn() },
+      styleSheets: [],
+      baseURI: "http://localhost/",
+    });
+    vi.stubGlobal("FileReader", FakeFileReader);
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      activeFetches += 1;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeFetches -= 1;
+      return { ok: true, blob: async () => new Blob(["x"]) };
+    }));
+  });
+
+  it("embeds a deferred workspace image instead of leaving blocked text", async () => {
+    fakeImages = [makeFakeImage({
+      alt: "Klasifikasi",
+      "data-notegen-export-src": "cover-klasifikasi.png",
+    })];
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: '<img alt="Klasifikasi" data-notegen-export-src="cover-klasifikasi.png">',
+      highlightFallback: false,
+    });
+
+    const { warnings } = await renderMarkdownToHtmlDetailed("![Klasifikasi](cover-klasifikasi.png)");
+
+    expect(renderMocks.renderMarkdownExportFragment).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ deferImages: true }),
+    );
+    expect(fakeImages[0].getAttribute("src")).toMatch(/^data:/);
+    expect(fakeImages[0].getAttribute("data-notegen-export-src")).toBeNull();
+    expect(warnings.filter((warning) => warning.code === "asset-not-embedded")).toHaveLength(0);
+  });
+
+  it("embeds images with bounded concurrency and keeps document order", async () => {
+    fakeImages = Array.from({ length: 6 }, (_, index) => makeFakeImage({
+      alt: `img-${index}`,
+      "data-notegen-export-src": `img-${index}.png`,
+    }));
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>gambar</p>",
+      highlightFallback: false,
+    });
+
+    const { warnings } = await renderMarkdownToHtmlDetailed("enam gambar");
+
+    expect(maxActiveFetches).toBeGreaterThan(1);
+    expect(maxActiveFetches).toBeLessThanOrEqual(4);
+    for (const image of fakeImages) {
+      expect(image.getAttribute("src")).toMatch(/^data:/);
+    }
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("warns that mermaid diagrams are preserved as code blocks", async () => {
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>diagram</p>",
+      highlightFallback: false,
+    });
+
+    const { warnings } = await renderMarkdownToHtmlDetailed(
+      "```mermaid\nflowchart TD\n  A --> B\n```",
+    );
+
+    expect(warnings).toContainEqual(expect.objectContaining({ code: "unsupported-content" }));
   });
 });

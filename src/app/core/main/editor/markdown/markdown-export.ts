@@ -39,7 +39,7 @@ export interface MarkdownExportSource {
 }
 
 export interface MarkdownExportWarning {
-  code: 'asset-not-embedded' | 'highlight-fallback' | 'styles-truncated'
+  code: 'asset-not-embedded' | 'highlight-fallback' | 'styles-truncated' | 'unsupported-content'
   message: string
 }
 
@@ -70,6 +70,9 @@ const DIRECT_PDF_EXPORT_TIMEOUT_MS = 75000
 const HTML_EXPORT_TIMEOUT_MS = 75000
 const EXPORT_IMAGE_EMBED_LIMIT_BYTES = 2 * 1024 * 1024
 const EXPORT_IMAGE_EMBED_TOTAL_LIMIT_BYTES = 10 * 1024 * 1024
+// PB2 PERF-01: bound parallel image embedding so a note with many
+// images does not spend the whole export deadline fetching serially.
+const EXPORT_IMAGE_EMBED_CONCURRENCY = 4
 const EXPORT_STYLES_BYTE_LIMIT = 10 * 1024 * 1024
 const ANIMATION_FRAME_TIMEOUT_MS = 250
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g
@@ -395,32 +398,101 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
   const warnings: MarkdownExportWarning[] = []
   let embeddedTotalBytes = 0
 
-  // DA-6 EXP-03 (area 13) + EXP-05 (area 12): embed image bytes as a
-  // data URL with per-image and total size limits so the exported
-  // HTML is self-contained; on failure keep the URL and record a
-  // warning instead of degrading silently.
-  const embedImage = async (image: HTMLImageElement, url: string, fallbackSrc: string) => {
+  // PB2 BUG2-01: the main export path now renders with
+  // deferImages (same as the advanced path), so the original src
+  // arrives in data-notegen-export-src and the img has no src yet.
+  // Read the deferred source first; fall back to src for fragments
+  // rendered without deferral.
+  interface PendingImage {
+    image: HTMLImageElement
+    src: string
+    fallbackSrc: string
+    blob: Blob | null
+    fetchFailed: boolean
+  }
+
+  const pending: PendingImage[] = []
+  for (const image of images) {
+    const deferredSrc = image.getAttribute('data-notegen-export-src')
+    image.removeAttribute('data-notegen-export-src')
+    const src = deferredSrc ?? image.getAttribute('src')
+    if (!src || /^(?:data:|blob:)/i.test(src)) {
+      if (src) {
+        image.setAttribute('src', src)
+      }
+      continue
+    }
+    pending.push({ image, src, fallbackSrc: src, blob: null, fetchFailed: false })
+  }
+
+  // PB2 PERF-01: fetch image bytes with bounded concurrency
+  // instead of one image at a time. Results are applied below in
+  // document order, so size-limit accounting and warning order
+  // stay deterministic.
+  const fetchImage = async (entry: PendingImage) => {
     try {
+      let url = entry.src
+      if (sourcePath && shouldTransformImageSrcToWorkspaceAsset(entry.src)) {
+        const fullRelativePath = resolveImagePathFromMarkdown(sourcePath, entry.src)
+        url = await withTimeout(
+          convertImageByWorkspace(fullRelativePath),
+          EXPORT_ASSET_FETCH_TIMEOUT_MS,
+          entry.src,
+        )
+        // In web mode the resolved URL is an authenticated
+        // same-origin media URL; fetch its bytes and embed them.
+        // On desktop the asset URL fetch may fail, in which case
+        // the URL is kept as before.
+        entry.fallbackSrc = url
+      } else {
+        url = new URL(entry.src, document.baseURI).href
+      }
       const response = await fetch(url, {
         signal: AbortSignal.timeout(EXPORT_ASSET_FETCH_TIMEOUT_MS),
       })
       if (!response.ok) {
         throw new Error('Export asset fetch failed')
       }
-      const blob = await response.blob()
-      if (
-        blob.size > EXPORT_IMAGE_EMBED_LIMIT_BYTES
-        || embeddedTotalBytes + blob.size > EXPORT_IMAGE_EMBED_TOTAL_LIMIT_BYTES
-      ) {
-        image.setAttribute('src', fallbackSrc)
-        warnings.push({
-          code: 'asset-not-embedded',
-          message: 'An image was too large to embed in the exported file',
-        })
-        return
-      }
+      entry.blob = await response.blob()
+    } catch {
+      entry.fetchFailed = true
+    }
+  }
+
+  for (let offset = 0; offset < pending.length; offset += EXPORT_IMAGE_EMBED_CONCURRENCY) {
+    await Promise.all(pending.slice(offset, offset + EXPORT_IMAGE_EMBED_CONCURRENCY).map(fetchImage))
+  }
+
+  // DA-6 EXP-03 (area 13) + EXP-05 (area 12): embed image bytes as a
+  // data URL with per-image and total size limits so the exported
+  // HTML is self-contained; on failure keep the URL and record a
+  // warning instead of degrading silently.
+  for (const entry of pending) {
+    const { image, fallbackSrc } = entry
+    if (entry.fetchFailed || !entry.blob) {
+      image.setAttribute('src', fallbackSrc)
+      warnings.push({
+        code: 'asset-not-embedded',
+        message: 'An image could not be embedded in the exported file',
+      })
+      continue
+    }
+    const blob = entry.blob
+    if (
+      blob.size > EXPORT_IMAGE_EMBED_LIMIT_BYTES
+      || embeddedTotalBytes + blob.size > EXPORT_IMAGE_EMBED_TOTAL_LIMIT_BYTES
+    ) {
+      image.setAttribute('src', fallbackSrc)
+      warnings.push({
+        code: 'asset-not-embedded',
+        message: 'An image was too large to embed in the exported file',
+      })
+      continue
+    }
+    try {
+      const dataUrl = await blobToDataUrl(blob)
       embeddedTotalBytes += blob.size
-      image.setAttribute('src', await blobToDataUrl(blob))
+      image.setAttribute('src', dataUrl)
     } catch {
       image.setAttribute('src', fallbackSrc)
       warnings.push({
@@ -428,29 +500,6 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string) {
         message: 'An image could not be embedded in the exported file',
       })
     }
-  }
-
-  for (const image of images) {
-    const src = image.getAttribute('src')
-    if (!src || /^(?:data:|blob:)/i.test(src)) {
-      continue
-    }
-
-    if (sourcePath && shouldTransformImageSrcToWorkspaceAsset(src)) {
-      const fullRelativePath = resolveImagePathFromMarkdown(sourcePath, src)
-      const resolvedSrc = await withTimeout(
-        convertImageByWorkspace(fullRelativePath),
-        EXPORT_ASSET_FETCH_TIMEOUT_MS,
-        src,
-      )
-      // In web mode resolvedSrc is an authenticated same-origin media
-      // URL; fetch its bytes and embed them. On desktop the asset
-      // URL fetch may fail, in which case the URL is kept as before.
-      await embedImage(image, resolvedSrc, resolvedSrc)
-      continue
-    }
-
-    await embedImage(image, new URL(src, document.baseURI).href, src)
   }
 
   return { html: template.innerHTML, warnings }
@@ -509,7 +558,12 @@ export async function renderMarkdownToHtmlDetailed(
   sourcePath?: string,
   signal?: AbortSignal,
 ) {
-  const { html, highlightFallback } = await renderMarkdownExportFragment(markdown, { signal })
+  // PB2 BUG2-01: deferImages keeps workspace-relative image
+  // references out of rehype-harden (which replaced plain relative
+  // names with "[Image blocked: ...]" text) so
+  // resolveMarkdownImageSources can embed them, matching the
+  // advanced export path.
+  const { html, highlightFallback } = await renderMarkdownExportFragment(markdown, { deferImages: true, signal })
   const resolved = await resolveMarkdownImageSources(sanitizeExportHtml(html), sourcePath)
   const warnings = [...resolved.warnings]
   // DA-6 EXP-05 (area 12): highlightFallback used to be discarded.
@@ -517,6 +571,15 @@ export async function renderMarkdownToHtmlDetailed(
     warnings.push({
       code: 'highlight-fallback',
       message: 'Code highlighting fell back to plain text in the exported file',
+    })
+  }
+  // PB2 BUG2-02: the export renderer has no mermaid plugin, so
+  // diagrams degrade to code blocks. Warn like the advanced path
+  // (export-document.ts) instead of degrading silently.
+  if (/(?:^|\n)\s*(?:`{3,}|~{3,})\s*mermaid\b/i.test(markdown)) {
+    warnings.push({
+      code: 'unsupported-content',
+      message: 'Mermaid diagrams are preserved as code blocks',
     })
   }
   return { html: resolved.html, warnings }

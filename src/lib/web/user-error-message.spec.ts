@@ -86,6 +86,13 @@ describe("userErrorMessageKey", () => {
     );
   });
 
+  it("maps the UNSAVED_CHANGES export guard to actionable text (PB2 R5)", () => {
+    assert.equal(
+      userErrorMessageKey(new Error("UNSAVED_CHANGES")),
+      "errors.unsaved_changes",
+    );
+  });
+
   it("handles non-Error values without leaking them", () => {
     assert.equal(userErrorMessageKey("some raw string"), "errors.unknown");
     assert.equal(userErrorMessageKey(null), "errors.unknown");

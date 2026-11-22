@@ -6,6 +6,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { platform } from "@/lib/platform";
 import { duplicateFolderTree } from "./duplicate-folder-tree";
 import { toast } from "@/hooks/use-toast";
+import { useTranslations } from "next-intl";
 
 interface DuplicateFolderProps {
   item: DirTree;
@@ -13,6 +14,7 @@ interface DuplicateFolderProps {
 }
 
 export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
+  const t = useTranslations('article.file');
   const path = computedParentPath(item);
 
   async function handleDuplicateFolder() {
@@ -58,16 +60,16 @@ export function DuplicateFolder({ item, shortcut }: DuplicateFolderProps) {
 
       if (copyResult.failed.length > 0) {
         toast({
-          title: `Folder copied as ${targetName} with ${copyResult.failed.length} failed file(s)`,
+          title: t('folderCopiedPartial', { targetName, count: copyResult.failed.length }),
           description: copyResult.failed.join(', '),
           variant: 'destructive',
         })
       } else {
-        toast({ title: `Folder copied as ${targetName}` })
+        toast({ title: t('folderCopiedAs', { targetName }) })
       }
     } catch (error) {
       console.error('Duplicate folder failed:', error)
-      toast({ title: 'Failed to copy the folder', variant: 'destructive' })
+      toast({ title: t('copyFolderFailed'), variant: 'destructive' })
     }
   }
 

@@ -65,8 +65,10 @@ export function ExportButton({ editor, markdown, getMarkdown }: ExportButtonProp
       if (exported) {
         toast({
           title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess'),
+          // PB2 BUG2-03: include the first warning message so the
+          // user can tell what was simplified, not only how many.
           description: exportWarnings.length > 0
-            ? t('exportWarnings', { count: exportWarnings.length })
+            ? `${t('exportWarnings', { count: exportWarnings.length })} ${exportWarnings[0].message}`
             : undefined,
         })
       }

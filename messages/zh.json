@@ -6371,7 +6371,12 @@
     "CONFLICT": "服务器上的内容已更改。请刷新后重试。",
     "PAYLOAD_TOO_LARGE": "文件过大。",
     "RATE_LIMITED": "请求过于频繁。请稍后再试。",
-    "SERVER_ERROR": "服务器无法完成请求。请重试。"
+    "SERVER_ERROR": "服务器无法完成请求。请重试。",
+    "unsaved_changes": "Your latest changes could not be saved. Save the note first, then export again.",
+    "ragErrorTitle": "RAG Error",
+    "ragErrorDescription": "{context}: The request failed. Please try again.",
+    "semanticSearchUnavailable": "Semantic search unavailable",
+    "semanticSearchUnavailableDesc": "Vector search failed; results use keyword matching only."
   },
   "marks": {
     "types": {
@@ -6882,6 +6887,7 @@
       "moveTargetExists": "目标路径已存在：{targetPath}",
       "invalidMoveTarget": "无效的移动目标",
       "folderCopiedAs": "文件夹已复制为 {targetName}",
+      "folderCopiedPartial": "Folder copied as {targetName} with {count} failed file(s)",
       "copyFolderFailed": "复制文件夹失败",
       "saveAsPdfInstruction": "请在系统打印窗口中选择“另存为 PDF”。",
       "exportButton": "导出"

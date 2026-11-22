@@ -6371,7 +6371,12 @@
     "CONFLICT": "The item changed on the server. Reload and try again.",
     "PAYLOAD_TOO_LARGE": "The file is too large.",
     "RATE_LIMITED": "Too many requests. Please wait and try again.",
-    "SERVER_ERROR": "The server could not complete the request. Please try again."
+    "SERVER_ERROR": "The server could not complete the request. Please try again.",
+    "unsaved_changes": "Your latest changes could not be saved. Save the note first, then export again.",
+    "ragErrorTitle": "RAG Error",
+    "ragErrorDescription": "{context}: The request failed. Please try again.",
+    "semanticSearchUnavailable": "Semantic search unavailable",
+    "semanticSearchUnavailableDesc": "Vector search failed; results use keyword matching only."
   },
   "marks": {
     "types": {
@@ -6882,6 +6887,7 @@
       "moveTargetExists": "The target path already exists: {targetPath}",
       "invalidMoveTarget": "Invalid move target.",
       "folderCopiedAs": "Folder copied as {targetName}",
+      "folderCopiedPartial": "Folder copied as {targetName} with {count} failed file(s)",
       "copyFolderFailed": "Failed to copy the folder",
       "saveAsPdfInstruction": "In the system print window, choose \"Save as PDF\".",
       "exportButton": "Export"

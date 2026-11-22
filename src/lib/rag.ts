@@ -38,6 +38,8 @@ import {
   RetrievalScope,
   RetrievalStrategy
 } from './rag-retrieval-policy';
+import { createTranslator } from 'next-intl';
+import { LANGUAGE_STORAGE_KEY, loadMessagesWithFallback, normalizeLocale } from '@/i18n/config';
 
 /**
  * 统一错误处理函数
@@ -45,13 +47,42 @@ import {
 // DA-2 (K-06): semantic search degradation must be visible
 // once per session instead of living only in console output.
 let semanticDegradedNotified = false;
+// PB2 R2: RAG toast texts resolve through the shared catalog
+// (createTranslator, same pattern as ai/utils.ts) with the
+// previous English strings as fallback when message loading
+// fails, so a localization failure never loses the notice.
+async function ragErrorTexts(context: string): Promise<{ title: string; description: string }> {
+  const fallback = { title: 'RAG Error', description: `${context}: The request failed. Please try again.` };
+  try {
+    const locale = normalizeLocale(typeof window === 'undefined' ? null : localStorage.getItem(LANGUAGE_STORAGE_KEY));
+    const messages = await loadMessagesWithFallback(locale);
+    const t = createTranslator({ locale, messages, namespace: 'errors' });
+    return { title: t('ragErrorTitle'), description: t('ragErrorDescription', { context }) };
+  } catch {
+    return fallback;
+  }
+}
+
+async function semanticDegradedTexts(): Promise<{ title: string; description: string }> {
+  const fallback = {
+    title: 'Semantic search unavailable',
+    description: 'Vector search failed; results use keyword matching only.',
+  };
+  try {
+    const locale = normalizeLocale(typeof window === 'undefined' ? null : localStorage.getItem(LANGUAGE_STORAGE_KEY));
+    const messages = await loadMessagesWithFallback(locale);
+    const t = createTranslator({ locale, messages, namespace: 'errors' });
+    return { title: t('semanticSearchUnavailable'), description: t('semanticSearchUnavailableDesc') };
+  } catch {
+    return fallback;
+  }
+}
+
 function notifySemanticDegradedOnce(): void {
   if (semanticDegradedNotified) return;
   semanticDegradedNotified = true;
-  toast({
-    title: 'Semantic search unavailable',
-    description: 'Vector search failed; results use keyword matching only.',
-    variant: 'destructive',
+  void semanticDegradedTexts().then(({ title, description }) => {
+    toast({ title, description, variant: 'destructive' });
   });
 }
 
@@ -61,13 +92,10 @@ function handleRAGError(error: unknown, context: string, showToast: boolean = tr
 
   if (showToast) {
     // DA-2 (BUG-07): never render the raw error text; the raw
-    // message stays in the console.error above. This module has
-    // no translator (hardcoded English surface), so the generic
-    // sentence is English until the surface is localized.
-    toast({
-      title: 'RAG Error',
-      description: `${context}: The request failed. Please try again.`,
-      variant: 'destructive',
+    // message stays in the console.error above. PB2 R2: the
+    // generic sentence now resolves through the catalog.
+    void ragErrorTexts(context).then(({ title, description }) => {
+      toast({ title, description, variant: 'destructive' });
     });
   }
 }
