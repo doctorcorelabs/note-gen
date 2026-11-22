@@ -1,3 +1,4 @@
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { TooltipButton } from "@/components/tooltip-button"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -48,6 +49,7 @@ import {
 type BrowserPageContent = { title: string; url: string; text: string; truncated: boolean }
 
 export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: { pageUrl?: string; browserTabId?: string; browserToolbar?: boolean } = {}) {
+  const userErrorMessage = useUserErrorMessage()
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('')
@@ -281,7 +283,7 @@ export function ControlLink({ pageUrl, browserTabId, browserToolbar = false }: {
       console.error('Error crawling page:', error);
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('record.capture.linkFetchFailed'),
+        description: userErrorMessage(error) ?? t('record.capture.linkFetchFailed'),
         variant: 'destructive',
       })
     } finally {

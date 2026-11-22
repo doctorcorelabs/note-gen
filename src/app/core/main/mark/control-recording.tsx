@@ -1,3 +1,4 @@
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { insertMark } from "@/db/marks"
 import useMarkStore from "@/stores/mark"
 import useSettingStore from "@/stores/setting"
@@ -19,6 +20,7 @@ import { useRecordCompletion } from './use-record-completion'
 import { getDefaultRecordSaveTagId } from '@/lib/record-save-target'
 
 export function ControlRecording() {
+  const userErrorMessage = useUserErrorMessage()
   const t = useTranslations();
   const { sttModel } = useSettingStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +71,7 @@ export function ControlRecording() {
       cancelRecording()
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : t('recording.startError'),
+        description: userErrorMessage(error) ?? t('recording.startError'),
         variant: 'destructive'
       })
     }
@@ -106,7 +108,7 @@ export function ControlRecording() {
       console.error('停止录音失败:', error)
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : t('recording.startError'),
+        description: userErrorMessage(error) ?? t('recording.startError'),
         variant: 'destructive'
       })
     }
@@ -199,7 +201,7 @@ export function ControlRecording() {
       
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : t('recording.transcriptionError'),
+        description: userErrorMessage(error) ?? t('recording.transcriptionError'),
         variant: 'destructive'
       })
     } finally {
@@ -282,7 +284,7 @@ export function ControlRecording() {
       console.error('文件选择失败:', error)
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : t('recording.fileSelectFailed'),
+        description: userErrorMessage(error) ?? t('recording.fileSelectFailed'),
         variant: 'destructive'
       })
     }
@@ -316,7 +318,7 @@ export function ControlRecording() {
       console.error('文件处理失败:', error)
       toast({
         title: t('recording.error'),
-        description: error instanceof Error ? error.message : t('recording.fileProcessFailed'),
+        description: userErrorMessage(error) ?? t('recording.fileProcessFailed'),
         variant: 'destructive'
       })
     }

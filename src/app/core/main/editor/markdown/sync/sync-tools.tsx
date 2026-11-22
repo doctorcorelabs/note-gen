@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { ArrowDownCircle, ArrowUpCircle, CloudCog, History } from 'lucide-react'
@@ -44,6 +45,7 @@ function DesktopSyncTools({ configured, ...props }: SyncToolsProps & { configure
   const workingRef = useRef(false)
   const mountedRef = useRef(true)
   const t = useTranslations('syncOverview.document')
+  const userErrorMessage = useUserErrorMessage()
 
   useEffect(() => {
     mountedRef.current = true
@@ -72,7 +74,7 @@ function DesktopSyncTools({ configured, ...props }: SyncToolsProps & { configure
     } catch (error) {
       if (isCurrent()) {
         setFailed(true)
-        toast({ title: t('failed'), description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
+        toast({ title: t('failed'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
       }
     } finally {
       workingRef.current = false

@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { TooltipButton } from "@/components/tooltip-button"
 import { useTranslations } from 'next-intl'
 import { platform, BaseDirectory } from "@/lib/platform"
@@ -126,6 +127,7 @@ function setCenteredDefaultCropBox(cropper: Cropper) {
 }
 
 export function ControlScan() {
+  const userErrorMessage = useUserErrorMessage()
   const t = useTranslations();
   const [open, setOpen] = useState(false)
   const [selectedImageSrc, setSelectedImageSrc] = useState('')
@@ -330,7 +332,7 @@ export function ControlScan() {
       await updateSavedMark(nextMark)
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('record.capture.screenshotRecognitionFailed'),
+        description: userErrorMessage(error) ?? t('record.capture.screenshotRecognitionFailed'),
         variant: 'destructive',
       })
     }
@@ -437,7 +439,7 @@ export function ControlScan() {
       console.error('Screenshot record failed:', error)
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('common.error'),
+        description: userErrorMessage(error) ?? t('common.error'),
         variant: 'destructive',
       })
     }

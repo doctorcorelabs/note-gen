@@ -1,3 +1,4 @@
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { TooltipButton } from "@/components/tooltip-button"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -37,6 +38,7 @@ import useSettingStore from '@/stores/setting'
 import { getRecordSaveTagIdFromTags } from '@/lib/record-save-target'
 
 export function ControlText() {
+  const userErrorMessage = useUserErrorMessage()
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('')
@@ -151,7 +153,7 @@ export function ControlText() {
       console.error('Failed to save text record:', error)
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('common.error'),
+        description: userErrorMessage(error) ?? t('common.error'),
         variant: 'destructive',
       })
     }

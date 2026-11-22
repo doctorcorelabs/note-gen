@@ -283,10 +283,18 @@ export async function purgeDisabledKnowledgeVectors() {
         failed++
         console.error(`Vector purge failed for ${source.sourceKey}:`, error)
       }
-      await updateKnowledgeSourceIndexState(source.sourceKey, {
-        status: 'pending',
-        indexedHash: null,
-      })
+      // IM-2 F08-12: the status reset gets its own try so one
+      // failure counts and continues instead of stopping the purge
+      // (K-10 semantics kept: reset is attempted for every source).
+      try {
+        await updateKnowledgeSourceIndexState(source.sourceKey, {
+          status: 'pending',
+          indexedHash: null,
+        })
+      } catch (error) {
+        failed++
+        console.error(`Vector purge status reset failed for ${source.sourceKey}:`, error)
+      }
     }
   }
   return { purged, failed }

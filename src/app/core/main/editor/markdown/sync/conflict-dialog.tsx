@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { useCallback, useState, useEffect, useRef } from 'react'
 import { Editor } from '@tiptap/react'
 import {
@@ -59,6 +60,7 @@ export function ConflictDialog({
   onResolved,
 }: ConflictDialogProps) {
   const t = useTranslations('syncOverview.document')
+  const userErrorMessage = useUserErrorMessage()
   const c = useTranslations('syncOverview.selfHostedConflict')
   const [preview, setPreview] = useState<{
     content: string
@@ -114,7 +116,7 @@ export function ConflictDialog({
           localContent: local, platform: primaryPlatform, workspacePath, metadataKey, absolutePath,
         })
       } catch (error) {
-        if (current()) toast({ title: t('failed'), description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
+        if (current()) toast({ title: t('failed'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
       } finally {
         if (current()) setIsLoading(false)
       }
@@ -179,7 +181,7 @@ export function ConflictDialog({
     } catch (error) {
       if (isCurrent()) {
         emitter.emit('sync-push-completed', { path: activeFilePath, success: false })
-        toast({ title: t('failed'), description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
+        toast({ title: t('failed'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
       }
     } finally {
       operationRef.current = false
@@ -200,7 +202,7 @@ export function ConflictDialog({
       onResolved()
       onOpenChange(false)
     } catch (error) {
-      if (isCurrent()) toast({ title: t('failed'), description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
+      if (isCurrent()) toast({ title: t('failed'), description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     } finally {
       operationRef.current = false
       if (mountedRef.current) setIsLoading(false)

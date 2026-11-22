@@ -2215,16 +2215,14 @@ function looksLikeMarkdown(text: string): boolean {
   return (
     containsMarkdownTable(text) || // 表格，包括前后带正文的 Markdown
     /^#{1,6}\s/.test(text) || // 标题
-    /\*\*[^*]+\*\*/.test(text) || // 粗体
-    /\*[^*]+\*/.test(text) || // 斜体
+    /\*\*[^*]+\*\*/.test(text) || // bold (IM-2 F-ED-8: single-asterisk italic alone no longer triggers markdown parsing)
     /\[.+\]\(.+\)/.test(text) || // 链接
     /^[-*+]\s/.test(text) || // 无序列表
     /^\d+\.\s/.test(text) || // 有序列表
     /^>\s/.test(text) || // 引用
     /^```[\s\S]*```$/.test(text) || // 代码块
     /`[^`]+`/.test(text) || // 行内代码
-    /\$\$[\s\S]+?\$\$/.test(text) || // 块级公式
-    /(^|[^\$])\$[^\$\n]+\$(?!\$)/.test(text) // 行内公式
+    /\$\$[\s\S]+?\$\$/.test(text) // block math (IM-2 F-ED-8: inline $...$ alone, e.g. prices, no longer triggers markdown parsing)
   )
 }
 
@@ -4618,6 +4616,15 @@ export function TipTapEditor({
       }))
     }
 
+    // IM-2 F09-05: a failed link open must tell the user.
+    const handleOpenLinkError = (error: unknown) => {
+      console.error('Failed to open link:', error)
+      const description = userErrorMessage(error)
+      if (description) {
+        toast({ title: description, variant: 'destructive' })
+      }
+    }
+
     const openLink = async (href: string) => {
       if (href.startsWith('#')) return
 
@@ -4665,7 +4672,7 @@ export function TipTapEditor({
       event.preventDefault()
       event.stopPropagation()
       modifiedPointerHandled = true
-      void openLink(href).catch(() => {})
+      void openLink(href).catch(handleOpenLinkError)
     }
 
     const handleClick = (event: MouseEvent) => {
@@ -4680,7 +4687,7 @@ export function TipTapEditor({
         event.stopPropagation()
 
         if (!modifiedPointerHandled) {
-          void openLink(href).catch(() => {})
+          void openLink(href).catch(handleOpenLinkError)
         }
         modifiedPointerHandled = false
         return
@@ -4696,7 +4703,7 @@ export function TipTapEditor({
       event.stopPropagation()
 
       if (isMobile) {
-        void openLink(href).catch(() => {})
+        void openLink(href).catch(handleOpenLinkError)
       } else {
         editLink(anchor, href)
       }
@@ -4707,7 +4714,7 @@ export function TipTapEditor({
       if (!detail || detail.editor !== editor) return
       const href = detail.href
       if (typeof href !== 'string' || !href.trim()) return
-      void openLink(href.trim()).catch(() => {})
+      void openLink(href.trim()).catch(handleOpenLinkError)
     }
 
     editorElement.addEventListener('mousedown', handleModifiedMouseDown, true)

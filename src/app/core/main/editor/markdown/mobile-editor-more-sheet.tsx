@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import type { Editor } from '@tiptap/core'
 import { useTranslations } from 'next-intl'
 import { TEXT_COLORS, HIGHLIGHT_COLORS } from './color-marks'
@@ -93,6 +94,7 @@ export function MobileEditorMoreSheet({
   onAction,
 }: MobileEditorMoreSheetProps) {
   const colorLabel = useTranslations('editor.bubbleMenu.colors')
+  const userErrorMessage = useUserErrorMessage()
   const contributions = usePluginEditorCommands('mobile/writing/overflow', editor)
   const pluginCommands = pluginsEnabled ? contributions : []
 
@@ -101,7 +103,7 @@ export function MobileEditorMoreSheet({
     void executePluginUserCommand(command.id).catch((error) => {
       toast({
         title: command.title,
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     })

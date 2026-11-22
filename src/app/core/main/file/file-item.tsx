@@ -23,7 +23,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import useSettingStore from "@/stores/setting";
 import { VectorKnowledgeMenu } from "./vector-knowledge-menu";
 import { isSkillsFolder } from "@/lib/skills/utils";
-import { exportMarkdownFile, type MarkdownExportFormat } from "../editor/markdown/markdown-export";
+import { exportMarkdownFile, type MarkdownExportFormat, type MarkdownExportWarning } from "../editor/markdown/markdown-export";
 import { isAlreadyExistsLike } from "../editor/markdown/revision-conflict";
 import { setFileManagerDragData } from "./file-dnd";
 import { debugSyncPath } from "@/lib/sync/remote-file";
@@ -643,11 +643,15 @@ export function FileItem({
     if (isFileDeletionPending(path, workspacePath)) return
     try {
       setExportingFormat(format)
+      // IM-2 EXP4-02: collect degradations like the editor
+      // ExportButton instead of discarding them silently.
+      let exportWarnings: MarkdownExportWarning[] = []
       const exported = await exportMarkdownFile(
         format,
         path,
         {
           onPdfRenderStart: showPdfExportStartToast,
+          onWarnings: (warnings) => { exportWarnings = warnings },
           // DA-2 (EXP-04): flush pending editor saves first so the
           // export never silently uses stale disk content.
           flushPendingSave: () => prepareActiveEditorPathMutationDurably(activeFilePath, [path]),
@@ -655,7 +659,12 @@ export function FileItem({
       )
 
       if (exported) {
-        toast({ title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess') })
+        toast({
+          title: format === 'pdf' ? t('pdfPrintWindowOpened') : t('exportSuccess'),
+          description: exportWarnings.length > 0
+            ? `${t('exportWarnings', { count: exportWarnings.length })} ${[...new Set(exportWarnings.map(warning => warning.message))].join(' ')}`
+            : undefined,
+        })
       }
     } catch (error) {
       console.error(`Export selected file failed: ${path}`, error)

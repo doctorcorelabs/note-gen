@@ -4,8 +4,9 @@ import { Editor } from '@tiptap/react'
 import { Copy, FileCode, FileJson, FileText } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
+import useArticleStore from '@/stores/article'
 import { markdownToPlainText } from '@/lib/markdown-to-plain-text'
-import { parseMarkdownToJson, renderMarkdownToHtml } from '../markdown-export'
+import { parseMarkdownToJson, renderMarkdownToHtmlDetailed } from '../markdown-export'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,9 +63,23 @@ export function CopyButton({ editor, markdown, getMarkdown }: CopyButtonProps) {
 
   const handleCopyHtml = useCallback(() => {
     void copyToClipboard(
-      () => getMarkdown || markdown !== undefined
-        ? renderMarkdownToHtml(getCurrentMarkdown())
-        : editor.getHTML(),
+      async () => {
+        if (!(getMarkdown || markdown !== undefined)) {
+          return editor.getHTML()
+        }
+        // IM-2 EXP4-01: pass the active file as sourcePath so
+        // workspace images resolve, and surface embed warnings
+        // instead of silently copying broken relative srcs.
+        const sourcePath = useArticleStore.getState().activeFilePath ?? undefined
+        const { html, warnings } = await renderMarkdownToHtmlDetailed(getCurrentMarkdown(), sourcePath)
+        if (warnings.length > 0) {
+          toast({
+            title: 'Copy Success',
+            description: warnings.map(warning => warning.message).join(' '),
+          })
+        }
+        return html
+      },
       'html'
     )
   }, [copyToClipboard, editor, getCurrentMarkdown, getMarkdown, markdown])

@@ -574,7 +574,10 @@ export function MdEditor({ tabContentsRef, filePath, isActive, disabled = false 
         tab.path === filePath && tab.preview
       ))
       if (previewTab) void setTabDisposition(previewTab.id, 'regular')
-      saveCurrentArticle(content, filePath)
+      // IM-2 F-ED-6: never leave a save rejection unhandled.
+      void saveCurrentArticle(content, filePath).catch((error) => {
+        console.error('Failed to save article:', error)
+      })
     } else if (!filePath && !isCreatingFileRef.current) {
       // Auto-create untitled file
       isCreatingFileRef.current = true

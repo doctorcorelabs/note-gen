@@ -1,3 +1,4 @@
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { TooltipButton } from "@/components/tooltip-button"
 import { insertMark, Mark } from "@/db/marks"
 import { useTranslations } from 'next-intl'
@@ -135,6 +136,7 @@ function getImageMimeType(extension: string) {
 }
 
 export function ControlImage() {
+  const userErrorMessage = useUserErrorMessage()
   const t = useTranslations();
   const { primaryModel, enableImageRecognition } = useSettingStore()
   const { addQueue, setQueue, removeQueue } = useMarkStore()
@@ -305,7 +307,7 @@ export function ControlImage() {
       removeQueue(queueId)
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('common.error'),
+        description: userErrorMessage(error) ?? t('common.error'),
         variant: 'destructive',
       })
     }
@@ -384,7 +386,7 @@ export function ControlImage() {
       removeQueue(queueId)
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('common.error'),
+        description: userErrorMessage(error) ?? t('common.error'),
         variant: 'destructive',
       })
     }

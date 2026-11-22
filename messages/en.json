@@ -4926,6 +4926,7 @@
           "tagsConflict": "Record tags changed. Reload the record and try again.",
           "tagsLabel": "Tags",
           "saveTags": "Save tags",
+        "tagsEmpty": "Select at least one tag.",
           "openLink": "Open link",
           "viewAsset": "Open file",
           "delete": "Move to trash",

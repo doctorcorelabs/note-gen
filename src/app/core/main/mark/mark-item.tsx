@@ -1,4 +1,5 @@
 'use client'
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import React from "react"
 import { delMark, deleteMarks, delMarkForever, Mark, restoreMark, updateMark } from "@/db/marks";
 import { useTranslations } from 'next-intl';
@@ -240,6 +241,7 @@ function ImageRecordStatusBadge({
 
 export const MarkWrapper = React.memo(({mark, variant = 'list', interactive = true}: {mark: Mark, variant?: MarkItemVariant, interactive?: boolean}) => {
   const t = useTranslations('record.mark.type');
+  const userErrorMessage = useUserErrorMessage();
   const todoT = useTranslations('record.mark.todo');
   const captureT = useTranslations('record.capture');
   const recordingT = useTranslations('recording');
@@ -342,7 +344,7 @@ export const MarkWrapper = React.memo(({mark, variant = 'list', interactive = tr
       console.error('重新识别录音失败:', error)
       toast({
         title: recordingT('error'),
-        description: error instanceof Error ? error.message : recordingT('retryError'),
+        description: userErrorMessage(error) ?? recordingT('retryError'),
         variant: 'destructive',
       })
     } finally {

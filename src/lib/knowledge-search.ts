@@ -204,6 +204,11 @@ async function searchOriginalKnowledge(
   if (options.mode !== 'keyword' && settings.semanticSearchEnabled && readyVectorKeys.size > 0) {
     try {
       const queryEmbedding = await fetchEmbedding(normalizedQuery)
+      if (!queryEmbedding) {
+        // IM-2 F08-04: a null embedding (no model) is degradation,
+        // not a silent lexical-only answer.
+        semanticDegraded = true
+      }
       if (queryEmbedding) {
         const vectorResults = await getSimilarDocuments(
           queryEmbedding,

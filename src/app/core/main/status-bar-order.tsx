@@ -127,7 +127,7 @@ export const useStatusBarOrder = create<StatusBarOrderState>((set, get) => ({
     try { await savePromise } catch (error) {
       console.warn('[status-bar] Could not save tool order', error)
       if (get().savedOrder === savedOrder) set({ savedOrder: state.savedOrder })
-      toast({ description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
+      toast({ variant: 'destructive' }) // IM-2 F09-01: no translator in store scope; raw error stays in console.warn above
     }
   },
 }))

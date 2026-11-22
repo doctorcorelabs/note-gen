@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { platform } from '@/lib/platform'
 import {
   ArrowDownAZ,
@@ -62,6 +63,7 @@ export function FileMoreMenu({
   onImportNotion,
 }: FileMoreMenuProps) {
   const t = useTranslations('article.file.cloudLibrary')
+  const userErrorMessage = useUserErrorMessage()
   const tToolbar = useTranslations('article.file.toolbar')
   const tSync = useTranslations('settings.sync')
   const { openSettings } = useSettingsDialogStore()
@@ -174,7 +176,7 @@ export function FileMoreMenu({
     } catch (error) {
       progressToast.update({
         title: t('operationFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
         duration: 5000,
       })
@@ -212,7 +214,7 @@ export function FileMoreMenu({
     } catch (error) {
       progressToast.update({
         title: t('operationFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
         duration: 5000,
       })
@@ -269,7 +271,7 @@ export function FileMoreMenu({
   function showError(error: unknown) {
     toast({
       title: t('operationFailed'),
-      description: error instanceof Error ? error.message : String(error),
+      description: userErrorMessage(error) ?? undefined,
       variant: 'destructive',
     })
   }

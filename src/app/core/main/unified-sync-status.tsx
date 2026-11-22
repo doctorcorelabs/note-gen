@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
@@ -69,6 +70,7 @@ export function UnifiedSyncStatus({ mobile = false, onNavigate }: { mobile?: boo
   const settingsStatus = useSettingsHydrationStore(state => state.status)
   const settingsReady = settingsStatus === 'ready'
   const t = useTranslations('syncOverview')
+  const userErrorMessage = useUserErrorMessage()
   const tSync = useTranslations('settings.sync')
   const p = useTranslations('settings.sync.switchPlan')
   const tConflict = useTranslations('syncOverview.selfHostedConflict')
@@ -318,11 +320,11 @@ export function UnifiedSyncStatus({ mobile = false, onNavigate }: { mobile?: boo
       if (!isCurrent()) return
       for (const result of results) {
         if (result.status === 'rejected') {
-          notifyFailure(result.reason instanceof Error ? result.reason.message : String(result.reason))
+          notifyFailure(userErrorMessage(result.reason) ?? p('failed'))
         }
       }
     } catch (error) {
-      if (isCurrent()) notifyFailure(error instanceof Error ? error.message : String(error))
+      if (isCurrent()) notifyFailure(userErrorMessage(error) ?? p('failed'))
     } finally {
       retryingRef.current = false
       setRetrying(false)
@@ -467,7 +469,7 @@ export function UnifiedSyncStatus({ mobile = false, onNavigate }: { mobile?: boo
       if (mobile) { onNavigate?.(); router.push('/mobile/writing') }
     } catch (error) {
       if (isCurrent()) toast({ title: tConflict('failed'),
-        description: error instanceof Error ? error.message : String(error), variant: 'destructive' })
+        description: userErrorMessage(error) ?? undefined, variant: 'destructive' })
     } finally {
       openingConflictRef.current = false
       setOpeningConflict(false)

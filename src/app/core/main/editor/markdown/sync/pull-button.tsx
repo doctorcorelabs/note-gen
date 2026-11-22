@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { Editor } from '@tiptap/react'
 import { ArrowDownCircle, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -33,6 +34,7 @@ const IDLE_PULL_INTERVAL = 30 * 1000
 const IDLE_THRESHOLD = 10 * 1000
 
 export function usePullSync({ editor, markdown, getMarkdown, prepareExternalAction, onMarkdownChange }: PullButtonProps) {
+  const userErrorMessage = useUserErrorMessage()
   const activeFilePath = useArticleStore(state => state.activeFilePath)
   const autoPullOnOpen = useSettingStore(state => state.autoPullOnOpen)
   const { configured, contextKey, isContextCurrent } = useDocumentSyncConfiguration()
@@ -227,7 +229,7 @@ export function usePullSync({ editor, markdown, getMarkdown, prepareExternalActi
       setStatus('error')
       toast({
         title: 'Pull Failed',
-        description: error instanceof Error ? error.message : 'Check the network connection and try again.',
+        description: userErrorMessage(error) ?? 'Check the network connection and try again.',
         variant: 'destructive',
       })
     } finally {

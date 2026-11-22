@@ -546,7 +546,7 @@ function MarkDetailToolbar({
       if (!isMarkRevisionConflict(error)) {
         toast({
           title: t('common.error'),
-          description: error instanceof Error ? error.message : t('record.mark.toolbar.regenerateDesc'),
+          description: userErrorMessage(error) ?? t('record.mark.toolbar.regenerateDesc'),
           variant: 'destructive',
         })
       }
@@ -573,7 +573,7 @@ function MarkDetailToolbar({
     } catch (error) {
       toast({
         title: t('common.error'),
-        description: error instanceof Error ? error.message : t('common.error'),
+        description: userErrorMessage(error) ?? t('common.error'),
         variant: 'destructive',
       })
     }
@@ -1012,7 +1012,7 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
       if (!isMarkRevisionConflict(error)) {
         toast({
           title: t('common.error'),
-          description: error instanceof Error ? error.message : t('record.capture.screenshotRecognitionFailed'),
+          description: userErrorMessage(error) ?? t('record.capture.screenshotRecognitionFailed'),
           variant: 'destructive',
         })
       }

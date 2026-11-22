@@ -122,6 +122,20 @@ export function ActivityPanel({
 
   return (
     <section className="@container/activity flex w-full min-w-0 flex-col gap-6">
+      {error ? (
+        <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
+          <p>{t('error')}</p>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-md border px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+            >
+              {t('refresh')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {showSummary && (
         <div className="grid grid-cols-1 gap-x-6 gap-y-5 @xs/activity:grid-cols-2 @xl/activity:grid-cols-4">
           {metrics.map(metric => (

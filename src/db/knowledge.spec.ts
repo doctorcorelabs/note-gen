@@ -50,6 +50,7 @@ const SOURCE: KnowledgeSource = {
 class FakeSqlAdapter {
   readonly mode = "web" as const;
   readonly ops: unknown[] = [];
+  listPages: unknown[][] | null = null;
   statsRow: unknown = {
     article: { pending: 1, indexing: 0, ready: 2, failed: 0 },
     record: { pending: 0, indexing: 0, ready: 3, failed: 1 },
@@ -66,7 +67,7 @@ class FakeSqlAdapter {
       case "knowledge.getSource":
         return op.sourceKey === SOURCE.sourceKey ? [SOURCE] : [];
       case "knowledge.listSources":
-        return [SOURCE];
+        return this.listPages ? (this.listPages.shift() ?? []) : [SOURCE];
       case "knowledge.stats":
         return this.statsRow === null ? [] : [this.statsRow];
       default:
@@ -118,12 +119,33 @@ describe("knowledge catalog migration (BUG-02)", () => {
 
   it("getKnowledgeSources passes only non-empty filters to knowledge.listSources", async () => {
     expect(await getKnowledgeSources()).toEqual([SOURCE]);
-    expect(fakeSql.ops[0]).toEqual({ kind: "knowledge.listSources" });
+    expect(fakeSql.ops[0]).toEqual({ kind: "knowledge.listSources", limit: 200 });
     await getKnowledgeSources({ statuses: ["failed"], sourceTypes: ["record"] });
     expect(fakeSql.ops[1]).toEqual({
       kind: "knowledge.listSources",
       sourceTypes: ["record"],
       statuses: ["failed"],
+      limit: 200,
+    });
+  });
+
+  it("getKnowledgeSources pages with the cursor until a short page (IM-2 F08-01)", async () => {
+    const fullPage = Array.from({ length: 200 }, (_, index) => ({
+      ...SOURCE,
+      sourceKey: `record:${index}`,
+      sourceId: String(index),
+      updatedAt: SOURCE.updatedAt - index,
+    }));
+    const tail = { ...SOURCE, sourceKey: "record:tail", sourceId: "tail" };
+    fakeSql.listPages = [fullPage, [tail]];
+    const result = await getKnowledgeSources();
+    expect(result).toHaveLength(201);
+    expect(result[200]).toEqual(tail);
+    expect(fakeSql.ops).toHaveLength(2);
+    expect(fakeSql.ops[1]).toEqual({
+      kind: "knowledge.listSources",
+      cursor: `${fullPage[199].updatedAt}:${encodeURIComponent(fullPage[199].sourceKey)}`,
+      limit: 200,
     });
   });
 

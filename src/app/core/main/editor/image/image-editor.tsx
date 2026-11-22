@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { useEffect, useState, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { Cropper, CropperRef, Priority } from 'react-advanced-cropper'
@@ -47,6 +48,7 @@ interface CropperLayoutState {
 
 export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
   const t = useTranslations('editorImage')
+  const userErrorMessage = useUserErrorMessage()
   const cropperRef = useRef<CropperRef>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const cropperContainerRef = useRef<HTMLDivElement>(null)
@@ -165,7 +167,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
       console.error('Failed to load image:', error)
       toast({
         title: t('loadFailed'),
-        description: String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive'
       })
     } finally {
@@ -344,7 +346,7 @@ export function ImageEditor({ filePath, isActive = true }: ImageEditorProps) {
       console.error('Failed to save image:', error)
       toast({
         title: t('saveFailed'),
-        description: String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive'
       })
     }

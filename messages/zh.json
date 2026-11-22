@@ -4926,6 +4926,7 @@
           "tagsConflict": "记录标签已更改，请刷新记录后重试。",
           "tagsLabel": "标签",
           "saveTags": "保存标签",
+        "tagsEmpty": "Select at least one tag.",
           "openLink": "打开链接",
           "viewAsset": "打开文件",
           "delete": "移入废纸篓",

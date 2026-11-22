@@ -1,5 +1,6 @@
 'use client'
 
+import { useUserErrorMessage } from '@/lib/use-user-error-message'
 import { platform } from '@/lib/platform'
 import { ArrowDownAZ, Calendar, Clock, Cloud, Database, DatabaseZap, Download, EllipsisVertical, LoaderCircle, PackageOpen, RefreshCw, SortAsc, SortDesc, Upload } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -35,6 +36,7 @@ export function CloudLibraryMenu({
   refreshing?: boolean
 }) {
   const t = useTranslations('article.file.cloudLibrary')
+  const userErrorMessage = useUserErrorMessage()
   const tToolbar = useTranslations('article.file.toolbar')
   const tSync = useTranslations('settings.sync')
   const router = useRouter()
@@ -100,7 +102,7 @@ export function CloudLibraryMenu({
     } catch (error) {
       toast({
         title: t('operationFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     }
@@ -133,7 +135,7 @@ export function CloudLibraryMenu({
     } catch (error) {
       toast({
         title: t('operationFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     }
@@ -159,7 +161,7 @@ export function CloudLibraryMenu({
     } catch (error) {
       toast({
         title: t('operationFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     }
@@ -188,7 +190,7 @@ export function CloudLibraryMenu({
     } catch (error) {
       toast({
         title: t('operationFailed'),
-        description: error instanceof Error ? error.message : String(error),
+        description: userErrorMessage(error) ?? undefined,
         variant: 'destructive',
       })
     }

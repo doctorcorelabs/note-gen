@@ -94,7 +94,14 @@ export function FolderStatsView({ folderPath, folderFiles }: FolderStatsViewProp
       if (active && mounted.current && activeView.current === viewKey) {
         setDiscovered({ key: viewKey, files: files.map(file => normalizePath(file.path)), partial: failedDirs.length > 0 })
       }
-    }).catch(cause => console.error('Failed to read folder notes:', cause))
+    }).catch(cause => {
+      // IM-2 F08-08: surface the discovery failure as a partial
+      // read instead of silently counting only the loaded tree.
+      console.error('Failed to read folder notes:', cause)
+      if (active && mounted.current && activeView.current === viewKey) {
+        setDiscovered({ key: viewKey, files: [], partial: true })
+      }
+    })
     return () => { active = false }
   }, [path, viewKey, treeFileSignature])
 

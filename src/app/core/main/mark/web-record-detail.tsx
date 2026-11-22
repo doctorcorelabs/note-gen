@@ -225,6 +225,12 @@ export function WebRecordDetail({
   }
 
   async function handleSaveTags() {
+    // IM-2 F02-03: an empty tag set can never save (the client
+    // throws); say so specifically instead of a generic error.
+    if (selectedTagIds.length === 0) {
+      setNotice(t("tagsEmpty"));
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -459,7 +465,7 @@ export function WebRecordDetail({
               lockedIds={[current.tagId]}
             />
             {tagsChanged && (
-              <Button size="sm" disabled={busy} onClick={handleSaveTags}>
+              <Button size="sm" disabled={busy || selectedTagIds.length === 0} onClick={handleSaveTags}>
                 {t("saveTags")}
               </Button>
             )}
