@@ -87,12 +87,18 @@ interface Fixture {
 
 let fixture: Fixture | undefined;
 
-async function setup(): Promise<Fixture> {
+async function setup(
+  makeTrashRoot?: (parent: string, root: string) => Promise<string>,
+): Promise<Fixture> {
   const parent = await realpath(await mkdtemp(join(tmpdir(), 'notegen-trash-')));
   const root = join(parent, 'workspace');
   await mkdir(root, { recursive: true });
+  const trashRoot = makeTrashRoot === undefined ? undefined : await makeTrashRoot(parent, root);
   const app = await buildApp({
-    config: testConfig({ workspaceRoot: root }),
+    config: testConfig({
+      workspaceRoot: root,
+      ...(trashRoot === undefined ? {} : { trashRoot }),
+    }),
     pool: null,
     version: 'test',
     verifySession: async ({ sessionId }) => (sessionId === 'good-session' ? TEST_PRINCIPAL : null),
@@ -1004,5 +1010,63 @@ describe('trash and the visible tree', () => {
       headers: { ...READ_HEADERS },
     });
     expect(statAgain.statusCode).toBe(200);
+  });
+});
+
+describe('explicit trash root (F-05-11)', () => {
+  it('rejects a TRASH_ROOT symlink that resolves inside the workspace', async () => {
+    const { app, root } = await setup(async (parent, workspaceRoot) => {
+      const inside = join(workspaceRoot, 'inside');
+      await mkdir(inside, { recursive: true });
+      const link = join(parent, 'trash-link');
+      await symlink(inside, link);
+      return link;
+    });
+    await seed(root, 'a.md', 'a');
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/workspace/file?path=a.md',
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(errorOf(res).code).toBe('service_unavailable');
+    expect(await exists(join(root, 'a.md'))).toBe(true);
+  });
+
+  it('rejects a missing TRASH_ROOT under a symlink into the workspace', async () => {
+    const { app, root } = await setup(async (parent, workspaceRoot) => {
+      const inside = join(workspaceRoot, 'inside');
+      await mkdir(inside, { recursive: true });
+      const link = join(parent, 'trash-link');
+      await symlink(inside, link);
+      return join(link, 'nested');
+    });
+    await seed(root, 'a.md', 'a');
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/workspace/file?path=a.md',
+      headers: { ...AUTH_HEADERS },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(errorOf(res).code).toBe('service_unavailable');
+    expect(await exists(join(root, 'a.md'))).toBe(true);
+    expect(await exists(join(root, 'inside', 'nested'))).toBe(false);
+  });
+
+  it('uses a not-yet-existing TRASH_ROOT on first move and creates nothing on list', async () => {
+    let trashRootPath = '';
+    const { app, root } = await setup(async (parent) => {
+      trashRootPath = join(parent, 'fresh-trash');
+      return trashRootPath;
+    });
+    await seed(root, 'a.md', 'a');
+    const listed = await listTrash(app);
+    expect(listed['totalCount']).toBe(0);
+    expect(await exists(trashRootPath)).toBe(false);
+    const { statusCode, data } = await trashPaths(app, ['a.md']);
+    expect(statusCode).toBe(200);
+    expect(data['moved']).toEqual(['a.md']);
+    expect(await exists(trashRootPath)).toBe(true);
+    expect((await listTrash(app))['totalCount']).toBe(1);
   });
 });

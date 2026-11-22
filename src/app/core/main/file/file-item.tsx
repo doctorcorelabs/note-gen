@@ -360,7 +360,9 @@ export function FileItem({
       finalName = await generateUniqueFilename(parentPath, 'Untitled')
       setName(finalName)
     } else {
-      finalName = name
+      // F-05-13: trim edge spaces so the validated name and the
+      // rename plan use the same name the server will store.
+      finalName = name.trim()
       setName(finalName)
     }
   

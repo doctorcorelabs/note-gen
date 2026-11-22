@@ -6,7 +6,7 @@ import { platform } from '@/lib/platform'
 import { cloneDeep } from 'lodash-es'
 
 import { toast } from '@/hooks/use-toast'
-import { isMobileDevice } from '@/lib/check'
+import { checkIsTauri, isMobileDevice } from '@/lib/check'
 import {
   activeEditorPathIsAffected,
   getCurrentEditorWorkspaceRoot,
@@ -103,8 +103,11 @@ export function useFileDeletion() {
         toast({ title: t('deleteEntriesBusy'), variant: 'destructive' })
         return
       }
+      // F-05-05: permanent-delete copy only fits Tauri mobile, where
+      // remove is a real delete. Web mobile goes to the server trash
+      // (recoverable), so it uses the plain confirm copy.
       const confirmed = await platform.dialog.ask(t(hasRemote ? 'confirmDeleteEntriesWithRemote'
-        : isMobileDevice() ? 'confirmDeleteEntriesPermanently' : 'confirmDeleteEntries', { count: entries.length }), {
+        : isMobileDevice() && checkIsTauri() ? 'confirmDeleteEntriesPermanently' : 'confirmDeleteEntries', { count: entries.length }), {
         title: entries.length === 1 ? entries[0].name : t('deleteSelected', { count: entries.length }),
         kind: 'warning',
       })

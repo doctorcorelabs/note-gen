@@ -90,7 +90,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { ApiError } from '../../plugins/envelope.js';
 import {
   InvalidWorkspacePathError,
@@ -541,13 +541,40 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
     return rootReal;
   }
 
-  function trashRootFor(rootReal: string): string {
+  // F-05-11: resolve a path through symlinks. When the path does not
+  // exist yet (the trash root is created lazily by the first move),
+  // realpath the nearest existing ancestor and rejoin the missing
+  // tail, mirroring the existingPrefix walk in lib/paths.ts. Never
+  // creates anything, so a GET list stays side-effect free.
+  async function realpathOrAncestor(target: string): Promise<string> {
+    let candidate = target;
+    const tail: string[] = [];
+    for (;;) {
+      try {
+        const real = await realpath(candidate);
+        return tail.length === 0 ? real : join(real, ...tail);
+      } catch (error) {
+        if (!isEnoent(error)) {
+          throw ApiError.serviceUnavailable();
+        }
+        const parent = dirname(candidate);
+        if (parent === candidate) {
+          throw ApiError.serviceUnavailable();
+        }
+        tail.unshift(basename(candidate));
+        candidate = parent;
+      }
+    }
+  }
+
+  async function trashRootFor(rootReal: string): Promise<string> {
     if (deps.trashRoot !== undefined && deps.trashRoot !== '') {
       const resolved = resolve(deps.trashRoot);
-      if (resolved === rootReal || resolved.startsWith(rootReal + sep)) {
+      const real = await realpathOrAncestor(resolved);
+      if (real === rootReal || real.startsWith(rootReal + sep)) {
         throw ApiError.serviceUnavailable();
       }
-      return resolved;
+      return real;
     }
     const suffix = createHash('sha256').update(rootReal, 'utf8').digest('hex').slice(0, 12);
     return join(dirname(rootReal), `.notegen-trash-${suffix}`);
@@ -811,7 +838,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
       }
       revision = buildRevision(workspaceKey, validated.path, bytes);
     }
-    const trashRoot = trashRootFor(rootReal);
+    const trashRoot = await trashRootFor(rootReal);
     await mkdir(trashRoot, { recursive: true });
     let entryDir: string | null = null;
     let id = '';
@@ -878,7 +905,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
     // Fail the whole request up front when the workspace is
     // unavailable, instead of reporting every item as rejected.
     const rootReal = await requireRoot();
-    const trashRoot = trashRootFor(rootReal);
+    const trashRoot = await trashRootFor(rootReal);
     const trashedPaths = new Set(
       (await readAllMetadata(trashRoot)).map((meta) => meta.originalPath),
     );
@@ -942,7 +969,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
     const limit = parseLimit(query.limit, DEFAULT_TRASH_LIMIT, MAX_TRASH_LIMIT);
     const cursor = decodeTrashCursor(query.cursor);
     const rootReal = await requireRoot();
-    const trashRoot = trashRootFor(rootReal);
+    const trashRoot = await trashRootFor(rootReal);
     const entries = (await readAllMetadata(trashRoot)).map(entryFromMetadata).sort(compareTrashEntries);
     const totalCount = entries.length;
     const totalSize = entries.reduce((sum, entry) => sum + entry.size, 0);
@@ -987,7 +1014,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
     }
     const rootReal = await requireRoot();
     const workspaceKey = deps.workspaceKey ?? rootReal;
-    const trashRoot = trashRootFor(rootReal);
+    const trashRoot = await trashRootFor(rootReal);
     const entryDir = join(trashRoot, idInput);
     const entryStats = await lstat(entryDir).catch(() => null);
     if (entryStats === null || !entryStats.isDirectory()) {
@@ -1095,7 +1122,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
       throw ApiError.notFound();
     }
     const rootReal = await requireRoot();
-    const trashRoot = trashRootFor(rootReal);
+    const trashRoot = await trashRootFor(rootReal);
     const entryDir = join(trashRoot, idInput);
     const entryStats = await lstat(entryDir).catch(() => null);
     if (entryStats === null || !entryStats.isDirectory()) {
@@ -1117,7 +1144,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
 
   async function purgeAll(): Promise<PurgeAllResult> {
     const rootReal = await requireRoot();
-    const trashRoot = trashRootFor(rootReal);
+    const trashRoot = await trashRootFor(rootReal);
     let dirents;
     try {
       dirents = await readdir(trashRoot, { withFileTypes: true });
@@ -1166,7 +1193,7 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
   async function probeTrashRoot(): Promise<boolean> {
     try {
       const rootReal = await requireRoot();
-      let candidate = trashRootFor(rootReal);
+      let candidate = await trashRootFor(rootReal);
       for (;;) {
         try {
           await access(candidate, fsConstants.W_OK);

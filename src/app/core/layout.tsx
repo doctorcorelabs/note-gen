@@ -444,7 +444,13 @@ export default function RootLayout({
         }
         if (cancelled) { cleanupWiki(); return }
         stopWiki = cleanupWiki
-        stopManagedBackup = initManagedBackupRuntime()
+        // Web fork (Fase 1, F-05-03): the managed backup runtime is
+        // desktop only, so it is skipped explicitly in web mode like
+        // the wiki runtime above. stopManagedBackup stays undefined
+        // in web mode and the cleanup below already guards with ?.
+        if (!webMode) {
+          stopManagedBackup = initManagedBackupRuntime()
+        }
 
         void initShortcut().catch((error) => console.error('Failed to initialize global shortcuts:', error))
         initEditorShortcuts()

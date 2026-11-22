@@ -20,7 +20,10 @@ export type SyncConfigurationReason =
 export function validateFileTreeName(name: string): 'empty' | 'invalid' | null {
   const trimmed = name.trim()
   if (!trimmed) return 'empty'
-  if (trimmed === '.' || trimmed === '..' || /[\\/\0-\x1f]/.test(trimmed)) return 'invalid'
+  // F-05-13: leading-dot names are hidden paths the server rejects
+  // (isHiddenWorkspacePath); reject them here too. This also covers
+  // the '.' and '..' cases.
+  if (trimmed.startsWith('.') || /[\\/\0-\x1f]/.test(trimmed)) return 'invalid'
   return null
 }
 

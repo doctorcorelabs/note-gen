@@ -382,7 +382,9 @@ export function FolderItem({
   }
 
   async function commitRename() {
-    const nextName = name
+    // F-05-13: trim edge spaces before validation and path joins so
+    // the stored name matches the validated name.
+    const nextName = name.trim()
     setName(nextName)
     if (nextName && validateFileTreeName(nextName)) {
       setRenameError(t('error.invalidName'))
