@@ -11,7 +11,7 @@ import { androidCloudFolderWorkspaceList, supportsCloudFolderWorkspace, type Clo
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
 import { hasNetworkConnection, ensureDirectoryExists } from '@/lib/sync/auto-sync'
 import { getSyncManager, isSyncConfigured, syncOnOpen } from '@/lib/sync/sync-manager'
-import { decodeExtensionlessText, isExtensionlessPath, isSyncTextPath } from '@/lib/sync/file-content'
+import { decodeExtensionlessText, isEditorTextCandidatePath, isExtensionlessPath, isSyncTextPath } from '@/lib/sync/file-content'
 import { sanitizeFilePath, hasInvalidFileNameChars } from '@/lib/sync/filename-utils'
 import { getCurrentFolder, computedParentPath } from '@/lib/path'
 import useVectorStore from './vector'
@@ -1574,7 +1574,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         : null
     const fileName = nextPath.split(/[\\/]/).pop() || ''
     const shouldReadArticle = Boolean(
-      !requestedTabIsFolder && fileName && fileName.includes('.')
+      fileName && isEditorTextCandidatePath(nextPath, requestedTabIsFolder)
     )
     const canReusePendingRead = shouldReadArticle
       && get().activeFilePath === nextPath
@@ -1925,7 +1925,10 @@ const useArticleStore = create<NoteState>((set, get) => ({
         readFilePath: '',
         isPulling: false,
         justPulledFile: false,
-        loading: Boolean(newActiveFilePath && isLikelyFilePath(newActiveFilePath)),
+        loading: Boolean(newActiveFilePath && isEditorTextCandidatePath(
+          newActiveFilePath,
+          Boolean(newTabs.find(tab => tab.id === newActiveTabId)?.isFolder),
+        )),
       } : {}),
     })
 
@@ -2072,7 +2075,10 @@ const useArticleStore = create<NoteState>((set, get) => ({
         readFilePath: '',
         isPulling: false,
         justPulledFile: false,
-        loading: Boolean(newActiveFilePath && isLikelyFilePath(newActiveFilePath)),
+        loading: Boolean(newActiveFilePath && isEditorTextCandidatePath(
+          newActiveFilePath,
+          Boolean(newTabs.find(tab => tab.id === newActiveTabId)?.isFolder),
+        )),
       } : {}),
     })
     const persistencePromise = tabsChanged || activeChanged
@@ -2156,7 +2162,8 @@ const useArticleStore = create<NoteState>((set, get) => ({
     const activeTab = nextTabs.find(tab => tab.id === nextActiveTabId)
     const nextActiveFilePath = getActiveFilePathForTab(activeTab)
     const shouldReadActiveArticle = Boolean(
-      nextActiveFilePath && !activeTab?.isFolder && isLikelyFilePath(nextActiveFilePath)
+      nextActiveFilePath
+      && isEditorTextCandidatePath(nextActiveFilePath, Boolean(activeTab?.isFolder))
     )
     const currentState = get()
     const canReuseActiveArticle = shouldReadActiveArticle

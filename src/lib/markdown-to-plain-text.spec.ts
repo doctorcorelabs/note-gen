@@ -5,9 +5,10 @@
 // character basis must reconstruct the same text the visual basis
 // (doc.textBetween + editorLeafText) counts, so the footer number
 // does not change when switching modes. Covers the residual classes
-// STAT-03 (surplus blank lines), STAT-04 (task list checkbox
-// syntax), STAT-05 (empty trailing table cells), plus the classes
-// that already had parity (fence contents, image alt, hardbreak).
+// STAT-03 (empty-paragraph placeholders; surplus blank lines
+// collapse, STAT2/AD-962), STAT-04 (task list checkbox syntax),
+// STAT-05 (empty trailing table cells), plus the classes that
+// already had parity (fence contents, image alt, hardbreak).
 //
 // Run: `pnpm vitest run --project unit src/lib/markdown-to-plain-text.spec.ts`
 // from the repo root.
@@ -46,17 +47,61 @@ describe("markdownToPlainText", () => {
     expect(markdownToPlainText("a<br>b")).toBe("a\nb");
   });
 
-  it("surplus blank lines become empty paragraphs (STAT-03)", () => {
-    expect(markdownToPlainText("a\n\n\nb")).toBe("a\n\nb");
+  it("surplus blank lines collapse like the visual parser (STAT2)", () => {
+    // Blank surplus produces no empty-paragraph node when loaded,
+    // so the source basis must not reconstruct separators for it.
+    expect(markdownToPlainText("a\n\n\nb")).toBe("a\nb");
     expect(markdownToPlainText("a\n\nb")).toBe("a\nb");
-    expect(markdownToPlainText("a\n\n\n\nb")).toBe("a\n\n\nb");
+    expect(markdownToPlainText("a\n\n\n\nb")).toBe("a\nb");
   });
 
-  it("surplus blank lines around headings and lists (STAT-03)", () => {
-    expect(markdownToPlainText("# Judul\n\n\nisi")).toBe("Judul\n\nisi");
+  it("surplus blank lines around headings, lists and fences (STAT2)", () => {
+    expect(markdownToPlainText("# Judul\n\n\nisi")).toBe("Judul\nisi");
     expect(markdownToPlainText("- satu\n- dua\n\n\npenutup")).toBe(
-      "satu\ndua\n\npenutup",
+      "satu\ndua\npenutup",
     );
+    expect(markdownToPlainText("> kutip\n\n\npenutup")).toBe(
+      "kutip\npenutup",
+    );
+    // Fence gaps from serializer wrapping must not add newlines
+    // (the final newline below is the fence content's own).
+    expect(
+      markdownToPlainText("```\nkode\n```\n\n\n\n```\nlain\n```"),
+    ).toBe("kode\nlain\n");
+    expect(
+      characters("```\nkode\n```\n\n\n\n```\nlain\n```"),
+    ).toBe(characters("kode\nlain"));
+  });
+
+  it("empty-paragraph placeholders count as separators only (STAT2)", () => {
+    // Visual [a, empty, b] counts "a\n\nb" (4). The placeholder
+    // character itself must not be counted.
+    expect(markdownToPlainText("a\n\n&nbsp;\n\nb")).toBe("a\n\nb");
+    expect(characters("a\n\n&nbsp;\n\nb")).toBe(4);
+    expect(markdownToPlainText("a\n\n&nbsp;\n\n&nbsp;\n\nb")).toBe(
+      "a\n\n\nb",
+    );
+    expect(characters("a\n\n&nbsp;\n\n&nbsp;\n\nb")).toBe(5);
+    expect(markdownToPlainText("a\n\n&#32;\n\nb")).toBe("a\n\nb");
+  });
+
+  it("placeholders at the document edges trim like the visual basis (STAT2)", () => {
+    expect(characters("&nbsp;\n\na")).toBe(1);
+    expect(characters("a\n\n&nbsp;")).toBe(1);
+    expect(characters("&nbsp;")).toBe(0);
+  });
+
+  it("a non-breaking space inside real text still counts (STAT2)", () => {
+    expect(characters("a&nbsp;b")).toBe(3);
+    expect(characters("a\u00A0b")).toBe(3);
+  });
+
+  it("no surplus newline after a full table (STAT2 regression)", () => {
+    // The removed surplus reconstruction counted table rows as
+    // blank lines because table cell inline tokens carry no map.
+    const markdown =
+      "```\nkode\n```\n\n| a | b |\n| --- | --- |\n| c | d |\n\n![alt](x.png)";
+    expect(markdownToPlainText(markdown)).toBe("kode\na\tb\nc\td\nalt");
   });
 
   it("task list checkbox syntax is not content (STAT-04)", () => {

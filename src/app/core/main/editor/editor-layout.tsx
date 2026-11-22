@@ -46,6 +46,7 @@ import { FolderView } from './folder'
 import { PluginDocumentPreview } from '@/components/plugins/plugin-document-preview'
 import { PluginViewSurface } from '@/components/plugins/plugin-view-surface'
 import { parsePluginEditorTabPath } from '@/lib/plugins/editor-tab'
+import { isExtensionlessPath } from '@/lib/sync/file-content'
 import { UnsupportedFile } from './unsupported-file'
 import { EditorDisabledNotice } from '@/components/editor-disabled-notice'
 import { editorDisabledMessageKeys, isEditorFeatureDisabled } from '@/lib/editor-disabled'
@@ -654,10 +655,15 @@ export function EditorLayout() {
   const getItemType = useCallback((path: string): 'markdown' | 'image' | 'folder' | 'unknown' => {
     if (!path) return 'unknown'
     if (findFolderInTree(path, fileTree)) return 'folder'
-    const extension = path.split('.').pop()?.toLowerCase()
-    if (!extension) return 'unknown'
-    if (MARKDOWN_EXTENSIONS.has(extension)) return 'markdown'
-    if (IMAGE_EXTENSIONS.has(extension)) return 'image'
+    // Extension comes from the final segment only, so a dotted
+    // folder cannot misclassify the file inside it (N-02 lanjutan).
+    const name = path.split('/').pop() || ''
+    const extension = name.includes('.') ? name.split('.').pop()?.toLowerCase() : undefined
+    if (extension && MARKDOWN_EXTENSIONS.has(extension)) return 'markdown'
+    if (extension && IMAGE_EXTENSIONS.has(extension)) return 'image'
+    // Extensionless files open in the text editor; the decode probe
+    // in readArticle still sends real binaries to the binary viewer.
+    if (isExtensionlessPath(path)) return 'markdown'
     return 'unknown'
   }, [fileTree])
 

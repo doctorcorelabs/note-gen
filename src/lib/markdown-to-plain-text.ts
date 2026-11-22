@@ -60,6 +60,12 @@ function htmlTokenToText(html: string): string {
   return result.replace(/&(?:#\d+|#x[\da-f]+|[a-z][a-z\d]+);/gi, (entity) => parser.utils.unescapeAll(entity))
 }
 
+// A paragraph whose whole text is one placeholder character is an
+// empty paragraph in the visual document (serializer writes "&nbsp;",
+// parser accepts the NBSP char and the space entities). The visual
+// basis counts only the block separator for it, never the character.
+const PLACEHOLDER_PARAGRAPH_TEXTS = new Set(['\u00A0', ' '])
+
 function inlineText(tokens: readonly Token[]): string {
   return tokens.map((token) => {
     if (token.type === 'text' || token.type === 'code_inline') return token.content
@@ -76,7 +82,6 @@ export function markdownToPlainText(markdown: string): string {
   let pendingCellSeparators = 0
   let generatedTrailingBreak = false
   let pendingTaskItem = false
-  let lastContentEndLine = -1
   const append = (text: string) => {
     if (!text) return
     result += '\t'.repeat(pendingCellSeparators)
@@ -100,30 +105,10 @@ export function markdownToPlainText(markdown: string): string {
   }
 
   for (const token of parser.parse(markdown, {})) {
-    // Surplus blank lines between top-level blocks are empty
-    // paragraphs in the visual basis; reconstruct them from the
-    // block line ranges (STAT-03). Container ranges (lists,
-    // blockquotes) swallow trailing blank lines, so the gap is
-    // measured from the last content token, not the container.
-    if (token.level === 0 && token.map && token.nesting !== -1) {
-      const startLine = token.map[0]
-      if (lastContentEndLine >= 0 && result) {
-        const surplusBlankLines = startLine - lastContentEndLine - 1
-        if (surplusBlankLines > 0) {
-          lineBreak()
-          result += '\n'.repeat(surplusBlankLines)
-          generatedTrailingBreak = false
-        }
-      }
-    }
-    if (
-      token.map
-      && (token.type === 'inline' || token.type === 'fence'
-        || token.type === 'code_block' || token.type === 'html_block'
-        || token.type === 'hr')
-    ) {
-      lastContentEndLine = Math.max(lastContentEndLine, token.map[1])
-    }
+    // Surplus blank lines in markdown produce no empty-paragraph
+    // node in the visual document (empty paragraphs serialize as
+    // "&nbsp;" placeholders instead), so they collapse here too;
+    // reconstructing them broke footer parity (STAT2/AD-962).
     if (token.type === 'list_item_open') {
       pendingTaskItem = true
     } else if (token.type === 'inline') {
@@ -134,7 +119,17 @@ export function markdownToPlainText(markdown: string): string {
         text = text.replace(/^\[(?: |x|X)\] /, '')
         pendingTaskItem = false
       }
-      append(text)
+      if (PLACEHOLDER_PARAGRAPH_TEXTS.has(text)) {
+        // Empty-paragraph placeholder: emit one extra block
+        // separator instead of the placeholder character so
+        // "a\n\n&nbsp;\n\nb" counts like the visual [a, empty, b].
+        if (result) {
+          result += '\n'
+          generatedTrailingBreak = true
+        }
+      } else {
+        append(text)
+      }
     } else if (token.type === 'fence' || token.type === 'code_block') {
       lineBreak()
       append(token.content)

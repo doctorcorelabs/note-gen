@@ -193,12 +193,22 @@ describe("visual/source basis parity", () => {
     expect(visualCharacters(doc)).toBe(sourceCharacters("a  \nb"));
   });
 
-  it("extra empty paragraph (STAT-03)", () => {
+  it("extra empty paragraph (STAT-03, placeholder form STAT2)", () => {
     const doc = schema.node("doc", null, [
       schema.node("paragraph", null, [schema.text("a")]),
       schema.node("paragraph", null, []),
       schema.node("paragraph", null, [schema.text("b")]),
     ]);
-    expect(visualCharacters(doc)).toBe(sourceCharacters("a\n\n\nb"));
+    // Empty paragraphs serialize as "&nbsp;" placeholders; surplus
+    // blank lines in markdown load as no node at all (STAT2).
+    expect(visualCharacters(doc)).toBe(sourceCharacters("a\n\n&nbsp;\n\nb"));
+  });
+
+  it("surplus blank lines load as no node (STAT2)", () => {
+    const doc = schema.node("doc", null, [
+      schema.node("paragraph", null, [schema.text("a")]),
+      schema.node("paragraph", null, [schema.text("b")]),
+    ]);
+    expect(visualCharacters(doc)).toBe(sourceCharacters("a\n\n\n\nb"));
   });
 });

@@ -46,6 +46,18 @@ export function decodeExtensionlessText(bytes: Uint8Array): string | undefined {
   }
 }
 
+/**
+ * Editor text candidate (N-02 lanjutan): known text paths, plus
+ * extensionless files that are not folders. This only opens the
+ * read path; the fatal UTF-8 decode probe in readArticle stays the
+ * final text-vs-binary decision, and sync classification
+ * (isSyncTextPath) is unchanged.
+ */
+export function isEditorTextCandidatePath(path: string, isFolder: boolean): boolean {
+  if (!path || isFolder) return false
+  return isSyncTextPath(path) || isExtensionlessPath(path)
+}
+
 export function syncContentBytes(content: string | Uint8Array): Uint8Array {
   return typeof content === 'string' ? new TextEncoder().encode(content) : content
 }

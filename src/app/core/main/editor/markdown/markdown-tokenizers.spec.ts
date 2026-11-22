@@ -9,7 +9,12 @@
 // from the repo root.
 
 import { describe, expect, it } from "vitest";
-import { INLINE_MATH_INPUT_RULE_RE, inlineMathTokenizer } from "./markdown-tokenizers";
+import type { Token } from "marked";
+import {
+  createMarkdownLexer,
+  INLINE_MATH_INPUT_RULE_RE,
+  inlineMathTokenizer,
+} from "./markdown-tokenizers";
 
 const tokenize = (src: string) =>
   inlineMathTokenizer.tokenize(src, [], undefined as never);
@@ -61,5 +66,37 @@ describe("INLINE_MATH_INPUT_RULE_RE (P1-3)", () => {
     expect(INLINE_MATH_INPUT_RULE_RE.test("a \\$x$")).toBe(false);
     expect(INLINE_MATH_INPUT_RULE_RE.test("$x $")).toBe(false);
     expect(INLINE_MATH_INPUT_RULE_RE.test("$ x$")).toBe(false);
+  });
+});
+
+// Full registered-lexer path (P1-3 lanjutan, AD-962): the worker and
+// the prepared-token load path lex through createMarkdownLexer, not
+// through tokenize() directly, so the price guard must hold there too.
+describe("createMarkdownLexer inline math (P1-3 lanjutan)", () => {
+  const inlineMathRaws = (source: string): string[] => {
+    const raws: string[] = [];
+    const walk = (tokens: readonly Token[] | undefined) => {
+      for (const token of tokens ?? []) {
+        if (token.type === "inline_math") {
+          raws.push((token as { raw?: string }).raw ?? "");
+        }
+        walk((token as { tokens?: Token[] }).tokens);
+      }
+    };
+    walk(createMarkdownLexer().lexer(source));
+    return raws;
+  };
+
+  it("keeps two plain-text amounts as text through the full lexer", () => {
+    expect(inlineMathRaws("harga $5 dan $10 ")).toEqual([]);
+    expect(inlineMathRaws("$5 dan $10")).toEqual([]);
+  });
+
+  it("still lexes a real formula through the full lexer", () => {
+    expect(inlineMathRaws("rumus $x+1$ selesai")).toEqual(["$x+1$"]);
+  });
+
+  it("keeps the documented single-amount residue only", () => {
+    expect(inlineMathRaws("$5$ dan $10")).toEqual(["$5$"]);
   });
 });

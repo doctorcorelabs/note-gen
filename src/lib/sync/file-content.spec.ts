@@ -9,7 +9,11 @@
 // from the repo root.
 
 import { describe, expect, it } from "vitest";
-import { decodeExtensionlessText, isExtensionlessPath } from "./file-content";
+import {
+  decodeExtensionlessText,
+  isEditorTextCandidatePath,
+  isExtensionlessPath,
+} from "./file-content";
 
 const encode = (text: string) => new TextEncoder().encode(text);
 
@@ -23,6 +27,25 @@ describe("isExtensionlessPath (N-02)", () => {
     expect(isExtensionlessPath("folder/note.md")).toBe(false);
     expect(isExtensionlessPath("folder/.hidden")).toBe(false);
     expect(isExtensionlessPath("")).toBe(false);
+  });
+});
+
+describe("isEditorTextCandidatePath (N-02 lanjutan)", () => {
+  it("accepts extensionless files but not extensionless folders", () => {
+    expect(isEditorTextCandidatePath("Folder Demo/Catatan 3 (edit)", false)).toBe(true);
+    expect(isEditorTextCandidatePath("Folder Demo", true)).toBe(false);
+  });
+
+  it("accepts known text paths and rejects unknown extensions", () => {
+    expect(isEditorTextCandidatePath("folder/note.md", false)).toBe(true);
+    expect(isEditorTextCandidatePath("folder/data.xyz", false)).toBe(false);
+    expect(isEditorTextCandidatePath("folder/photo.png", false)).toBe(false);
+  });
+
+  it("handles dotted folders and empty names", () => {
+    expect(isEditorTextCandidatePath("my.folder/Catatan 3 (edit)", false)).toBe(true);
+    expect(isEditorTextCandidatePath("", false)).toBe(false);
+    expect(isEditorTextCandidatePath("folder/", false)).toBe(false);
   });
 });
 

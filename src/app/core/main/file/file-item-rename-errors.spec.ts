@@ -17,6 +17,10 @@ const article = readFileSync(
   new URL("../../../../stores/article.ts", import.meta.url),
   "utf8",
 );
+const editorLayout = readFileSync(
+  new URL("../editor/editor-layout.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("rename error honesty (N-07)", () => {
   it("prepare-false branches set a specific rename error", () => {
@@ -41,5 +45,31 @@ describe("article read guards (N-02/N-06)", () => {
 
   it("allows saving extensionless notes opened as text (N-02)", () => {
     expect(article).toContain("!isSyncTextPath(path) && !isExtensionlessPath(path)");
+  });
+
+  it("starts the read for extensionless files on click (N-02 lanjutan, gate A)", () => {
+    expect(article).toContain(
+      "fileName && isEditorTextCandidatePath(nextPath, requestedTabIsFolder)",
+    );
+    expect(article).not.toContain("!requestedTabIsFolder && fileName && fileName.includes('.')");
+  });
+
+  it("restores extensionless tabs with a read (N-02 lanjutan)", () => {
+    expect(article).toContain(
+      "isEditorTextCandidatePath(nextActiveFilePath, Boolean(activeTab?.isFolder))",
+    );
+    expect(article).not.toContain("!activeTab?.isFolder && isLikelyFilePath(nextActiveFilePath)");
+  });
+});
+
+describe("viewer selection for extensionless files (N-02 lanjutan, gate B)", () => {
+  it("routes extensionless files to the markdown editor", () => {
+    expect(editorLayout).toContain("if (isExtensionlessPath(path)) return 'markdown'");
+    expect(editorLayout).toContain("findFolderInTree(path, fileTree)) return 'folder'");
+  });
+
+  it("takes the extension from the final path segment only", () => {
+    expect(editorLayout).toContain("const name = path.split('/').pop() || ''");
+    expect(editorLayout).not.toContain("const extension = path.split('.').pop()");
   });
 });

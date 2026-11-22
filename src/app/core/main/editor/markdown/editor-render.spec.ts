@@ -3,7 +3,7 @@
 //
 // Render-path regression specs for the web editor core (Fase 1, V3-22
 // render slot, 3D-22b). Covers only behavior that runs in Node without
-// a DOM: the lexer protocol v4 contract, the fenced code block
+// a DOM: the lexer protocol v5 contract, the fenced code block
 // round-trip handlers, the outline heading index, KaTeX and lowlight
 // rendering, and static guards for the Mermaid strict setting, the
 // root-served lexer worker, and the absence of Tauri imports on the
@@ -61,9 +61,9 @@ function readEditorFile(fileName: string): string {
   return readRepoFile(`./${fileName}`);
 }
 
-describe("lexer protocol v4", () => {
-  it("pins the lexer protocol version to 4", () => {
-    expect(MARKDOWN_LEXER_VERSION).toBe(4);
+describe("lexer protocol v5", () => {
+  it("pins the lexer protocol version to 5", () => {
+    expect(MARKDOWN_LEXER_VERSION).toBe(5);
   });
 
   it("registers nine custom tokenizers in the shared list", () => {
@@ -310,7 +310,7 @@ describe("render configuration guards", () => {
     expect(source).not.toContain("securityLevel: 'loose'");
   });
 
-  it("loads the lexer worker as a module from the site root with v4", () => {
+  it("loads the lexer worker as a module from the site root with v5", () => {
     const source = readEditorFile("markdown-lexer-async.ts");
     expect(source).toContain(
       "`/markdown-lexer.js?v=${MARKDOWN_LEXER_VERSION}`",
