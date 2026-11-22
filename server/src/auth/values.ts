@@ -56,6 +56,32 @@ export const API_GENERAL_IP_LIMIT_PER_MINUTE = 60;
 export const API_UPLOAD_LIMIT_PER_MINUTE = 20;
 export const API_EXPORT_LIMIT_PER_10_MINUTES = 5;
 
+// Agent token values (F2-1 wave G-F2-1d, desain-auth.md
+// sections 11.3 and 11.5). Expiry is mandatory: 90 days by
+// default, 365 days at most. The scope vocabulary is final
+// and non-hierarchical; there is no delete, secret, account,
+// token-management, session, or audit scope.
+export const AGENT_TOKEN_DEFAULT_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+export const AGENT_TOKEN_MAX_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+export const AGENT_TOKEN_NAME_MAX_LENGTH = 128;
+
+export const AGENT_TOKEN_SCOPES = [
+  'workspace.read',
+  'workspace.write',
+  'notes.read',
+  'notes.write',
+  'notes.append',
+  'files.read',
+  'files.write',
+  'search.read',
+] as const;
+
+export type AgentTokenScope = (typeof AGENT_TOKEN_SCOPES)[number];
+
+export function isAgentTokenScope(value: unknown): value is AgentTokenScope {
+  return typeof value === 'string' && (AGENT_TOKEN_SCOPES as readonly string[]).includes(value);
+}
+
 // Audit event types written by the auth core (desain-auth.md section
 // 12.1). TOTP enrollment, reset, and admin event types belong to V3-02
 // and are not listed here.
@@ -73,6 +99,9 @@ export const AUDIT_EVENT_TYPES = {
   recoveryCodeUsed: 'recovery_code_used',
   stepUpSucceeded: 'step_up_succeeded',
   stepUpFailed: 'step_up_failed',
+  agentTokenCreated: 'agent_token_created',
+  agentTokenRevoked: 'agent_token_revoked',
+  agentTokenUsed: 'agent_token_used',
 } as const;
 
 export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[keyof typeof AUDIT_EVENT_TYPES];

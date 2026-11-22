@@ -51,10 +51,13 @@ import {
 import { isCfAccessExemptRequest } from './middleware/cf-access-exemptions.js';
 import {
   registerAuthHooks,
+  type AgentGuardFn,
+  type VerifyAgentTokenFn,
   type VerifyCsrfTokenFn,
   type VerifyOriginFn,
   type VerifySessionFn,
 } from './middleware/auth-hook.js';
+import { createAgentRequestGuard, createAgentTokenVerifier } from './middleware/agent-token.js';
 import { createCsrfVerifier } from './middleware/csrf.js';
 import { createSessionVerifier } from './middleware/session.js';
 import { registerErrorHandling } from './plugins/error-handler.js';
@@ -73,6 +76,11 @@ export interface AppDeps {
   verifySession?: VerifySessionFn;
   verifyCsrf?: VerifyCsrfTokenFn;
   verifyOrigin?: VerifyOriginFn;
+  // Agent token verifier and guard (F2-1 wave G-F2-1d).
+  // Derived from the injected auth context unless explicitly
+  // given; without either, agent routes deny by default.
+  verifyAgentToken?: VerifyAgentTokenFn;
+  agentGuard?: AgentGuardFn;
   // Auth context injected by the auth worker (V3-01, AD-40). When
   // present, the auth-core adapter registers its routes and the
   // session/CSRF verifiers are derived from it, unless explicit
@@ -117,10 +125,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // applies when no explicit verifier is given.
   const verifySession = deps.verifySession ?? (deps.auth === undefined ? undefined : createSessionVerifier(deps.auth));
   const verifyCsrf = deps.verifyCsrf ?? (deps.auth === undefined ? undefined : createCsrfVerifier(deps.auth));
+  const verifyAgentToken =
+    deps.verifyAgentToken ?? (deps.auth === undefined ? undefined : createAgentTokenVerifier(deps.auth));
+  const agentGuard =
+    deps.agentGuard ?? (deps.auth === undefined ? undefined : createAgentRequestGuard(deps.auth));
   registerAuthHooks(app, {
     verifySession,
     verifyCsrf,
     verifyOrigin: deps.verifyOrigin,
+    verifyAgentToken,
+    agentGuard,
     canonicalOrigin: deps.config.publicBaseUrl,
   });
 

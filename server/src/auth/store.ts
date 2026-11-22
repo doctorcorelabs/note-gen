@@ -23,6 +23,7 @@ import type { Database } from '../db/index.js';
 import { INSTALLATION_LOCK_NAME } from './crypto.js';
 import {
   accountLockouts,
+  agentTokens,
   auditEvents,
   installationState,
   loginChallenges,
@@ -43,6 +44,7 @@ export type AccountLockoutRow = typeof accountLockouts.$inferSelect;
 export type AuthSessionRow = typeof sessions.$inferSelect;
 export type AuthUserRow = typeof users.$inferSelect;
 export type AuthWorkspaceRow = typeof workspaces.$inferSelect;
+export type AgentTokenRow = typeof agentTokens.$inferSelect;
 export type LoginChallengeRow = typeof loginChallenges.$inferSelect;
 export type RecoveryCodeRow = typeof recoveryCodes.$inferSelect;
 export type TotpCredentialRow = typeof totpCredentials.$inferSelect;
@@ -80,6 +82,23 @@ export interface CreateLoginChallengeInput {
   createdIp: string | null;
   userAgentHash: string | null;
   expiresAt: Date;
+}
+
+export interface CreateAgentTokenInput {
+  userId: string;
+  // SHA-256 of the full raw token value; the raw value never
+  // reaches the store.
+  tokenHash: string;
+  tokenPrefix: string;
+  last4: string;
+  name: string;
+  scopes: string[];
+  workspaceIds: string[];
+  pathPrefixes: string[] | null;
+  credentialEpoch: number;
+  expiresAt: Date;
+  createdAt: Date;
+  createdByIp: string | null;
 }
 
 export interface AuditEventInput {
@@ -141,7 +160,30 @@ export interface AuthStore {
   readBucketHits(scope: string, rateKey: string, windowStart: Date): Promise<number>;
   incrementBucket(scope: string, rateKey: string, windowStart: Date, expiresAt: Date): Promise<number>;
 
+  // Agent tokens (F2-1 wave G-F2-1d, desain-auth.md section
+  // 11). Creation and revocation write their audit event in
+  // the same transaction when one is supplied, so a failed
+  // audit write fails the credential change. The creation
+  // audit is a builder because the token id exists only after
+  // the insert.
+  createAgentToken(
+    input: CreateAgentTokenInput,
+    audit?: (tokenId: string) => AuditEventInput,
+  ): Promise<AgentTokenRow>;
+  findAgentTokenByHash(tokenHash: string): Promise<AgentTokenRow | null>;
+  findAgentTokenById(id: string): Promise<AgentTokenRow | null>;
+  listAgentTokensByUser(userId: string): Promise<AgentTokenRow[]>;
+  revokeAgentToken(
+    userId: string,
+    id: string,
+    revokedAt: Date,
+    audit?: AuditEventInput,
+  ): Promise<boolean>;
+  updateAgentTokenLastUsed(id: string, at: Date): Promise<void>;
+
   findFirstWorkspaceByOwner(userId: string): Promise<AuthWorkspaceRow | null>;
+  findWorkspaceById(id: string): Promise<AuthWorkspaceRow | null>;
+  listWorkspacesByOwner(userId: string): Promise<AuthWorkspaceRow[]>;
   insertAuditEvent(event: AuditEventInput): Promise<void>;
 }
 
@@ -471,6 +513,86 @@ export class DrizzleAuthStore implements AuthStore {
       .orderBy(sql`${workspaces.createdAt} ASC`)
       .limit(1);
     return rows[0] ?? null;
+  }
+
+  async createAgentToken(
+    input: CreateAgentTokenInput,
+    audit?: (tokenId: string) => AuditEventInput,
+  ): Promise<AgentTokenRow> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx.insert(agentTokens).values(input).returning();
+      const row = rows[0];
+      if (row === undefined) {
+        throw new Error('Agent token insert returned no row.');
+      }
+      if (audit !== undefined) {
+        await tx.insert(auditEvents).values(audit(row.id));
+      }
+      return row;
+    });
+  }
+
+  async findAgentTokenByHash(tokenHash: string): Promise<AgentTokenRow | null> {
+    const rows = await this.db
+      .select()
+      .from(agentTokens)
+      .where(eq(agentTokens.tokenHash, tokenHash))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async findAgentTokenById(id: string): Promise<AgentTokenRow | null> {
+    const rows = await this.db.select().from(agentTokens).where(eq(agentTokens.id, id)).limit(1);
+    return rows[0] ?? null;
+  }
+
+  async listAgentTokensByUser(userId: string): Promise<AgentTokenRow[]> {
+    return this.db
+      .select()
+      .from(agentTokens)
+      .where(eq(agentTokens.userId, userId))
+      .orderBy(sql`${agentTokens.createdAt} DESC`);
+  }
+
+  async revokeAgentToken(
+    userId: string,
+    id: string,
+    revokedAt: Date,
+    audit?: AuditEventInput,
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .update(agentTokens)
+        .set({ revokedAt })
+        .where(
+          and(eq(agentTokens.id, id), eq(agentTokens.userId, userId), isNull(agentTokens.revokedAt)),
+        )
+        .returning({ id: agentTokens.id });
+      if (rows.length === 0) {
+        return false;
+      }
+      if (audit !== undefined) {
+        await tx.insert(auditEvents).values(audit);
+      }
+      return true;
+    });
+  }
+
+  async updateAgentTokenLastUsed(id: string, at: Date): Promise<void> {
+    await this.db.update(agentTokens).set({ lastUsedAt: at }).where(eq(agentTokens.id, id));
+  }
+
+  async findWorkspaceById(id: string): Promise<AuthWorkspaceRow | null> {
+    const rows = await this.db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
+    return rows[0] ?? null;
+  }
+
+  async listWorkspacesByOwner(userId: string): Promise<AuthWorkspaceRow[]> {
+    return this.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.ownerUserId, userId))
+      .orderBy(sql`${workspaces.createdAt} ASC`);
   }
 
   async insertAuditEvent(event: AuditEventInput): Promise<void> {

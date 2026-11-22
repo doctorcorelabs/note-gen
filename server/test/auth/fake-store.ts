@@ -18,7 +18,9 @@ import {
   type AuthSessionRow,
   type AuthStore,
   type AuthUserRow,
+  type AgentTokenRow,
   type AuthWorkspaceRow,
+  type CreateAgentTokenInput,
   type CreateLoginChallengeInput,
   type CreateSessionInput,
   type LockoutFailureInput,
@@ -46,12 +48,15 @@ export class FakeAuthStore implements AuthStore {
   lockouts = new Map<string, AccountLockoutRow>();
   buckets = new Map<string, number>();
   auditEvents: AuditEventInput[] = [];
+  agentTokens = new Map<string, AgentTokenRow>();
+  agentTokensByHash = new Map<string, AgentTokenRow>();
   installationCompletedAt: Date | null = null;
   installationCompletedBy: string | null = null;
 
   // Fault injection for verifier failure tests.
   failFindSessionByHash = false;
   failFindSessionById = false;
+  failFindAgentTokenByHash = false;
 
   async getUserCount(): Promise<number> {
     return this.users.size;
@@ -351,6 +356,120 @@ export class FakeAuthStore implements AuthStore {
 
   async insertAuditEvent(event: AuditEventInput): Promise<void> {
     this.auditEvents.push(event);
+  }
+
+  async createAgentToken(
+    input: CreateAgentTokenInput,
+    audit?: (tokenId: string) => AuditEventInput,
+  ): Promise<AgentTokenRow> {
+    const row: AgentTokenRow = {
+      id: randomUUID(),
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      tokenPrefix: input.tokenPrefix,
+      last4: input.last4,
+      name: input.name,
+      scopes: [...input.scopes],
+      workspaceIds: [...input.workspaceIds],
+      pathPrefixes: input.pathPrefixes === null ? null : [...input.pathPrefixes],
+      credentialEpoch: input.credentialEpoch,
+      expiresAt: input.expiresAt,
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: input.createdAt,
+      createdByIp: input.createdByIp,
+    };
+    this.agentTokens.set(row.id, row);
+    this.agentTokensByHash.set(row.tokenHash, row);
+    if (audit !== undefined) {
+      this.auditEvents.push(audit(row.id));
+    }
+    return row;
+  }
+
+  async findAgentTokenByHash(tokenHash: string): Promise<AgentTokenRow | null> {
+    if (this.failFindAgentTokenByHash) {
+      throw new Error('injected database failure');
+    }
+    return this.agentTokensByHash.get(tokenHash) ?? null;
+  }
+
+  async findAgentTokenById(id: string): Promise<AgentTokenRow | null> {
+    return this.agentTokens.get(id) ?? null;
+  }
+
+  async listAgentTokensByUser(userId: string): Promise<AgentTokenRow[]> {
+    return [...this.agentTokens.values()]
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async revokeAgentToken(
+    userId: string,
+    id: string,
+    revokedAt: Date,
+    audit?: AuditEventInput,
+  ): Promise<boolean> {
+    const row = this.agentTokens.get(id);
+    if (row === undefined || row.userId !== userId || row.revokedAt !== null) {
+      return false;
+    }
+    row.revokedAt = revokedAt;
+    if (audit !== undefined) {
+      this.auditEvents.push(audit);
+    }
+    return true;
+  }
+
+  async updateAgentTokenLastUsed(id: string, at: Date): Promise<void> {
+    const row = this.agentTokens.get(id);
+    if (row !== undefined) {
+      row.lastUsedAt = at;
+    }
+  }
+
+  async findWorkspaceById(id: string): Promise<AuthWorkspaceRow | null> {
+    return this.workspaces.find((row) => row.id === id) ?? null;
+  }
+
+  async listWorkspacesByOwner(userId: string): Promise<AuthWorkspaceRow[]> {
+    return this.workspaces
+      .filter((row) => row.ownerUserId === userId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  seedAgentToken(input: {
+    userId: string;
+    tokenHash: string;
+    scopes?: string[];
+    workspaceIds?: string[];
+    pathPrefixes?: string[] | null;
+    credentialEpoch?: number;
+    expiresAt?: Date;
+    revokedAt?: Date | null;
+    lastUsedAt?: Date | null;
+    name?: string;
+  }): AgentTokenRow {
+    const row: AgentTokenRow = {
+      id: randomUUID(),
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      tokenPrefix: 'seeded00',
+      last4: 'seed',
+      name: input.name ?? 'seeded token',
+      scopes: input.scopes ?? ['notes.read'],
+      workspaceIds: input.workspaceIds ?? [],
+      pathPrefixes: input.pathPrefixes ?? null,
+      credentialEpoch: input.credentialEpoch ?? 1,
+      expiresAt: input.expiresAt ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      lastUsedAt: input.lastUsedAt ?? null,
+      revokedAt: input.revokedAt ?? null,
+      createdAt: new Date(),
+      createdByIp: null,
+    };
+    this.agentTokens.set(row.id, row);
+    this.agentTokensByHash.set(row.tokenHash, row);
+    return row;
   }
 
   // Seed helpers. Tests build rows directly instead of going through

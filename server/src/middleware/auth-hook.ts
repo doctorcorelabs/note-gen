@@ -66,6 +66,13 @@ declare module 'fastify' {
   interface FastifyContextConfig {
     requiresAuth?: boolean;
     requiresCsrf?: boolean;
+    // F2-1 wave G-F2-1d: routes with authMode 'agent' verify a
+    // Bearer agent token instead of the session cookie and
+    // skip Origin/CSRF (Bearer is not an ambient credential).
+    // agentScope names the single scope the route requires;
+    // a token without it answers the generic 404.
+    authMode?: 'session' | 'agent';
+    agentScope?: string;
     // DA-6 A17-01: per-route 413 mapping read by the error handler.
     bodyTooLarge?: import('../plugins/envelope.js').BodyTooLargeMapping;
   }
@@ -77,6 +84,37 @@ export interface SessionPrincipal {
   sessionId: string;
   credentialEpoch?: number;
 }
+
+// Agent principal (desain-auth.md section 11.4): deliberately
+// separate from SessionPrincipal. A handler that needs a
+// browser session never accepts this shape, and agent
+// handlers read it back with getAgentPrincipal.
+export interface AgentPrincipal {
+  userId: string;
+  tokenId: string;
+  scopes: readonly string[];
+  workspaceIds: readonly string[];
+  pathPrefixes: readonly string[] | null;
+  authMode: 'agent';
+}
+
+export interface AgentVerificationInput {
+  request: FastifyRequest;
+}
+
+// Verify a Bearer agent token. Returns the agent principal
+// when the token is valid, or null for every rejection (no
+// header, unknown hash, revoked, expired, inactive owner,
+// stale credential epoch, no known scope). All of those
+// answer the same generic 401. A missing store or database
+// error throws 503, mirroring the session verifier.
+export type VerifyAgentTokenFn = (input: AgentVerificationInput) => Promise<AgentPrincipal | null>;
+
+// Post-verification guard for agent routes: per-token and
+// per-account rate limits plus usage audit (desain-auth.md
+// section 11.4 step 7). Throws ApiError.rateLimited when a
+// bucket is exhausted.
+export type AgentGuardFn = (request: FastifyRequest, principal: AgentPrincipal) => Promise<void>;
 
 export interface SessionVerificationInput {
   request: FastifyRequest;
@@ -110,6 +148,8 @@ export interface AuthHookDeps {
   verifySession?: VerifySessionFn;
   verifyCsrf?: VerifyCsrfTokenFn;
   verifyOrigin?: VerifyOriginFn;
+  verifyAgentToken?: VerifyAgentTokenFn;
+  agentGuard?: AgentGuardFn;
   canonicalOrigin?: string | undefined;
 }
 
@@ -119,6 +159,7 @@ export interface AuthHookDeps {
 export const denyByDefaultVerifySession: VerifySessionFn = async () => null;
 
 export const denyByDefaultVerifyCsrf: VerifyCsrfTokenFn = async () => false;
+export const denyByDefaultVerifyAgentToken: VerifyAgentTokenFn = async () => null;
 
 // Health paths that bypass application auth. Single source of truth is
 // the route module; the middleware contract test asserts the exemption
@@ -243,7 +284,12 @@ export function defaultVerifyOrigin(request: FastifyRequest, canonicalOrigin: st
 }
 
 interface RouteInfo {
-  config: { requiresAuth?: boolean; requiresCsrf?: boolean };
+  config: {
+    requiresAuth?: boolean;
+    requiresCsrf?: boolean;
+    authMode?: 'session' | 'agent';
+    agentScope?: string;
+  };
   pattern: string | undefined;
   // False when the router matched no route (404, including a
   // wrong-method request to an existing path). In Fastify 5 an
@@ -292,10 +338,32 @@ function setPrincipal(request: FastifyRequest, principal: SessionPrincipal): voi
   (request as unknown as Record<string, unknown>)[PRINCIPAL_KEY] = principal;
 }
 
+const AGENT_PRINCIPAL_KEY = 'agentPrincipal';
+
+export function getAgentPrincipal(request: FastifyRequest): AgentPrincipal | undefined {
+  const holder = request as unknown as Record<string, unknown>;
+  const value = holder[AGENT_PRINCIPAL_KEY];
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as AgentPrincipal).authMode === 'agent' &&
+    typeof (value as AgentPrincipal).tokenId === 'string'
+  ) {
+    return value as AgentPrincipal;
+  }
+  return undefined;
+}
+
+function setAgentPrincipal(request: FastifyRequest, principal: AgentPrincipal): void {
+  (request as unknown as Record<string, unknown>)[AGENT_PRINCIPAL_KEY] = principal;
+}
+
 export function createAuthPreHandler(deps: AuthHookDeps = {}) {
   const verifySession = deps.verifySession ?? denyByDefaultVerifySession;
   const verifyOrigin = deps.verifyOrigin ?? defaultVerifyOrigin;
   const verifyCsrf = deps.verifyCsrf ?? denyByDefaultVerifyCsrf;
+  const verifyAgentToken = deps.verifyAgentToken ?? denyByDefaultVerifyAgentToken;
+  const agentGuard = deps.agentGuard;
   const canonicalOrigin = deps.canonicalOrigin;
 
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
@@ -312,6 +380,28 @@ export function createAuthPreHandler(deps: AuthHookDeps = {}) {
       return;
     }
     if (isPublicNoSessionRequest(request.method, path) || PUBLIC_HEALTH_PATHS.includes(pattern)) {
+      return;
+    }
+    // Agent branch (F2-1 wave G-F2-1d): only routes that
+    // explicitly declare authMode 'agent' take this path, so
+    // every pre-existing route keeps the session behavior
+    // below unchanged. The cookie is ignored here and the
+    // Bearer token is ignored on session routes. A missing
+    // required scope answers the generic 404 (desain-auth
+    // section 11.4 step 4), never 403.
+    if (info.config.authMode === 'agent') {
+      const agentPrincipal = await verifyAgentToken({ request });
+      if (agentPrincipal === null) {
+        throw ApiError.unauthenticated();
+      }
+      const requiredScope = info.config.agentScope;
+      if (requiredScope !== undefined && !agentPrincipal.scopes.includes(requiredScope)) {
+        throw ApiError.notFound();
+      }
+      setAgentPrincipal(request, agentPrincipal);
+      if (agentGuard !== undefined) {
+        await agentGuard(request, agentPrincipal);
+      }
       return;
     }
     const requiresAuth = info.config.requiresAuth === true || path.startsWith('/api/') || pattern.startsWith('/api/');

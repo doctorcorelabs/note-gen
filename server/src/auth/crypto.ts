@@ -42,6 +42,42 @@ export function newOpaqueToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
+// Agent token format (desain-auth.md section 11.2): the ngt_
+// prefix plus 32 CSPRNG bytes in base64url, 47 characters in
+// total. tokenPrefix is the first 8 characters after the
+// prefix and last4 the final 4; together they identify a
+// token in lists and logs without the raw value. Only the
+// SHA-256 hash of the full raw value is ever stored.
+export const AGENT_TOKEN_PREFIX = 'ngt_';
+
+export interface GeneratedAgentToken {
+  raw: string;
+  tokenPrefix: string;
+  last4: string;
+}
+
+export function newAgentToken(): GeneratedAgentToken {
+  const raw = `${AGENT_TOKEN_PREFIX}${newOpaqueToken()}`;
+  return {
+    raw,
+    tokenPrefix: raw.slice(AGENT_TOKEN_PREFIX.length, AGENT_TOKEN_PREFIX.length + 8),
+    last4: raw.slice(-4),
+  };
+}
+
+// Reads a Bearer token from an Authorization header value.
+// Anything that is not exactly one Bearer credential (missing
+// header, other scheme, embedded whitespace, duplicated
+// headers) yields undefined; the verifier answers the same
+// generic 401 for all of them.
+export function parseBearerToken(header: string | string[] | undefined): string | undefined {
+  if (typeof header !== 'string') {
+    return undefined;
+  }
+  const match = /^Bearer (\S+)$/i.exec(header.trim());
+  return match?.[1];
+}
+
 // Constant-time string comparison that does not leak length: values
 // of different lengths are compared through their hashes.
 export function safeEqual(a: string, b: string): boolean {

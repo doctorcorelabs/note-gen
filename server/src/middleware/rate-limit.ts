@@ -49,6 +49,8 @@ export const STEP_UP_ACCOUNT_SCOPE = 'stepup:account';
 export const PASSWORD_CHANGE_ACCOUNT_SCOPE = 'password_change:account';
 export const API_ACCOUNT_SCOPE = 'api:account';
 export const API_IP_SCOPE = 'api:ip';
+export const AGENT_TOKEN_SCOPE = 'agent:token';
+export const AGENT_ACCOUNT_SCOPE = 'agent:account';
 
 // Fixed-window start: now rounded down to a multiple of the window
 // length (UTC epoch math, no timezone involved).
@@ -296,6 +298,46 @@ export async function checkGeneralApiLimit(input: {
     windowMs: 60 * 1000,
     nowMs: input.nowMs,
   });
+}
+
+// Agent request limits (F2-1 wave G-F2-1d, desain-auth.md
+// sections 6.5 and 11.4 step 7): every authenticated agent
+// request counts against a per-token bucket and an aggregate
+// per-account bucket, both capped at the general account
+// limit per minute. Counting is one atomic increment per
+// bucket (the setup-scope discipline), so concurrent
+// requests cannot overshoot by more than the increment
+// race the store already accepts.
+export async function checkAndCountAgentRequest(input: {
+  store: AuthStore;
+  tokenId: string;
+  userId: string;
+  authSecret: string | undefined;
+  nowMs: number;
+  limitPerMinute?: number;
+}): Promise<RateLimitDecision> {
+  const limit = input.limitPerMinute ?? API_GENERAL_ACCOUNT_LIMIT_PER_MINUTE;
+  const windowMs = 60 * 1000;
+  const tokenHits = await recordFailureBucket({
+    store: input.store,
+    scope: AGENT_TOKEN_SCOPE,
+    rawKey: input.tokenId,
+    authSecret: input.authSecret,
+    windowMs,
+    nowMs: input.nowMs,
+  });
+  const accountHits = await recordFailureBucket({
+    store: input.store,
+    scope: AGENT_ACCOUNT_SCOPE,
+    rawKey: input.userId,
+    authSecret: input.authSecret,
+    windowMs,
+    nowMs: input.nowMs,
+  });
+  return {
+    allowed: tokenHits <= limit && accountHits <= limit,
+    retryAfterSeconds: secondsUntilWindowEnd(input.nowMs, windowMs),
+  };
 }
 
 // Lockout ladder (section 6.3, mechanism C): level 1 is 15 minutes,
