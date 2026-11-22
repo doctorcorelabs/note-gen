@@ -17,6 +17,7 @@ import {
   buildTodoCreateBody,
   createBodyMatchesRecord,
   hasNoExtractedContent,
+  hasSelectedTags,
   makeSourceId,
   normalizeLinkUrl,
   parseTodoContent,
@@ -173,6 +174,14 @@ describe("create bodies", () => {
       tagId: 3,
       tagIds: [3, 7],
     });
+  });
+
+  it("reports whether a create selection names any tag (F02-03)", () => {
+    expect(hasSelectedTags({})).toBe(false);
+    expect(hasSelectedTags({ tagIds: [] })).toBe(false);
+    expect(hasSelectedTags({ tagIds: [1.5] })).toBe(false);
+    expect(hasSelectedTags({ tagIds: [3] })).toBe(true);
+    expect(hasSelectedTags({ tagIds: [3, 7, 3] })).toBe(true);
   });
 
   it("builds prefixed sourceIds that differ per action", () => {

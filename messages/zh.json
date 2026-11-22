@@ -4909,6 +4909,7 @@
           "tagsLabel": "标签",
           "saveFailed": "记录保存失败，请重试。",
           "noTagsExist": "This workspace has no tags yet. Create a tag first, then save the record.",
+          "tagsEmpty": "Select at least one tag.",
           "duplicateDraft": "This record was already saved earlier, so your latest edits were not applied. Save again to create a new record with them.",
           "invalidUrl": "请输入有效的 http 或 https 链接。",
           "emptyText": "请先输入一些文本。",

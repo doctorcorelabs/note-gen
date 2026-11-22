@@ -164,6 +164,19 @@ export function resolveCreateTags(
   return { tagId: tagIds[0], tagIds };
 }
 
+/**
+ * True when a create tag selection resolves to at least one tag.
+ * Defined through resolveCreateTags so the dialog guard and the
+ * builders can never disagree about what counts as a selection.
+ * The create dialog (F02-03) blocks an empty selection with an
+ * honest notice instead of letting the kind client fall back to
+ * the default save target silently; non-dialog callers keep the
+ * fallback contract above.
+ */
+export function hasSelectedTags(selection: CreateTagSelection): boolean {
+  return resolveCreateTags(selection).tagIds !== undefined;
+}
+
 function fnv1aHex(text: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i += 1) {

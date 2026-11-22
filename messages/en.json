@@ -4909,6 +4909,7 @@
           "tagsLabel": "Tags",
           "saveFailed": "The record could not be saved. Try again.",
           "noTagsExist": "This workspace has no tags yet. Create a tag first, then save the record.",
+          "tagsEmpty": "Select at least one tag.",
           "duplicateDraft": "This record was already saved earlier, so your latest edits were not applied. Save again to create a new record with them.",
           "invalidUrl": "Enter a valid http or https URL.",
           "emptyText": "Enter some text first.",

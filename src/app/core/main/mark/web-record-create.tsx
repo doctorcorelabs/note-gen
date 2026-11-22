@@ -36,6 +36,7 @@ import {
   buildTextCreateBody,
   buildTodoCreateBody,
   createBodyMatchesRecord,
+  hasSelectedTags,
   makeSourceId,
   type CreateRecordBody,
   type RecordType,
@@ -169,6 +170,16 @@ export function WebRecordCreate({
   }
 
   async function handleSave() {
+    // F02-03: never let an empty selection reach the builders,
+    // which omit the tag fields and let the kind client fall
+    // back to the default save target silently. Block here,
+    // before any asset upload, with the honest notice. A
+    // workspace with no tags at all gets the noTagsExist copy
+    // because there is nothing to select.
+    if (!hasSelectedTags({ tagIds: selectedTagIds })) {
+      setNotice(tags.length === 0 ? t("noTagsExist") : t("tagsEmpty"));
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -475,7 +486,12 @@ export function WebRecordCreate({
         </div>
 
         <div className="flex gap-2 border-t pt-3">
-          <Button disabled={busy} onClick={handleSave}>
+          <Button
+            disabled={
+              busy || (tags.length > 0 && selectedTagIds.length === 0)
+            }
+            onClick={handleSave}
+          >
             {busy ? t("saving") : t("save")}
           </Button>
           <Button
