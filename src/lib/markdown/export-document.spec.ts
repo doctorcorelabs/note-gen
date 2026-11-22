@@ -10,7 +10,7 @@
 // Run: `pnpm vitest run --project unit src/lib/markdown/export-document.spec.ts`
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { nextFrame } from "./export-document";
+import { MERMAID_DIAGRAM_TIMEOUT_MS, nextFrame, renderMermaidCodeBlocks } from "./export-document";
 
 let rafCallback: (() => void) | null = null;
 
@@ -50,5 +50,86 @@ describe("nextFrame (DA-6 EXP-02)", () => {
     const assertion = expect(promise).rejects.toThrow(/cancelled/i);
     controller.abort();
     await assertion;
+  });
+});
+
+describe("renderMermaidCodeBlocks (PB3 BUG2-02)", () => {
+  interface FakeFigure { className: string; innerHTML: string }
+  let figures: FakeFigure[] = [];
+
+  function makeBlock(language: string, lines: string[]) {
+    const code = {
+      children: lines.map((text) => ({ textContent: text })),
+      textContent: lines.join(""),
+    };
+    return {
+      getAttribute: (name: string) => (name === "data-language" ? language : null),
+      querySelector: (selector: string) => (selector === "code" ? code : null),
+      replaceWith: vi.fn(),
+    };
+  }
+
+  function makeRoot(blocks: ReturnType<typeof makeBlock>[]) {
+    return { querySelectorAll: () => blocks } as never;
+  }
+
+  beforeEach(() => {
+    figures = [];
+    vi.stubGlobal("document", {
+      createElement: () => {
+        const figure: FakeFigure = { className: "", innerHTML: "" };
+        figures.push(figure);
+        return figure;
+      },
+    });
+  });
+
+  it("replaces a mermaid code block with the rendered SVG", async () => {
+    const block = makeBlock("mermaid", ["flowchart TD", "  A --> B"]);
+    const renderDiagram = vi.fn(async () => "<svg>ok</svg>");
+
+    const counts = await renderMermaidCodeBlocks(makeRoot([block]), renderDiagram);
+
+    expect(counts).toEqual({ rendered: 1, failed: 0 });
+    expect(renderDiagram).toHaveBeenCalledWith("flowchart TD\n  A --> B", undefined);
+    expect(block.replaceWith).toHaveBeenCalledTimes(1);
+    expect(figures[0].innerHTML).toBe("<svg>ok</svg>");
+    expect(figures[0].className).toBe("notegen-export-mermaid");
+  });
+
+  it("keeps the code block when the renderer returns null", async () => {
+    const block = makeBlock("mermaid", ["flowchart TD"]);
+    const counts = await renderMermaidCodeBlocks(makeRoot([block]), async () => null);
+    expect(counts).toEqual({ rendered: 0, failed: 1 });
+    expect(block.replaceWith).not.toHaveBeenCalled();
+  });
+
+  it("keeps the code block when the renderer rejects", async () => {
+    const block = makeBlock("mermaid", ["flowchart TD"]);
+    const counts = await renderMermaidCodeBlocks(makeRoot([block]), async () => {
+      throw new Error("render failed");
+    });
+    expect(counts).toEqual({ rendered: 0, failed: 1 });
+    expect(block.replaceWith).not.toHaveBeenCalled();
+  });
+
+  it("times out a hung renderer instead of stalling", async () => {
+    const block = makeBlock("mermaid", ["flowchart TD"]);
+    const promise = renderMermaidCodeBlocks(
+      makeRoot([block]),
+      () => new Promise<never>(() => {}),
+    );
+    await vi.advanceTimersByTimeAsync(MERMAID_DIAGRAM_TIMEOUT_MS);
+    await expect(promise).resolves.toEqual({ rendered: 0, failed: 1 });
+    expect(block.replaceWith).not.toHaveBeenCalled();
+  });
+
+  it("ignores non-mermaid blocks and counts empty mermaid blocks as failed", async () => {
+    const other = makeBlock("ts", ["const x = 1"]);
+    const empty = makeBlock("mermaid", []);
+    const renderDiagram = vi.fn(async () => "<svg>ok</svg>");
+    const counts = await renderMermaidCodeBlocks(makeRoot([other, empty]), renderDiagram);
+    expect(counts).toEqual({ rendered: 0, failed: 1 });
+    expect(renderDiagram).not.toHaveBeenCalled();
   });
 });

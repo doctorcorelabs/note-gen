@@ -35,12 +35,33 @@ async function getMermaid(): Promise<MermaidApi> {
   return await mermaidPromise
 }
 
+// PB3 BUG2-02: race the frame wait against a timer, mirroring
+// nextFrame in export-document.ts (DA-6 EXP-02) and
+// waitForAnimationFrame in markdown-export.ts. A frame that never
+// fires (hidden page, suppressed rendering in automation) must not
+// stall the serialized render queue forever (UTANG-UJI-07 pattern).
+const MERMAID_FRAME_TIMEOUT_MS = 250
+
+function waitForFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let frame = 0
+    const timer = window.setTimeout(() => {
+      window.cancelAnimationFrame(frame)
+      resolve()
+    }, MERMAID_FRAME_TIMEOUT_MS)
+    frame = window.requestAnimationFrame(() => {
+      window.clearTimeout(timer)
+      resolve()
+    })
+  })
+}
+
 export async function renderMermaid(
   code: string,
   shouldRender: () => boolean
 ): Promise<string | null> {
   const render = async () => {
-    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+    await waitForFrame()
     if (!shouldRender()) return null
 
     const mermaid = await getMermaid()

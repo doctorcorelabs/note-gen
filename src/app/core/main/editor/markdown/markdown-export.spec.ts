@@ -405,16 +405,33 @@ describe("main-path image deferral (PB2 BUG2-01/02, PERF-01)", () => {
     expect(warnings).toHaveLength(0);
   });
 
-  it("warns that mermaid diagrams are preserved as code blocks", async () => {
+  it("warns that mermaid diagrams are preserved as code blocks when rendering fails", async () => {
     renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
       html: "<p>diagram</p>",
       highlightFallback: false,
-    });
+      mermaidRendered: 0,
+      mermaidFailed: 1,
+    } as never);
 
     const { warnings } = await renderMarkdownToHtmlDetailed(
       "```mermaid\nflowchart TD\n  A --> B\n```",
     );
 
     expect(warnings).toContainEqual(expect.objectContaining({ code: "unsupported-content" }));
+  });
+
+  it("does not warn when every mermaid diagram rendered to SVG", async () => {
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: "<p>diagram</p>",
+      highlightFallback: false,
+      mermaidRendered: 1,
+      mermaidFailed: 0,
+    } as never);
+
+    const { warnings } = await renderMarkdownToHtmlDetailed(
+      "```mermaid\nflowchart TD\n  A --> B\n```",
+    );
+
+    expect(warnings.filter((warning) => warning.code === "unsupported-content")).toHaveLength(0);
   });
 });

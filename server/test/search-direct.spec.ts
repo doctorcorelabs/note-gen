@@ -439,3 +439,47 @@ describe('direct keyword search port degradation (F-15-03)', () => {
     expect(page.results.length).toBe(1);
   });
 });
+
+describe('direct keyword search port extensionless files (PB3)', () => {
+  let root: string;
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  function filesPort() {
+    return createDirectKeywordSearchPort({
+      workspaceRoot: root,
+      resolveWorkspaceId: async () => null,
+    });
+  }
+
+  it('finds an extensionless text file by content', async () => {
+    root = await mkdtemp(join(tmpdir(), 'w4wire-search-'));
+    await writeFile(join(root, 'catatanpolos'), 'gagal jantung polos', 'utf8');
+    await writeFile(join(root, 'jantung.md'), 'gagal jantung markdown', 'utf8');
+    const page = await filesPort().search(searchInput({ query: 'gagal jantung', scope: 'files' }));
+    const paths = page.results.map((r) => (r.kind === 'file' ? r.path : '?')).sort();
+    expect(paths).toEqual(['catatanpolos', 'jantung.md']);
+    expect(page.degraded).toBe(false);
+  });
+
+  it('skips extensionless binary files without degrading', async () => {
+    root = await mkdtemp(join(tmpdir(), 'w4wire-search-'));
+    // 'gagal' bytes followed by NUL and invalid UTF-8: the DA-5c
+    // text probe must reject it.
+    await writeFile(join(root, 'binerpolos'), Buffer.from([0x67, 0x61, 0x67, 0x61, 0x6c, 0x00, 0xff, 0xfe]));
+    await writeFile(join(root, 'rusakpolos'), Buffer.from([0xff, 0xfe, 0x67, 0x61, 0x67, 0x61, 0x6c]));
+    const page = await filesPort().search(searchInput({ query: 'gagal', scope: 'files' }));
+    expect(page.results).toHaveLength(0);
+    expect(page.degraded).toBe(false);
+  });
+
+  it('still skips dotted non-Markdown files', async () => {
+    root = await mkdtemp(join(tmpdir(), 'w4wire-search-'));
+    await writeFile(join(root, 'notes.txt'), 'gagal jantung txt', 'utf8');
+    const page = await filesPort().search(searchInput({ query: 'gagal jantung', scope: 'files' }));
+    expect(page.results).toHaveLength(0);
+    expect(page.degraded).toBe(false);
+  });
+});

@@ -128,10 +128,79 @@ export function nextFrame(signal?: AbortSignal) {
   })
 }
 
+// PB3 BUG2-02: per-diagram and cumulative bounds for mermaid SVG
+// rendering in the export fragment. A diagram that times out or
+// fails keeps its code block and is counted, so the caller can warn
+// instead of degrading silently; the export never hangs on a
+// diagram (UTANG-UJI-07 pattern).
+export const MERMAID_DIAGRAM_TIMEOUT_MS = 5000
+export const MERMAID_TOTAL_BUDGET_MS = 20000
+
+export type MermaidDiagramRenderer = (
+  code: string,
+  signal?: AbortSignal,
+) => Promise<string | null>
+
+function mermaidCodeFromBlock(block: Element): string {
+  const code = block.querySelector('code')
+  if (!code) return ''
+  const lines = Array.from(code.children)
+  const source = lines.length
+    ? lines.map(line => line.textContent === '\n' ? '' : line.textContent ?? '').join('\n')
+    : code.textContent ?? ''
+  return source.replace(/\n+$/, '')
+}
+
+export async function renderMermaidCodeBlocks(
+  root: { querySelectorAll: (selector: string) => Iterable<Element> },
+  renderDiagram: MermaidDiagramRenderer,
+  signal?: AbortSignal,
+): Promise<{ rendered: number; failed: number }> {
+  const blocks = Array.from(root.querySelectorAll('[data-streamdown="code-block"]'))
+    .filter(block => (block.getAttribute('data-language') || '').toLowerCase() === 'mermaid')
+  let rendered = 0
+  let failed = 0
+  const startedAt = Date.now()
+  for (const block of blocks) {
+    checkAbort(signal)
+    const code = mermaidCodeFromBlock(block)
+    if (!code.trim() || Date.now() - startedAt > MERMAID_TOTAL_BUDGET_MS) {
+      failed += 1
+      continue
+    }
+    let svg: string | null = null
+    try {
+      svg = await abortable(
+        Promise.race([
+          renderDiagram(code, signal),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), MERMAID_DIAGRAM_TIMEOUT_MS)),
+        ]),
+        signal,
+      )
+    } catch {
+      svg = null
+    }
+    if (svg) {
+      const figure = document.createElement('figure')
+      figure.className = 'notegen-export-mermaid'
+      figure.innerHTML = svg
+      block.replaceWith(figure)
+      rendered += 1
+    } else {
+      failed += 1
+    }
+  }
+  return { rendered, failed }
+}
+
 /** Shared renderer; image embedding and document serialization remain caller policies. */
 export async function renderMarkdownExportFragment(
   markdown: string,
-  options: { deferImages?: boolean; signal?: AbortSignal } = {},
+  options: {
+    deferImages?: boolean
+    signal?: AbortSignal
+    renderMermaidDiagram?: MermaidDiagramRenderer
+  } = {},
 ) {
   const controller = new AbortController()
   const cancelled = () => controller.abort(options.signal ? abortError(options.signal) : new PluginError('Cancelled', 'HTML export was cancelled'))
@@ -172,7 +241,19 @@ export async function renderMarkdownExportFragment(
     await nextFrame(signal)
     flushSync(() => undefined)
     checkAbort(signal)
-    return { html: container.innerHTML, highlightFallback: highlighter.didFallback() }
+    // PB3 BUG2-02: when the caller supplies a mermaid renderer,
+    // replace mermaid code blocks with rendered SVG before
+    // serialization. Without one, diagrams stay code blocks (the
+    // advanced export path keeps its documented warning).
+    let mermaidRendered = 0
+    let mermaidFailed = 0
+    if (options.renderMermaidDiagram) {
+      const counts = await renderMermaidCodeBlocks(container, options.renderMermaidDiagram, signal)
+      mermaidRendered = counts.rendered
+      mermaidFailed = counts.failed
+      checkAbort(signal)
+    }
+    return { html: container.innerHTML, highlightFallback: highlighter.didFallback(), mermaidRendered, mermaidFailed }
   } finally {
     highlighter.dispose()
     root.unmount()

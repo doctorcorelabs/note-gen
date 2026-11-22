@@ -25,8 +25,10 @@
 //   lookup never fails a files search: the content comes from
 //   disk, and versions are auxiliary guard metadata.
 // - The walk follows the reconcile scanner's rules: dot-leading
-//   names and symlinks are skipped, only `.md` files are read
-//   (case-sensitive, matching the read service), and a file that
+//   names and symlinks are skipped, `.md` files are read
+//   (case-sensitive, matching the read service), extensionless
+//   files are read when they pass the read service's text probe
+//   (fatal UTF-8 decode + NUL check, DA-5c), and a file that
 //   cannot be read is skipped rather than failing the search.
 // - Todo records match over their parsed title + description,
 //   not over the raw JSON envelope (S-05 convention); a todo
@@ -162,7 +164,8 @@ async function loadFileItems(
   const items: FakeSearchItem[] = [];
   // DA-2 (F-15-03): count only error-driven skips (readdir,
   // lstat, readFile failures). Rule-based skips below (dot
-  // segments, symlinks, non-.md) are not degradation.
+  // segments, symlinks, dotted non-.md names, extensionless
+  // files that fail the text probe) are not degradation.
   let skipped = 0;
   const stack: string[] = [''];
   while (stack.length > 0) {
@@ -195,7 +198,16 @@ async function loadFileItems(
         stack.push(childPath);
         continue;
       }
-      if (!childStats.isFile() || !childPath.endsWith('.md')) {
+      if (!childStats.isFile()) {
+        continue;
+      }
+      // PB3: extensionless names (final segment without a dot, the
+      // read service's DA-5c candidate rule) join the loader when
+      // their bytes pass the same text probe; dotted non-.md names
+      // stay skipped.
+      const isMarkdown = childPath.endsWith('.md');
+      const isExtensionless = !dirent.name.includes('.');
+      if (!isMarkdown && !isExtensionless) {
         continue;
       }
       let bytes: Buffer;
@@ -205,10 +217,23 @@ async function loadFileItems(
         skipped += 1;
         continue;
       }
+      let content: string;
+      if (isExtensionless) {
+        try {
+          content = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+        } catch {
+          continue;
+        }
+        if (content.includes('\0')) {
+          continue;
+        }
+      } else {
+        content = bytes.toString('utf8');
+      }
       items.push({
         kind: 'file',
         path: childPath,
-        content: bytes.toString('utf8'),
+        content,
         contentHash: contentHash(bytes),
         version: versions.get(childPath) ?? 0,
         updatedAt: Math.floor(childStats.mtimeMs),

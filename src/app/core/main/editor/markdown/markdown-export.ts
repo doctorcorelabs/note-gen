@@ -12,7 +12,7 @@ import { MarkdownParagraph } from './markdown-paragraph'
 import { MarkdownListItem, MarkdownTaskItem } from './markdown-list-item'
 import { MarkdownTable, MarkdownTableCell, MarkdownTableHeader } from './markdown-table-extension'
 import { InlineMath, BlockMath } from './math-extension'
-import { MermaidDiagram } from './mermaid-extension'
+import { MermaidDiagram, renderMermaid } from './mermaid-extension'
 import StarterKit from '@tiptap/starter-kit'
 import { renderMarkdownExportFragment } from '@/lib/markdown/export-document'
 import { checkIsTauri } from '@/lib/check'
@@ -362,7 +362,15 @@ function sanitizeExportHtml(html: string) {
   // sanitizing; only dangerous URL schemes are removed.
   template.content
     .querySelectorAll('script, style, link, iframe, object, embed, audio, video, source, base, meta, form')
-    .forEach((element) => element.remove())
+    .forEach((element) => {
+      // PB3 BUG2-02: mermaid renders its diagram CSS in a style
+      // element inside the generated SVG (securityLevel strict; the
+      // CSS comes from the mermaid theme, not user text, and raw
+      // user svg/style never survives the Streamdown sanitize
+      // schema). Removing it would strip all diagram styling.
+      if (element.tagName.toLowerCase() === 'style' && element.closest('svg')) return
+      element.remove()
+    })
 
   template.content.querySelectorAll<Element>('*').forEach((element) => {
     Array.from(element.attributes).forEach((attribute) => {
@@ -563,7 +571,22 @@ export async function renderMarkdownToHtmlDetailed(
   // names with "[Image blocked: ...]" text) so
   // resolveMarkdownImageSources can embed them, matching the
   // advanced export path.
-  const { html, highlightFallback } = await renderMarkdownExportFragment(markdown, { deferImages: true, signal })
+  const { html, highlightFallback, mermaidFailed } = await renderMarkdownExportFragment(markdown, {
+    deferImages: true,
+    signal,
+    // PB3 BUG2-02: render mermaid fences to SVG in the export.
+    // renderMermaid races its frame wait against a timer, and the
+    // fragment races each diagram against a timeout, so a stuck
+    // diagram degrades to its code block instead of hanging the
+    // export (UTANG-UJI-07 pattern).
+    renderMermaidDiagram: async (code, diagramSignal) => {
+      try {
+        return await renderMermaid(code, () => !diagramSignal?.aborted)
+      } catch {
+        return null
+      }
+    },
+  })
   const resolved = await resolveMarkdownImageSources(sanitizeExportHtml(html), sourcePath)
   const warnings = [...resolved.warnings]
   // DA-6 EXP-05 (area 12): highlightFallback used to be discarded.
@@ -573,10 +596,11 @@ export async function renderMarkdownToHtmlDetailed(
       message: 'Code highlighting fell back to plain text in the exported file',
     })
   }
-  // PB2 BUG2-02: the export renderer has no mermaid plugin, so
-  // diagrams degrade to code blocks. Warn like the advanced path
-  // (export-document.ts) instead of degrading silently.
-  if (/(?:^|\n)\s*(?:`{3,}|~{3,})\s*mermaid\b/i.test(markdown)) {
+  // PB3 BUG2-02: diagrams that could not be rendered stay code
+  // blocks; warn like the advanced path (export-document.ts)
+  // instead of degrading silently. Fully rendered exports carry
+  // no warning.
+  if ((mermaidFailed ?? 0) > 0) {
     warnings.push({
       code: 'unsupported-content',
       message: 'Mermaid diagrams are preserved as code blocks',
