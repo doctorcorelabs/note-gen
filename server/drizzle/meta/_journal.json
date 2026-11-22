@@ -43,6 +43,13 @@
       "when": 1794995933845,
       "tag": "0005_totp-enrollment-stages",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795355736054,
+      "tag": "0006_f2-citations",
+      "breakpoints": true
     }
   ]
 }

@@ -258,7 +258,7 @@ describe('checkMigrations with a fake pool', () => {
 });
 
 describe('real manifest and drift comparison', () => {
-  it('reads the six journal entries M1-M8 plus the TOTP stage table from disk with SHA-256 digests', async () => {
+  it('reads the seven journal entries M1-M9 plus the TOTP stage table from disk with SHA-256 digests', async () => {
     const manifest = await readMigrationManifest();
     expect(manifest.entries.map((entry) => entry.tag)).toEqual([
       '0000_initial-schema-m1-m7',
@@ -267,6 +267,7 @@ describe('real manifest and drift comparison', () => {
       '0003_m8-contract-columns',
       '0004_m8-contract-tables',
       '0005_totp-enrollment-stages',
+      '0006_f2-citations',
     ]);
     for (const entry of manifest.entries) {
       expect(entry.hash).toMatch(/^[0-9a-f]{64}$/);
