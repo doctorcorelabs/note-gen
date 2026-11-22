@@ -11,7 +11,7 @@ import { androidCloudFolderWorkspaceList, supportsCloudFolderWorkspace, type Clo
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
 import { hasNetworkConnection, ensureDirectoryExists } from '@/lib/sync/auto-sync'
 import { getSyncManager, isSyncConfigured, syncOnOpen } from '@/lib/sync/sync-manager'
-import { decodeExtensionlessText, isEditorTextCandidatePath, isExtensionlessPath, isSyncTextPath } from '@/lib/sync/file-content'
+import { decodeExtensionlessText, isEditorTextCandidatePath, isExtensionlessPath, isSyncTextPath, reconcileTabFolderFlags } from '@/lib/sync/file-content'
 import { sanitizeFilePath, hasInvalidFileNameChars } from '@/lib/sync/filename-utils'
 import { getCurrentFolder, computedParentPath } from '@/lib/path'
 import useVectorStore from './vector'
@@ -1557,10 +1557,15 @@ const useArticleStore = create<NoteState>((set, get) => ({
       || matchingOpenTab?.name
       || nextPath.split(/[\\/]/).pop()
       || nextPath
+    // Unknown classification defaults to not-a-folder (PB2b): the
+    // old dot-based guess ("no dot = folder") defeated the N-02
+    // extensionless gate whenever a tab was created before the file
+    // tree loaded. The decode probe in readArticle and the tree
+    // reconciliation in setFileTree make the final call.
     const requestedTabIsFolder = options?.tabMetadata?.isFolder
       ?? matchingFileTabOpenRequest?.isFolder
       ?? matchingOpenTab?.isFolder
-      ?? !(nextPath.split(/[\\/]/).pop() || '').includes('.')
+      ?? false
     const pendingFileTabOpenRequest = options?.tabOpenMode && nextPath
       ? {
           id: ++fileTabOpenRequestSequence,
@@ -2155,7 +2160,17 @@ const useArticleStore = create<NoteState>((set, get) => ({
     const tabs = await store.get<OpenTabInfo[]>('openTabs')
     const activeTabId = await store.get<string>('activeTabId')
     if (editorStateMutationRevision !== initializationRevision) return
-    const nextTabs = (tabs || []).map(normalizeOpenTabInfo)
+    const restoredTabs = (tabs || []).map(normalizeOpenTabInfo)
+    // A persisted tab may carry a wrong folder guess from before the
+    // tree loaded (PB2b); when the tree is already available, the
+    // tree wins before we decide whether to read the active article.
+    const currentTree = get().fileTree
+    const nextTabs = currentTree.length
+      ? reconcileTabFolderFlags(restoredTabs, path => {
+          const entry = getCurrentFolder(path, currentTree)
+          return entry ? entry.isDirectory === true : undefined
+        }).tabs
+      : restoredTabs
     const nextActiveTabId = activeTabId && nextTabs.some(tab => tab.id === activeTabId)
       ? activeTabId
       : nextTabs.at(-1)?.id ?? ''
@@ -2289,7 +2304,36 @@ const useArticleStore = create<NoteState>((set, get) => ({
   },
   setFileTree: (tree: DirTree[]) => {
     const sortedTree = get().sortFileTree(preservePendingFileTreeRenameRows(tree))
-    set({ fileTree: sortedTree, fileTreeInitialized: true })
+    // Correct tabs whose folder flag was guessed before the tree
+    // loaded (PB2b); the tree entry is authoritative once present.
+    const { tabs: reconciledTabs, changed } = reconcileTabFolderFlags(
+      get().openTabs,
+      path => {
+        const entry = getCurrentFolder(path, sortedTree)
+        return entry ? entry.isDirectory === true : undefined
+      },
+    )
+    set({
+      fileTree: sortedTree,
+      fileTreeInitialized: true,
+      ...(changed ? { openTabs: reconciledTabs } : {}),
+    })
+    if (!changed) return
+    void persistEditorState({ openTabs: reconciledTabs })
+    const state = get()
+    const activeTab = reconciledTabs.find(tab => tab.id === state.activeTabId)
+    if (
+      activeTab
+      && !activeTab.isFolder
+      && state.activeFilePath === activeTab.path
+      && isEditorTextCandidatePath(activeTab.path, false)
+      && !state.currentArticle
+      && !state.loading
+    ) {
+      void get().readArticle(activeTab.path, undefined, true, {
+        createIfMissing: false,
+      })
+    }
   },
   setEntryLoading: (relativePath: string, loading: boolean) => {
     const nextTree = updateTreeEntryByPath(get().fileTree, relativePath, entry => ({

@@ -58,6 +58,34 @@ export function isEditorTextCandidatePath(path: string, isFolder: boolean): bool
   return isSyncTextPath(path) || isExtensionlessPath(path)
 }
 
+export interface FolderFlagTab {
+  path: string
+  isFolder: boolean
+  kind?: string
+}
+
+/**
+ * Correct persisted tab folder flags against the loaded file tree
+ * (PB2b). A tab created before the tree loaded could carry a wrong
+ * isFolder guess; once the tree knows the entry, the tree wins.
+ * Tabs whose path is not in the tree yet are left untouched.
+ * Returns the original array reference when nothing changed.
+ */
+export function reconcileTabFolderFlags<T extends FolderFlagTab>(
+  tabs: T[],
+  lookupIsDirectory: (path: string) => boolean | undefined,
+): { tabs: T[]; changed: boolean } {
+  let changed = false
+  const next = tabs.map(tab => {
+    if (tab.kind && tab.kind !== 'file') return tab
+    const isDirectory = lookupIsDirectory(tab.path)
+    if (isDirectory === undefined || isDirectory === tab.isFolder) return tab
+    changed = true
+    return { ...tab, isFolder: isDirectory }
+  })
+  return changed ? { tabs: next, changed } : { tabs, changed }
+}
+
 export function syncContentBytes(content: string | Uint8Array): Uint8Array {
   return typeof content === 'string' ? new TextEncoder().encode(content) : content
 }

@@ -13,6 +13,7 @@ import {
   decodeExtensionlessText,
   isEditorTextCandidatePath,
   isExtensionlessPath,
+  reconcileTabFolderFlags,
 } from "./file-content";
 
 const encode = (text: string) => new TextEncoder().encode(text);
@@ -62,5 +63,51 @@ describe("decodeExtensionlessText (N-02)", () => {
 
   it("rejects text containing NUL bytes", () => {
     expect(decodeExtensionlessText(encode("a\0b"))).toBeUndefined();
+  });
+});
+
+describe("reconcileTabFolderFlags (PB2b)", () => {
+  const treeLookup = (path: string): boolean | undefined => {
+    if (path === "Folder Demo") return true;
+    if (path === "Folder Demo/Catatan 3 (edit)") return false;
+    if (path === "Folder Demo/Catatan 2.md") return false;
+    return undefined;
+  };
+
+  it("corrects an extensionless file restored as folder before the tree loaded", () => {
+    const tabs = [
+      { path: "Folder Demo/Catatan 3 (edit)", isFolder: true, kind: "file" },
+    ];
+    const result = reconcileTabFolderFlags(tabs, treeLookup);
+    expect(result.changed).toBe(true);
+    expect(result.tabs[0].isFolder).toBe(false);
+    expect(
+      isEditorTextCandidatePath(result.tabs[0].path, result.tabs[0].isFolder),
+    ).toBe(true);
+  });
+
+  it("keeps a real folder tab as folder", () => {
+    const tabs = [{ path: "Folder Demo", isFolder: true, kind: "file" }];
+    const result = reconcileTabFolderFlags(tabs, treeLookup);
+    expect(result.changed).toBe(false);
+    expect(result.tabs).toBe(tabs);
+    expect(result.tabs[0].isFolder).toBe(true);
+  });
+
+  it("corrects an extensionless folder defaulted to file before the tree loaded", () => {
+    const tabs = [{ path: "Folder Demo", isFolder: false, kind: "file" }];
+    const result = reconcileTabFolderFlags(tabs, treeLookup);
+    expect(result.changed).toBe(true);
+    expect(result.tabs[0].isFolder).toBe(true);
+  });
+
+  it("leaves tabs unknown to the tree and non-file tabs untouched", () => {
+    const tabs = [
+      { path: "Belum Termuat/Catatan", isFolder: true, kind: "file" },
+      { path: "Folder Demo/Catatan 3 (edit)", isFolder: true, kind: "record" },
+    ];
+    const result = reconcileTabFolderFlags(tabs, treeLookup);
+    expect(result.changed).toBe(false);
+    expect(result.tabs).toBe(tabs);
   });
 });

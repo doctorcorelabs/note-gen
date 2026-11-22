@@ -650,7 +650,6 @@ export function EditorLayout() {
     }
   }, [])
   const getRecordIdForTab = useCallback((tab: TabInfo) => tab.markId ?? getRecordIdFromTabPath(tab.path), [])
-  const isFolderPath = useCallback((path: string) => !(path.split(/[\\/]/).pop() || '').includes('.'), [])
 
   const getItemType = useCallback((path: string): 'markdown' | 'image' | 'folder' | 'unknown' => {
     if (!path) return 'unknown'
@@ -977,7 +976,9 @@ export function EditorLayout() {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         path: activeFilePath,
         name: openRequest?.name || activeFilePath.split(/[\\/]/).pop() || activeFilePath,
-        isFolder: treeItem?.isDirectory ?? openRequest?.isFolder ?? isFolderPath(activeFilePath),
+        // No dot-based folder guess (PB2b): unknown means not-a-folder
+        // until the tree or the decode probe decides.
+        isFolder: treeItem?.isDirectory ?? openRequest?.isFolder ?? false,
         kind: 'file',
         preview: openRequest?.mode === 'preview',
         pinned: openRequest?.mode === 'pinned',
@@ -1034,7 +1035,7 @@ export function EditorLayout() {
       if (openRequest) consumeFileTabOpenRequest(openRequest.id)
     })()
     return () => { disposed = true }
-  }, [activateTab, activeFilePath, activeTabId, addTab, consumeFileTabOpenRequest, fileTree, isFolderPath, layoutReady, openTabs, pendingFileTabOpenRequest, replaceTab, setActiveFilePath, setLayout, setTabDisposition])
+  }, [activateTab, activeFilePath, activeTabId, addTab, consumeFileTabOpenRequest, fileTree, layoutReady, openTabs, pendingFileTabOpenRequest, replaceTab, setActiveFilePath, setLayout, setTabDisposition])
 
   useEffect(() => {
     if (
