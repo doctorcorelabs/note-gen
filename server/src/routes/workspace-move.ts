@@ -60,7 +60,8 @@
 
 import { randomBytes } from 'node:crypto';
 import type { Dirent, Stats } from 'node:fs';
-import { lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { copyFile, link, lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isTextFilePath } from '../lib/paths.js';
@@ -753,8 +754,43 @@ export async function registerWorkspaceMoveRoutes(
       const affectedCount = await countSubtree(sourceResolved.absolute, isFolderMove);
       await ensureTargetParents(targetResolved.absolute, rootReal);
       try {
-        await rename(sourceResolved.absolute, targetResolved.absolute);
+        if (isFolderMove) {
+          // Final existence check immediately before rename: POSIX
+          // rename of a directory onto an existing empty directory
+          // would silently replace it (F-05-02). A rename onto a
+          // non-empty directory fails ENOTEMPTY below.
+          const occupied = await lstat(targetResolved.absolute).catch(() => null);
+          if (occupied !== null) {
+            throw ApiError.alreadyExists();
+          }
+          await rename(sourceResolved.absolute, targetResolved.absolute);
+        } else {
+          // link fails EEXIST when the target appeared after the
+          // earlier existence check, so a file move can never
+          // silently overwrite (F-05-02; same pattern as trash
+          // restore in trash.ts moveBlobToTarget).
+          try {
+            await link(sourceResolved.absolute, targetResolved.absolute);
+          } catch (error) {
+            const code = errnoOf(error);
+            if (code === 'EEXIST') {
+              throw ApiError.alreadyExists();
+            }
+            if (code !== 'EXDEV' && code !== 'EPERM') {
+              throw error;
+            }
+            await copyFile(
+              sourceResolved.absolute,
+              targetResolved.absolute,
+              fsConstants.COPYFILE_EXCL,
+            );
+          }
+          await unlink(sourceResolved.absolute).catch(() => undefined);
+        }
       } catch (error) {
+        if (error instanceof ApiError) {
+          throw error;
+        }
         const code = errnoOf(error);
         if (code === 'ENOENT') {
           throw ApiError.notFound();

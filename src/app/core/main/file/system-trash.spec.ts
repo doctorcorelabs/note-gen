@@ -78,14 +78,25 @@ describe("moveEntriesToSystemTrash (web)", () => {
     });
   });
 
-  it("counts notFound as done (the entry is already gone)", async () => {
+  it("does not count notFound as moved (F-05-04)", async () => {
     mocks.invoke.mockResolvedValue({
       moved: [],
       notFound: ["gone.md"],
       rejected: [],
     });
 
-    await expect(moveEntryToSystemTrash("gone.md")).resolves.toBe(true);
+    await expect(moveEntryToSystemTrash("gone.md")).resolves.toBe(false);
+    await expect(moveEntriesToSystemTrash(["gone.md"])).resolves.toBe(0);
+  });
+
+  it("counts only moved items in a mixed batch", async () => {
+    mocks.invoke.mockResolvedValue({
+      moved: ["a.md"],
+      notFound: ["gone.md"],
+      rejected: [],
+    });
+
+    await expect(moveEntriesToSystemTrash(["a.md", "gone.md"])).resolves.toBe(1);
   });
 
   it("throws when the server rejects any item", async () => {

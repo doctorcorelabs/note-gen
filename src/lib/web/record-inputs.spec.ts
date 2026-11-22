@@ -15,6 +15,7 @@ import {
   buildTextCreateBody,
   buildTodoContent,
   buildTodoCreateBody,
+  createBodyMatchesRecord,
   hasNoExtractedContent,
   makeSourceId,
   normalizeLinkUrl,
@@ -332,5 +333,34 @@ describe("display helpers", () => {
     expect(recordAssetUrl("assets/a/b.png")).toBe(
       "/api/assets/assets%2Fa%2Fb.png",
     );
+  });
+});
+
+describe("createBodyMatchesRecord (F02-09)", () => {
+  const record = { content: "first", desc: "first", url: "" };
+
+  it("matches an identical retry payload", () => {
+    expect(
+      createBodyMatchesRecord({ type: "text", content: "first", desc: "first" }, record),
+    ).toBe(true);
+  });
+
+  it("rejects edited text after the first save", () => {
+    expect(
+      createBodyMatchesRecord({ type: "text", content: "edited", desc: "edited" }, record),
+    ).toBe(false);
+  });
+
+  it("rejects an edited link url", () => {
+    expect(
+      createBodyMatchesRecord(
+        { type: "link", url: "https://example.com/new" },
+        { content: "", desc: "", url: "https://example.com/old" },
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores fields the body does not carry", () => {
+    expect(createBodyMatchesRecord({ type: "text", content: "first" }, record)).toBe(true);
   });
 });

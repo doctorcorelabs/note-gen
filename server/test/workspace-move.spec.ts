@@ -297,6 +297,16 @@ describe('POST /api/workspace/move', () => {
     expect(await readFile(join(dir, 'move/clash-dst.md'), 'utf8')).toBe('dst');
   });
 
+  it('refuses to move a folder onto an existing empty folder (F-05-02)', async () => {
+    const { app, dir } = await setup();
+    await mkdir(join(dir, 'move/fsrc'), { recursive: true });
+    await seed(dir, 'move/fsrc/a.md', 'a');
+    await mkdir(join(dir, 'move/fdst'), { recursive: true });
+    const res = await move(app, { source: 'move/fsrc', target: 'move/fdst' });
+    errorOf(res, 409, 'already_exists');
+    expect(await readFile(join(dir, 'move/fsrc/a.md'), 'utf8')).toBe('a');
+  });
+
   it('answers 412 for a stale guard and moves nothing', async () => {
     const { app, dir, rootReal } = await setup();
     await seed(dir, 'move/stale.md', 'v1');

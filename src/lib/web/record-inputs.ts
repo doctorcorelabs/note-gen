@@ -126,6 +126,22 @@ export interface CreateRecordBody {
   sourceId?: string;
 }
 
+/**
+ * F02-09: decide whether a duplicate create answer (first-write-wins
+ * on sourceId) carries the same payload the caller just sent. When
+ * it does not, the draft was edited after the first save committed,
+ * and closing the dialog as success would silently drop the edits.
+ */
+export function createBodyMatchesRecord(
+  body: CreateRecordBody,
+  record: { content: string; desc: string; url: string },
+): boolean {
+  if (body.content !== undefined && body.content !== record.content) return false;
+  if (body.desc !== undefined && body.desc !== record.desc) return false;
+  if (body.url !== undefined && body.url !== record.url) return false;
+  return true;
+}
+
 /** Tag selection shared by all five create flows. */
 export interface CreateTagSelection {
   tagIds?: number[];

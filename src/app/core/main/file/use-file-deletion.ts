@@ -168,8 +168,8 @@ export function useFileDeletion() {
                 queued += 1
               } else if (hasRemote) {
                 throw new Error('The self-hosted workspace deletion could not be queued')
-              } else {
-                await moveEntryToSystemTrash(entry.path, workspaceRoot)
+              } else if (!await moveEntryToSystemTrash(entry.path, workspaceRoot)) {
+                throw new Error('The entry could not be moved to trash')
               }
               return true
             }, workspaceRoot)
@@ -202,7 +202,9 @@ export function useFileDeletion() {
             await assertContext()
             await runEditorPathWriteTransaction(entry.path, async () => {
               await assertContext()
-              await moveEntryToSystemTrash(entry.path, workspaceRoot)
+              if (!await moveEntryToSystemTrash(entry.path, workspaceRoot)) {
+                throw new Error('The entry could not be moved to trash')
+              }
               return true
             }, workspaceRoot)
           }

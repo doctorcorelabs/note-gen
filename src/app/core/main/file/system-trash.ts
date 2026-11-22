@@ -46,7 +46,9 @@ export async function moveEntriesToSystemTrash(relativePaths: string[], workspac
       if (result.rejected.length > 0) {
         throw new Error(`Failed to move ${result.rejected.length} item(s) to trash.`)
       }
-      return journaled + result.moved.length + result.notFound.length
+      // F-05-04: notFound is not a move. Counting it made an
+      // all-notFound batch look successful while nothing moved.
+      return journaled + result.moved.length
     } else {
       await platform.invoke.invoke('move_paths_to_trash', { paths })
     }

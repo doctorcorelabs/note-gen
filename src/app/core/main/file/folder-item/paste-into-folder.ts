@@ -51,6 +51,7 @@ async function copyWorkspaceFile(
 
   if (!/\.(?:md|markdown)$/i.test(sourcePath)) return
 
+  try {
   const content = sourceOptions.baseDir
     ? await platform.fs.readTextFile(sourceOptions.path, { baseDir: sourceOptions.baseDir })
     : await platform.fs.readTextFile(sourceOptions.path)
@@ -61,6 +62,21 @@ async function copyWorkspaceFile(
     await platform.fs.writeTextFile(targetOptions.path, rewrittenContent, { baseDir: targetOptions.baseDir })
   } else {
     await platform.fs.writeTextFile(targetOptions.path, rewrittenContent)
+  }
+  } catch (error) {
+    // F-05-07: the byte copy already landed; remove the partial
+    // copy so a failed paste does not leave an orphan behind
+    // while the toast reports failure.
+    try {
+      if (targetOptions.baseDir) {
+        await platform.fs.remove(targetOptions.path, { baseDir: targetOptions.baseDir })
+      } else {
+        await platform.fs.remove(targetOptions.path)
+      }
+    } catch {
+      // Best effort cleanup only; the original error wins.
+    }
+    throw error
   }
 }
 

@@ -1057,7 +1057,20 @@ export function createWorkspaceTrash(deps: WorkspaceTrashDeps) {
     if (meta.kind === 'file') {
       const bytes = await readFileNoFollow(targetFs);
       if (bytes === null) {
-        throw ApiError.internalError();
+        // The restore already succeeded and the trash entry is
+        // gone; a vanished target here (concurrent delete or
+        // replace) must not turn the answer into a 500 (F-05-08).
+        // Report the stored size with no revision instead.
+        emit({ kind: 'created', path: validated.path, trashId: idInput, actorId: options.actorId });
+        return {
+          id: idInput,
+          originalPath: meta.originalPath,
+          restoredPath: validated.path,
+          kind: meta.kind,
+          revision: null,
+          size: meta.size,
+          restoredAt,
+        };
       }
       // Recomputed at the restored path, so the revision differs
       // from the trashed one exactly when the path changed

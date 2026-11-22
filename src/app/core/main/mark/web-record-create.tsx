@@ -35,7 +35,9 @@ import {
   buildLinkCreateBody,
   buildTextCreateBody,
   buildTodoCreateBody,
+  createBodyMatchesRecord,
   makeSourceId,
+  type CreateRecordBody,
   type RecordType,
   type TodoPriority,
 } from "@/lib/web/record-inputs";
@@ -172,6 +174,7 @@ export function WebRecordCreate({
     try {
       const selection = { tagIds: selectedTagIds };
       let created: ApiRecord;
+      let sentBody: CreateRecordBody | null = null;
       if (flow === "text") {
         let body;
         try {
@@ -180,6 +183,7 @@ export function WebRecordCreate({
           setNotice(t("emptyText"));
           return;
         }
+        sentBody = body;
         created = await api.createRecord(body);
       } else if (flow === "link") {
         let body;
@@ -189,6 +193,7 @@ export function WebRecordCreate({
           setNotice(t("invalidUrl"));
           return;
         }
+        sentBody = body;
         created = await api.createRecord(body);
       } else if (flow === "todo") {
         let body;
@@ -206,6 +211,7 @@ export function WebRecordCreate({
           setNotice(t("emptyText"));
           return;
         }
+        sentBody = body;
         created = await api.createRecord(body);
       } else {
         if (file === null) {
@@ -229,7 +235,22 @@ export function WebRecordCreate({
                 selection,
                 getSourceId("upload", seed),
               );
+        sentBody = body;
         created = await api.createRecord(body);
+      }
+      if (
+        created.duplicate === true &&
+        sentBody !== null &&
+        !createBodyMatchesRecord(sentBody, created)
+      ) {
+        // F02-09: the first save committed but its response was
+        // lost, and the draft was edited since. The server kept
+        // the first version; do not close as success and drop the
+        // edits. A fresh sourceId lets the next save create a new
+        // record with the edited content.
+        sourceIdRef.current = null;
+        setNotice(t("duplicateDraft"));
+        return;
       }
       resetDraft();
       onRecordCreated(created);
