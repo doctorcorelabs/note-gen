@@ -254,5 +254,25 @@ export function createFakeCitationsRepository(workspaceId: string): FakeCitation
       const row = bibliographyStore.get(markId);
       return row === undefined ? null : { ...row };
     },
+
+    async findMarkBibliographyByIdentifier(
+      requestedWorkspaceId: string,
+      identifier: { doi?: string | undefined; pmid?: string | undefined },
+    ): Promise<MarkBibliographyRow | null> {
+      checkWorkspace(requestedWorkspaceId);
+      for (const row of bibliographyStore.values()) {
+        if (identifier.doi !== undefined && row.doi === identifier.doi) {
+          return { ...row };
+        }
+        if (
+          identifier.doi === undefined &&
+          identifier.pmid !== undefined &&
+          row.pmid === identifier.pmid
+        ) {
+          return { ...row };
+        }
+      }
+      return null;
+    },
   };
 }

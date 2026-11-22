@@ -40,7 +40,7 @@
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, eq, isNull } from 'drizzle-orm';
-import { files, markTags, marks, type Database } from '../../db/index.js';
+import { files, markBibliography, markTags, marks, type Database } from '../../db/index.js';
 import { contentHash } from '../../lib/revision.js';
 import type { SessionPrincipal } from '../../middleware/auth-hook.js';
 import { ApiError } from '../../plugins/envelope.js';
@@ -79,6 +79,38 @@ function searchableContent(type: string, content: string): string {
   return content;
 }
 
+// Searchable text contributed by a record's bibliographic companion
+// row (F2-1 structured records): title, authors, journal, year, and
+// the DOI/PMID/PMCID identifiers in raw and prefixed form, so a
+// keyword search for an identifier finds the structured record.
+// Pure and exported for specs; the loader appends it to the record
+// content the engine matches over.
+export function bibliographySearchText(row: {
+  bibTitle: string | null;
+  bibAuthors: string | null;
+  bibJournal: string | null;
+  bibYear: number | null;
+  bibDoi: string | null;
+  bibPmid: string | null;
+  bibPmcid: string | null;
+}): string {
+  const parts: string[] = [];
+  if (row.bibTitle !== null && row.bibTitle !== '') parts.push(row.bibTitle);
+  if (row.bibAuthors !== null && row.bibAuthors !== '') parts.push(row.bibAuthors);
+  if (row.bibJournal !== null && row.bibJournal !== '') parts.push(row.bibJournal);
+  if (row.bibYear !== null) parts.push(String(row.bibYear));
+  if (row.bibDoi !== null && row.bibDoi !== '') {
+    parts.push(row.bibDoi);
+    parts.push(`doi:${row.bibDoi}`);
+  }
+  if (row.bibPmid !== null && row.bibPmid !== '') {
+    parts.push(row.bibPmid);
+    parts.push(`PMID: ${row.bibPmid}`);
+  }
+  if (row.bibPmcid !== null && row.bibPmcid !== '') parts.push(row.bibPmcid);
+  return parts.join(' ');
+}
+
 async function loadRecordItems(db: Database, workspaceId: string): Promise<FakeSearchItem[]> {
   let rows;
   let tagRows;
@@ -93,8 +125,16 @@ async function loadRecordItems(db: Database, workspaceId: string): Promise<FakeS
         desc: marks.desc,
         createdAt: marks.createdAt,
         updatedAt: marks.updatedAt,
+        bibTitle: markBibliography.title,
+        bibAuthors: markBibliography.authors,
+        bibJournal: markBibliography.journal,
+        bibYear: markBibliography.year,
+        bibDoi: markBibliography.doi,
+        bibPmid: markBibliography.pmid,
+        bibPmcid: markBibliography.pmcid,
       })
       .from(marks)
+      .leftJoin(markBibliography, eq(markBibliography.markId, marks.id))
       .where(and(eq(marks.workspaceId, workspaceId), isNull(marks.deletedAt)));
     tagRows = await db
       .select({ markId: markTags.markId, tagId: markTags.tagId })
@@ -114,11 +154,13 @@ async function loadRecordItems(db: Database, workspaceId: string): Promise<FakeS
     const tagIds = [row.tagId, ...(tagsByMark.get(row.id) ?? [])].filter(
       (tagId, index, all) => all.indexOf(tagId) === index,
     );
+    const bibText = bibliographySearchText(row);
+    const searchable = searchableContent(row.type, content);
     return {
       kind: 'record',
       id: row.id,
       title: row.desc ?? '',
-      content: searchableContent(row.type, content),
+      content: bibText === '' ? searchable : `${searchable} ${bibText}`.trim(),
       // DA-6 F-15-02 (option C): Fase 1 stores no original file
       // name for records (file records keep the asset key in url),
       // so fileName stays empty and is not a matched field.

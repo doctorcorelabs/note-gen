@@ -37,7 +37,10 @@ import {
   type SessionPrincipal,
 } from '../src/middleware/auth-hook.js';
 import { ApiError } from '../src/plugins/envelope.js';
-import { createDirectKeywordSearchPort } from '../src/services/search/direct.js';
+import {
+  bibliographySearchText,
+  createDirectKeywordSearchPort,
+} from '../src/services/search/direct.js';
 import type { KeywordSearchInput } from '../src/services/search/port.js';
 import { createDrizzleWorkspaceIdentityResolver } from '../src/services/workspace/reconcile-index-pg.js';
 import { testConfig } from './auth/helpers.js';
@@ -481,5 +484,40 @@ describe('direct keyword search port extensionless files (PB3)', () => {
     const page = await filesPort().search(searchInput({ query: 'gagal jantung', scope: 'files' }));
     expect(page.results).toHaveLength(0);
     expect(page.degraded).toBe(false);
+  });
+});
+
+describe('bibliography search text (F2-1 structured records)', () => {
+  it('includes identifiers in raw and prefixed form', () => {
+    const text = bibliographySearchText({
+      bibTitle: 'Studi hipospadia',
+      bibAuthors: 'Doe J',
+      bibJournal: 'J Urol',
+      bibYear: 2024,
+      bibDoi: '10.1000/abc',
+      bibPmid: '12345678',
+      bibPmcid: 'PMC1234567',
+    });
+    expect(text).toContain('Studi hipospadia');
+    expect(text).toContain('10.1000/abc');
+    expect(text).toContain('doi:10.1000/abc');
+    expect(text).toContain('12345678');
+    expect(text).toContain('PMID: 12345678');
+    expect(text).toContain('PMC1234567');
+    expect(text).toContain('2024');
+  });
+
+  it('is empty when the record has no bibliography row', () => {
+    expect(
+      bibliographySearchText({
+        bibTitle: null,
+        bibAuthors: null,
+        bibJournal: null,
+        bibYear: null,
+        bibDoi: null,
+        bibPmid: null,
+        bibPmcid: null,
+      }),
+    ).toBe('');
   });
 });

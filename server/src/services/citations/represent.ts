@@ -74,3 +74,107 @@ export function sortReferences(rows: ReferenceRow[]): ReferenceRow[] {
     return a.createdAt - b.createdAt;
   });
 }
+
+// Wire representations for the citations routes (wave G-F2-1b).
+// Field lists mirror the row shapes one to one; the route layer
+// never invents fields the service does not hold.
+
+export interface ApiReference {
+  id: string;
+  workspaceId: string;
+  projectKey: string;
+  number: number | null;
+  sourceRecordId: number | null;
+  title: string | null;
+  authors: string | null;
+  journal: string | null;
+  year: number | null;
+  doi: string | null;
+  pmid: string | null;
+  pmcid: string | null;
+  url: string | null;
+  oaFlag: boolean | null;
+  createdAt: number;
+  updatedAt: number;
+  duplicate?: boolean;
+}
+
+export function toApiReference(row: ReferenceRow, duplicate = false): ApiReference {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    projectKey: row.projectKey,
+    number: row.number,
+    sourceRecordId: row.sourceRecordId,
+    title: row.title,
+    authors: row.authors,
+    journal: row.journal,
+    year: row.year,
+    doi: row.doi,
+    pmid: row.pmid,
+    pmcid: row.pmcid,
+    url: row.url,
+    oaFlag: row.oaFlag,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    ...(duplicate ? { duplicate: true } : {}),
+  };
+}
+
+export interface ApiFact {
+  id: string;
+  workspaceId: string;
+  projectKey: string;
+  text: string;
+  score: number;
+  status: FactStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function toApiFact(row: FactRow): ApiFact {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    projectKey: row.projectKey,
+    text: row.text,
+    score: row.score,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export interface ApiBibliography {
+  markId: number;
+  workspaceId: string;
+  title: string | null;
+  authors: string | null;
+  journal: string | null;
+  year: number | null;
+  doi: string | null;
+  pmid: string | null;
+  pmcid: string | null;
+  url: string | null;
+  oaFlag: boolean | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function toApiBibliography(row: MarkBibliographyRow): ApiBibliography {
+  return {
+    markId: row.markId,
+    workspaceId: row.workspaceId,
+    title: row.title,
+    authors: row.authors,
+    journal: row.journal,
+    year: row.year,
+    doi: row.doi,
+    pmid: row.pmid,
+    pmcid: row.pmcid,
+    url: row.url,
+    oaFlag: row.oaFlag,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}

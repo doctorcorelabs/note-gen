@@ -386,5 +386,26 @@ export function createDrizzleCitationsRepository(db: Database): CitationsReposit
         .limit(1);
       return rows[0] === undefined ? null : toBibliographyRow(rows[0]);
     },
+
+    async findMarkBibliographyByIdentifier(
+      workspaceId: string,
+      identifier: { doi?: string | undefined; pmid?: string | undefined },
+    ): Promise<MarkBibliographyRow | null> {
+      const condition =
+        identifier.doi !== undefined
+          ? eq(markBibliography.doi, identifier.doi)
+          : identifier.pmid !== undefined
+            ? eq(markBibliography.pmid, identifier.pmid)
+            : undefined;
+      if (condition === undefined) {
+        return null;
+      }
+      const rows = await db
+        .select()
+        .from(markBibliography)
+        .where(and(eq(markBibliography.workspaceId, workspaceId), condition))
+        .limit(1);
+      return rows[0] === undefined ? null : toBibliographyRow(rows[0]);
+    },
   };
 }

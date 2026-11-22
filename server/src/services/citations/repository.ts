@@ -94,4 +94,14 @@ export interface CitationsRepository {
     workspaceId: string,
     markId: number,
   ): Promise<MarkBibliographyRow | null>;
+
+  // The bibliographic companion row carrying the given normalized
+  // DOI or PMID in the workspace, or null. Backs the structured
+  // record dedupe: a second create with the same identifier finds
+  // the first record instead of inserting a twin. When both are
+  // given, DOI wins (the stronger identifier).
+  findMarkBibliographyByIdentifier(
+    workspaceId: string,
+    identifier: { doi?: string | undefined; pmid?: string | undefined },
+  ): Promise<MarkBibliographyRow | null>;
 }
