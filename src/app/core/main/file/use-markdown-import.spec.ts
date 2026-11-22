@@ -42,14 +42,16 @@ vi.mock("@/stores/article", () => ({
 import {
   copyMarkdownFilesRecursively,
   copyPickedMarkdownFiles,
+  MARKDOWN_IMPORT_MAX_FILE_BYTES,
+  MARKDOWN_IMPORT_MAX_FILES,
 } from "./use-markdown-import";
 import type { DialogPickedFile } from "@/lib/platform";
 
-function picked(name: string): DialogPickedFile {
+function picked(name: string, size = 3): DialogPickedFile {
   return {
     name,
     relativePath: name,
-    size: 3,
+    size,
     type: "text/markdown",
     file: {
       arrayBuffer: async () => new ArrayBuffer(3),
@@ -123,6 +125,32 @@ describe("markdown import copy (IMP-02)", () => {
     expect(result.copied).toBe(2);
     expect(result.failures).toEqual([]);
     expect(result.skipped).toBe(2);
+  });
+
+  it("picked files: a file over the per-file cap fails by name without being read (EXP4-13)", async () => {
+    const result = await copyPickedMarkdownFiles(
+      [picked("ok.md"), picked("huge.md", MARKDOWN_IMPORT_MAX_FILE_BYTES + 1)],
+      "target",
+    );
+    expect(result.copied).toBe(1);
+    expect(result.failures).toEqual(["huge.md"]);
+    expect(mocks.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("picked files: the count cap stops copying and counts the rest as skipped (EXP4-13)", async () => {
+    const many = Array.from({ length: MARKDOWN_IMPORT_MAX_FILES + 2 }, (_, i) => picked(`f-${i}.md`));
+    const result = await copyPickedMarkdownFiles(many, "target");
+    expect(result.copied).toBe(MARKDOWN_IMPORT_MAX_FILES);
+    expect(result.skipped).toBe(2);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("picked files: the total byte cap refuses files past the budget (EXP4-13)", async () => {
+    const tenMiB = 10 * 1024 * 1024;
+    const files = Array.from({ length: 11 }, (_, i) => picked(`big-${i}.md`, tenMiB));
+    const result = await copyPickedMarkdownFiles(files, "target");
+    expect(result.copied).toBe(10);
+    expect(result.failures).toEqual(["big-10.md"]);
   });
 
   it("recursive copy: hidden and unsupported entries count as skipped (DA-6 IMP-05)", async () => {

@@ -9,6 +9,9 @@
 //
 // Run: `pnpm vitest run --project unit src/lib/markdown/export-document.spec.ts`
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MERMAID_DIAGRAM_TIMEOUT_MS, nextFrame, renderMermaidCodeBlocks } from "./export-document";
 
@@ -131,5 +134,24 @@ describe("renderMermaidCodeBlocks (PB3 BUG2-02)", () => {
     const counts = await renderMermaidCodeBlocks(makeRoot([other, empty]), renderDiagram);
     expect(counts).toEqual({ rendered: 0, failed: 1 });
     expect(renderDiagram).not.toHaveBeenCalled();
+  });
+});
+
+// EXP4-12 (AD-1050) static pin: resolveExportImages resolves
+// with bounded concurrency in phase 1 and applies in document
+// order in phase 2. Runtime proof belongs to the post-deploy
+// browser rerun; this pin keeps the two-phase shape from
+// regressing to the sequential loop silently.
+describe("advanced export image resolution (EXP4-12)", () => {
+  it("keeps the bounded-concurrency resolve phase ahead of the apply loop", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "export-document.ts"),
+      "utf8",
+    );
+    expect(source).toContain("EXPORT_IMAGE_RESOLVE_CONCURRENCY = 4");
+    const phaseOne = source.indexOf("Phase 1: fill the resolved cache");
+    const applyLoop = source.indexOf("const dataUrl = source.startsWith('data:')");
+    expect(phaseOne).toBeGreaterThan(-1);
+    expect(applyLoop).toBeGreaterThan(phaseOne);
   });
 });

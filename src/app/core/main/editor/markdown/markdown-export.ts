@@ -471,7 +471,13 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string, si
     bytes: number
   }
 
-  type ImageEntry = FetchEntry | DataEntry
+  interface RemoteEntry {
+    kind: 'remote'
+    image: HTMLImageElement
+    src: string
+  }
+
+  type ImageEntry = FetchEntry | DataEntry | RemoteEntry
 
   const entries: ImageEntry[] = []
   for (const image of images) {
@@ -487,6 +493,16 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string, si
     // document order below) instead of passing through unchecked.
     if (/^data:/i.test(src)) {
       entries.push({ kind: 'data', image, src, bytes: estimateDataUrlBytes(src) })
+      continue
+    }
+    // EXP4-08 (AD-1050): remote http(s) images are never fetched
+    // by the main export path, matching the advanced path
+    // (export-document.ts): the URL is kept and a warning tells
+    // the reader a network connection is required. Same-origin
+    // workspace media URLs are not remote; they keep the fetch
+    // path below so workspace assets stay self-contained.
+    if (/^https?:\/\//i.test(src) && !/^https?:\/\/[^/]+\/api\/workspace\/media\//i.test(src)) {
+      entries.push({ kind: 'remote', image, src })
       continue
     }
     // IM-3 EXP4-06: blob: URLs are bound to this tab session and
@@ -566,6 +582,14 @@ async function resolveMarkdownImageSources(html: string, sourcePath?: string, si
         continue
       }
       embeddedTotalBytes += entry.bytes
+      continue
+    }
+    if (entry.kind === 'remote') {
+      image.setAttribute('src', entry.src)
+      warnings.push({
+        code: 'asset-not-embedded',
+        message: 'A remote image requires a network connection when the exported file is opened',
+      })
       continue
     }
     const { fallbackSrc } = entry
@@ -705,6 +729,15 @@ export async function renderMarkdownToHtml(markdown: string, sourcePath?: string
   return (await renderMarkdownToHtmlDetailed(markdown, sourcePath)).html
 }
 
+// EXP4-07 (AD-1050): the main export path embeds SVG payloads
+// as data URLs without raster restriction, while the advanced
+// path (export-document.ts) embeds raster formats only. This
+// asymmetry is accepted and documented: an SVG loaded through
+// an img element is inert in modern browsers (scripts inside
+// the SVG do not run in img context), and sanitizeExportHtml
+// runs before image resolution, so embedded SVG bytes are
+// never re-sanitized. Revisit only if a cheap SVG sanitizer
+// lands in the main path.
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()

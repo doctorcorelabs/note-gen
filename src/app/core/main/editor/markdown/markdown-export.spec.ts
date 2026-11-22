@@ -455,6 +455,28 @@ describe("main-path image deferral (PB2 BUG2-01/02, PERF-01)", () => {
     expect(warnings).toHaveLength(0);
   });
 
+  it("keeps remote image URLs without fetching (EXP4-08)", async () => {
+    fakeImages = [makeFakeImage({
+      alt: "Remote",
+      "data-notegen-export-src": "https://example.com/pic.png",
+    })];
+    renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
+      html: '<img alt="Remote" data-notegen-export-src="https://example.com/pic.png">',
+      highlightFallback: false,
+    });
+
+    const { warnings } = await renderMarkdownToHtmlDetailed("![Remote](https://example.com/pic.png)");
+
+    expect(fakeImages[0].getAttribute("src")).toBe("https://example.com/pic.png");
+    expect(maxActiveFetches).toBe(0);
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: "asset-not-embedded",
+        message: expect.stringContaining("remote image"),
+      }),
+    ]);
+  });
+
   it("warns that mermaid diagrams are preserved as code blocks when rendering fails", async () => {
     renderMocks.renderMarkdownExportFragment.mockResolvedValueOnce({
       html: "<p>diagram</p>",

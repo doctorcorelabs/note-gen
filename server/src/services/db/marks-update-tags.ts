@@ -10,7 +10,11 @@
 // this workspace are ignored (the upstream filter over the valid
 // set), except that a request naming no valid tag at all, with no
 // new tag created from newNames, answers 400: a mark without a tag
-// is not valid. The primary tag never changes through this
+// is not valid. F02-08 (AD-1050): the ignore-unknown-ids rule
+// above is the ratified contract, kept deliberately over the
+// REST tag_not_found divergence (records-kind-client divergence
+// 7): a save never fails because another surface deleted a tag
+// first. The primary tag never changes through this
 // operation: the old primary is always added to the final set, and
 // the marks tag_id column is untouched. Every execution bumps
 // version by 1 and refreshes tag_updated_at, even when the set is

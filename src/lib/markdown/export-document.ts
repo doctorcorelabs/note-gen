@@ -285,6 +285,13 @@ function safeWarningSource(source: string) {
 
 type AddWarning = (warning: AdvancedHtmlWarning) => void
 
+// EXP4-12 (AD-1050): resolve image sources with bounded
+// concurrency (phase 1) before applying them in document order
+// (phase 2), mirroring the main export path (PB2 PERF-01). The
+// apply phase keeps the exact size-limit accounting and warning
+// order of the previous sequential loop; only wall time drops.
+const EXPORT_IMAGE_RESOLVE_CONCURRENCY = 4
+
 async function resolveExportImages(
   template: HTMLTemplateElement,
   options: AdvancedHtmlDocumentOptions,
@@ -296,6 +303,29 @@ async function resolveExportImages(
   let embeddedImages = 0
   const resolved = new Map<string, string | undefined>()
 
+  // Phase 1: fill the resolved cache for every unique local
+  // source that needs the resolver. Remote and data: sources
+  // never reach the resolver, exactly as before.
+  if (options.resolveImage) {
+    const resolveImage = options.resolveImage
+    const pending: string[] = []
+    const seen = new Set<string>()
+    for (const image of images) {
+      const source = image.getAttribute('data-notegen-export-src') ?? ''
+      if (!source || source.startsWith('data:') || /^https?:\/\//i.test(source) || seen.has(source)) {
+        continue
+      }
+      seen.add(source)
+      pending.push(source)
+    }
+    for (let offset = 0; offset < pending.length; offset += EXPORT_IMAGE_RESOLVE_CONCURRENCY) {
+      checkAbort(signal)
+      await Promise.all(pending.slice(offset, offset + EXPORT_IMAGE_RESOLVE_CONCURRENCY).map(async (source) => {
+        resolved.set(source, await abortable(resolveImage(source), signal))
+      }))
+    }
+  }
+
   for (const image of images) {
     checkAbort(signal)
     const source = image.getAttribute('data-notegen-export-src') ?? ''
@@ -306,11 +336,7 @@ async function resolveExportImages(
       continue
     }
 
-    let dataUrl = source.startsWith('data:') ? source : resolved.get(source)
-    if (embeddedImages < PLUGIN_HTML_EXPORT_LIMITS.images && !source.startsWith('data:') && !resolved.has(source) && source && options.resolveImage) {
-      dataUrl = await abortable(options.resolveImage(source), signal)
-      resolved.set(source, dataUrl)
-    }
+    const dataUrl = source.startsWith('data:') ? source : resolved.get(source)
     const match = dataUrl?.match(RASTER_DATA_URI)
     if (match) {
       const base64 = match[1]

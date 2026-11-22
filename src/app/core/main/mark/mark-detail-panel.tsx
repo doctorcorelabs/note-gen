@@ -445,9 +445,16 @@ function MarkDetailToolbar({
     showError: reportPanelError,
   }), [reportPanelError])
 
+  // BUG-09/F02-01 (AD-1050): tag transfer is union semantics,
+  // ratified for Move in AD-911 and affirmed here. The server
+  // keeps every existing mark_tags row and only adds the new
+  // primary (marks-update design rule 3), so the panel sends
+  // the union set: the optimistic state then matches the
+  // server result instead of flickering the old primary away
+  // until refetch. The toolbar label says add tag, not move.
   const handleTransfer = useCallback(async (tagId: number) => {
     await runPanelAction(async () => {
-      await updateMark({ ...mark, tagId, tagIds: [...markTagIds.filter((id) => id !== mark.tagId), tagId] })
+      await updateMark({ ...mark, tagId, tagIds: [...new Set([...markTagIds, tagId])] })
       await fetchTags()
       getCurrentTag()
       await refreshMarks()
@@ -691,7 +698,7 @@ function MarkDetailToolbar({
                     <DropdownMenuTrigger asChild>
                       <TooltipButton
                         icon={<Tag className="size-4" />}
-                        tooltipText={t('record.mark.toolbar.moveTag')}
+                        tooltipText={t('record.mark.toolbar.addTag')}
                         variant="ghost"
                         size="sm"
                         buttonClassName={detailToolbarIconButtonClass}

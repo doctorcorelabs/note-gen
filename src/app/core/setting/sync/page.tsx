@@ -631,6 +631,12 @@ function SyncPlatformIcon({
 // page in web mode, including credential fields that can never save.
 // In web mode render only the same disabled marker; the upstream
 // page stays in the tree for later phases. Desktop is unchanged.
+// F09-02 (AD-1050): because of this gate, the self-hosted sync
+// settings (self-hosted-sync, self-hosted-workspaces,
+// self-hosted-personal-data-options) are unreachable in web
+// production; their raw toast.error sites stay desktop-only
+// debt and are not converted in Fase 1. The gate is pinned by
+// gated-pages.spec.ts.
 export default function GatedSyncSettingPage() {
   if (!isTauri()) {
     return <DisabledSettingSection section="sync" />

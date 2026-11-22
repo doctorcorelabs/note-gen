@@ -456,6 +456,9 @@ export function TagManage() {
                 </Select>
               </Field></FieldGroup>
             ) : null}
+            {action?.kind === 'delete' && tags.length === 1 ? (
+              <p role="alert" className="text-sm text-destructive">{t('lastTagDeleteWarning')}</p>
+            ) : null}
             {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={saving} onClick={() => setAction(null)}>{common('cancel')}</Button>

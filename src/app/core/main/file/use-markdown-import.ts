@@ -67,6 +67,18 @@ export interface MarkdownCopyResult {
   skipped: number
 }
 
+// EXP4-13 (AD-1050): import caps. The web picked-files path used
+// to load every file fully into tab memory with no per-file,
+// count, or total limit. Caps are enforced from the
+// browser-reported size before any bytes are read; the desktop
+// recursive copy applies the same caps with stat sizes when
+// available. Values: 10 MiB per file (a markdown note or image
+// beyond that is not a note import), 500 files per import, and
+// 100 MiB total per import.
+export const MARKDOWN_IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024
+export const MARKDOWN_IMPORT_MAX_FILES = 500
+export const MARKDOWN_IMPORT_MAX_TOTAL_BYTES = 100 * 1024 * 1024
+
 // DA-6 IMP-04: extension checks are case-insensitive; a .MD or
 // .Md file imports as markdown instead of being skipped.
 export function isMarkdownFileName(fileName: string) {
@@ -79,7 +91,8 @@ export function isMarkdownFileName(fileName: string) {
 export async function copyMarkdownFilesRecursively(
   sourceDir: string,
   targetDir: string,
-  relativePath = ''
+  relativePath = '',
+  budget: { files: number; bytes: number } = { files: 0, bytes: 0 }
 ): Promise<MarkdownCopyResult> {
   const result: MarkdownCopyResult = { copied: 0, failures: [], skipped: 0 }
   const entries = await platform.fs.readDir(sourceDir)
@@ -95,7 +108,7 @@ export async function copyMarkdownFilesRecursively(
 
     try {
       if (entry.isDirectory) {
-        const nested = await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath)
+        const nested = await copyMarkdownFilesRecursively(sourcePath, targetDir, nextRelativePath, budget)
         result.copied += nested.copied
         result.failures.push(...nested.failures)
         result.skipped += nested.skipped
@@ -119,9 +132,33 @@ export async function copyMarkdownFilesRecursively(
         await platform.fs.mkdir(targetDirectory, { recursive: true })
       }
 
+      // EXP4-13 (AD-1050): caps for the desktop recursive copy.
+      // Size comes from stat when the platform answers; a
+      // missing stat keeps the count cap only.
+      let fileSize: number | undefined
+      try {
+        fileSize = (await platform.fs.stat(sourcePath)).size
+      } catch {
+        fileSize = undefined
+      }
+      if (fileSize !== undefined && fileSize > MARKDOWN_IMPORT_MAX_FILE_BYTES) {
+        result.failures.push(entry.name)
+        continue
+      }
+      if (budget.files >= MARKDOWN_IMPORT_MAX_FILES) {
+        result.skipped += 1
+        continue
+      }
+      if (fileSize !== undefined && budget.bytes + fileSize > MARKDOWN_IMPORT_MAX_TOTAL_BYTES) {
+        result.failures.push(entry.name)
+        continue
+      }
+
       const availableTarget = await getAvailableCopyPath(targetDirectory, entry.name)
       await platform.fs.copyFile(sourcePath, availableTarget)
       result.copied++
+      budget.files += 1
+      budget.bytes += fileSize ?? 0
     } catch (error) {
       console.error(`Import copy failed: ${entry.name}`, error)
       result.failures.push(entry.name)
@@ -136,6 +173,7 @@ export async function copyPickedMarkdownFiles(
   targetDir: string,
 ): Promise<MarkdownCopyResult> {
   const result: MarkdownCopyResult = { copied: 0, failures: [], skipped: 0 }
+  let totalBytes = 0
 
   for (const entry of picked) {
     // Directory picks report paths relative to the picked directory
@@ -167,6 +205,23 @@ export async function copyPickedMarkdownFiles(
       continue
     }
 
+    // EXP4-13 (AD-1050): web import caps, checked from the
+    // browser-reported size before any bytes are read into the
+    // tab. Oversized files land in failures so the import toast
+    // names them; files past the count cap count as skipped.
+    if (entry.size > MARKDOWN_IMPORT_MAX_FILE_BYTES) {
+      result.failures.push(fileName)
+      continue
+    }
+    if (result.copied >= MARKDOWN_IMPORT_MAX_FILES) {
+      result.skipped += 1
+      continue
+    }
+    if (totalBytes + entry.size > MARKDOWN_IMPORT_MAX_TOTAL_BYTES) {
+      result.failures.push(fileName)
+      continue
+    }
+
     try {
       const targetDirectory = parts.length > 1
         ? await platform.path.join(targetDir, ...parts.slice(0, -1))
@@ -181,6 +236,7 @@ export async function copyPickedMarkdownFiles(
       const targetPath = await getAvailableCopyPath(targetDirectory, fileName)
       await platform.fs.writeFile(targetPath, new Uint8Array(await entry.file.arrayBuffer()))
       result.copied++
+      totalBytes += entry.size
     } catch (error) {
       console.error(`Import copy failed: ${fileName}`, error)
       result.failures.push(fileName)
