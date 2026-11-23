@@ -19,6 +19,8 @@
 import { ApiError } from '../../plugins/envelope.js';
 import {
   STEP_KINDS,
+  formatUsdUnits,
+  parseUsdToUnits,
   type JobSummary,
   type SearchCandidateRow,
   type SearchFactCandidateRow,
@@ -397,6 +399,64 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
       row.errorCode = errorCode;
       row.errorDetail = errorDetail;
       row.finishedAt = now();
+      return { ...row };
+    },
+
+    async claimNextExaJob(): Promise<SearchJobRow | null> {
+      const running = [...jobsStore.values()].some(
+        (row) =>
+          row.status === 'collecting' ||
+          row.status === 'assessing' ||
+          row.status === 'complementing' ||
+          row.status === 'writing',
+      );
+      if (running) {
+        return null;
+      }
+      const queued = [...jobsStore.values()]
+        .filter((row) => row.status === 'queued')
+        .sort((a, b) =>
+          a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.id.localeCompare(b.id),
+        );
+      for (const job of queued) {
+        const steps = stepsStore.get(job.id) ?? [];
+        const pubmedStep = steps.find((row) => row.step === 'collector_pubmed');
+        const exaStep = steps.find((row) => row.step === 'collector_exa');
+        if (
+          pubmedStep === undefined ||
+          pubmedStep.status !== 'completed' ||
+          exaStep === undefined ||
+          exaStep.status !== 'pending'
+        ) {
+          continue;
+        }
+        job.status = 'collecting';
+        job.startedAt = job.startedAt ?? now();
+        exaStep.status = 'running';
+        exaStep.startedAt = now();
+        return { ...job };
+      }
+      return null;
+    },
+
+    async skipStep(
+      jobId: string,
+      stepKind: StepKind,
+      detail: Record<string, unknown> | null,
+    ): Promise<void> {
+      requireJob(jobId);
+      const step = (stepsStore.get(jobId) ?? []).find((row) => row.step === stepKind);
+      if (step === undefined) {
+        throw jobNotFound();
+      }
+      step.status = 'skipped';
+      step.detail = detail;
+      step.finishedAt = now();
+    },
+
+    async addJobCost(jobId: string, costUsd: string): Promise<SearchJobRow> {
+      const row = requireJob(jobId);
+      row.costExaUsd = formatUsdUnits(parseUsdToUnits(row.costExaUsd) + parseUsdToUnits(costUsd));
       return { ...row };
     },
 

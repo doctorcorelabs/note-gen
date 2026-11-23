@@ -2,24 +2,41 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Deep Search worker (F2-2, wave G-F2-2b): the first executor.
+// Deep Search worker (F2-2, waves G-F2-2b and G-F2-2c): the
+// executor.
 //
 // One background worker in the api process (design 3.2). It claims
-// the oldest queued job whose collector_pubmed step is pending,
+// the oldest queued job whose next collector step is pending,
 // at most one running job per workspace (decision 6), runs the
-// PubMed collector with an explicit per-stage timeout (10 minutes,
-// decision 6), stores candidates + evidence, and hands the job
-// back to queued so later waves (Collector Exa, Assessor,
-// Complement, Writer) continue the chain from the next pending
-// step. This wave never writes F2-1 data.
+// stage with an explicit per-stage timeout (10 minutes, decision
+// 6), stores candidates + evidence, and hands the job back to
+// queued so later waves (Assessor, Complement, Writer) continue
+// the chain from the next pending step. This wave never writes
+// F2-1 data.
 //
-// Failure semantics (decision 7): a PubMed (E-utilities) failure
-// fails the stage and the job; a Europe PMC failure with PubMed
-// success completes the stage as partial, with the failed source
-// recorded in the step detail. HTTP 429 stops the source that
-// returned it; nothing retries or routes around it. At startup,
-// jobs a previous process left in a running status are marked
-// failed with error_code worker_restarted, never resumed silently.
+// G-F2-2b runs the PubMed collector stage. G-F2-2c adds the Exa
+// collector stage, claimed only after the PubMed step completed
+// and only when an Exa collector is wired in. Exa stage outcomes:
+// - No approved budget on the job (decision 1) or no API key on
+//   the server (decision 2): the step is recorded skipped with
+//   its reason and the job returns to queued. The stage being
+//   unavailable is an explicit recorded outcome, not a failure.
+// - Source failure (429, HTTP, network, timeout, bad response):
+//   the step is failed with its detail and the job returns to
+//   queued as partial. Decision 7 allows partial completion only
+//   when the PubMed stage completed, which the Exa claim already
+//   guarantees; the PubMed candidates stay the job's trail.
+// - Success: candidates + evidence stored, the recorded run cost
+//   added to the job, step completed, job back to queued.
+//
+// PubMed failure semantics (decision 7): a PubMed (E-utilities)
+// failure fails the stage and the job; a Europe PMC failure with
+// PubMed success completes the stage as partial, with the failed
+// source recorded in the step detail. HTTP 429 stops the source
+// that returned it; nothing retries or routes around it. At
+// startup, jobs a previous process left in a running status are
+// marked failed with error_code worker_restarted, never resumed
+// silently.
 //
 // runWorkerOnce is exported for specs: it claims and runs at most
 // one job without timers.
@@ -31,6 +48,7 @@ import {
   type CollectorResult,
   type PubmedCollector,
 } from './collector-pubmed.js';
+import type { ExaCollector, ExaCollectorResult } from './collector-exa.js';
 
 export interface DeepSearchWorkerHandle {
   stop: () => void;
@@ -39,6 +57,12 @@ export interface DeepSearchWorkerHandle {
 export interface DeepSearchWorkerOptions {
   repository: DeepSearchRepository;
   collector: PubmedCollector;
+  // Exa stage wiring (G-F2-2c). When absent the worker never
+  // claims the Exa step; production registration always wires a
+  // collector (its key may still be unconfigured, which the
+  // collector reports as exa_key_missing and the worker records
+  // as a skipped step).
+  exaCollector?: ExaCollector;
   pollIntervalMs?: number;
   stageTimeoutMs?: number;
   // Delay before the first tick (startup recovery + first claim).
@@ -92,16 +116,25 @@ function sourceDetail(result: CollectorResult): Record<string, unknown> {
 }
 
 // Claim and run at most one job. Returns true when a job ran
-// (successfully or not), false when nothing was claimable.
+// (successfully or not), false when nothing was claimable. The
+// PubMed stage is claimed first (binding chain order); the Exa
+// stage runs only when no PubMed job is claimable.
 export async function runWorkerOnce(options: DeepSearchWorkerOptions): Promise<boolean> {
   const { repository, collector } = options;
   const stageTimeoutMs = options.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
   const job = await repository.claimNextCollectorJob();
-  if (job === null) {
-    return false;
+  if (job !== null) {
+    await runCollectorStage(repository, collector, job, stageTimeoutMs);
+    return true;
   }
-  await runCollectorStage(repository, collector, job, stageTimeoutMs);
-  return true;
+  if (options.exaCollector !== undefined) {
+    const exaJob = await repository.claimNextExaJob();
+    if (exaJob !== null) {
+      await runExaStage(repository, options.exaCollector, exaJob, stageTimeoutMs);
+      return true;
+    }
+  }
+  return false;
 }
 
 async function runCollectorStage(
@@ -165,6 +198,99 @@ async function runCollectorStage(
     try {
       await repository.failStep(job.id, 'collector_pubmed', { errorCode: code });
       await repository.failJob(job.id, code, detail);
+    } catch {
+      // The repository itself is unreachable; the job stays in
+      // collecting and startup recovery will mark it failed with
+      // worker_restarted. Nothing else can be recorded honestly.
+    }
+  }
+}
+
+function exaDetail(result: ExaCollectorResult): Record<string, unknown> {
+  return {
+    queries: result.queries,
+    calls: result.calls,
+    costUsd: result.costUsd,
+    sources: {
+      exa: {
+        ok: result.outcome.ok,
+        httpStatus: result.outcome.httpStatus,
+        resultCount: result.outcome.resultCount,
+        errorCode: result.outcome.errorCode,
+      },
+    },
+    candidates: result.candidates.length,
+  };
+}
+
+async function runExaStage(
+  repository: DeepSearchRepository,
+  collector: ExaCollector,
+  job: SearchJobRow,
+  stageTimeoutMs: number,
+): Promise<void> {
+  try {
+    if (job.budgetExaUsd === null) {
+      // Decision 1: without a caller-approved ceiling the Exa
+      // stage must not run. The skip is recorded with its reason.
+      await repository.skipStep(job.id, 'collector_exa', {
+        skipped: 'no_exa_budget',
+      });
+      await repository.releaseJobToQueued(job.id);
+      return;
+    }
+    const existing = await repository.countCandidates(job.id);
+    const limit = Math.max(0, job.input.maxCandidates - existing);
+    if (limit === 0) {
+      await repository.completeStep(job.id, 'collector_exa', {
+        skipped: 'candidate_cap_reached',
+        candidates: existing,
+      });
+      await repository.releaseJobToQueued(job.id);
+      return;
+    }
+    const result = await withTimeout(collector.collect(job, limit), stageTimeoutMs);
+
+    const stored = await repository.insertCandidates(job.id, result.candidates);
+    const idByExternalId = new Map(stored.map((row) => [row.externalId, row.id]));
+    const evidence: NewEvidence[] = [...result.queryEvidence];
+    for (const item of result.candidateEvidence) {
+      evidence.push({
+        candidateId: idByExternalId.get(item.externalId) ?? null,
+        queryText: item.queryText,
+        sourceKind: item.sourceKind,
+        httpStatus: item.httpStatus,
+        note: item.note,
+      });
+    }
+    await repository.insertEvidence(job.id, evidence);
+    if (result.costUsd !== '0.0000') {
+      await repository.addJobCost(job.id, result.costUsd);
+    }
+
+    if (!result.outcome.ok) {
+      // Decision 7 partial: the PubMed stage already completed
+      // (the claim required it), so an Exa source failure fails
+      // the step but not the job. Stored candidates and recorded
+      // cost stay as the partial trail.
+      await repository.failStep(job.id, 'collector_exa', exaDetail(result));
+      await repository.releaseJobToQueued(job.id);
+      return;
+    }
+
+    await repository.completeStep(job.id, 'collector_exa', exaDetail(result));
+    await repository.releaseJobToQueued(job.id);
+  } catch (error) {
+    const code = error instanceof CollectorError ? error.code : 'collector_error';
+    try {
+      if (code === 'exa_key_missing' || code === 'exa_budget_missing') {
+        // The stage is explicitly unavailable (decision 2: no key
+        // installed yet). Recorded skipped, never a job failure.
+        await repository.skipStep(job.id, 'collector_exa', { skipped: code });
+      } else {
+        await repository.failStep(job.id, 'collector_exa', { errorCode: code });
+      }
+      await repository.releaseJobToQueued(job.id);
     } catch {
       // The repository itself is unreachable; the job stays in
       // collecting and startup recovery will mark it failed with

@@ -12,7 +12,9 @@
 // when a database is configured. The E-utilities identity comes
 // from server config (design 3.4); without a configured contact
 // email the collector fails closed per job, which is recorded on
-// the job, not hidden.
+// the job, not hidden. G-F2-2c wires the Exa collector stage the
+// same way: the key comes from server config only, and without
+// it the Exa step is recorded skipped per job.
 //
 // When no DATABASE_URL is configured, the repository fails closed
 // with 503 per request while the routes stay registered (the census
@@ -23,6 +25,8 @@ import type { RegistrationContext } from '../registration/context.js';
 import { createDb } from '../db/index.js';
 import { ApiError } from '../plugins/envelope.js';
 import { createPubmedCollector } from '../services/deep-search/collector-pubmed.js';
+import { createExaCollector } from '../services/deep-search/collector-exa.js';
+import { parseUsdToUnits } from '../services/deep-search/represent.js';
 import { createDrizzleDeepSearchRepository } from '../services/deep-search/drizzle-repository.js';
 import type { DeepSearchRepository } from '../services/deep-search/repository.js';
 import { startDeepSearchWorker } from '../services/deep-search/worker.js';
@@ -88,6 +92,15 @@ const UNAVAILABLE_DEEP_SEARCH: DeepSearchRepository = {
   async failJob(): Promise<never> {
     return unavailable();
   },
+  async claimNextExaJob(): Promise<never> {
+    return unavailable();
+  },
+  async skipStep(): Promise<never> {
+    return unavailable();
+  },
+  async addJobCost(): Promise<never> {
+    return unavailable();
+  },
 };
 
 export const REGISTRATION_ID = 'deep-search' as const;
@@ -111,6 +124,16 @@ export async function registerGroup(ctx: RegistrationContext): Promise<void> {
       tool: ctx.config.ncbiEutilsTool ?? 'notegen',
       email: ctx.config.ncbiEutilsEmail,
     });
+    // Exa collector (G-F2-2c): the key comes from server config
+    // only (decision 2). When no key is installed the collector
+    // fails closed per job and the worker records the Exa step
+    // skipped; the key value never enters logs or evidence.
+    const exaCollector = createExaCollector(ctx.config.exaApiKey, {
+      estimatedCostPerCallUnits:
+        ctx.config.exaCostPerCallUsd !== undefined
+          ? parseUsdToUnits(ctx.config.exaCostPerCallUsd)
+          : undefined,
+    });
     // The worker runs on its own bounded handle: a short connect
     // timeout makes an unreachable database fail fast inside the
     // worker loop, and a bounded close timeout keeps app shutdown
@@ -125,6 +148,7 @@ export async function registerGroup(ctx: RegistrationContext): Promise<void> {
     const worker = startDeepSearchWorker({
       repository: createDrizzleDeepSearchRepository(workerHandle.db),
       collector,
+      exaCollector,
     });
     ctx.close.append(async () => {
       worker.stop();

@@ -21,6 +21,8 @@ import {
 } from '../../db/index.js';
 import {
   STEP_KINDS,
+  formatUsdUnits,
+  parseUsdToUnits,
   type JobInput,
   type JobStatus,
   type JobSummary,
@@ -540,6 +542,98 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
         const updated = await tx
           .update(searchJobs)
           .set({ status: 'failed', errorCode, errorDetail, finishedAt: new Date() })
+          .where(eq(searchJobs.id, jobId))
+          .returning();
+        const row = updated[0];
+        if (row === undefined) {
+          throw jobNotFound();
+        }
+        return toJobRow(row);
+      });
+    },
+
+    async claimNextExaJob(): Promise<SearchJobRow | null> {
+      return db.transaction(async (tx) => {
+        const busyRows = await tx
+          .select({ workspaceId: searchJobs.workspaceId })
+          .from(searchJobs)
+          .where(
+            inArray(searchJobs.status, ['collecting', 'assessing', 'complementing', 'writing']),
+          );
+        const busyWorkspaces = new Set(busyRows.map((row) => row.workspaceId));
+        const queued = await tx
+          .select()
+          .from(searchJobs)
+          .where(eq(searchJobs.status, 'queued'))
+          .orderBy(asc(searchJobs.createdAt), asc(searchJobs.id))
+          .limit(50);
+        for (const job of queued) {
+          if (busyWorkspaces.has(job.workspaceId)) continue;
+          const stepRows = await tx
+            .select()
+            .from(searchJobSteps)
+            .where(
+              and(
+                eq(searchJobSteps.jobId, job.id),
+                inArray(searchJobSteps.step, ['collector_pubmed', 'collector_exa']),
+              ),
+            );
+          const pubmedStep = stepRows.find((row) => row.step === 'collector_pubmed');
+          const exaStep = stepRows.find((row) => row.step === 'collector_exa');
+          if (
+            pubmedStep === undefined ||
+            pubmedStep.status !== 'completed' ||
+            exaStep === undefined ||
+            exaStep.status !== 'pending'
+          ) {
+            continue;
+          }
+          const updated = await tx
+            .update(searchJobs)
+            .set({ status: 'collecting', startedAt: job.startedAt ?? new Date() })
+            .where(and(eq(searchJobs.id, job.id), eq(searchJobs.status, 'queued')))
+            .returning();
+          if (updated.length === 0) continue;
+          await tx
+            .update(searchJobSteps)
+            .set({ status: 'running', startedAt: new Date() })
+            .where(eq(searchJobSteps.id, exaStep.id));
+          return toJobRow(updated[0] as DbJobRow);
+        }
+        return null;
+      });
+    },
+
+    async skipStep(
+      jobId: string,
+      step: StepKind,
+      detail: Record<string, unknown> | null,
+    ): Promise<void> {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(searchJobSteps)
+          .set({ status: 'skipped', detail, finishedAt: new Date() })
+          .where(and(eq(searchJobSteps.jobId, jobId), eq(searchJobSteps.step, step)));
+      });
+    },
+
+    async addJobCost(jobId: string, costUsd: string): Promise<SearchJobRow> {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .select()
+          .from(searchJobs)
+          .where(eq(searchJobs.id, jobId))
+          .limit(1);
+        const current = rows[0];
+        if (current === undefined) {
+          throw jobNotFound();
+        }
+        const next = formatUsdUnits(
+          parseUsdToUnits(String(current.costExaUsd)) + parseUsdToUnits(costUsd),
+        );
+        const updated = await tx
+          .update(searchJobs)
+          .set({ costExaUsd: next })
           .where(eq(searchJobs.id, jobId))
           .returning();
         const row = updated[0];

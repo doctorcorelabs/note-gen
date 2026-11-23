@@ -11,8 +11,11 @@
 // G-F2-2a shipped schema + job API. G-F2-2b adds the executor
 // surface for the first stage (Collector PubMed): claiming queued
 // jobs, stage transitions, candidate and evidence inserts, and
-// stale-job recovery. Later waves (Collector Exa, Assessor,
-// Complement, Writer) extend the same port.
+// stale-job recovery. G-F2-2c adds the Collector Exa claim, the
+// explicit stage skip (a stage that must not run is recorded
+// skipped with its reason, never silently pending), and recorded
+// Exa cost accumulation. Later waves (Assessor, Complement,
+// Writer) extend the same port.
 //
 // Status rules (binding):
 // - cancel: allowed before writing (queued, collecting, assessing,
@@ -167,6 +170,26 @@ export interface DeepSearchRepository {
   // Terminal failure: status failed, finishedAt stamped, stable
   // error code plus a short non-secret detail.
   failJob(jobId: string, errorCode: string, errorDetail: string): Promise<SearchJobRow>;
+
+  // Executor surface (G-F2-2c). Claim the oldest queued job whose
+  // collector_pubmed step completed and whose collector_exa step
+  // is still pending, with no running job in its workspace. The
+  // job moves to collecting and the step to running, atomically.
+  // Returns null when nothing is claimable. Budget and key checks
+  // belong to the worker/collector, not the claim, so a job that
+  // must not run Exa still gets its step resolved as skipped.
+  claimNextExaJob(): Promise<SearchJobRow | null>;
+
+  // Record a stage as skipped with its non-secret reason (no
+  // approved Exa budget, Exa key not configured, Complement not
+  // triggered). A skipped stage is a recorded outcome, never a
+  // silently pending one.
+  skipStep(jobId: string, step: StepKind, detail: Record<string, unknown> | null): Promise<void>;
+
+  // Add a recorded Exa run cost (decimal string, 4 places) to the
+  // job's cost_exa_usd. Integer-unit arithmetic; the ceiling was
+  // enforced by the collector before spending.
+  addJobCost(jobId: string, costUsd: string): Promise<SearchJobRow>;
 }
 
 // Cursor helpers shared by both implementations so the wire format

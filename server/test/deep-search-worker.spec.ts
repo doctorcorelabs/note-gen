@@ -13,6 +13,10 @@ import {
   type CollectorResult,
   type PubmedCollector,
 } from '../src/services/deep-search/collector-pubmed.js';
+import type {
+  ExaCollector,
+  ExaCollectorResult,
+} from '../src/services/deep-search/collector-exa.js';
 import {
   createFakeDeepSearchRepository,
   type FakeDeepSearchRepository,
@@ -236,5 +240,189 @@ describe('deep search worker (fake repository)', () => {
     const again = await repo.insertCandidates(job.id, [candidate]);
     expect(again).toHaveLength(1);
     expect(await repo.countCandidates(job.id)).toBe(1);
+  });
+});
+
+function okExaResult(overrides: Partial<ExaCollectorResult> = {}): ExaCollectorResult {
+  return {
+    candidates: [
+      {
+        sourceKind: 'exa',
+        externalId: 'https://example.org/guidelines/hypospadias-2024',
+        title: 'Hypospadias guideline update 2024',
+        authors: 'Guideline Panel',
+        journal: null,
+        year: 2024,
+        doi: null,
+        pmid: null,
+        pmcid: null,
+        url: 'https://example.org/guidelines/hypospadias-2024',
+        oaFlag: null,
+        snippet: 'First highlight sentence.',
+      },
+    ],
+    candidateEvidence: [
+      {
+        externalId: 'https://example.org/guidelines/hypospadias-2024',
+        queryText: 'hypospadias',
+        sourceKind: 'exa',
+        httpStatus: 200,
+        note: null,
+      },
+    ],
+    queryEvidence: [
+      {
+        candidateId: null,
+        queryText: 'hypospadias',
+        sourceKind: 'exa',
+        httpStatus: 200,
+        note: 'results=1 cost=0.0050',
+      },
+    ],
+    outcome: { ok: true, httpStatus: 200, resultCount: 1, errorCode: null },
+    costUsd: '0.0050',
+    calls: 1,
+    queries: ['hypospadias'],
+    ...overrides,
+  };
+}
+
+function stubExaCollector(result: ExaCollectorResult): ExaCollector {
+  return {
+    collect: async () => result,
+  };
+}
+
+// Drive one job through the PubMed stage so its Exa step becomes
+// claimable, then hand back the job row.
+async function setupJobPastPubmed(
+  repo: FakeDeepSearchRepository,
+  body: Record<string, unknown> = {},
+): Promise<SearchJobRow> {
+  const job = await repo.createJob(
+    WORKSPACE_ID,
+    USER_ID,
+    parseCreateJobBody({ projectKey: 'deck-x', topic: 'hypospadias', ...body }),
+  );
+  await runWorkerOnce({ repository: repo, collector: stubCollector(okResult()) });
+  return job;
+}
+
+describe('deep search worker exa stage (fake repository)', () => {
+  it('runs the exa stage after pubmed, stores candidates, records cost', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastPubmed(repo, { budgetExaUsd: 0.15 });
+
+    const ran = await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(okResult()),
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+    expect(ran).toBe(true);
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    expect(after.costExaUsd).toBe('0.0050');
+
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    const exaStep = steps.find((s) => s.step === 'collector_exa');
+    expect(exaStep?.status).toBe('completed');
+    expect(exaStep?.detail).toMatchObject({ calls: 1, costUsd: '0.0050' });
+
+    const candidates = await repo.listCandidates(WORKSPACE_ID, job.id);
+    expect(candidates).toHaveLength(2);
+    expect(candidates.map((c) => c.sourceKind)).toEqual(['pubmed', 'exa']);
+
+    const evidence = repo.listEvidence(job.id);
+    expect(evidence.filter((e) => e.sourceKind === 'exa')).toHaveLength(2);
+
+    // Both collector stages are done: nothing left to claim here.
+    const ranAgain = await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(okResult()),
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+    expect(ranAgain).toBe(false);
+  });
+
+  it('skips the exa stage with a recorded reason when the job has no budget', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastPubmed(repo);
+
+    const ran = await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(okResult()),
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+    expect(ran).toBe(true);
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    expect(after.costExaUsd).toBe('0');
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    const exaStep = steps.find((s) => s.step === 'collector_exa');
+    expect(exaStep?.status).toBe('skipped');
+    expect(exaStep?.detail).toMatchObject({ skipped: 'no_exa_budget' });
+    expect(await repo.listCandidates(WORKSPACE_ID, job.id)).toHaveLength(1);
+  });
+
+  it('skips the exa stage when the server key is missing', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastPubmed(repo, { budgetExaUsd: 0.15 });
+    const exaCollector: ExaCollector = {
+      collect: async () => {
+        throw new CollectorError(
+          'exa_key_missing',
+          'The Exa API key is not configured on the server.',
+        );
+      },
+    };
+    await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(okResult()),
+      exaCollector,
+    });
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    expect(after.errorCode).toBeNull();
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    const exaStep = steps.find((s) => s.step === 'collector_exa');
+    expect(exaStep?.status).toBe('skipped');
+    expect(exaStep?.detail).toMatchObject({ skipped: 'exa_key_missing' });
+  });
+
+  it('fails only the exa step on a 429 and keeps the job partial (decision 7)', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastPubmed(repo, { budgetExaUsd: 0.15 });
+    const result = okExaResult({
+      candidates: [],
+      candidateEvidence: [],
+      outcome: { ok: false, httpStatus: 429, resultCount: 0, errorCode: 'rate_limited' },
+      costUsd: '0.0000',
+    });
+    await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(okResult()),
+      exaCollector: stubExaCollector(result),
+    });
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    expect(after.costExaUsd).toBe('0');
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    expect(steps.find((s) => s.step === 'collector_exa')?.status).toBe('failed');
+    // The PubMed candidate trail is untouched.
+    expect(await repo.listCandidates(WORKSPACE_ID, job.id)).toHaveLength(1);
+  });
+
+  it('does not claim the exa step before the pubmed step completes', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    await repo.createJob(
+      WORKSPACE_ID,
+      USER_ID,
+      parseCreateJobBody({ projectKey: 'deck-x', topic: 'hypospadias', budgetExaUsd: 0.15 }),
+    );
+    expect(await repo.claimNextExaJob()).toBeNull();
   });
 });

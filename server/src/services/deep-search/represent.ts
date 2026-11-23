@@ -19,6 +19,22 @@ export type JobStatus =
   | 'failed'
   | 'cancelled';
 
+// Money helpers (wave G-F2-2c). Budget and recorded cost travel as
+// decimal strings with 4 places end to end (validation formats
+// with toFixed(4)); all arithmetic happens in integer units of
+// 0.0001 USD so no float rounding ever touches a recorded cost.
+export const USD_UNIT_SCALE = 10_000;
+
+export function parseUsdToUnits(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * USD_UNIT_SCALE);
+}
+
+export function formatUsdUnits(units: number): string {
+  return (units / USD_UNIT_SCALE).toFixed(4);
+}
+
 export const JOB_STATUSES: readonly JobStatus[] = [
   'queued',
   'collecting',

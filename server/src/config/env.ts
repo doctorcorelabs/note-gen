@@ -88,6 +88,16 @@ export interface ServerConfig {
   // warnings still name the variable only, never the value.
   ncbiEutilsTool?: string | undefined;
   ncbiEutilsEmail?: string | undefined;
+  // Deep Search Exa key (F2-2, wave G-F2-2c; design 3.4,
+  // decision 2). The paid Exa API key lives in server env only,
+  // installed by Daivan through the existing secret path; it is
+  // never accepted from job input, never logged, and warnings
+  // name the variable only. Without it the Exa collector stage
+  // is recorded skipped as explicitly unavailable.
+  exaApiKey?: string | undefined;
+  // Per-call Exa cost estimate (decimal string, USD) used for
+  // the pre-call budget guard when the API reports no cost.
+  exaCostPerCallUsd?: string | undefined;
 }
 
 export const DEFAULT_PORT = 3001;
@@ -404,6 +414,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     warnings.push('NCBI_EUTILS_EMAIL is not set; the Deep Search PubMed collector will fail closed until it is set.');
   }
 
+  // Deep Search Exa key (decision 2): server env only. The value
+  // is a credential: it is never echoed into warnings or logs,
+  // only its presence is reported. An unset key leaves the Exa
+  // stage explicitly unavailable (recorded skipped per job).
+  const exaApiKey = nonEmpty(env.EXA_API_KEY);
+  if (exaApiKey === undefined) {
+    warnings.push('EXA_API_KEY is not set; the Deep Search Exa collector stage will be skipped until it is set.');
+  }
+  let exaCostPerCallUsd = nonEmpty(env.EXA_COST_PER_CALL_USD);
+  if (exaCostPerCallUsd !== undefined) {
+    const parsedCost = Number(exaCostPerCallUsd);
+    if (!Number.isFinite(parsedCost) || parsedCost <= 0 || parsedCost > 0.15) {
+      warnings.push('EXA_COST_PER_CALL_USD is not valid; the default per-call estimate will be used.');
+      exaCostPerCallUsd = undefined;
+    }
+  }
+
   return {
     host,
     port,
@@ -434,5 +461,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     maxBodyBytes,
     ncbiEutilsTool,
     ncbiEutilsEmail,
+    exaApiKey,
+    exaCostPerCallUsd,
   };
 }
