@@ -2,7 +2,7 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Schema entry point: every table of waves M1 to M9, in dependency order.
+// Schema entry point: every table of waves M1 to M10, in dependency order.
 //
 // drizzle-kit reads this file (see server/drizzle.config.ts). The schema
 // object below is the single registry passed to drizzle(); endpoint
@@ -25,6 +25,7 @@ export * from './m5-knowledge.js';
 export * from './m6-wiki.js';
 export * from './m7-memory.js';
 export * from './m9-citations.js';
+export * from './m10-deep-search.js';
 
 import {
   auditEvents,
@@ -55,6 +56,13 @@ import { knowledgeSources, vectorChunks } from './m5-knowledge.js';
 import { wikiJobs, wikiMeta, wikiPages, wikiRevisions, wikiSegments, wikiSources } from './m6-wiki.js';
 import { memories, memoryJobs, memoryPolicies } from './m7-memory.js';
 import { citationReferences, factReferences, facts, markBibliography } from './m9-citations.js';
+import {
+  searchCandidates,
+  searchEvidence,
+  searchFactCandidates,
+  searchJobs,
+  searchJobSteps,
+} from './m10-deep-search.js';
 
 // Listed explicitly, one entry per table, so no helper export (such as
 // the bytea column builder) can leak into the Drizzle schema object.
@@ -104,4 +112,9 @@ export const schema = {
   facts,
   factReferences,
   markBibliography,
+  searchJobs,
+  searchJobSteps,
+  searchCandidates,
+  searchFactCandidates,
+  searchEvidence,
 };
