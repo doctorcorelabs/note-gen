@@ -109,6 +109,7 @@ const VITEST_SPECS = [
   "src/lib/platform/sql/sql.tauri.spec.ts",
   "src/lib/platform/sql/sql.web.spec.ts",
   "src/lib/web/auth-client.spec.ts",
+  "src/lib/web/citations-client.spec.ts",
   "src/lib/web/csrf.spec.ts",
   "src/lib/web/record-assets.spec.ts",
   "src/lib/web/record-inputs.spec.ts",

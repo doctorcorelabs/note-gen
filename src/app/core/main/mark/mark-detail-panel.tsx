@@ -77,6 +77,7 @@ import { getMarkTypeListBadgeClasses } from "./mark-type-meta"
 import { TipTapEditor } from "@/app/core/main/editor/markdown/tiptap-editor"
 import { isLargeMarkdownDocument } from "@/app/core/main/editor/markdown/large-markdown"
 import { RecordTagEditor } from './record-tag-editor'
+import { RecordCitationsPanel } from './record-citations-panel'
 import { recordTagIds } from '@/lib/record-tags'
 import emitter from "@/lib/emitter"
 import { EmitterRecordEvents } from "@/config/emitters"
@@ -1098,6 +1099,9 @@ function MarkDetailBody({ mark, isActive }: { mark: Mark; isActive: boolean }) {
           )}
         </SectionBlock>
       ) : null}
+      <SectionBlock title={t('record.mark.citations.title')}>
+        <RecordCitationsPanel markId={mark.id} />
+      </SectionBlock>
       <SectionBlock className="px-0 py-0" contentClassName="overflow-visible">
         <div
           id="record-detail-content"
