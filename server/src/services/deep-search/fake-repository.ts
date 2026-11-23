@@ -21,6 +21,7 @@ import {
   STEP_KINDS,
   formatUsdUnits,
   parseUsdToUnits,
+  type EvidenceRow,
   type JobSummary,
   type SearchCandidateRow,
   type SearchFactCandidateRow,
@@ -31,6 +32,7 @@ import {
 import {
   decodeJobCursor,
   encodeJobCursor,
+  type CandidateWrittenUpdate,
   type DeepSearchRepository,
   type FactScoreUpdate,
   type ListJobsFilter,
@@ -586,6 +588,132 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
         row.status = update.status;
         row.assessorNote = update.assessorNote;
       }
+    },
+
+    async approveWriting(
+      requestedWorkspaceId: string,
+      jobId: string,
+    ): Promise<SearchJobRow> {
+      checkWorkspace(requestedWorkspaceId);
+      const row = requireJob(jobId);
+      if (
+        row.status === 'completed' ||
+        row.status === 'failed' ||
+        row.status === 'cancelled' ||
+        row.status === 'writing'
+      ) {
+        throw ApiError.revisionConflict(
+          { status: row.status },
+          {},
+          'The job can no longer be approved for writing.',
+        );
+      }
+      row.input = { ...row.input, writingApproved: true };
+      return { ...row };
+    },
+
+    async claimNextWriterJob(): Promise<SearchJobRow | null> {
+      const running = [...jobsStore.values()].some(
+        (row) =>
+          row.status === 'collecting' ||
+          row.status === 'assessing' ||
+          row.status === 'complementing' ||
+          row.status === 'writing',
+      );
+      if (running) {
+        return null;
+      }
+      const queued = [...jobsStore.values()]
+        .filter((row) => row.status === 'queued')
+        .sort((a, b) =>
+          a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.id.localeCompare(b.id),
+        );
+      for (const job of queued) {
+        const steps = stepsStore.get(job.id) ?? [];
+        const complementStep = steps.find((row) => row.step === 'complement');
+        const complementResolved =
+          complementStep !== undefined &&
+          (complementStep.status === 'completed' ||
+            complementStep.status === 'skipped' ||
+            complementStep.status === 'failed');
+        if (!complementResolved) {
+          continue;
+        }
+        const approved = job.input.writingApproved === true;
+        const projectAlreadyWritten = [...jobsStore.values()].some(
+          (other) =>
+            other.id !== job.id &&
+            other.workspaceId === job.workspaceId &&
+            other.projectKey === job.projectKey &&
+            candidatesStore.some(
+              (candidate) =>
+                candidate.jobId === other.id && candidate.recordMarkId !== null,
+            ),
+        );
+        if (!approved && !projectAlreadyWritten) {
+          continue;
+        }
+        job.status = 'writing';
+        job.startedAt = job.startedAt ?? now();
+        return { ...job };
+      }
+      return null;
+    },
+
+    async completeJob(jobId: string): Promise<SearchJobRow> {
+      const row = requireJob(jobId);
+      row.status = 'completed';
+      row.finishedAt = now();
+      return { ...row };
+    },
+
+    async setCandidateWritten(
+      jobId: string,
+      candidateId: string,
+      update: CandidateWrittenUpdate,
+    ): Promise<void> {
+      requireJob(jobId);
+      const row = candidatesStore.find(
+        (candidate) => candidate.jobId === jobId && candidate.id === candidateId,
+      );
+      if (row === undefined) {
+        throw jobNotFound();
+      }
+      row.disposition = update.disposition;
+      row.recordMarkId = update.recordMarkId;
+      row.rejectReason = update.rejectReason;
+    },
+
+    async setFactWritten(
+      jobId: string,
+      factCandidateId: string,
+      factId: string,
+    ): Promise<void> {
+      requireJob(jobId);
+      const row = factCandidatesStore.find(
+        (candidate) => candidate.jobId === jobId && candidate.id === factCandidateId,
+      );
+      if (row === undefined) {
+        throw jobNotFound();
+      }
+      row.factId = factId;
+    },
+
+    async listJobEvidence(jobId: string): Promise<EvidenceRow[]> {
+      requireJob(jobId);
+      return evidenceStore
+        .filter((row) => row.jobId === jobId)
+        .map((row) => ({
+          id: row.id,
+          jobId: row.jobId,
+          candidateId: row.candidateId,
+          factCandidateId: row.factCandidateId ?? null,
+          queryText: row.queryText,
+          sourceKind: row.sourceKind,
+          httpStatus: row.httpStatus,
+          note: row.note,
+          retrievedAt: row.retrievedAt,
+        }));
     },
 
     listEvidence(jobId: string): FakeEvidenceRow[] {

@@ -15,8 +15,13 @@
 // explicit stage skip (a stage that must not run is recorded
 // skipped with its reason, never silently pending), and recorded
 // Exa cost accumulation. G-F2-2d adds the Assessor and Complement
-// claims plus fact candidate inserts and score updates. Later
-// waves (Writer) extend the same port.
+// claims plus fact candidate inserts and score updates. G-F2-2e
+// adds the Writer surface: explicit writing approval (decision
+// 8), the writer claim, job completion, and the candidate/fact
+// write-back links. The Writer stage has no step row (the step
+// CHECK predates it and no migration is needed): the job status
+// writing -> completed plus per-item evidence rows are its
+// record.
 //
 // Status rules (binding):
 // - cancel: allowed before writing (queued, collecting, assessing,
@@ -26,9 +31,17 @@
 // - retry: only from failed. The job returns to queued with steps
 //   reset to pending and error fields cleared; candidates are kept
 //   for dedupe. Any other status answers 409.
+// - approve-writing (G-F2-2e, decision 8): sets the explicit
+//   writing approval on a non-terminal job. Terminal or writing
+//   jobs answer 409. Approving twice is a no-op success. The
+//   first job of a project is claimed by the Writer only with
+//   this approval; a later job of the same project is claimable
+//   once an earlier job already wrote data.
 // - There is no delete: a job is the search audit trail (decision 9).
 
 import type {
+  CandidateDisposition,
+  EvidenceRow,
   FactCandidateStatus,
   JobStatus,
   JobSummary,
@@ -91,6 +104,17 @@ export interface FactScoreUpdate {
   score: number;
   status: FactCandidateStatus;
   assessorNote: string | null;
+}
+
+// Writer write-back shapes (G-F2-2e). A CandidateWrittenUpdate
+// records what one candidate became in the writing stage:
+// accepted with its new structured record, duplicate with the
+// existing record it matched, or rejected with its reason (no
+// record). recordMarkId stays null exactly when rejected.
+export interface CandidateWrittenUpdate {
+  disposition: CandidateDisposition;
+  recordMarkId: number | null;
+  rejectReason: string | null;
 }
 
 export interface ListJobsFilter {
@@ -245,6 +269,42 @@ export interface DeepSearchRepository {
   // listed rows change; unknown ids are ignored so a partial
   // update never fails the stage.
   updateFactCandidateScores(jobId: string, updates: FactScoreUpdate[]): Promise<void>;
+
+  // Executor + approval surface (G-F2-2e, Writer).
+
+  // Record the explicit human approval to write the results of
+  // this job into F2-1 (decision 8). Sets input.writingApproved.
+  // Terminal or writing jobs answer 409; unknown job 404.
+  // Approving an already approved job is a no-op success.
+  approveWriting(workspaceId: string, jobId: string): Promise<SearchJobRow>;
+
+  // Claim the oldest queued job whose complement step is
+  // resolved (completed, skipped, or failed) and whose writing
+  // is allowed: explicitly approved, or an earlier job of the
+  // same project in the same workspace already wrote data
+  // (decision 8: only the first job per project stops for
+  // approval). The job moves to writing, atomically. Returns
+  // null when nothing is claimable. A first job without
+  // approval simply stays queued; cancel remains available.
+  claimNextWriterJob(): Promise<SearchJobRow | null>;
+
+  // Terminal success: status completed, finishedAt stamped.
+  completeJob(jobId: string): Promise<SearchJobRow>;
+
+  // Record what one candidate became in the writing stage.
+  setCandidateWritten(
+    jobId: string,
+    candidateId: string,
+    update: CandidateWrittenUpdate,
+  ): Promise<void>;
+
+  // Link one fact candidate to the facts row it became.
+  setFactWritten(jobId: string, factCandidateId: string, factId: string): Promise<void>;
+
+  // Search-trail rows of a job in retrieval order. The Writer
+  // reads the assessor evidence to learn which candidates
+  // support which fact candidate.
+  listJobEvidence(jobId: string): Promise<EvidenceRow[]>;
 }
 
 // Cursor helpers shared by both implementations so the wire format

@@ -9,7 +9,7 @@
 // cursor pagination, and since G-F2-2b the executor claim, stage
 // transitions, candidate/evidence inserts, and stale recovery.
 
-import { and, asc, count, desc, eq, inArray, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, lt, ne, or } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
 import {
   searchCandidates,
@@ -23,6 +23,7 @@ import {
   STEP_KINDS,
   formatUsdUnits,
   parseUsdToUnits,
+  type EvidenceRow,
   type JobInput,
   type JobStatus,
   type JobSummary,
@@ -40,6 +41,7 @@ import {
 import {
   decodeJobCursor,
   encodeJobCursor,
+  type CandidateWrittenUpdate,
   type DeepSearchRepository,
   type FactScoreUpdate,
   type ListJobsFilter,
@@ -54,6 +56,7 @@ type DbJobRow = typeof searchJobs.$inferSelect;
 type DbStepRow = typeof searchJobSteps.$inferSelect;
 type DbCandidateRow = typeof searchCandidates.$inferSelect;
 type DbFactCandidateRow = typeof searchFactCandidates.$inferSelect;
+type DbEvidenceRow = typeof searchEvidence.$inferSelect;
 
 function jobNotFound(): ApiError {
   return ApiError.notFound('The search job was not found in this workspace.');
@@ -77,6 +80,7 @@ function normalizeJobInput(raw: unknown): JobInput {
       typeof record['complementThresholdAverage'] === 'number'
         ? record['complementThresholdAverage']
         : 80,
+    ...(record['writingApproved'] === true ? { writingApproved: true } : {}),
   };
 }
 
@@ -148,6 +152,20 @@ function toFactCandidateRow(row: DbFactCandidateRow): SearchFactCandidateRow {
     factId: row.factId,
     assessorNote: row.assessorNote,
     createdAt: row.createdAt.getTime(),
+  };
+}
+
+function toEvidenceRow(row: DbEvidenceRow): EvidenceRow {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    candidateId: row.candidateId,
+    factCandidateId: row.factCandidateId,
+    queryText: row.queryText,
+    sourceKind: row.sourceKind as SourceKind,
+    httpStatus: row.httpStatus,
+    note: row.note,
+    retrievedAt: row.retrievedAt.getTime(),
   };
 }
 
@@ -810,6 +828,165 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
               ),
             );
         }
+      });
+    },
+
+    async approveWriting(workspaceId: string, jobId: string): Promise<SearchJobRow> {
+      return db.transaction(async (tx) => {
+        const row = await requireJob(tx, workspaceId, jobId);
+        if (
+          row.status === 'completed' ||
+          row.status === 'failed' ||
+          row.status === 'cancelled' ||
+          row.status === 'writing'
+        ) {
+          throw ApiError.revisionConflict(
+            { status: row.status },
+            {},
+            'The job can no longer be approved for writing.',
+          );
+        }
+        const rawInput =
+          typeof row.input === 'object' && row.input !== null
+            ? (row.input as Record<string, unknown>)
+            : {};
+        const updated = await tx
+          .update(searchJobs)
+          .set({ input: { ...rawInput, writingApproved: true } })
+          .where(eq(searchJobs.id, jobId))
+          .returning();
+        const updatedRow = updated[0];
+        if (updatedRow === undefined) {
+          throw jobNotFound();
+        }
+        return toJobRow(updatedRow);
+      });
+    },
+
+    async claimNextWriterJob(): Promise<SearchJobRow | null> {
+      return db.transaction(async (tx) => {
+        const busyRows = await tx
+          .select({ workspaceId: searchJobs.workspaceId })
+          .from(searchJobs)
+          .where(
+            inArray(searchJobs.status, ['collecting', 'assessing', 'complementing', 'writing']),
+          );
+        const busyWorkspaces = new Set(busyRows.map((row) => row.workspaceId));
+        const queued = await tx
+          .select()
+          .from(searchJobs)
+          .where(eq(searchJobs.status, 'queued'))
+          .orderBy(asc(searchJobs.createdAt), asc(searchJobs.id))
+          .limit(50);
+        for (const job of queued) {
+          if (busyWorkspaces.has(job.workspaceId)) continue;
+          const stepRows = await tx
+            .select()
+            .from(searchJobSteps)
+            .where(
+              and(eq(searchJobSteps.jobId, job.id), eq(searchJobSteps.step, 'complement')),
+            )
+            .limit(1);
+          const complementStep = stepRows[0];
+          const complementResolved =
+            complementStep !== undefined &&
+            (complementStep.status === 'completed' ||
+              complementStep.status === 'skipped' ||
+              complementStep.status === 'failed');
+          if (!complementResolved) {
+            continue;
+          }
+          const approved = normalizeJobInput(job.input).writingApproved === true;
+          if (!approved) {
+            const writtenRows = await tx
+              .select({ id: searchCandidates.id })
+              .from(searchCandidates)
+              .innerJoin(searchJobs, eq(searchCandidates.jobId, searchJobs.id))
+              .where(
+                and(
+                  eq(searchJobs.workspaceId, job.workspaceId),
+                  eq(searchJobs.projectKey, job.projectKey),
+                  ne(searchJobs.id, job.id),
+                  isNotNull(searchCandidates.recordMarkId),
+                ),
+              )
+              .limit(1);
+            if (writtenRows.length === 0) {
+              continue;
+            }
+          }
+          const updated = await tx
+            .update(searchJobs)
+            .set({ status: 'writing', startedAt: job.startedAt ?? new Date() })
+            .where(and(eq(searchJobs.id, job.id), eq(searchJobs.status, 'queued')))
+            .returning();
+          if (updated.length === 0) continue;
+          return toJobRow(updated[0] as DbJobRow);
+        }
+        return null;
+      });
+    },
+
+    async completeJob(jobId: string): Promise<SearchJobRow> {
+      return db.transaction(async (tx) => {
+        const updated = await tx
+          .update(searchJobs)
+          .set({ status: 'completed', finishedAt: new Date() })
+          .where(eq(searchJobs.id, jobId))
+          .returning();
+        const row = updated[0];
+        if (row === undefined) {
+          throw jobNotFound();
+        }
+        return toJobRow(row);
+      });
+    },
+
+    async setCandidateWritten(
+      jobId: string,
+      candidateId: string,
+      update: CandidateWrittenUpdate,
+    ): Promise<void> {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(searchCandidates)
+          .set({
+            disposition: update.disposition,
+            recordMarkId: update.recordMarkId,
+            rejectReason: update.rejectReason,
+          })
+          .where(
+            and(eq(searchCandidates.jobId, jobId), eq(searchCandidates.id, candidateId)),
+          );
+      });
+    },
+
+    async setFactWritten(
+      jobId: string,
+      factCandidateId: string,
+      factId: string,
+    ): Promise<void> {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(searchFactCandidates)
+          .set({ factId })
+          .where(
+            and(
+              eq(searchFactCandidates.jobId, jobId),
+              eq(searchFactCandidates.id, factCandidateId),
+            ),
+          );
+      });
+    },
+
+    async listJobEvidence(jobId: string): Promise<EvidenceRow[]> {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .select()
+          .from(searchEvidence)
+          .where(eq(searchEvidence.jobId, jobId))
+          .orderBy(asc(searchEvidence.retrievedAt), asc(searchEvidence.id));
+        return rows.map(toEvidenceRow);
       });
     },
   };

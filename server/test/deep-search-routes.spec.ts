@@ -99,7 +99,7 @@ interface ApiJobShape {
   budgetExaUsd: string | null;
   costExaUsd: string;
   createdByUserId: string | null;
-  input: { maxCandidates: number; stages: string };
+  input: { maxCandidates: number; stages: string; writingApproved: boolean };
 }
 
 describe('deep search routes', () => {
@@ -275,5 +275,75 @@ describe('deep search routes', () => {
       },
     });
     expect(del.statusCode).toBe(405);
+  });
+
+  it('approves writing for a queued job and repeats as a no-op (G-F2-2e)', async () => {
+    const { app } = await setup();
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/deep-search/jobs',
+      headers: authHeaders(),
+      payload: { projectKey: 'deck-x', topic: 'T' },
+    });
+    const job = dataOf<ApiJobShape>(created);
+    expect(job.input.writingApproved).toBe(false);
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/deep-search/jobs/${job.id}/approve-writing`,
+      headers: authHeaders(),
+      payload: {},
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(dataOf<ApiJobShape>(approved).input.writingApproved).toBe(true);
+    const again = await app.inject({
+      method: 'POST',
+      url: `/api/deep-search/jobs/${job.id}/approve-writing`,
+      headers: authHeaders(),
+      payload: {},
+    });
+    expect(again.statusCode).toBe(200);
+    expect(dataOf<ApiJobShape>(again).input.writingApproved).toBe(true);
+  });
+
+  it('refuses approve-writing on a cancelled job (409) and unknown ids (404)', async () => {
+    const { app } = await setup();
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/deep-search/jobs',
+      headers: authHeaders(),
+      payload: { projectKey: 'deck-x', topic: 'T' },
+    });
+    const job = dataOf<ApiJobShape>(created);
+    await app.inject({
+      method: 'POST',
+      url: `/api/deep-search/jobs/${job.id}/cancel`,
+      headers: authHeaders(),
+      payload: {},
+    });
+    const refused = await app.inject({
+      method: 'POST',
+      url: `/api/deep-search/jobs/${job.id}/approve-writing`,
+      headers: authHeaders(),
+      payload: {},
+    });
+    expect(refused.statusCode).toBe(409);
+    const unknown = await app.inject({
+      method: 'POST',
+      url: '/api/deep-search/jobs/00000000-0000-4000-8000-000000000099/approve-writing',
+      headers: authHeaders(),
+      payload: {},
+    });
+    expect(unknown.statusCode).toBe(404);
+  });
+
+  it('rejects writingApproved smuggled through the create body (400)', async () => {
+    const { app } = await setup();
+    const smuggled = await app.inject({
+      method: 'POST',
+      url: '/api/deep-search/jobs',
+      headers: authHeaders(),
+      payload: { projectKey: 'deck-x', topic: 'T', writingApproved: true },
+    });
+    expect(smuggled.statusCode).toBe(400);
   });
 });

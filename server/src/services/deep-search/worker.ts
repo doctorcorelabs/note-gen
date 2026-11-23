@@ -2,8 +2,8 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Deep Search worker (F2-2, waves G-F2-2b, G-F2-2c, and
-// G-F2-2d): the executor.
+// Deep Search worker (F2-2, waves G-F2-2b, G-F2-2c, G-F2-2d,
+// and G-F2-2e): the executor.
 //
 // One background worker in the api process (design 3.2). It claims
 // the oldest queued job whose next collector step is pending,
@@ -11,8 +11,9 @@
 // stage with an explicit per-stage timeout (10 minutes, decision
 // 6), stores candidates + evidence, and hands the job back to
 // queued so later waves (Assessor, Complement, Writer) continue
-// the chain from the next pending step. This wave never writes
-// F2-1 data.
+// the chain from the next pending step. Only the Writer stage
+// (G-F2-2e) writes F2-1 data, and only for jobs whose writing
+// is allowed (decision 8).
 //
 // G-F2-2b runs the PubMed collector stage. G-F2-2c adds the Exa
 // collector stage, claimed only after the PubMed step completed
@@ -20,7 +21,11 @@
 // Assessor stage (pure scoring over stored candidates) and the
 // conditional Complement stage (re-collection plus re-scoring
 // only when the stored fact scores fall below the job
-// thresholds). Exa stage outcomes:
+// thresholds). G-F2-2e adds the Writer stage, claimed only
+// after the Complement step resolved and only when the F2-1
+// repositories are wired in; it writes structured records,
+// facts, and references (see writer.ts) and completes the job.
+// Exa stage outcomes:
 // - No approved budget on the job (decision 1) or no API key on
 //   the server (decision 2): the step is recorded skipped with
 //   its reason and the job returns to queued. The stage being
@@ -60,6 +65,9 @@ import {
   type PubmedCollector,
 } from './collector-pubmed.js';
 import type { ExaCollector, ExaCollectorResult } from './collector-exa.js';
+import type { CitationsRepository } from '../citations/repository.js';
+import type { RecordsRepository } from '../records/repository.js';
+import { writeJobResults } from './writer.js';
 
 export interface DeepSearchWorkerHandle {
   stop: () => void;
@@ -74,6 +82,15 @@ export interface DeepSearchWorkerOptions {
   // collector reports as exa_key_missing and the worker records
   // as a skipped step).
   exaCollector?: ExaCollector;
+  // Writer stage wiring (G-F2-2e). When absent the worker never
+  // claims the writer stage; production registration wires the
+  // Drizzle records + citations repositories on the worker
+  // handle. Writing itself stays gated per job (decision 8):
+  // the first job of a project needs explicit approval.
+  writer?: {
+    records: RecordsRepository;
+    citations: CitationsRepository;
+  };
   pollIntervalMs?: number;
   stageTimeoutMs?: number;
   // Delay before the first tick (startup recovery + first claim).
@@ -129,9 +146,11 @@ function sourceDetail(result: CollectorResult): Record<string, unknown> {
 // Claim and run at most one job. Returns true when a job ran
 // (successfully or not), false when nothing was claimable. Stages
 // are claimed in binding chain order: PubMed, Exa, Assessor,
-// Complement. The Exa stage runs only when an Exa collector is
-// wired in; Assessor and Complement run regardless because their
-// claims already require the earlier steps to be resolved.
+// Complement, Writer. The Exa stage runs only when an Exa
+// collector is wired in and the Writer stage only when the F2-1
+// repositories are wired in; Assessor and Complement run
+// regardless because their claims already require the earlier
+// steps to be resolved.
 export async function runWorkerOnce(options: DeepSearchWorkerOptions): Promise<boolean> {
   const { repository, collector } = options;
   const stageTimeoutMs = options.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
@@ -162,6 +181,13 @@ export async function runWorkerOnce(options: DeepSearchWorkerOptions): Promise<b
       stageTimeoutMs,
     );
     return true;
+  }
+  if (options.writer !== undefined) {
+    const writerJob = await repository.claimNextWriterJob();
+    if (writerJob !== null) {
+      await runWriterStage(repository, options.writer, writerJob, stageTimeoutMs);
+      return true;
+    }
   }
   return false;
 }
@@ -581,6 +607,40 @@ async function runComplementStage(
       // The repository itself is unreachable; the job stays in
       // complementing and startup recovery will mark it failed
       // with worker_restarted. Nothing else can be recorded.
+    }
+  }
+}
+
+async function runWriterStage(
+  repository: DeepSearchRepository,
+  writer: { records: RecordsRepository; citations: CitationsRepository },
+  job: SearchJobRow,
+  stageTimeoutMs: number,
+): Promise<void> {
+  try {
+    await withTimeout(
+      writeJobResults(
+        { deepSearch: repository, records: writer.records, citations: writer.citations },
+        job,
+      ),
+      stageTimeoutMs,
+    );
+    await repository.completeJob(job.id);
+  } catch (error) {
+    const code = error instanceof CollectorError ? error.code : 'writer_error';
+    try {
+      // Writes already committed stay valid (each record/fact is
+      // its own transaction); the explicit retry resumes from
+      // the write-back links without duplicating data.
+      await repository.failJob(
+        job.id,
+        code,
+        'The Writer stage failed unexpectedly.',
+      );
+    } catch {
+      // The repository itself is unreachable; the job stays in
+      // writing and startup recovery will mark it failed with
+      // worker_restarted. Nothing else can be recorded honestly.
     }
   }
 }

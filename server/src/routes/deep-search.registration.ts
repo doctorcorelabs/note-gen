@@ -14,7 +14,9 @@
 // email the collector fails closed per job, which is recorded on
 // the job, not hidden. G-F2-2c wires the Exa collector stage the
 // same way: the key comes from server config only, and without
-// it the Exa step is recorded skipped per job.
+// it the Exa step is recorded skipped per job. G-F2-2e wires the
+// Writer stage: the Drizzle records + citations repositories on
+// the worker handle, so approved jobs write into F2-1.
 //
 // When no DATABASE_URL is configured, the repository fails closed
 // with 503 per request while the routes stay registered (the census
@@ -28,6 +30,8 @@ import { createPubmedCollector } from '../services/deep-search/collector-pubmed.
 import { createExaCollector } from '../services/deep-search/collector-exa.js';
 import { parseUsdToUnits } from '../services/deep-search/represent.js';
 import { createDrizzleDeepSearchRepository } from '../services/deep-search/drizzle-repository.js';
+import { createDrizzleCitationsRepository } from '../services/citations/drizzle-repository.js';
+import { createDrizzleRecordsRepository } from '../services/records/drizzle-repository.js';
 import type { DeepSearchRepository } from '../services/deep-search/repository.js';
 import { startDeepSearchWorker } from '../services/deep-search/worker.js';
 import { createDrizzleWorkspaceIdentityResolver } from '../services/workspace/reconcile-index-pg.js';
@@ -113,6 +117,24 @@ const UNAVAILABLE_DEEP_SEARCH: DeepSearchRepository = {
   async updateFactCandidateScores(): Promise<never> {
     return unavailable();
   },
+  async approveWriting(): Promise<never> {
+    return unavailable();
+  },
+  async claimNextWriterJob(): Promise<never> {
+    return unavailable();
+  },
+  async completeJob(): Promise<never> {
+    return unavailable();
+  },
+  async setCandidateWritten(): Promise<never> {
+    return unavailable();
+  },
+  async setFactWritten(): Promise<never> {
+    return unavailable();
+  },
+  async listJobEvidence(): Promise<never> {
+    return unavailable();
+  },
 };
 
 export const REGISTRATION_ID = 'deep-search' as const;
@@ -161,6 +183,10 @@ export async function registerGroup(ctx: RegistrationContext): Promise<void> {
       repository: createDrizzleDeepSearchRepository(workerHandle.db),
       collector,
       exaCollector,
+      writer: {
+        records: createDrizzleRecordsRepository(workerHandle.db),
+        citations: createDrizzleCitationsRepository(workerHandle.db),
+      },
     });
     ctx.close.append(async () => {
       worker.stop();

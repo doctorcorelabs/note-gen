@@ -2,11 +2,12 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Deep Search routes (F2-2 design 3.3, wave G-F2-2a): the
-// cookie-auth HTTP surface over the Deep Search job service.
-// Create, list, detail, candidates, facts, cancel, retry. No
-// DELETE: a job is the search audit trail (decision 9). No
-// executor in this wave: created jobs stay queued.
+// Deep Search routes (F2-2 design 3.3, waves G-F2-2a and
+// G-F2-2e): the cookie-auth HTTP surface over the Deep Search
+// job service. Create, list, detail, candidates, facts, cancel,
+// retry, and approve-writing (the explicit human approval that
+// lets the first job of a project write into F2-1, decision 8).
+// No DELETE: a job is the search audit trail (decision 9).
 //
 // Auth comes from the frozen global hook (requiresAuth; mutations
 // also get Origin and CSRF checks). The workspace never comes from
@@ -38,6 +39,8 @@ export const DEEP_SEARCH_JOB_CANDIDATES_PATH = '/api/deep-search/jobs/:jobId/can
 export const DEEP_SEARCH_JOB_FACTS_PATH = '/api/deep-search/jobs/:jobId/facts';
 export const DEEP_SEARCH_JOB_CANCEL_PATH = '/api/deep-search/jobs/:jobId/cancel';
 export const DEEP_SEARCH_JOB_RETRY_PATH = '/api/deep-search/jobs/:jobId/retry';
+export const DEEP_SEARCH_JOB_APPROVE_WRITING_PATH =
+  '/api/deep-search/jobs/:jobId/approve-writing';
 
 export const DEEP_SEARCH_BODY_LIMIT_BYTES = 1024 * 1024;
 
@@ -214,6 +217,17 @@ export async function registerDeepSearchRoutes(
       const { workspaceId } = await principalAndWorkspace(request, deps.resolveWorkspaceId);
       const jobId = parseUuidParam((request.params as { jobId?: unknown }).jobId);
       const row = await deps.deepSearch.retryJob(workspaceId, jobId);
+      return successEnvelope(toApiJob(row));
+    },
+  );
+
+  app.post(
+    DEEP_SEARCH_JOB_APPROVE_WRITING_PATH,
+    { config: { requiresAuth: true }, bodyLimit: DEEP_SEARCH_BODY_LIMIT_BYTES },
+    async (request: FastifyRequest) => {
+      const { workspaceId } = await principalAndWorkspace(request, deps.resolveWorkspaceId);
+      const jobId = parseUuidParam((request.params as { jobId?: unknown }).jobId);
+      const row = await deps.deepSearch.approveWriting(workspaceId, jobId);
       return successEnvelope(toApiJob(row));
     },
   );

@@ -80,6 +80,13 @@ export interface JobInput {
   stages: StageChoice;
   complementThresholdFact: number;
   complementThresholdAverage: number;
+  // Explicit approval to write results into F2-1 (decision 8,
+  // wave G-F2-2e). Never accepted from the create-job body; only
+  // the approve-writing endpoint sets it, after a human reviewed
+  // the candidates. The first job of a project waits for it;
+  // later jobs of the same project write once an earlier job
+  // already wrote data.
+  writingApproved?: boolean;
 }
 
 export interface SearchJobRow {
@@ -144,6 +151,21 @@ export interface SearchFactCandidateRow {
   createdAt: number;
 }
 
+// One search-trail row as stored (wave G-F2-2e read surface for
+// the Writer stage: it links fact candidates to the candidates
+// that support them). Mirrors search_evidence one to one.
+export interface EvidenceRow {
+  id: string;
+  jobId: string;
+  candidateId: string | null;
+  factCandidateId: string | null;
+  queryText: string;
+  sourceKind: SourceKind;
+  httpStatus: number | null;
+  note: string | null;
+  retrievedAt: number;
+}
+
 export interface JobSummary {
   candidates: number;
   acceptedCandidates: number;
@@ -164,6 +186,7 @@ export interface ApiJobInput {
   stages: StageChoice;
   complementThresholdFact: number;
   complementThresholdAverage: number;
+  writingApproved: boolean;
 }
 
 export interface ApiJob {
@@ -199,6 +222,7 @@ export function toApiJob(row: SearchJobRow): ApiJob {
       stages: row.input.stages,
       complementThresholdFact: row.input.complementThresholdFact,
       complementThresholdAverage: row.input.complementThresholdAverage,
+      writingApproved: row.input.writingApproved === true,
     },
     budgetExaUsd: row.budgetExaUsd,
     costExaUsd: row.costExaUsd,
