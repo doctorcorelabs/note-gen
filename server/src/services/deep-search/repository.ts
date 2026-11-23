@@ -2,15 +2,17 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Repository port for the Deep Search service (F2-2, wave G-F2-2a).
-// Coarse like the citations port: each method owns one operation's
-// transaction. Two implementations: Drizzle over Postgres, and an
-// in-memory fake for specs. HTTP concerns belong to the route layer.
+// Repository port for the Deep Search service (F2-2, waves G-F2-2a
+// and G-F2-2b). Coarse like the citations port: each method owns one
+// operation's transaction. Two implementations: Drizzle over
+// Postgres, and an in-memory fake for specs. HTTP concerns belong
+// to the route layer.
 //
-// This wave is schema + job API only. The executor stages
-// (Collector, Assessor, Complement, Writer) land in G-F2-2b..e, so
-// jobs created here stay queued; cancel and retry already enforce
-// the full status machine so later waves only add transitions.
+// G-F2-2a shipped schema + job API. G-F2-2b adds the executor
+// surface for the first stage (Collector PubMed): claiming queued
+// jobs, stage transitions, candidate and evidence inserts, and
+// stale-job recovery. Later waves (Collector Exa, Assessor,
+// Complement, Writer) extend the same port.
 //
 // Status rules (binding):
 // - cancel: allowed before writing (queued, collecting, assessing,
@@ -29,8 +31,40 @@ import type {
   SearchFactCandidateRow,
   SearchJobRow,
   SearchJobStepRow,
+  SourceKind,
+  StepKind,
 } from './represent.js';
 import type { CreateJobInput } from './validation.js';
+
+// Executor-facing insert shapes (G-F2-2b). A NewCandidate is a
+// normalized external source before it has a row id; disposition
+// starts pending and recordMarkId stays null until the writing
+// stage of a later wave. NewEvidence is one search-trail row:
+// query-level rows carry candidateId null, candidate rows link to
+// the candidate they produced. No credential ever rides in either
+// shape.
+export interface NewCandidate {
+  sourceKind: SourceKind;
+  externalId: string;
+  title: string | null;
+  authors: string | null;
+  journal: string | null;
+  year: number | null;
+  doi: string | null;
+  pmid: string | null;
+  pmcid: string | null;
+  url: string | null;
+  oaFlag: boolean | null;
+  snippet: string | null;
+}
+
+export interface NewEvidence {
+  candidateId: string | null;
+  queryText: string;
+  sourceKind: SourceKind;
+  httpStatus: number | null;
+  note: string | null;
+}
 
 export interface ListJobsFilter {
   projectKey?: string | undefined;
@@ -80,6 +114,59 @@ export interface DeepSearchRepository {
 
   // Fact candidates of a job, creation order. Unknown job 404.
   listFactCandidates(workspaceId: string, jobId: string): Promise<SearchFactCandidateRow[]>;
+
+  // Executor surface (G-F2-2b). These methods are worker-internal:
+  // they take no workspace argument because the worker claims work
+  // across workspaces, oldest first, and the claim itself is the
+  // authorization boundary (one running job per workspace,
+  // decision 6).
+
+  // Claim the oldest queued job whose collector_pubmed step is
+  // still pending and whose workspace has no running job. The job
+  // moves to collecting (startedAt set on first claim) and the
+  // step to running, atomically. Returns null when nothing is
+  // claimable. A queued job whose collector_pubmed step already
+  // completed is left for the later waves' executor.
+  claimNextCollectorJob(): Promise<SearchJobRow | null>;
+
+  // Startup recovery: jobs left in a running status by a previous
+  // process are marked failed with error_code worker_restarted,
+  // and their running steps failed. Returns how many jobs were
+  // recovered. Never resumes work silently (design 3.2).
+  markStaleJobsFailed(): Promise<number>;
+
+  // Stage transitions. completeStep/failStep stamp finishedAt and
+  // store the non-secret detail (query counts, per-source
+  // outcomes, skip or failure reasons).
+  completeStep(
+    jobId: string,
+    step: StepKind,
+    detail: Record<string, unknown> | null,
+  ): Promise<void>;
+  failStep(jobId: string, step: StepKind, detail: Record<string, unknown> | null): Promise<void>;
+
+  // Insert collector candidates, deduplicated on the unique
+  // (job_id, external_id) pair so a stage retry never duplicates
+  // a candidate. Returns the stored rows for the given external
+  // ids (newly inserted and pre-existing alike) so the worker can
+  // link evidence to candidate ids.
+  insertCandidates(jobId: string, candidates: NewCandidate[]): Promise<SearchCandidateRow[]>;
+
+  // Append search-trail rows for a job.
+  insertEvidence(jobId: string, evidence: NewEvidence[]): Promise<void>;
+
+  // How many candidates a job already holds (cap enforcement
+  // across stage retries).
+  countCandidates(jobId: string): Promise<number>;
+
+  // Hand a job back to queued after a stage completed: the chain
+  // continues when a later wave's executor claims the next
+  // pending step. startedAt is kept (the job did start).
+  releaseJobToQueued(jobId: string): Promise<SearchJobRow>;
+
+  // Terminal failure: status failed, finishedAt stamped, stable
+  // error code plus a short non-secret detail.
+  failJob(jobId: string, errorCode: string, errorDetail: string): Promise<SearchJobRow>;
 }
 
 // Cursor helpers shared by both implementations so the wire format

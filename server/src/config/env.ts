@@ -81,6 +81,13 @@ export interface ServerConfig {
   setupTokenConfigured: boolean;
   setupTokenLengthOk: boolean;
   maxBodyBytes: number;
+  // Deep Search PubMed identity (F2-2, wave G-F2-2b; design 3.4,
+  // decision 3). The E-utilities tool name defaults to "notegen";
+  // the contact email has no default and the PubMed collector
+  // fails closed without it. Neither value is a credential, but
+  // warnings still name the variable only, never the value.
+  ncbiEutilsTool?: string | undefined;
+  ncbiEutilsEmail?: string | undefined;
 }
 
 export const DEFAULT_PORT = 3001;
@@ -384,6 +391,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     }
   }
 
+  // Deep Search E-utilities identity (decision 3): tool defaults
+  // to "notegen"; the contact email must be configured explicitly.
+  // A malformed email is treated as unset so the collector fails
+  // closed instead of identifying itself wrongly to NCBI.
+  const ncbiEutilsTool = nonEmpty(env.NCBI_EUTILS_TOOL) ?? 'notegen';
+  let ncbiEutilsEmail = nonEmpty(env.NCBI_EUTILS_EMAIL);
+  if (ncbiEutilsEmail !== undefined && !ncbiEutilsEmail.includes('@')) {
+    warnings.push('NCBI_EUTILS_EMAIL is not valid; the Deep Search PubMed collector will fail closed.');
+    ncbiEutilsEmail = undefined;
+  } else if (ncbiEutilsEmail === undefined) {
+    warnings.push('NCBI_EUTILS_EMAIL is not set; the Deep Search PubMed collector will fail closed until it is set.');
+  }
+
   return {
     host,
     port,
@@ -412,5 +432,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     setupTokenConfigured,
     setupTokenLengthOk,
     maxBodyBytes,
+    ncbiEutilsTool,
+    ncbiEutilsEmail,
   };
 }

@@ -49,18 +49,33 @@ export interface CreateDbOptions {
   // Maximum pooled connections. When omitted, the postgres.js default
   // applies.
   max?: number;
+  // Seconds to wait for a new connection before failing. When omitted,
+  // the postgres.js default applies. Background workers set a short
+  // bound so an unreachable database fails fast instead of wedging
+  // the worker loop (F2-2, wave G-F2-2b).
+  connectTimeoutSeconds?: number;
+  // Seconds close() waits for in-flight queries before forcibly
+  // ending the client. When omitted, close waits indefinitely.
+  closeTimeoutSeconds?: number;
 }
 
 export function createDb(databaseUrl: string, options: CreateDbOptions = {}): DbHandle {
   const client = postgres(databaseUrl, {
     ...(options.max !== undefined ? { max: options.max } : {}),
+    ...(options.connectTimeoutSeconds !== undefined
+      ? { connect_timeout: options.connectTimeoutSeconds }
+      : {}),
   });
   const db = drizzle(client, { schema });
   return {
     db,
     client,
     close: async () => {
-      await client.end();
+      await client.end(
+        options.closeTimeoutSeconds !== undefined
+          ? { timeout: options.closeTimeoutSeconds }
+          : undefined,
+      );
     },
   };
 }

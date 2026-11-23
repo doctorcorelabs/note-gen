@@ -5,15 +5,16 @@
 // In-memory implementation of the Deep Search repository, for specs
 // only. It mirrors the Drizzle implementation's observable semantics
 // (queued creation with pending steps, cancel/retry status machine,
-// cursor pagination) without a database. It must never be wired
-// into production.
+// cursor pagination, and since G-F2-2b the executor claim and stage
+// transitions) without a database. It must never be wired into
+// production.
 //
 // The fake owns one workspace per instance; the workspaceId argument
 // is accepted for interface compatibility and checked for equality.
 // Ids and timestamps come from monotonic counters so ordering is
-// deterministic in specs. Candidates and fact candidates are seeded
-// through the test-only helpers below (the executor that produces
-// them lands in later waves).
+// deterministic in specs. Candidates and fact candidates can still
+// be seeded through the test-only helpers below; the executor
+// methods produce them for real in worker specs.
 
 import { ApiError } from '../../plugins/envelope.js';
 import {
@@ -23,6 +24,7 @@ import {
   type SearchFactCandidateRow,
   type SearchJobRow,
   type SearchJobStepRow,
+  type StepKind,
 } from './represent.js';
 import {
   decodeJobCursor,
@@ -30,18 +32,29 @@ import {
   type DeepSearchRepository,
   type ListJobsFilter,
   type ListJobsResult,
+  type NewCandidate,
+  type NewEvidence,
 } from './repository.js';
 import type { CreateJobInput } from './validation.js';
 
+// Stored evidence row shape (the port only writes evidence; the
+// fake keeps rows so specs can assert the search trail).
+export interface FakeEvidenceRow extends NewEvidence {
+  id: string;
+  jobId: string;
+  retrievedAt: number;
+}
+
 export interface FakeDeepSearchRepository extends DeepSearchRepository {
-  // Test-only seeding: executor waves produce these rows for real.
+  // Test-only seeding.
   seedCandidate(row: Omit<SearchCandidateRow, 'id' | 'createdAt'>): SearchCandidateRow;
   seedFactCandidate(
     row: Omit<SearchFactCandidateRow, 'id' | 'createdAt'>,
   ): SearchFactCandidateRow;
-  // Test-only status forcing so specs can reach failed/writing
-  // without an executor.
+  // Test-only status forcing so specs can reach failed/writing.
   forceJobStatus(jobId: string, status: SearchJobRow['status']): void;
+  // Test-only evidence read-back (the port has no evidence read).
+  listEvidence(jobId: string): FakeEvidenceRow[];
 }
 
 function jobNotFound(): ApiError {
@@ -53,6 +66,7 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
   const stepsStore = new Map<string, SearchJobStepRow[]>();
   const candidatesStore: SearchCandidateRow[] = [];
   const factCandidatesStore: SearchFactCandidateRow[] = [];
+  const evidenceStore: FakeEvidenceRow[] = [];
   let idCounter = 0;
   let clock = 1_700_000_000_000;
 
@@ -239,6 +253,155 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
       checkWorkspace(requestedWorkspaceId);
       requireJob(jobId);
       return factCandidatesStore
+        .filter((row) => row.jobId === jobId)
+        .map((row) => ({ ...row }));
+    },
+
+    async claimNextCollectorJob(): Promise<SearchJobRow | null> {
+      const running = [...jobsStore.values()].some(
+        (row) =>
+          row.status === 'collecting' ||
+          row.status === 'assessing' ||
+          row.status === 'complementing' ||
+          row.status === 'writing',
+      );
+      if (running) {
+        return null;
+      }
+      const queued = [...jobsStore.values()]
+        .filter((row) => row.status === 'queued')
+        .sort((a, b) =>
+          a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.id.localeCompare(b.id),
+        );
+      for (const job of queued) {
+        const steps = stepsStore.get(job.id) ?? [];
+        const step = steps.find((row) => row.step === 'collector_pubmed');
+        if (step === undefined || step.status !== 'pending') {
+          continue;
+        }
+        job.status = 'collecting';
+        job.startedAt = job.startedAt ?? now();
+        step.status = 'running';
+        step.startedAt = now();
+        return { ...job };
+      }
+      return null;
+    },
+
+    async markStaleJobsFailed(): Promise<number> {
+      let recovered = 0;
+      for (const job of jobsStore.values()) {
+        if (
+          job.status === 'collecting' ||
+          job.status === 'assessing' ||
+          job.status === 'complementing' ||
+          job.status === 'writing'
+        ) {
+          job.status = 'failed';
+          job.errorCode = 'worker_restarted';
+          job.errorDetail = 'The worker process restarted while this job was running.';
+          job.finishedAt = now();
+          recovered += 1;
+          for (const step of stepsStore.get(job.id) ?? []) {
+            if (step.status === 'running') {
+              step.status = 'failed';
+              step.finishedAt = now();
+            }
+          }
+        }
+      }
+      return recovered;
+    },
+
+    async completeStep(
+      jobId: string,
+      stepKind: StepKind,
+      detail: Record<string, unknown> | null,
+    ): Promise<void> {
+      requireJob(jobId);
+      const step = (stepsStore.get(jobId) ?? []).find((row) => row.step === stepKind);
+      if (step === undefined) {
+        throw jobNotFound();
+      }
+      step.status = 'completed';
+      step.detail = detail;
+      step.finishedAt = now();
+    },
+
+    async failStep(
+      jobId: string,
+      stepKind: StepKind,
+      detail: Record<string, unknown> | null,
+    ): Promise<void> {
+      requireJob(jobId);
+      const step = (stepsStore.get(jobId) ?? []).find((row) => row.step === stepKind);
+      if (step === undefined) {
+        throw jobNotFound();
+      }
+      step.status = 'failed';
+      step.detail = detail;
+      step.finishedAt = now();
+    },
+
+    async insertCandidates(
+      jobId: string,
+      candidates: NewCandidate[],
+    ): Promise<SearchCandidateRow[]> {
+      requireJob(jobId);
+      for (const candidate of candidates) {
+        const exists = candidatesStore.some(
+          (row) => row.jobId === jobId && row.externalId === candidate.externalId,
+        );
+        if (exists) continue;
+        candidatesStore.push({
+          ...candidate,
+          id: nextId(),
+          jobId,
+          disposition: 'pending',
+          rejectReason: null,
+          recordMarkId: null,
+          createdAt: now(),
+        });
+      }
+      const wanted = new Set(candidates.map((candidate) => candidate.externalId));
+      return candidatesStore
+        .filter((row) => row.jobId === jobId && wanted.has(row.externalId))
+        .map((row) => ({ ...row }));
+    },
+
+    async insertEvidence(jobId: string, evidence: NewEvidence[]): Promise<void> {
+      requireJob(jobId);
+      for (const item of evidence) {
+        evidenceStore.push({ ...item, id: nextId(), jobId, retrievedAt: now() });
+      }
+    },
+
+    async countCandidates(jobId: string): Promise<number> {
+      requireJob(jobId);
+      return candidatesStore.filter((row) => row.jobId === jobId).length;
+    },
+
+    async releaseJobToQueued(jobId: string): Promise<SearchJobRow> {
+      const row = requireJob(jobId);
+      row.status = 'queued';
+      return { ...row };
+    },
+
+    async failJob(
+      jobId: string,
+      errorCode: string,
+      errorDetail: string,
+    ): Promise<SearchJobRow> {
+      const row = requireJob(jobId);
+      row.status = 'failed';
+      row.errorCode = errorCode;
+      row.errorDetail = errorDetail;
+      row.finishedAt = now();
+      return { ...row };
+    },
+
+    listEvidence(jobId: string): FakeEvidenceRow[] {
+      return evidenceStore
         .filter((row) => row.jobId === jobId)
         .map((row) => ({ ...row }));
     },

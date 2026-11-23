@@ -3,16 +3,17 @@
 // See LICENSE and FORK.md.
 
 // Drizzle/Postgres implementation of the Deep Search repository
-// (F2-2, wave G-F2-2a). Every method runs in one transaction via
-// db.transaction(). Semantics mirror the fake: queued creation with
-// pending steps, cancel/retry status machine, cursor pagination.
-// The executor stages land in G-F2-2b..e; this implementation only
-// reads and writes job state.
+// (F2-2, waves G-F2-2a and G-F2-2b). Every method runs in one
+// transaction via db.transaction(). Semantics mirror the fake:
+// queued creation with pending steps, cancel/retry status machine,
+// cursor pagination, and since G-F2-2b the executor claim, stage
+// transitions, candidate/evidence inserts, and stale recovery.
 
-import { and, asc, count, desc, eq, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { ApiError } from '../../plugins/envelope.js';
 import {
   searchCandidates,
+  searchEvidence,
   searchFactCandidates,
   searchJobs,
   searchJobSteps,
@@ -40,6 +41,8 @@ import {
   type DeepSearchRepository,
   type ListJobsFilter,
   type ListJobsResult,
+  type NewCandidate,
+  type NewEvidence,
 } from './repository.js';
 import type { CreateJobInput } from './validation.js';
 
@@ -367,6 +370,183 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
           .where(eq(searchFactCandidates.jobId, jobId))
           .orderBy(asc(searchFactCandidates.createdAt), asc(searchFactCandidates.id));
         return rows.map(toFactCandidateRow);
+      });
+    },
+
+    async claimNextCollectorJob(): Promise<SearchJobRow | null> {
+      return db.transaction(async (tx) => {
+        const busyRows = await tx
+          .select({ workspaceId: searchJobs.workspaceId })
+          .from(searchJobs)
+          .where(
+            inArray(searchJobs.status, ['collecting', 'assessing', 'complementing', 'writing']),
+          );
+        const busyWorkspaces = new Set(busyRows.map((row) => row.workspaceId));
+        const queued = await tx
+          .select()
+          .from(searchJobs)
+          .where(eq(searchJobs.status, 'queued'))
+          .orderBy(asc(searchJobs.createdAt), asc(searchJobs.id))
+          .limit(50);
+        for (const job of queued) {
+          if (busyWorkspaces.has(job.workspaceId)) continue;
+          const stepRows = await tx
+            .select()
+            .from(searchJobSteps)
+            .where(
+              and(eq(searchJobSteps.jobId, job.id), eq(searchJobSteps.step, 'collector_pubmed')),
+            )
+            .limit(1);
+          const step = stepRows[0];
+          if (step === undefined || step.status !== 'pending') continue;
+          const updated = await tx
+            .update(searchJobs)
+            .set({ status: 'collecting', startedAt: job.startedAt ?? new Date() })
+            .where(and(eq(searchJobs.id, job.id), eq(searchJobs.status, 'queued')))
+            .returning();
+          if (updated.length === 0) continue;
+          await tx
+            .update(searchJobSteps)
+            .set({ status: 'running', startedAt: new Date() })
+            .where(eq(searchJobSteps.id, step.id));
+          return toJobRow(updated[0] as DbJobRow);
+        }
+        return null;
+      });
+    },
+
+    async markStaleJobsFailed(): Promise<number> {
+      return db.transaction(async (tx) => {
+        const stale = await tx
+          .select({ id: searchJobs.id })
+          .from(searchJobs)
+          .where(
+            inArray(searchJobs.status, ['collecting', 'assessing', 'complementing', 'writing']),
+          );
+        if (stale.length === 0) return 0;
+        const ids = stale.map((row) => row.id);
+        await tx
+          .update(searchJobs)
+          .set({
+            status: 'failed',
+            errorCode: 'worker_restarted',
+            errorDetail: 'The worker process restarted while this job was running.',
+            finishedAt: new Date(),
+          })
+          .where(inArray(searchJobs.id, ids));
+        await tx
+          .update(searchJobSteps)
+          .set({ status: 'failed', finishedAt: new Date() })
+          .where(
+            and(inArray(searchJobSteps.jobId, ids), eq(searchJobSteps.status, 'running')),
+          );
+        return ids.length;
+      });
+    },
+
+    async completeStep(
+      jobId: string,
+      step: StepKind,
+      detail: Record<string, unknown> | null,
+    ): Promise<void> {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(searchJobSteps)
+          .set({ status: 'completed', detail, finishedAt: new Date() })
+          .where(and(eq(searchJobSteps.jobId, jobId), eq(searchJobSteps.step, step)));
+      });
+    },
+
+    async failStep(
+      jobId: string,
+      step: StepKind,
+      detail: Record<string, unknown> | null,
+    ): Promise<void> {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(searchJobSteps)
+          .set({ status: 'failed', detail, finishedAt: new Date() })
+          .where(and(eq(searchJobSteps.jobId, jobId), eq(searchJobSteps.step, step)));
+      });
+    },
+
+    async insertCandidates(
+      jobId: string,
+      candidates: NewCandidate[],
+    ): Promise<SearchCandidateRow[]> {
+      if (candidates.length === 0) return [];
+      return db.transaction(async (tx) => {
+        await tx
+          .insert(searchCandidates)
+          .values(candidates.map((candidate) => ({ jobId, ...candidate })))
+          .onConflictDoNothing({
+            target: [searchCandidates.jobId, searchCandidates.externalId],
+          });
+        const rows = await tx
+          .select()
+          .from(searchCandidates)
+          .where(
+            and(
+              eq(searchCandidates.jobId, jobId),
+              inArray(
+                searchCandidates.externalId,
+                candidates.map((candidate) => candidate.externalId),
+              ),
+            ),
+          )
+          .orderBy(asc(searchCandidates.createdAt), asc(searchCandidates.id));
+        return rows.map(toCandidateRow);
+      });
+    },
+
+    async insertEvidence(jobId: string, evidence: NewEvidence[]): Promise<void> {
+      if (evidence.length === 0) return;
+      await db.transaction(async (tx) => {
+        await tx.insert(searchEvidence).values(evidence.map((item) => ({ jobId, ...item })));
+      });
+    },
+
+    async countCandidates(jobId: string): Promise<number> {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .select({ value: count() })
+          .from(searchCandidates)
+          .where(eq(searchCandidates.jobId, jobId));
+        return rows[0]?.value ?? 0;
+      });
+    },
+
+    async releaseJobToQueued(jobId: string): Promise<SearchJobRow> {
+      return db.transaction(async (tx) => {
+        const updated = await tx
+          .update(searchJobs)
+          .set({ status: 'queued' })
+          .where(eq(searchJobs.id, jobId))
+          .returning();
+        const row = updated[0];
+        if (row === undefined) {
+          throw jobNotFound();
+        }
+        return toJobRow(row);
+      });
+    },
+
+    async failJob(
+      jobId: string,
+      errorCode: string,
+      errorDetail: string,
+    ): Promise<SearchJobRow> {
+      return db.transaction(async (tx) => {
+        const updated = await tx
+          .update(searchJobs)
+          .set({ status: 'failed', errorCode, errorDetail, finishedAt: new Date() })
+          .where(eq(searchJobs.id, jobId))
+          .returning();
+        const row = updated[0];
+        if (row === undefined) {
+          throw jobNotFound();
+        }
+        return toJobRow(row);
       });
     },
   };
