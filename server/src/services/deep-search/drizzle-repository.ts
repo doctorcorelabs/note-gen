@@ -192,6 +192,7 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
       workspaceId: string,
       createdByUserId: string | null,
       input: CreateJobInput,
+      createdByTokenId?: string | null,
     ): Promise<SearchJobRow> {
       return db.transaction(async (tx) => {
         const inserted = await tx
@@ -204,6 +205,7 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
             input: input.input,
             budgetExaUsd: input.budgetExaUsd ?? null,
             createdByUserId,
+            createdByTokenId: createdByTokenId ?? null,
           })
           .returning();
         const row = inserted[0] as DbJobRow;

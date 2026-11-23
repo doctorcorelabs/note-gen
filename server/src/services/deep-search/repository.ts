@@ -133,12 +133,14 @@ export interface ListJobsResult {
 
 export interface DeepSearchRepository {
   // Create a job in queued status with its four stage rows pending.
-  // createdByUserId is the session user (null on the agent path of a
-  // later wave, which passes a token id instead).
+  // createdByUserId is the session user on the cookie path (null on
+  // the agent path, which passes createdByTokenId instead; wave
+  // G-F2-2f). Exactly one of the two is set by the route layer.
   createJob(
     workspaceId: string,
     createdByUserId: string | null,
     input: CreateJobInput,
+    createdByTokenId?: string | null,
   ): Promise<SearchJobRow>;
 
   // A single job. Unknown id answers 404.

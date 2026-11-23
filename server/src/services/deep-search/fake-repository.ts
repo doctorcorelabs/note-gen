@@ -117,6 +117,7 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
       requestedWorkspaceId: string,
       createdByUserId: string | null,
       input: CreateJobInput,
+      createdByTokenId?: string | null,
     ): Promise<SearchJobRow> {
       checkWorkspace(requestedWorkspaceId);
       const row: SearchJobRow = {
@@ -129,7 +130,7 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
         budgetExaUsd: input.budgetExaUsd ?? null,
         costExaUsd: '0',
         createdByUserId,
-        createdByTokenId: null,
+        createdByTokenId: createdByTokenId ?? null,
         createdAt: now(),
         startedAt: null,
         finishedAt: null,

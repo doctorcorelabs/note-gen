@@ -4534,6 +4534,83 @@
         "noMarker": "No marker",
         "score": "Score {score}"
       },
+      "deepSearch": {
+        "title": "Deep Search",
+        "projectKeyLabel": "Project key",
+        "projectKeyPlaceholder": "e.g. deck-hipospadia",
+        "topicLabel": "Topic",
+        "topicPlaceholder": "Search topic, e.g. hypospadias repair",
+        "yearFromLabel": "Year from",
+        "yearToLabel": "Year to",
+        "languageLabel": "Language",
+        "budgetLabel": "Exa budget (USD)",
+        "budgetHint": "Exa budget ceiling per job, at most 0.15 USD. Leave empty to skip Exa.",
+        "maxCandidatesLabel": "Max candidates",
+        "createJob": "Create job",
+        "loadJobs": "Load jobs",
+        "invalidProjectKey": "Enter a project key (1-128 characters).",
+        "invalidInput": "Check the inputs: topic is required, budget at most 0.15 USD, candidates 1-100, year from not after year to.",
+        "jobs": "Jobs",
+        "noJobs": "No jobs for this project yet.",
+        "loading": "Loading...",
+        "loadFailed": "Could not load Deep Search jobs.",
+        "viewJob": "View",
+        "jobDetail": "Job detail",
+        "refresh": "Refresh",
+        "approveWriting": "Approve writing",
+        "cancel": "Cancel job",
+        "retry": "Retry job",
+        "cost": "Exa cost {cost} USD",
+        "budget": "budget {budget} USD",
+        "summary": "{candidates} candidates ({accepted} accepted), {facts} facts ({mapped} mapped, {unmapped} unmapped)",
+        "candidates": "Candidates",
+        "noCandidates": "No candidates collected yet.",
+        "untitledCandidate": "Untitled candidate",
+        "facts": "Fact candidates",
+        "noFacts": "No fact candidates yet.",
+        "score": "Score {score}",
+        "notScored": "Not scored yet",
+        "noMarker": "No marker",
+        "status": {
+          "queued": "Queued",
+          "collecting": "Collecting",
+          "assessing": "Assessing",
+          "complementing": "Complementing",
+          "writing": "Writing",
+          "completed": "Completed",
+          "failed": "Failed",
+          "cancelled": "Cancelled"
+        },
+        "step": {
+          "collector_pubmed": "Collector (PubMed)",
+          "collector_exa": "Collector (Exa)",
+          "assessor": "Assessor",
+          "complement": "Complement"
+        },
+        "stepStatus": {
+          "pending": "Pending",
+          "running": "Running",
+          "completed": "Completed",
+          "skipped": "Skipped",
+          "failed": "Failed"
+        },
+        "sourceKind": {
+          "pubmed": "PubMed",
+          "europepmc": "Europe PMC",
+          "exa": "Exa"
+        },
+        "disposition": {
+          "pending": "Pending",
+          "accepted": "Accepted",
+          "duplicate": "Duplicate",
+          "rejected": "Rejected"
+        },
+        "factStatus": {
+          "pending": "Pending",
+          "mapped": "Mapped",
+          "unmapped": "Unmapped"
+        }
+      },
       "type": {
         "scan": "截图",
         "image": "插图",

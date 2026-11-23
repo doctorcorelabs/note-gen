@@ -60,7 +60,10 @@ export const API_EXPORT_LIMIT_PER_10_MINUTES = 5;
 // sections 11.3 and 11.5). Expiry is mandatory: 90 days by
 // default, 365 days at most. The scope vocabulary is final
 // and non-hierarchical; there is no delete, secret, account,
-// token-management, session, or audit scope.
+// token-management, session, or audit scope. The F2-2 decision 4
+// addition deepsearch.write (wave G-F2-2f) is a separate
+// non-hierarchical scope: it grants creating Deep Search jobs
+// only and implies no read scope.
 export const AGENT_TOKEN_DEFAULT_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 export const AGENT_TOKEN_MAX_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 export const AGENT_TOKEN_NAME_MAX_LENGTH = 128;
@@ -74,6 +77,7 @@ export const AGENT_TOKEN_SCOPES = [
   'files.read',
   'files.write',
   'search.read',
+  'deepsearch.write',
 ] as const;
 
 export type AgentTokenScope = (typeof AGENT_TOKEN_SCOPES)[number];
