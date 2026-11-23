@@ -32,10 +32,12 @@ import {
   decodeJobCursor,
   encodeJobCursor,
   type DeepSearchRepository,
+  type FactScoreUpdate,
   type ListJobsFilter,
   type ListJobsResult,
   type NewCandidate,
   type NewEvidence,
+  type NewFactCandidate,
 } from './repository.js';
 import type { CreateJobInput } from './validation.js';
 
@@ -374,7 +376,13 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
     async insertEvidence(jobId: string, evidence: NewEvidence[]): Promise<void> {
       requireJob(jobId);
       for (const item of evidence) {
-        evidenceStore.push({ ...item, id: nextId(), jobId, retrievedAt: now() });
+        evidenceStore.push({
+          ...item,
+          factCandidateId: item.factCandidateId ?? null,
+          id: nextId(),
+          jobId,
+          retrievedAt: now(),
+        });
       }
     },
 
@@ -458,6 +466,126 @@ export function createFakeDeepSearchRepository(workspaceId: string): FakeDeepSea
       const row = requireJob(jobId);
       row.costExaUsd = formatUsdUnits(parseUsdToUnits(row.costExaUsd) + parseUsdToUnits(costUsd));
       return { ...row };
+    },
+
+    async claimNextAssessorJob(): Promise<SearchJobRow | null> {
+      const running = [...jobsStore.values()].some(
+        (row) =>
+          row.status === 'collecting' ||
+          row.status === 'assessing' ||
+          row.status === 'complementing' ||
+          row.status === 'writing',
+      );
+      if (running) {
+        return null;
+      }
+      const queued = [...jobsStore.values()]
+        .filter((row) => row.status === 'queued')
+        .sort((a, b) =>
+          a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.id.localeCompare(b.id),
+        );
+      for (const job of queued) {
+        const steps = stepsStore.get(job.id) ?? [];
+        const pubmedStep = steps.find((row) => row.step === 'collector_pubmed');
+        const exaStep = steps.find((row) => row.step === 'collector_exa');
+        const assessorStep = steps.find((row) => row.step === 'assessor');
+        const exaResolved =
+          exaStep !== undefined &&
+          (exaStep.status === 'completed' ||
+            exaStep.status === 'skipped' ||
+            exaStep.status === 'failed');
+        if (
+          pubmedStep === undefined ||
+          pubmedStep.status !== 'completed' ||
+          !exaResolved ||
+          assessorStep === undefined ||
+          assessorStep.status !== 'pending'
+        ) {
+          continue;
+        }
+        job.status = 'assessing';
+        job.startedAt = job.startedAt ?? now();
+        assessorStep.status = 'running';
+        assessorStep.startedAt = now();
+        return { ...job };
+      }
+      return null;
+    },
+
+    async claimNextComplementJob(): Promise<SearchJobRow | null> {
+      const running = [...jobsStore.values()].some(
+        (row) =>
+          row.status === 'collecting' ||
+          row.status === 'assessing' ||
+          row.status === 'complementing' ||
+          row.status === 'writing',
+      );
+      if (running) {
+        return null;
+      }
+      const queued = [...jobsStore.values()]
+        .filter((row) => row.status === 'queued')
+        .sort((a, b) =>
+          a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.id.localeCompare(b.id),
+        );
+      for (const job of queued) {
+        const steps = stepsStore.get(job.id) ?? [];
+        const assessorStep = steps.find((row) => row.step === 'assessor');
+        const complementStep = steps.find((row) => row.step === 'complement');
+        if (
+          assessorStep === undefined ||
+          assessorStep.status !== 'completed' ||
+          complementStep === undefined ||
+          complementStep.status !== 'pending'
+        ) {
+          continue;
+        }
+        job.status = 'complementing';
+        job.startedAt = job.startedAt ?? now();
+        complementStep.status = 'running';
+        complementStep.startedAt = now();
+        return { ...job };
+      }
+      return null;
+    },
+
+    async insertFactCandidates(
+      jobId: string,
+      facts: NewFactCandidate[],
+    ): Promise<SearchFactCandidateRow[]> {
+      requireJob(jobId);
+      const inserted: SearchFactCandidateRow[] = [];
+      for (const fact of facts) {
+        const row: SearchFactCandidateRow = {
+          id: nextId(),
+          jobId,
+          text: fact.text,
+          score: fact.score,
+          status: fact.status,
+          factId: null,
+          assessorNote: fact.assessorNote,
+          createdAt: now(),
+        };
+        factCandidatesStore.push(row);
+        inserted.push({ ...row });
+      }
+      return inserted;
+    },
+
+    async updateFactCandidateScores(
+      jobId: string,
+      updates: FactScoreUpdate[],
+    ): Promise<void> {
+      requireJob(jobId);
+      for (const update of updates) {
+        const row = factCandidatesStore.find(
+          (candidate) => candidate.jobId === jobId && candidate.id === update.id,
+        );
+        if (row === undefined) continue;
+        row.score = update.score;
+        row.status = update.status;
+        row.assessorNote = update.assessorNote;
+      }
     },
 
     listEvidence(jobId: string): FakeEvidenceRow[] {

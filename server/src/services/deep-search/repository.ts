@@ -14,8 +14,9 @@
 // stale-job recovery. G-F2-2c adds the Collector Exa claim, the
 // explicit stage skip (a stage that must not run is recorded
 // skipped with its reason, never silently pending), and recorded
-// Exa cost accumulation. Later waves (Assessor, Complement,
-// Writer) extend the same port.
+// Exa cost accumulation. G-F2-2d adds the Assessor and Complement
+// claims plus fact candidate inserts and score updates. Later
+// waves (Writer) extend the same port.
 //
 // Status rules (binding):
 // - cancel: allowed before writing (queued, collecting, assessing,
@@ -28,6 +29,7 @@
 // - There is no delete: a job is the search audit trail (decision 9).
 
 import type {
+  FactCandidateStatus,
   JobStatus,
   JobSummary,
   SearchCandidateRow,
@@ -63,10 +65,32 @@ export interface NewCandidate {
 
 export interface NewEvidence {
   candidateId: string | null;
+  // Fact candidate this trail row supports (G-F2-2d Assessor and
+  // Complement evidence). Collector rows leave it unset; the
+  // repositories store null for unset.
+  factCandidateId?: string | null;
   queryText: string;
   sourceKind: SourceKind;
   httpStatus: number | null;
   note: string | null;
+}
+
+// Executor-facing fact shapes (G-F2-2d). A NewFactCandidate is
+// one Assessor output before it has a row id; factId stays null
+// until the writing stage of a later wave. A FactScoreUpdate
+// re-scores one stored fact candidate after Complement.
+export interface NewFactCandidate {
+  text: string;
+  score: number;
+  status: FactCandidateStatus;
+  assessorNote: string | null;
+}
+
+export interface FactScoreUpdate {
+  id: string;
+  score: number;
+  status: FactCandidateStatus;
+  assessorNote: string | null;
 }
 
 export interface ListJobsFilter {
@@ -190,6 +214,37 @@ export interface DeepSearchRepository {
   // job's cost_exa_usd. Integer-unit arithmetic; the ceiling was
   // enforced by the collector before spending.
   addJobCost(jobId: string, costUsd: string): Promise<SearchJobRow>;
+
+  // Executor surface (G-F2-2d). Claim the oldest queued job whose
+  // collector_pubmed step completed, whose collector_exa step is
+  // resolved (completed, skipped, or failed), and whose assessor
+  // step is still pending, with no running job in its workspace.
+  // The job moves to assessing and the step to running,
+  // atomically. Returns null when nothing is claimable.
+  claimNextAssessorJob(): Promise<SearchJobRow | null>;
+
+  // Claim the oldest queued job whose assessor step completed
+  // and whose complement step is still pending, with no running
+  // job in its workspace. The job moves to complementing and the
+  // step to running, atomically. Returns null when nothing is
+  // claimable. Whether Complement actually collects is decided
+  // by the worker from the stored fact scores, not by the claim,
+  // so a job that must not collect still gets its step resolved
+  // as skipped.
+  claimNextComplementJob(): Promise<SearchJobRow | null>;
+
+  // Insert Assessor fact candidates for a job. Returns the
+  // stored rows in insertion order so the worker can link
+  // evidence to fact candidate ids.
+  insertFactCandidates(
+    jobId: string,
+    facts: NewFactCandidate[],
+  ): Promise<SearchFactCandidateRow[]>;
+
+  // Re-score stored fact candidates after Complement. Only the
+  // listed rows change; unknown ids are ignored so a partial
+  // update never fails the stage.
+  updateFactCandidateScores(jobId: string, updates: FactScoreUpdate[]): Promise<void>;
 }
 
 // Cursor helpers shared by both implementations so the wire format

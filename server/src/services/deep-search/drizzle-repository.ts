@@ -41,10 +41,12 @@ import {
   decodeJobCursor,
   encodeJobCursor,
   type DeepSearchRepository,
+  type FactScoreUpdate,
   type ListJobsFilter,
   type ListJobsResult,
   type NewCandidate,
   type NewEvidence,
+  type NewFactCandidate,
 } from './repository.js';
 import type { CreateJobInput } from './validation.js';
 
@@ -504,7 +506,17 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
     async insertEvidence(jobId: string, evidence: NewEvidence[]): Promise<void> {
       if (evidence.length === 0) return;
       await db.transaction(async (tx) => {
-        await tx.insert(searchEvidence).values(evidence.map((item) => ({ jobId, ...item })));
+        await tx.insert(searchEvidence).values(
+          evidence.map((item) => ({
+            jobId,
+            candidateId: item.candidateId,
+            factCandidateId: item.factCandidateId ?? null,
+            queryText: item.queryText,
+            sourceKind: item.sourceKind,
+            httpStatus: item.httpStatus,
+            note: item.note,
+          })),
+        );
       });
     },
 
@@ -641,6 +653,163 @@ export function createDrizzleDeepSearchRepository(db: Database): DeepSearchRepos
           throw jobNotFound();
         }
         return toJobRow(row);
+      });
+    },
+
+    async claimNextAssessorJob(): Promise<SearchJobRow | null> {
+      return db.transaction(async (tx) => {
+        const busyRows = await tx
+          .select({ workspaceId: searchJobs.workspaceId })
+          .from(searchJobs)
+          .where(
+            inArray(searchJobs.status, ['collecting', 'assessing', 'complementing', 'writing']),
+          );
+        const busyWorkspaces = new Set(busyRows.map((row) => row.workspaceId));
+        const queued = await tx
+          .select()
+          .from(searchJobs)
+          .where(eq(searchJobs.status, 'queued'))
+          .orderBy(asc(searchJobs.createdAt), asc(searchJobs.id))
+          .limit(50);
+        for (const job of queued) {
+          if (busyWorkspaces.has(job.workspaceId)) continue;
+          const stepRows = await tx
+            .select()
+            .from(searchJobSteps)
+            .where(
+              and(
+                eq(searchJobSteps.jobId, job.id),
+                inArray(searchJobSteps.step, ['collector_pubmed', 'collector_exa', 'assessor']),
+              ),
+            );
+          const pubmedStep = stepRows.find((row) => row.step === 'collector_pubmed');
+          const exaStep = stepRows.find((row) => row.step === 'collector_exa');
+          const assessorStep = stepRows.find((row) => row.step === 'assessor');
+          const exaResolved =
+            exaStep !== undefined &&
+            (exaStep.status === 'completed' ||
+              exaStep.status === 'skipped' ||
+              exaStep.status === 'failed');
+          if (
+            pubmedStep === undefined ||
+            pubmedStep.status !== 'completed' ||
+            !exaResolved ||
+            assessorStep === undefined ||
+            assessorStep.status !== 'pending'
+          ) {
+            continue;
+          }
+          const updated = await tx
+            .update(searchJobs)
+            .set({ status: 'assessing', startedAt: job.startedAt ?? new Date() })
+            .where(and(eq(searchJobs.id, job.id), eq(searchJobs.status, 'queued')))
+            .returning();
+          if (updated.length === 0) continue;
+          await tx
+            .update(searchJobSteps)
+            .set({ status: 'running', startedAt: new Date() })
+            .where(eq(searchJobSteps.id, assessorStep.id));
+          return toJobRow(updated[0] as DbJobRow);
+        }
+        return null;
+      });
+    },
+
+    async claimNextComplementJob(): Promise<SearchJobRow | null> {
+      return db.transaction(async (tx) => {
+        const busyRows = await tx
+          .select({ workspaceId: searchJobs.workspaceId })
+          .from(searchJobs)
+          .where(
+            inArray(searchJobs.status, ['collecting', 'assessing', 'complementing', 'writing']),
+          );
+        const busyWorkspaces = new Set(busyRows.map((row) => row.workspaceId));
+        const queued = await tx
+          .select()
+          .from(searchJobs)
+          .where(eq(searchJobs.status, 'queued'))
+          .orderBy(asc(searchJobs.createdAt), asc(searchJobs.id))
+          .limit(50);
+        for (const job of queued) {
+          if (busyWorkspaces.has(job.workspaceId)) continue;
+          const stepRows = await tx
+            .select()
+            .from(searchJobSteps)
+            .where(
+              and(
+                eq(searchJobSteps.jobId, job.id),
+                inArray(searchJobSteps.step, ['assessor', 'complement']),
+              ),
+            );
+          const assessorStep = stepRows.find((row) => row.step === 'assessor');
+          const complementStep = stepRows.find((row) => row.step === 'complement');
+          if (
+            assessorStep === undefined ||
+            assessorStep.status !== 'completed' ||
+            complementStep === undefined ||
+            complementStep.status !== 'pending'
+          ) {
+            continue;
+          }
+          const updated = await tx
+            .update(searchJobs)
+            .set({ status: 'complementing', startedAt: job.startedAt ?? new Date() })
+            .where(and(eq(searchJobs.id, job.id), eq(searchJobs.status, 'queued')))
+            .returning();
+          if (updated.length === 0) continue;
+          await tx
+            .update(searchJobSteps)
+            .set({ status: 'running', startedAt: new Date() })
+            .where(eq(searchJobSteps.id, complementStep.id));
+          return toJobRow(updated[0] as DbJobRow);
+        }
+        return null;
+      });
+    },
+
+    async insertFactCandidates(
+      jobId: string,
+      facts: NewFactCandidate[],
+    ): Promise<SearchFactCandidateRow[]> {
+      if (facts.length === 0) return [];
+      return db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(searchFactCandidates)
+          .values(
+            facts.map((fact) => ({
+              jobId,
+              factText: fact.text,
+              score: fact.score,
+              status: fact.status,
+              assessorNote: fact.assessorNote,
+            })),
+          )
+          .returning();
+        return inserted.map(toFactCandidateRow);
+      });
+    },
+
+    async updateFactCandidateScores(
+      jobId: string,
+      updates: FactScoreUpdate[],
+    ): Promise<void> {
+      if (updates.length === 0) return;
+      await db.transaction(async (tx) => {
+        for (const update of updates) {
+          await tx
+            .update(searchFactCandidates)
+            .set({
+              score: update.score,
+              status: update.status,
+              assessorNote: update.assessorNote,
+            })
+            .where(
+              and(
+                eq(searchFactCandidates.jobId, jobId),
+                eq(searchFactCandidates.id, update.id),
+              ),
+            );
+        }
       });
     },
   };

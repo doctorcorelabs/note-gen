@@ -2,8 +2,8 @@
 // This file is part of the NoteGen web fork, licensed under the GNU General Public License v3.
 // See LICENSE and FORK.md.
 
-// Deep Search worker (F2-2, waves G-F2-2b and G-F2-2c): the
-// executor.
+// Deep Search worker (F2-2, waves G-F2-2b, G-F2-2c, and
+// G-F2-2d): the executor.
 //
 // One background worker in the api process (design 3.2). It claims
 // the oldest queued job whose next collector step is pending,
@@ -16,7 +16,11 @@
 //
 // G-F2-2b runs the PubMed collector stage. G-F2-2c adds the Exa
 // collector stage, claimed only after the PubMed step completed
-// and only when an Exa collector is wired in. Exa stage outcomes:
+// and only when an Exa collector is wired in. G-F2-2d adds the
+// Assessor stage (pure scoring over stored candidates) and the
+// conditional Complement stage (re-collection plus re-scoring
+// only when the stored fact scores fall below the job
+// thresholds). Exa stage outcomes:
 // - No approved budget on the job (decision 1) or no API key on
 //   the server (decision 2): the step is recorded skipped with
 //   its reason and the job returns to queued. The stage being
@@ -41,8 +45,15 @@
 // runWorkerOnce is exported for specs: it claims and runs at most
 // one job without timers.
 
-import type { SearchJobRow } from './represent.js';
-import type { DeepSearchRepository, NewEvidence } from './repository.js';
+import { parseUsdToUnits, type SearchJobRow } from './represent.js';
+import type {
+  DeepSearchRepository,
+  FactScoreUpdate,
+  NewEvidence,
+  NewFactCandidate,
+} from './repository.js';
+import { assessCandidates, averageScoreOf, type AssessedFact } from './assessor.js';
+import { evaluateComplementTrigger } from './complement.js';
 import {
   CollectorError,
   type CollectorResult,
@@ -116,9 +127,11 @@ function sourceDetail(result: CollectorResult): Record<string, unknown> {
 }
 
 // Claim and run at most one job. Returns true when a job ran
-// (successfully or not), false when nothing was claimable. The
-// PubMed stage is claimed first (binding chain order); the Exa
-// stage runs only when no PubMed job is claimable.
+// (successfully or not), false when nothing was claimable. Stages
+// are claimed in binding chain order: PubMed, Exa, Assessor,
+// Complement. The Exa stage runs only when an Exa collector is
+// wired in; Assessor and Complement run regardless because their
+// claims already require the earlier steps to be resolved.
 export async function runWorkerOnce(options: DeepSearchWorkerOptions): Promise<boolean> {
   const { repository, collector } = options;
   const stageTimeoutMs = options.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
@@ -133,6 +146,22 @@ export async function runWorkerOnce(options: DeepSearchWorkerOptions): Promise<b
       await runExaStage(repository, options.exaCollector, exaJob, stageTimeoutMs);
       return true;
     }
+  }
+  const assessorJob = await repository.claimNextAssessorJob();
+  if (assessorJob !== null) {
+    await runAssessorStage(repository, assessorJob);
+    return true;
+  }
+  const complementJob = await repository.claimNextComplementJob();
+  if (complementJob !== null) {
+    await runComplementStage(
+      repository,
+      collector,
+      options.exaCollector,
+      complementJob,
+      stageTimeoutMs,
+    );
+    return true;
   }
   return false;
 }
@@ -295,6 +324,263 @@ async function runExaStage(
       // The repository itself is unreachable; the job stays in
       // collecting and startup recovery will mark it failed with
       // worker_restarted. Nothing else can be recorded honestly.
+    }
+  }
+}
+
+function factEvidence(
+  job: SearchJobRow,
+  assessed: AssessedFact[],
+  storedFactIds: string[],
+): NewEvidence[] {
+  const evidence: NewEvidence[] = [];
+  for (let index = 0; index < assessed.length; index += 1) {
+    const fact = assessed[index] as AssessedFact;
+    evidence.push({
+      candidateId: fact.candidateId,
+      factCandidateId: storedFactIds[index] ?? null,
+      queryText: job.topic,
+      sourceKind: fact.sourceKind,
+      httpStatus: null,
+      note: `assessor score=${fact.score} status=${fact.status}`,
+    });
+  }
+  return evidence;
+}
+
+async function runAssessorStage(
+  repository: DeepSearchRepository,
+  job: SearchJobRow,
+): Promise<void> {
+  try {
+    const candidates = await repository.listCandidates(job.workspaceId, job.id);
+    const assessed = assessCandidates(candidates);
+    const facts: NewFactCandidate[] = assessed.map((fact) => ({
+      text: fact.text,
+      score: fact.score,
+      status: fact.status,
+      assessorNote: fact.assessorNote,
+    }));
+    const stored = await repository.insertFactCandidates(job.id, facts);
+    await repository.insertEvidence(
+      job.id,
+      factEvidence(
+        job,
+        assessed,
+        stored.map((row) => row.id),
+      ),
+    );
+    const mapped = assessed.filter((fact) => fact.status === 'mapped').length;
+    const unmapped = assessed.length - mapped;
+    await repository.completeStep(job.id, 'assessor', {
+      facts: assessed.length,
+      mapped,
+      unmapped,
+      averageScore: averageScoreOf(assessed.map((fact) => fact.score)),
+    });
+    await repository.releaseJobToQueued(job.id);
+  } catch (error) {
+    const code = error instanceof CollectorError ? error.code : 'assessor_error';
+    try {
+      await repository.failStep(job.id, 'assessor', { errorCode: code });
+      await repository.failJob(
+        job.id,
+        code,
+        'The Assessor stage failed unexpectedly.',
+      );
+    } catch {
+      // The repository itself is unreachable; the job stays in
+      // assessing and startup recovery will mark it failed with
+      // worker_restarted. Nothing else can be recorded honestly.
+    }
+  }
+}
+
+async function runComplementStage(
+  repository: DeepSearchRepository,
+  collector: PubmedCollector,
+  exaCollector: ExaCollector | undefined,
+  job: SearchJobRow,
+  stageTimeoutMs: number,
+): Promise<void> {
+  try {
+    const thresholds = {
+      complementThresholdFact: job.input.complementThresholdFact,
+      complementThresholdAverage: job.input.complementThresholdAverage,
+    };
+    const storedFacts = await repository.listFactCandidates(job.workspaceId, job.id);
+    const trigger = evaluateComplementTrigger(storedFacts, thresholds);
+    if (!trigger.triggered) {
+      await repository.skipStep(job.id, 'complement', {
+        skipped: 'complement_not_triggered',
+        minScore: trigger.minScore,
+        averageScore: trigger.averageScore,
+        thresholds,
+      });
+      await repository.releaseJobToQueued(job.id);
+      return;
+    }
+
+    const triggerDetail: Record<string, unknown> = {
+      triggered: true,
+      reason: trigger.reason,
+      minScore: trigger.minScore,
+      averageScore: trigger.averageScore,
+      thresholds,
+    };
+    const candidatesBefore = await repository.countCandidates(job.id);
+    let pubmedDetail: Record<string, unknown> | null = null;
+    let exaDetailRecord: Record<string, unknown> | null = null;
+    let exaSkipped: string | null = null;
+
+    const limitAfterPubmed = Math.max(0, job.input.maxCandidates - candidatesBefore);
+    if (limitAfterPubmed > 0) {
+      const result = await withTimeout(collector.collect(job, limitAfterPubmed), stageTimeoutMs);
+      const stored = await repository.insertCandidates(job.id, result.candidates);
+      const idByExternalId = new Map(stored.map((row) => [row.externalId, row.id]));
+      const evidence: NewEvidence[] = [...result.queryEvidence];
+      for (const item of result.candidateEvidence) {
+        evidence.push({
+          candidateId: idByExternalId.get(item.externalId) ?? null,
+          queryText: item.queryText,
+          sourceKind: item.sourceKind,
+          httpStatus: item.httpStatus,
+          note: item.note,
+        });
+      }
+      await repository.insertEvidence(job.id, evidence);
+      pubmedDetail = sourceDetail(result);
+      if (!result.sources.pubmed.ok) {
+        // Decision 7 partial: the initial PubMed stage already
+        // completed (the Assessor claim required it), so a PubMed
+        // failure inside Complement fails only this step. The job
+        // returns to queued and is never failed from Complement.
+        await repository.failStep(job.id, 'complement', {
+          ...triggerDetail,
+          pubmed: pubmedDetail,
+        });
+        await repository.releaseJobToQueued(job.id);
+        return;
+      }
+    } else {
+      pubmedDetail = { skipped: 'candidate_cap_reached', candidates: candidatesBefore };
+    }
+
+    const candidatesAfterPubmed = await repository.countCandidates(job.id);
+    const exaLimit = Math.max(0, job.input.maxCandidates - candidatesAfterPubmed);
+    if (exaCollector === undefined) {
+      exaSkipped = 'exa_not_wired';
+    } else if (job.budgetExaUsd === null) {
+      exaSkipped = 'no_exa_budget';
+    } else if (exaLimit === 0) {
+      exaSkipped = 'candidate_cap_reached';
+    } else {
+      const remainingUnits =
+        parseUsdToUnits(job.budgetExaUsd) - parseUsdToUnits(job.costExaUsd);
+      if (remainingUnits <= 0) {
+        exaSkipped = 'exa_budget_exhausted';
+      } else {
+        try {
+          const exaResult = await withTimeout(
+            exaCollector.collect(job, exaLimit),
+            stageTimeoutMs,
+          );
+          const storedExa = await repository.insertCandidates(job.id, exaResult.candidates);
+          const exaIdByExternalId = new Map(
+            storedExa.map((row) => [row.externalId, row.id]),
+          );
+          const exaEvidence: NewEvidence[] = [...exaResult.queryEvidence];
+          for (const item of exaResult.candidateEvidence) {
+            exaEvidence.push({
+              candidateId: exaIdByExternalId.get(item.externalId) ?? null,
+              queryText: item.queryText,
+              sourceKind: item.sourceKind,
+              httpStatus: item.httpStatus,
+              note: item.note,
+            });
+          }
+          await repository.insertEvidence(job.id, exaEvidence);
+          if (exaResult.costUsd !== '0.0000') {
+            await repository.addJobCost(job.id, exaResult.costUsd);
+          }
+          exaDetailRecord = exaDetail(exaResult);
+        } catch (error) {
+          const code = error instanceof CollectorError ? error.code : 'collector_error';
+          if (code === 'exa_key_missing' || code === 'exa_budget_missing') {
+            exaSkipped = code;
+          } else {
+            exaDetailRecord = { errorCode: code };
+          }
+        }
+      }
+    }
+
+    const allCandidates = await repository.listCandidates(job.workspaceId, job.id);
+    const reassessed = assessCandidates(allCandidates);
+    const factsByText = new Map<string, string[]>();
+    for (const fact of storedFacts) {
+      const queue = factsByText.get(fact.text) ?? [];
+      queue.push(fact.id);
+      factsByText.set(fact.text, queue);
+    }
+    const updates: FactScoreUpdate[] = [];
+    const newAssessed: AssessedFact[] = [];
+    for (const fact of reassessed) {
+      const queue = factsByText.get(fact.text);
+      const existingId = queue !== undefined && queue.length > 0 ? queue.shift() : undefined;
+      if (existingId !== undefined) {
+        updates.push({
+          id: existingId,
+          score: fact.score,
+          status: fact.status,
+          assessorNote: fact.assessorNote,
+        });
+      } else {
+        newAssessed.push(fact);
+      }
+    }
+    await repository.updateFactCandidateScores(job.id, updates);
+    const insertedFacts = await repository.insertFactCandidates(
+      job.id,
+      newAssessed.map((fact) => ({
+        text: fact.text,
+        score: fact.score,
+        status: fact.status,
+        assessorNote: fact.assessorNote,
+      })),
+    );
+    await repository.insertEvidence(
+      job.id,
+      factEvidence(
+        job,
+        newAssessed,
+        insertedFacts.map((row) => row.id),
+      ),
+    );
+    const candidatesAfter = await repository.countCandidates(job.id);
+    await repository.completeStep(job.id, 'complement', {
+      ...triggerDetail,
+      candidatesBefore,
+      candidatesAfter,
+      factsBefore: storedFacts.length,
+      factsAfter: storedFacts.length + insertedFacts.length,
+      updated: updates.length,
+      inserted: insertedFacts.length,
+      averageScoreAfter: averageScoreOf(reassessed.map((fact) => fact.score)),
+      pubmed: pubmedDetail,
+      exa: exaDetailRecord,
+      exaSkipped,
+    });
+    await repository.releaseJobToQueued(job.id);
+  } catch (error) {
+    const code = error instanceof CollectorError ? error.code : 'complement_error';
+    try {
+      await repository.failStep(job.id, 'complement', { errorCode: code });
+      await repository.releaseJobToQueued(job.id);
+    } catch {
+      // The repository itself is unreachable; the job stays in
+      // complementing and startup recovery will mark it failed
+      // with worker_restarted. Nothing else can be recorded.
     }
   }
 }

@@ -336,13 +336,18 @@ describe('deep search worker exa stage (fake repository)', () => {
     const evidence = repo.listEvidence(job.id);
     expect(evidence.filter((e) => e.sourceKind === 'exa')).toHaveLength(2);
 
-    // Both collector stages are done: nothing left to claim here.
+    // Both collector stages are done: the Assessor stage is next
+    // in the chain (G-F2-2d). The default fixture candidate has
+    // no snippet, so the Assessor derives no facts but still
+    // completes its step.
     const ranAgain = await runWorkerOnce({
       repository: repo,
       collector: stubCollector(okResult()),
       exaCollector: stubExaCollector(okExaResult()),
     });
-    expect(ranAgain).toBe(false);
+    expect(ranAgain).toBe(true);
+    const stepsAfter = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    expect(stepsAfter.find((s) => s.step === 'assessor')?.status).toBe('completed');
   });
 
   it('skips the exa stage with a recorded reason when the job has no budget', async () => {
@@ -424,5 +429,230 @@ describe('deep search worker exa stage (fake repository)', () => {
       parseCreateJobBody({ projectKey: 'deck-x', topic: 'hypospadias', budgetExaUsd: 0.15 }),
     );
     expect(await repo.claimNextExaJob()).toBeNull();
+  });
+});
+
+function strongResult(): CollectorResult {
+  return okResult({
+    candidates: [
+      {
+        sourceKind: 'pubmed',
+        externalId: 'pmid:40118740',
+        title: 'Guidelines on Paediatric Urology Part II',
+        authors: 'Skott M',
+        journal: 'European Urology',
+        year: 2025,
+        doi: '10.1016/j.eururo.2025.02.022',
+        pmid: '40118740',
+        pmcid: null,
+        url: 'https://pubmed.ncbi.nlm.nih.gov/40118740/',
+        oaFlag: true,
+        snippet: 'A short abstract snippet.',
+      },
+    ],
+  });
+}
+
+function sequenceCollector(results: CollectorResult[]): PubmedCollector {
+  let calls = 0;
+  return {
+    collect: async () => {
+      const result = results[Math.min(calls, results.length - 1)] as CollectorResult;
+      calls += 1;
+      return result;
+    },
+  };
+}
+
+// Drive one job through PubMed plus the Exa skip (no budget) so
+// its Assessor step becomes claimable.
+async function setupJobPastCollectors(
+  repo: FakeDeepSearchRepository,
+  collector: PubmedCollector,
+): Promise<SearchJobRow> {
+  const job = await repo.createJob(
+    WORKSPACE_ID,
+    USER_ID,
+    parseCreateJobBody({ projectKey: 'deck-x', topic: 'hypospadias' }),
+  );
+  await runWorkerOnce({ repository: repo, collector });
+  await runWorkerOnce({
+    repository: repo,
+    collector,
+    exaCollector: stubExaCollector(okExaResult()),
+  });
+  return job;
+}
+
+describe('deep search worker assessor and complement stages (fake repository)', () => {
+  it('runs the assessor stage and stores fact candidates with evidence', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastCollectors(repo, stubCollector(strongResult()));
+
+    const ran = await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(strongResult()),
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+    expect(ran).toBe(true);
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    const assessorStep = steps.find((s) => s.step === 'assessor');
+    expect(assessorStep?.status).toBe('completed');
+    expect(assessorStep?.detail).toMatchObject({
+      facts: 1,
+      mapped: 1,
+      unmapped: 0,
+      averageScore: 85,
+    });
+
+    const facts = await repo.listFactCandidates(WORKSPACE_ID, job.id);
+    expect(facts).toHaveLength(1);
+    expect(facts[0]?.score).toBe(85);
+    expect(facts[0]?.status).toBe('mapped');
+    expect(facts[0]?.factId).toBeNull();
+
+    const candidates = await repo.listCandidates(WORKSPACE_ID, job.id);
+    const evidence = repo.listEvidence(job.id);
+    const factEvidence = evidence.find((e) => e.factCandidateId !== null);
+    expect(factEvidence?.factCandidateId).toBe(facts[0]?.id);
+    expect(factEvidence?.candidateId).toBe(candidates[0]?.id);
+  });
+
+  it('records the complement step skipped when scores clear the thresholds', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastCollectors(repo, stubCollector(strongResult()));
+    await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(strongResult()),
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+
+    const ran = await runWorkerOnce({
+      repository: repo,
+      collector: stubCollector(strongResult()),
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+    expect(ran).toBe(true);
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    const complementStep = steps.find((s) => s.step === 'complement');
+    expect(complementStep?.status).toBe('skipped');
+    expect(complementStep?.detail).toMatchObject({
+      skipped: 'complement_not_triggered',
+      minScore: 85,
+      averageScore: 85,
+    });
+    // No second collection happened.
+    expect(await repo.listCandidates(WORKSPACE_ID, job.id)).toHaveLength(1);
+  });
+
+  it('re-collects on complement trigger and raises the corroborated score', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const initial = okResult({
+      candidates: [
+        {
+          sourceKind: 'europepmc',
+          externalId: 'epmc:1',
+          title: 'Shared article title',
+          authors: 'Author A',
+          journal: 'Journal X',
+          year: 2024,
+          doi: '10.1000/shared',
+          pmid: null,
+          pmcid: null,
+          url: null,
+          oaFlag: null,
+          snippet: 'A short abstract snippet.',
+        },
+      ],
+      candidateEvidence: [
+        {
+          externalId: 'epmc:1',
+          queryText: 'hypospadias',
+          sourceKind: 'europepmc',
+          httpStatus: 200,
+          note: null,
+        },
+      ],
+    });
+    const complementHit = okResult({
+      candidates: [
+        {
+          sourceKind: 'pubmed',
+          externalId: 'pmid:2',
+          title: 'Shared article title',
+          authors: 'Author A',
+          journal: 'Journal X',
+          year: 2024,
+          doi: '10.1000/shared',
+          pmid: '2',
+          pmcid: null,
+          url: null,
+          oaFlag: null,
+          snippet: 'A short abstract snippet.',
+        },
+      ],
+      candidateEvidence: [
+        {
+          externalId: 'pmid:2',
+          queryText: 'hypospadias',
+          sourceKind: 'pubmed',
+          httpStatus: 200,
+          note: null,
+        },
+      ],
+    });
+    const collector = sequenceCollector([initial, complementHit]);
+    const job = await setupJobPastCollectors(repo, collector);
+    await runWorkerOnce({
+      repository: repo,
+      collector,
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+
+    const before = await repo.listFactCandidates(WORKSPACE_ID, job.id);
+    expect(before).toHaveLength(1);
+    // base 45 + doi 10 + snippet 5 + year 5 = 65, below 70.
+    expect(before[0]?.score).toBe(65);
+
+    const ran = await runWorkerOnce({
+      repository: repo,
+      collector,
+      exaCollector: stubExaCollector(okExaResult()),
+    });
+    expect(ran).toBe(true);
+
+    const after = await repo.getJob(WORKSPACE_ID, job.id);
+    expect(after.status).toBe('queued');
+    const steps = await repo.getJobSteps(WORKSPACE_ID, job.id);
+    const complementStep = steps.find((s) => s.step === 'complement');
+    expect(complementStep?.status).toBe('completed');
+    expect(complementStep?.detail).toMatchObject({
+      triggered: true,
+      candidatesBefore: 1,
+      candidatesAfter: 2,
+      updated: 1,
+      inserted: 1,
+    });
+
+    const factsAfter = await repo.listFactCandidates(WORKSPACE_ID, job.id);
+    expect(factsAfter).toHaveLength(2);
+    const raised = factsAfter.find((f) => f.id === before[0]?.id);
+    // Corroboration across europepmc and pubmed adds 15.
+    expect(raised?.score).toBe(80);
+    expect(raised?.assessorNote).toContain('corroboration=+15');
+  });
+
+  it('does not claim the assessor step before the exa step resolves', async () => {
+    const repo = createFakeDeepSearchRepository(WORKSPACE_ID);
+    const job = await setupJobPastPubmed(repo);
+    expect(job.id).toBeDefined();
+    expect(await repo.claimNextAssessorJob()).toBeNull();
+    expect(await repo.claimNextComplementJob()).toBeNull();
   });
 });

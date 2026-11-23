@@ -101,6 +101,18 @@ const UNAVAILABLE_DEEP_SEARCH: DeepSearchRepository = {
   async addJobCost(): Promise<never> {
     return unavailable();
   },
+  async claimNextAssessorJob(): Promise<never> {
+    return unavailable();
+  },
+  async claimNextComplementJob(): Promise<never> {
+    return unavailable();
+  },
+  async insertFactCandidates(): Promise<never> {
+    return unavailable();
+  },
+  async updateFactCandidateScores(): Promise<never> {
+    return unavailable();
+  },
 };
 
 export const REGISTRATION_ID = 'deep-search' as const;
